@@ -7,6 +7,7 @@ import Auth from './pages/Auth';
 import Feed from './pages/Feed';
 import Profile from './pages/Profile';
 
+
 export const AuthContext = createContext({});
 
 function ProtectedRoute({ children }) {
