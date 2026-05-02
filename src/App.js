@@ -6,7 +6,6 @@ import Layout from './components/Layout';
 import Auth from './pages/Auth';
 import Feed from './pages/Feed';
 import Profile from './pages/Profile';
-import Legal from './pages/Legal';
 
 export const AuthContext = createContext({});
 
@@ -30,7 +29,6 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -39,7 +37,6 @@ export default function App() {
       setLoading(false);
     });
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -69,8 +66,6 @@ export default function App() {
               <Layout><Profile /></Layout>
             </ProtectedRoute>
           } />
-          <Route path="/privacy" element={<Legal page="privacy" />} />
-          <Route path="/terms" element={<Legal page="terms" />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
