@@ -6,6 +6,7 @@ import Layout from './components/Layout';
 import Auth from './pages/Auth';
 import Feed from './pages/Feed';
 import Profile from './pages/Profile';
+import Legal from './pages/Legal';
 
 export const AuthContext = createContext({});
 
@@ -68,6 +69,8 @@ export default function App() {
               <Layout><Profile /></Layout>
             </ProtectedRoute>
           } />
+          <Route path="/privacy" element={<Legal page="privacy" />} />
+          <Route path="/terms" element={<Legal page="terms" />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
