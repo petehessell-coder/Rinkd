@@ -26,6 +26,7 @@ export async function signUp({ email, password, name, handle, position, level })
     });
     if (profileError) console.error('Profile create error:', profileError);
   }
+
   return data;
 }
 
@@ -67,10 +68,10 @@ export async function updateProfile(userId, updates) {
 }
 
 function randomColor() {
-  const colors = ['#2E5B8C','#D72638','#8B5CF6','#22C55E','#F59E0B','#EC4899','#0891B2'];
+  const colors = ['#2E5B8C', '#D72638', '#8B5CF6', '#22C55E', '#F59E0B', '#EC4899', '#0891B2'];
   return colors[Math.floor(Math.random() * colors.length)];
 }
 
 function initials(name) {
-  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2);
+  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 }
