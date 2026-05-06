@@ -1,7 +1,4 @@
 {
-  "redirects": [
-    { "source": "/survey", "destination": "https://celebrated-daffodil-7cf715.netlify.app/survey.html", "permanent": false }
-  ],
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ]
