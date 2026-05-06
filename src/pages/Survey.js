@@ -1,7 +1,6 @@
-// Rinkd Survey Component 
 import React, { useState, useEffect } from 'react';
 
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxm4Yz7h4OK-2xMb-dt6E87cvAPVfNExjFJbLc96QQv0uZ4bRqjIFvT7wDlWhuxWPRGVg/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxMNu_eWI24uulRNN_DkXBJElrqeqk__gH3a4mK87xo4HFDy9ENZdpFixW-5MqlgiqqDA/exec';
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,400;0,600;0,700;0,900;1,900&family=Barlow:wght@400;500;600&display=swap');
