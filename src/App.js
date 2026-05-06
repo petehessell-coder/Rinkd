@@ -6,7 +6,7 @@ import Layout from './components/Layout';
 import Auth from './pages/Auth';
 import Feed from './pages/Feed';
 import Profile from './pages/Profile';
-
+import Survey from './pages/Survey';
 
 export const AuthContext = createContext({});
 
@@ -37,7 +37,6 @@ export default function App() {
       }
       setLoading(false);
     });
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -48,7 +47,6 @@ export default function App() {
       }
       setLoading(false);
     });
-
     return () => subscription.unsubscribe();
   }, []);
 
@@ -67,6 +65,7 @@ export default function App() {
               <Layout><Profile /></Layout>
             </ProtectedRoute>
           } />
+          <Route path="/survey" element={<Survey />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
