@@ -520,11 +520,11 @@ export default function Survey() {
       if (Array.isArray(data[k])) data[k] = data[k].join(', ');
     });
     try {
-      await fetch(SCRIPT_URL, {
-        method: 'POST',
+      const params = new URLSearchParams(); Object.entries(data).forEach(([k, v]) => params.append(k, v || '')); await fetch(SCRIPT_URL + '?' + params.toString(), {
+        method: 'GET',
         mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        // removed
+        // removed
       });
     } catch (err) { /* no-cors means we can't read response — that's fine */ }
     setSubmitted(true);
