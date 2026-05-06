@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/survey", "destination": "/survey.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
