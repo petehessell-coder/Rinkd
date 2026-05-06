@@ -1,3 +1,4 @@
+// Rinkd Survey Component
 import React, { useState, useEffect } from 'react';
 
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxm4Yz7h4OK-2xMb-dt6E87cvAPVfNExjFJbLc96QQv0uZ4bRqjIFvT7wDlWhuxWPRGVg/exec';
