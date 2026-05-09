@@ -14,6 +14,7 @@ import Discover from './pages/Discover';
 import Tournament from './pages/Tournament';
 import Tournaments from './pages/Tournaments';
 import TournamentCreate from './pages/TournamentCreate';
+import ScorerView from './pages/ScorerView';
 
 export const AuthContext = createContext(null);
 export function useAuth() { return useContext(AuthContext); }
@@ -45,6 +46,7 @@ function AppRoutes() {
       <Route path="/tournaments" element={<ProtectedRoute><Tournaments profile={profile} /></ProtectedRoute>} />
       <Route path="/tournament/create" element={<ProtectedRoute><TournamentCreate profile={profile} /></ProtectedRoute>} />
       <Route path="/tournament/:id" element={<ProtectedRoute><Tournament /></ProtectedRoute>} />
+      <Route path="/scorer/:gameId" element={<ProtectedRoute><ScorerView /></ProtectedRoute>} />
       <Route path="/privacy" element={<Legal />} />
       <Route path="/terms" element={<Legal />} />
       <Route path="*" element={<Navigate to="/feed" replace />} />
