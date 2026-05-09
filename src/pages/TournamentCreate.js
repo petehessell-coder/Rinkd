@@ -387,8 +387,7 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
             </select>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8 }}>
-            <input type="datetime-local" value={newGame.time} onChange={e => setNewGame({...newGame, time: e.target.value})}
-              style={{ ...inputStyle }} />
+            <DateTimePicker value={newGame.time} onChange={v => setNewGame({...newGame, time: v})} placeholder="Date & time" />
             <select value={newGame.rink} onChange={e => setNewGame({...newGame, rink: e.target.value})} style={{ ...selectStyle }}>
               <option value="">Select rink</option>
               {(data.rinks||[]).map(r => <option key={r.sub_rink||r.name} value={r.sub_rink||r.name}>{r.sub_rink||r.name}</option>)}
