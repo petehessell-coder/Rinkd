@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import DateTimePicker from '../components/DateTimePicker';
 import { getTeam, getTeamMembers, getTeamGames, getJoinRequests, createTeam, updateTeam, addTeamMember, removeTeamMember, updateTeamMember, addTeamGame, approveJoinRequest, denyJoinRequest } from '../lib/teams';
+import { supabase } from '../lib/supabase';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 const inputStyle = { width:'100%', background:'#07111F', border:`0.5px solid ${C.border}`, borderRadius:8, padding:'10px 12px', color:C.ice, fontFamily:'Barlow, sans-serif', fontSize:14, outline:'none' };
@@ -141,7 +142,7 @@ function ManageTeam({ id, profile, navigate }) {
     setSaving(true); setError(null);
     try {
       // Look up user by handle
-      const { data: p } = await import('../lib/supabase').then(m => m.supabase.from('profiles').select('id').eq('handle', memberForm.handle.replace('@', '')).single());
+      const { data: p } = await supabase.from('profiles').select('id').eq('email', memberForm.email.trim().toLowerCase()).maybeSingle();
       if (!p) { setError('User not found — check the handle'); setSaving(false); return; }
       await addTeamMember({ team_id: id, user_id: p.id, role: memberForm.role, jersey_number: memberForm.jersey_number ? parseInt(memberForm.jersey_number) : null, position: memberForm.position, shot_hand: memberForm.shot_hand });
       setMemberForm({ handle: '', jersey_number: '', position: 'Center', role: 'player', shot_hand: 'left' });
