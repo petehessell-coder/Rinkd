@@ -215,6 +215,7 @@ function GameCard({ game }) {
         {(isLive||isFinal) ? <span style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:26,color:'#F4F7FA'}}>{game.away_score}</span> : <span style={{fontSize:11,fontWeight:600,color:'rgba(244,247,250,0.3)'}}>VS</span>}
       </div>
       <div style={{fontSize:11,color:'rgba(244,247,250,0.4)'}}>📍 {game.rink?.sub_rink} · {game.rink?.name}</div>
+      <button onClick={() => navigate("/scorer/" + game.id)} style={{marginTop:8,width:"100%",padding:"9px",background:"rgba(46,91,140,0.2)",border:"0.5px solid rgba(46,91,140,0.5)",borderRadius:8,color:"#F4F7FA",fontFamily:"Barlow,sans-serif",fontSize:12,fontWeight:600,cursor:"pointer"}} onMouseEnter={e=>{e.currentTarget.style.background="#F4F7FA";e.currentTarget.style.color="#0B1F3A";}} onMouseLeave={e=>{e.currentTarget.style.background="rgba(46,91,140,0.2)";e.currentTarget.style.color="#F4F7FA";}}>✏️ Open Scorer View</button>
       {hasStream && !isFinal && (
         <div style={{background:'rgba(215,38,56,0.08)',border:'0.5px solid rgba(215,38,56,0.3)',borderRadius:7,padding:'7px 11px',marginTop:9,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
           <div style={{fontSize:10,color:'rgba(244,247,250,0.5)',lineHeight:1.6}}>Rinkd members save · ✓ Code <strong style={{color:'#D72638'}}>RINKD10</strong> auto-applied</div>
