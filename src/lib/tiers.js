@@ -1,24 +1,27 @@
 export const TIERS = [
-  { level: 1, name: 'Mite',   minPts: 0,     maxPts: 99,    color: '#64748B', disc: 0  },
-  { level: 2, name: 'Squirt', minPts: 100,   maxPts: 499,   color: '#60A5FA', disc: 0  },
-  { level: 3, name: 'Peewee', minPts: 500,   maxPts: 1499,  color: '#34D399', disc: 5  },
-  { level: 4, name: 'Bantam', minPts: 1500,  maxPts: 3999,  color: '#FBBF24', disc: 10 },
-  { level: 5, name: 'Midget', minPts: 4000,  maxPts: 7999,  color: '#F97316', disc: 15 },
-  { level: 6, name: 'Junior', minPts: 8000,  maxPts: 14999, color: '#D72638', disc: 20 },
-  { level: 7, name: 'Pro',    minPts: 15000, maxPts: 99999, color: '#F5C842', disc: 25 },
+  { name: 'Mite',   min: 0,     max: 99,    color: '#8BA3BE', discount: 0 },
+  { name: 'Squirt', min: 100,   max: 499,   color: '#22C55E', discount: 0 },
+  { name: 'Peewee', min: 500,   max: 1499,  color: '#0EA5E9', discount: 5 },
+  { name: 'Bantam', min: 1500,  max: 3999,  color: '#F59E0B', discount: 10 },
+  { name: 'Midget', min: 4000,  max: 7999,  color: '#8B5CF6', discount: 15 },
+  { name: 'Junior', min: 8000,  max: 14999, color: '#D72638', discount: 20 },
+  { name: 'Pro',    min: 15000, max: Infinity, color: '#F4F7FA', discount: 25 },
 ];
 
 export function getTier(points) {
-  return TIERS.find(t => points >= t.minPts && points <= t.maxPts) || TIERS[0];
+  return TIERS.find(t => points >= t.min && points <= t.max) || TIERS[0];
+}
+
+export function getTierProgress(points) {
+  const tier = getTier(points);
+  const idx = TIERS.indexOf(tier);
+  if (idx === TIERS.length - 1) return 100;
+  const progress = ((points - tier.min) / (tier.max - tier.min + 1)) * 100;
+  return Math.min(100, Math.max(0, progress));
 }
 
 export function getNextTier(points) {
-  const current = getTier(points);
-  return TIERS[current.level] || current;
-}
-
-export function getProgress(points) {
   const tier = getTier(points);
-  const range = tier.maxPts - tier.minPts;
-  return Math.min(((points - tier.minPts) / range) * 100, 100);
+  const idx = TIERS.indexOf(tier);
+  return idx < TIERS.length - 1 ? TIERS[idx + 1] : null;
 }

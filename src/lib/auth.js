@@ -1,49 +1,51 @@
 import { supabase } from './supabase';
 
-export async function signUp({ email, password, name, handle, position, level }) {
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: { name, handle, position, level }
-    }
-  });
-  if (error) throw error;
-
-  // Create profile row
-  if (data.user) {
-    const { error: profileError } = await supabase.from('profiles').upsert({
-      id: data.user.id,
-      name,
-      handle: handle.toLowerCase().replace(/[^a-z0-9_]/g, ''),
-      position,
-      level,
-      avatar_color: randomColor(),
-      avatar_initials: initials(name),
-      bio: '',
-      points: 50,
-      tier: 'Mite',
-    });
-    if (profileError) console.error('Profile create error:', profileError);
+export async function signUp({ email, password, name, handle, position, level, dob }) {
+  // COPPA check
+  const birthDate = new Date(dob);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
+  if (age < 13) {
+    return { error: { message: 'You must be 13 or older to create a Rinkd account.' } };
   }
 
-  return data;
+  const { data, error } = await supabase.auth.signUp({ email, password });
+  if (error) return { error };
+
+  const userId = data.user?.id;
+  if (!userId) return { error: { message: 'Signup failed. Please try again.' } };
+
+  const avatarColors = ['#D72638','#2E5B8C','#22C55E','#F59E0B','#8B5CF6','#0EA5E9'];
+  const color = avatarColors[Math.floor(Math.random() * avatarColors.length)];
+  const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+
+  const { error: profileError } = await supabase.from('profiles').upsert({
+    id: userId,
+    name,
+    handle: handle.replace('@', ''),
+    avatar_color: color,
+    avatar_initials: initials,
+    position: position || 'Fan',
+    level: level || 'Beer League',
+    points: 0,
+    tier: 'Mite',
+    bio: '',
+    home_rink: '',
+    created_at: new Date().toISOString()
+  });
+
+  if (profileError) console.error('Profile creation error:', profileError);
+  return { data, error: null };
 }
 
 export async function signIn({ email, password }) {
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) throw error;
-  return data;
+  return supabase.auth.signInWithPassword({ email, password });
 }
 
 export async function signOut() {
-  const { error } = await supabase.auth.signOut();
-  if (error) throw error;
-}
-
-export async function getSession() {
-  const { data: { session } } = await supabase.auth.getSession();
-  return session;
+  return supabase.auth.signOut();
 }
 
 export async function getProfile(userId) {
@@ -52,26 +54,22 @@ export async function getProfile(userId) {
     .select('*')
     .eq('id', userId)
     .single();
-  if (error) return null;
-  return data;
+  return { data, error };
 }
 
 export async function updateProfile(userId, updates) {
+  // Filter only allowed fields to prevent freezing from invalid data
+  const allowed = ['name', 'bio', 'position', 'level', 'home_rink', 'handle'];
+  const filtered = {};
+  for (const key of allowed) {
+    if (updates[key] !== undefined) filtered[key] = updates[key];
+  }
+  
   const { data, error } = await supabase
     .from('profiles')
-    .update(updates)
+    .update(filtered)
     .eq('id', userId)
     .select()
     .single();
-  if (error) throw error;
-  return data;
-}
-
-function randomColor() {
-  const colors = ['#2E5B8C', '#D72638', '#8B5CF6', '#22C55E', '#F59E0B', '#EC4899', '#0891B2'];
-  return colors[Math.floor(Math.random() * colors.length)];
-}
-
-function initials(name) {
-  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+  return { data, error };
 }

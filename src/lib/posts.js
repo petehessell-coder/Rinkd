@@ -1,114 +1,131 @@
 import { supabase } from './supabase';
 
-export async function getPosts(limit = 20, offset = 0) {
+export async function getPosts(limit = 30) {
   const { data, error } = await supabase
     .from('posts')
-    .select(`
-      *,
-      profiles:author_id (
-        id, name, handle, avatar_color, avatar_initials, tier, position
-      )
-    `)
+    .select(`*, profiles(id, name, handle, avatar_color, avatar_initials, tier, position)`)
     .order('created_at', { ascending: false })
-    .range(offset, offset + limit - 1);
-  if (error) throw error;
-  return data || [];
+    .limit(limit);
+  return { data, error };
 }
 
-export async function createPost({ authorId, content, tag, tagColor }) {
+export async function getFollowingPosts(userId, limit = 30) {
+  const { data: follows } = await supabase
+    .from('follows')
+    .select('following_id')
+    .eq('follower_id', userId);
+  
+  if (!follows || follows.length === 0) return { data: [], error: null };
+  
+  const ids = follows.map(f => f.following_id);
+  const { data, error } = await supabase
+    .from('posts')
+    .select(`*, profiles(id, name, handle, avatar_color, avatar_initials, tier, position)`)
+    .in('author_id', ids)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  return { data, error };
+}
+
+export async function createPost(authorId, { content, tag, tagColor, mediaUrl, mediaType }) {
   const { data, error } = await supabase
     .from('posts')
     .insert({
       author_id: authorId,
       content,
-      tag: tag || 'POST',
-      tag_color: tagColor || '#2E5B8C',
+      tag: tag || null,
+      tag_color: tagColor || null,
+      media_url: mediaUrl || null,
+      media_type: mediaType || null,
       likes: 0,
       comment_count: 0,
       repost_count: 0,
+      created_at: new Date().toISOString()
     })
-    .select(`
-      *,
-      profiles:author_id (
-        id, name, handle, avatar_color, avatar_initials, tier, position
-      )
-    `)
+    .select()
     .single();
-  if (error) throw error;
-  return data;
+  return { data, error };
 }
 
-export async function deletePost(postId, userId) {
-  const { error } = await supabase
-    .from('posts')
-    .delete()
-    .eq('id', postId)
-    .eq('author_id', userId);
-  if (error) throw error;
+export async function uploadMedia(file, userId) {
+  const ext = file.name.split('.').pop();
+  const fileName = `${userId}/${Date.now()}.${ext}`;
+  const { data, error } = await supabase.storage
+    .from('media')
+    .upload(fileName, file, { cacheControl: '3600', upsert: false });
+  if (error) return { url: null, error };
+  const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(fileName);
+  const mediaType = file.type.startsWith('video') ? 'video' : 'image';
+  return { url: publicUrl, mediaType, error: null };
 }
 
 export async function toggleLike(postId, userId) {
-  // Check if already liked
   const { data: existing } = await supabase
-    .from('likes')
-    .select('id')
-    .eq('post_id', postId)
-    .eq('user_id', userId)
-    .single();
-
+    .from('likes').select('id').eq('post_id', postId).eq('user_id', userId).single();
   if (existing) {
-    // Unlike
     await supabase.from('likes').delete().eq('post_id', postId).eq('user_id', userId);
-    await supabase.rpc('decrement_likes', { post_id: postId });
-    return false;
+    await supabase.from('posts').update({ likes: supabase.rpc('decrement', { x: 1 }) }).eq('id', postId).catch(() => {});
+    return { liked: false };
   } else {
-    // Like
     await supabase.from('likes').insert({ post_id: postId, user_id: userId });
-    await supabase.rpc('increment_likes', { post_id: postId });
-    // Award points
-    await supabase.rpc('add_points', { user_id: userId, pts: 1 });
-    return true;
+    return { liked: true };
   }
 }
 
 export async function getLikedPosts(userId) {
-  const { data } = await supabase
-    .from('likes')
-    .select('post_id')
-    .eq('user_id', userId);
-  return (data || []).map(l => l.post_id);
+  const { data } = await supabase.from('likes').select('post_id').eq('user_id', userId);
+  return data?.map(l => l.post_id) || [];
 }
 
 export async function getComments(postId) {
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from('comments')
-    .select(`
-      *,
-      profiles:author_id (
-        id, name, handle, avatar_color, avatar_initials, tier
-      )
-    `)
+    .select(`*, profiles(id, name, handle, avatar_color, avatar_initials, tier)`)
     .eq('post_id', postId)
     .order('created_at', { ascending: true });
-  if (error) throw error;
   return data || [];
 }
 
-export async function createComment({ postId, authorId, content }) {
+export async function createComment(postId, authorId, content) {
   const { data, error } = await supabase
     .from('comments')
-    .insert({ post_id: postId, author_id: authorId, content })
-    .select(`
-      *,
-      profiles:author_id (
-        id, name, handle, avatar_color, avatar_initials, tier
-      )
-    `)
-    .single();
-  if (error) throw error;
-  // Increment comment count
-  await supabase.rpc('increment_comments', { post_id: postId });
-  // Award points for commenting
-  await supabase.rpc('add_points', { user_id: authorId, pts: 1 });
-  return data;
+    .insert({ post_id: postId, author_id: authorId, content, created_at: new Date().toISOString() })
+    .select().single();
+  return { data, error };
+}
+
+// Follow system
+export async function followUser(followerId, followingId) {
+  const { error } = await supabase.from('follows').insert({ follower_id: followerId, following_id: followingId });
+  return { error };
+}
+
+export async function unfollowUser(followerId, followingId) {
+  const { error } = await supabase.from('follows').delete()
+    .eq('follower_id', followerId).eq('following_id', followingId);
+  return { error };
+}
+
+export async function isFollowing(followerId, followingId) {
+  const { data } = await supabase.from('follows').select('id')
+    .eq('follower_id', followerId).eq('following_id', followingId).single();
+  return !!data;
+}
+
+export async function getFollowCounts(userId) {
+  const [{ count: followers }, { count: following }] = await Promise.all([
+    supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userId),
+    supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId),
+  ]);
+  return { followers: followers || 0, following: following || 0 };
+}
+
+export function timeAgo(dateStr) {
+  const now = new Date();
+  const date = new Date(dateStr);
+  const seconds = Math.floor((now - date) / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  return `${Math.floor(seconds / 86400)}d`;
 }

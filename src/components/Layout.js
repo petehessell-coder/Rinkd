@@ -1,39 +1,33 @@
-import React, { useContext } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
-import { RinkdLogo } from './Logos';
-import { AuthContext } from '../App';
+import React, { useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { RinkdLogo, Avatar } from './Logos';
 import { signOut } from '../lib/auth';
-import { getTier } from '../lib/tiers';
-
-const C = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
-  dark: '#07111F', card: '#112236',
-  lgray: '#8BA3BE', mgray: '#4A6180', border: '#1E3A5C',
-};
 
 const NAV = [
-  { path: '/feed',    label: 'Feed',    icon: '⬡' },
-  { path: '/profile', label: 'Profile', icon: '👤' },
+  { path: '/feed',      icon: '🏒', label: 'Feed',      active: true },
+  { path: '/rinkside',  icon: '📰', label: 'Rinkside',  badge: 'CONTENT' },
+  { path: '/crease',    icon: '🎬', label: 'Crease',    badge: 'PREMIUM' },
+  { path: '/leagues',   icon: '🏆', label: 'Leagues',   badge: 'COMMUNITY' },
+  { path: '/store',     icon: '🛒', label: 'Store',     badge: 'MERCH' },
+  { path: '/discover',  icon: '🔍', label: 'Discover' },
+  { path: '/profile',   icon: '👤', label: 'Profile' },
 ];
 
-export function Avatar({ user, size = 36 }) {
-  const tier = getTier(user?.points || 0);
-  return (
-    <div style={{
-      width: size, height: size, borderRadius: '50%',
-      background: user?.avatar_color || C.blue,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontFamily: "'Barlow Condensed', sans-serif",
-      fontWeight: 800, fontSize: size * 0.36, color: '#fff',
-      border: `2px solid ${tier.color}`,
-      flexShrink: 0,
-    }}>{user?.avatar_initials || '??'}</div>
-  );
-}
+const BRAND_COLORS = {
+  navy: '#0B1F3A',
+  blue: '#2E5B8C',
+  red: '#D72638',
+  ice: '#F4F7FA',
+  steel: '#8BA3BE',
+  dark: '#07111F',
+  card: '#112236',
+  border: '#1E3A5C',
+};
 
-export default function Layout({ children }) {
-  const { profile } = useContext(AuthContext);
+export default function Layout({ children, profile }) {
+  const location = useLocation();
   const navigate = useNavigate();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
@@ -41,111 +35,180 @@ export default function Layout({ children }) {
   };
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#030C15' }}>
-      {/* Desktop sidebar */}
+    <div style={{
+      display: 'flex',
+      minHeight: '100vh',
+      background: BRAND_COLORS.dark,
+      fontFamily: "'Barlow', sans-serif",
+      color: BRAND_COLORS.ice,
+    }}>
+      {/* ─── DESKTOP SIDEBAR ─── */}
       <aside style={{
-        width: 240, flexShrink: 0,
-        background: C.dark, borderRight: `1px solid ${C.border}`,
-        display: 'flex', flexDirection: 'column',
-        position: 'sticky', top: 0, height: '100vh', overflowY: 'auto',
-      }} className="desktop-sidebar">
-        <div style={{ padding: '22px 20px 16px', borderBottom: `2px solid ${C.red}` }}>
-          <RinkdLogo size={26} />
+        width: 240,
+        background: BRAND_COLORS.navy,
+        borderRight: `1px solid ${BRAND_COLORS.border}`,
+        display: 'flex',
+        flexDirection: 'column',
+        position: 'fixed',
+        left: 0, top: 0, bottom: 0,
+        zIndex: 100,
+        '@media (max-width: 768px)': { display: 'none' }
+      }} className="sidebar-desktop">
+        {/* Logo */}
+        <div style={{
+          padding: '24px 20px 20px',
+          borderBottom: `1px solid ${BRAND_COLORS.border}`,
+        }}>
+          <Link to="/feed" style={{ textDecoration: 'none' }}>
+            <RinkdLogo size={44} showText />
+          </Link>
         </div>
 
-        <nav style={{ padding: '10px', flex: 1 }}>
-          {NAV.map(item => (
-            <NavLink key={item.path} to={item.path} style={({ isActive }) => ({
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '10px 12px', borderRadius: 8, marginBottom: 3,
-              background: isActive ? `${C.blue}22` : 'transparent',
-              borderLeft: `3px solid ${isActive ? C.red : 'transparent'}`,
-              color: isActive ? '#fff' : C.lgray,
-              fontFamily: "'Barlow Condensed', sans-serif",
-              fontWeight: 700, fontSize: 14, letterSpacing: '0.06em',
-              textDecoration: 'none', transition: 'all 0.15s',
-            })}>
-              <span style={{ fontSize: 16, width: 20, textAlign: 'center' }}>{item.icon}</span>
-              {item.label.toUpperCase()}
-            </NavLink>
-          ))}
+        {/* Nav */}
+        <nav style={{ flex: 1, padding: '12px 8px' }}>
+          {NAV.map(item => {
+            const active = location.pathname === item.path ||
+              (item.path === '/feed' && location.pathname === '/');
+            return (
+              <Link key={item.path} to={item.path}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '11px 12px', borderRadius: 10, marginBottom: 2,
+                  textDecoration: 'none',
+                  background: active ? BRAND_COLORS.blue + '33' : 'transparent',
+                  color: active ? BRAND_COLORS.ice : BRAND_COLORS.steel,
+                  fontWeight: active ? 600 : 400,
+                  fontSize: 15,
+                  transition: 'all 0.15s',
+                  position: 'relative',
+                }}
+                onMouseEnter={e => { if (!active) e.currentTarget.style.background = BRAND_COLORS.border + '66'; }}
+                onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+              >
+                {active && (
+                  <div style={{
+                    position: 'absolute', left: 0, top: '20%', bottom: '20%',
+                    width: 3, background: BRAND_COLORS.red, borderRadius: '0 3px 3px 0'
+                  }}/>
+                )}
+                <span style={{ fontSize: 18 }}>{item.icon}</span>
+                <span>{item.label}</span>
+                {item.badge && (
+                  <span style={{
+                    marginLeft: 'auto',
+                    fontSize: 9, fontWeight: 700,
+                    fontFamily: "'Barlow Condensed', sans-serif",
+                    letterSpacing: '0.08em',
+                    background: BRAND_COLORS.border,
+                    color: BRAND_COLORS.steel,
+                    padding: '2px 5px', borderRadius: 3,
+                  }}>{item.badge}</span>
+                )}
+              </Link>
+            );
+          })}
         </nav>
 
-        {/* Brand tags */}
-        <div style={{ padding: '12px 14px', borderTop: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: 5 }}>
-          {[['RINKD','THE PLATFORM','#2E5B8C'],['RINKSIDE','THE CONTENT','#1A4A7A'],['CREASE','THE PREMIUM','#D72638']].map(([n,s,c]) => (
-            <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ width: 3, height: 28, background: c, borderRadius: 2 }} />
-              <div>
-                <div style={{ fontFamily: "'Barlow Condensed'", fontWeight: 800, fontSize: 11, color: '#fff', letterSpacing: '0.1em' }}>{n}</div>
-                <div style={{ fontFamily: "'Barlow Condensed'", fontSize: 9, color: C.mgray, letterSpacing: '0.1em' }}>{s}</div>
+        {/* Profile + signout */}
+        {profile && (
+          <div style={{
+            padding: '16px', borderTop: `1px solid ${BRAND_COLORS.border}`,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <Avatar profile={profile} size={34} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: BRAND_COLORS.ice,
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {profile.name}
+                </div>
+                <div style={{ fontSize: 11, color: BRAND_COLORS.steel }}>
+                  @{profile.handle}
+                </div>
               </div>
             </div>
-          ))}
-        </div>
-
-        {/* User + sign out */}
-        {profile && (
-          <div style={{ borderTop: `1px solid ${C.border}`, padding: '12px 14px' }}>
-            <NavLink to="/profile" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', marginBottom: 10 }}>
-              <Avatar user={profile} size={32} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ color: '#fff', fontSize: 12, fontFamily: "'Barlow Condensed'", fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.name}</div>
-                <div style={{ color: C.mgray, fontSize: 10 }}>@{profile.handle}</div>
-              </div>
-            </NavLink>
             <button onClick={handleSignOut} style={{
-              width: '100%', padding: '7px', borderRadius: 6,
-              background: 'transparent', border: `1px solid ${C.border}`,
-              color: C.mgray, fontSize: 11,
-              fontFamily: "'Barlow Condensed'", fontWeight: 700, letterSpacing: '0.06em',
-            }}>SIGN OUT</button>
+              width: '100%', padding: '8px', borderRadius: 8,
+              background: 'transparent', border: `1px solid ${BRAND_COLORS.border}`,
+              color: BRAND_COLORS.steel, fontSize: 13, cursor: 'pointer',
+              fontFamily: "'Barlow', sans-serif",
+              transition: 'all 0.15s',
+            }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = BRAND_COLORS.red; e.currentTarget.style.color = BRAND_COLORS.red; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = BRAND_COLORS.border; e.currentTarget.style.color = BRAND_COLORS.steel; }}
+            >Sign Out</button>
+            
+            {/* Legal footer */}
+            <div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <Link to="/privacy" style={{ fontSize: 10, color: BRAND_COLORS.border, textDecoration: 'none' }}
+                onMouseEnter={e => e.currentTarget.style.color = BRAND_COLORS.steel}
+                onMouseLeave={e => e.currentTarget.style.color = BRAND_COLORS.border}
+              >Privacy</Link>
+              <Link to="/terms" style={{ fontSize: 10, color: BRAND_COLORS.border, textDecoration: 'none' }}
+                onMouseEnter={e => e.currentTarget.style.color = BRAND_COLORS.steel}
+                onMouseLeave={e => e.currentTarget.style.color = BRAND_COLORS.border}
+              >Terms</Link>
+              <span style={{ fontSize: 10, color: BRAND_COLORS.border }}>© 2026 Rinkd LLC</span>
+            </div>
           </div>
         )}
       </aside>
 
-      {/* Main */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        {/* Mobile header */}
-        <header style={{
-          display: 'none', alignItems: 'center', justifyContent: 'space-between',
-          padding: '12px 16px', background: C.dark,
-          borderBottom: `2px solid ${C.red}`,
-          position: 'sticky', top: 0, zIndex: 50,
-        }} className="mobile-header">
-          <RinkdLogo size={22} />
-          <button onClick={handleSignOut} style={{ color: C.mgray, fontSize: 11, fontFamily: "'Barlow Condensed'", fontWeight: 700 }}>SIGN OUT</button>
-        </header>
+      {/* ─── MAIN CONTENT ─── */}
+      <main style={{
+        flex: 1,
+        marginLeft: 240,
+        maxWidth: '100%',
+      }} className="main-content">
+        {children}
+      </main>
 
-        <main style={{ flex: 1, overflowY: 'auto' }}>{children}</main>
-
-        {/* Mobile bottom nav */}
-        <nav style={{
-          display: 'none', justifyContent: 'space-around', alignItems: 'center',
-          padding: '8px 0 14px',
-          background: C.dark, borderTop: `1px solid ${C.border}`,
-          position: 'sticky', bottom: 0, zIndex: 50,
-        }} className="mobile-nav">
-          {NAV.map(item => (
-            <NavLink key={item.path} to={item.path} style={({ isActive }) => ({
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-              padding: '6px 20px', textDecoration: 'none',
-              color: isActive ? C.red : C.lgray,
-            })}>
-              <span style={{ fontSize: 20 }}>{item.icon}</span>
-              <span style={{ fontFamily: "'Barlow Condensed'", fontSize: 9, fontWeight: 700, letterSpacing: '0.08em' }}>{item.label.toUpperCase()}</span>
-            </NavLink>
-          ))}
-        </nav>
-      </div>
+      {/* ─── MOBILE BOTTOM NAV ─── */}
+      <nav style={{
+        display: 'none',
+        position: 'fixed', bottom: 0, left: 0, right: 0,
+        background: BRAND_COLORS.navy,
+        borderTop: `1px solid ${BRAND_COLORS.border}`,
+        zIndex: 200,
+        padding: '8px 0 max(8px, env(safe-area-inset-bottom))',
+      }} className="mobile-nav">
+        <div style={{ display: 'flex', justifyContent: 'space-around' }}>
+          {NAV.slice(0, 5).map(item => {
+            const active = location.pathname === item.path ||
+              (item.path === '/feed' && location.pathname === '/');
+            return (
+              <Link key={item.path} to={item.path}
+                style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center',
+                  gap: 3, padding: '4px 8px', textDecoration: 'none',
+                  color: active ? BRAND_COLORS.ice : BRAND_COLORS.steel,
+                  minWidth: 50,
+                }}
+              >
+                <span style={{ fontSize: 20, lineHeight: 1 }}>{item.icon}</span>
+                <span style={{ fontSize: 10, fontWeight: active ? 600 : 400 }}>
+                  {item.label}
+                </span>
+                {active && (
+                  <div style={{
+                    width: 4, height: 4, borderRadius: '50%',
+                    background: BRAND_COLORS.red,
+                  }}/>
+                )}
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
 
       <style>{`
         @media (max-width: 768px) {
-          .desktop-sidebar { display: none !important; }
-          .mobile-header   { display: flex !important; }
-          .mobile-nav      { display: flex !important; }
+          .sidebar-desktop { display: none !important; }
+          .main-content { margin-left: 0 !important; padding-bottom: 72px; }
+          .mobile-nav { display: block !important; }
         }
       `}</style>
     </div>
   );
 }
+
+export { BRAND_COLORS };

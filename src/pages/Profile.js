@@ -1,248 +1,245 @@
-import React, { useState, useEffect, useContext } from 'react';
-import { AuthContext } from '../App';
-import { Avatar } from '../components/Layout';
-import { TierBadge } from '../components/Logos';
+import React, { useState, useEffect, useCallback } from 'react';
+import Layout, { BRAND_COLORS as C } from '../components/Layout';
+import { Avatar, TierBadge } from '../components/Logos';
 import { updateProfile } from '../lib/auth';
-import { getPosts } from '../lib/posts';
-import { getTier, getNextTier, TIERS } from '../lib/tiers';
+import { getTier, getTierProgress, getNextTier, TIERS } from '../lib/tiers';
+import { supabase } from '../lib/supabase';
+import { useParams } from 'react-router-dom';
+import { followUser, unfollowUser, isFollowing, getFollowCounts, timeAgo } from '../lib/posts';
 
-const C = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
-  ice: '#F4F7FA', dark: '#07111F', card: '#112236', card2: '#0D2A47',
-  lgray: '#8BA3BE', mgray: '#4A6180', border: '#1E3A5C',
-};
+const POSITIONS = ['Forward', 'Defense', 'Goalie', 'Coach', 'Parent', 'Official', 'Fan'];
+const LEVELS = ['Youth (Mite-Bantam)', 'Youth (Midget)', 'High School', 'Junior (Tier I)', 'Junior (Tier II/III)', 'College', 'Minor Pro', 'Beer League', 'Adult Rec', 'Fan'];
 
-export default function Profile() {
-  const { user, profile, setProfile } = useContext(AuthContext);
-  const [tab, setTab] = useState('stats');
-  const [editMode, setEditMode] = useState(false);
+export default function Profile({ currentUser, profile: myProfile, onProfileUpdate }) {
+  const { userId: urlUserId } = useParams();
+  const [profile, setProfile] = useState(myProfile);
+  const [posts, setPosts] = useState([]);
+  const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [userPosts, setUserPosts] = useState([]);
-  const [loadingPosts, setLoadingPosts] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [activeTab, setActiveTab] = useState('posts');
+  const [following, setFollowing] = useState(false);
+  const [followCounts, setFollowCounts] = useState({ followers: 0, following: 0 });
+  const [followLoading, setFollowLoading] = useState(false);
 
-  const [editBio, setEditBio] = useState(profile?.bio || '');
-  const [editPosition, setEditPosition] = useState(profile?.position || '');
-  const [editLevel, setEditLevel] = useState(profile?.level || '');
-  const [editRink, setEditRink] = useState(profile?.home_rink || '');
+  const [editName, setEditName] = useState('');
+  const [editHandle, setEditHandle] = useState('');
+  const [editBio, setEditBio] = useState('');
+  const [editPosition, setEditPosition] = useState('');
+  const [editLevel, setEditLevel] = useState('');
+  const [editRink, setEditRink] = useState('');
 
-  const tier = getTier(profile?.points || 0);
-  const nextTier = getNextTier(profile?.points || 0);
-  const ptsToNext = tier.maxPts - (profile?.points || 0) + 1;
-  const progress = Math.min(((profile?.points || 0) - tier.minPts) / (tier.maxPts - tier.minPts) * 100, 100);
+  const profileId = urlUserId || currentUser?.id;
+  const isOwnProfile = !urlUserId || urlUserId === currentUser?.id;
 
-  useEffect(() => {
-    if (tab === 'posts' && user) {
-      setLoadingPosts(true);
-      getPosts(50).then(all => {
-        setUserPosts(all.filter(p => p.author_id === user.id));
-      }).finally(() => setLoadingPosts(false));
+  const loadProfile = useCallback(async () => {
+    if (isOwnProfile) {
+      setProfile(myProfile);
+    } else {
+      const { data } = await supabase.from('profiles').select('*').eq('id', profileId).single();
+      setProfile(data);
     }
-  }, [tab, user]);
-
-  const saveProfile = async () => {
-    setSaving(true);
-    try {
-      const updated = await updateProfile(user.id, {
-        bio: editBio,
-        position: editPosition,
-        level: editLevel,
-        home_rink: editRink,
-      });
-      setProfile(prev => ({ ...prev, ...updated }));
-      setEditMode(false);
-    } catch (err) {
-      console.error('Error saving profile:', err);
-    } finally {
-      setSaving(false);
+    if (profileId) {
+      const { data } = await supabase.from('posts').select('*').eq('author_id', profileId).order('created_at', { ascending: false });
+      setPosts(data || []);
+      const counts = await getFollowCounts(profileId);
+      setFollowCounts(counts);
+      if (!isOwnProfile && currentUser) {
+        const f = await isFollowing(currentUser.id, profileId);
+        setFollowing(f);
+      }
     }
+  }, [profileId, isOwnProfile, myProfile, currentUser]);
+
+  useEffect(() => { loadProfile(); }, [loadProfile]);
+
+  const handleFollow = async () => {
+    if (!currentUser || isOwnProfile) return;
+    setFollowLoading(true);
+    if (following) {
+      await unfollowUser(currentUser.id, profileId);
+      setFollowing(false);
+      setFollowCounts(c => ({ ...c, followers: Math.max(0, c.followers - 1) }));
+    } else {
+      await followUser(currentUser.id, profileId);
+      setFollowing(true);
+      setFollowCounts(c => ({ ...c, followers: c.followers + 1 }));
+    }
+    setFollowLoading(false);
   };
 
-  if (!profile) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: C.lgray }}>Loading profile...</div>
-  );
+  const openEdit = () => {
+    setEditName(profile?.name || ''); setEditHandle(profile?.handle || '');
+    setEditBio(profile?.bio || ''); setEditPosition(profile?.position || 'Fan');
+    setEditLevel(profile?.level || 'Beer League'); setEditRink(profile?.home_rink || '');
+    setSaveError(''); setEditing(true);
+  };
+
+  const saveEdit = async (e) => {
+    e.preventDefault();
+    if (!currentUser) return;
+    setSaving(true); setSaveError('');
+    const updates = { name: editName.trim(), handle: editHandle.trim().replace('@', ''), bio: editBio.trim(), position: editPosition, level: editLevel, home_rink: editRink.trim() };
+    const { data, error } = await updateProfile(currentUser.id, updates);
+    setSaving(false);
+    if (error) { setSaveError(error.message || 'Failed to save.'); return; }
+    const updated = data || { ...profile, ...updates };
+    setProfile(updated);
+    if (onProfileUpdate) onProfileUpdate(updated);
+    setEditing(false);
+  };
+
+  if (!profile) return <Layout profile={myProfile}><div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><div style={{ color: C.steel }}>Loading...</div></div></Layout>;
+
+  const tier = getTier(profile.points || 0);
+  const progress = getTierProgress(profile.points || 0);
+  const nextTier = getNextTier(profile.points || 0);
+
+  const labelStyle = { display: 'block', fontSize: 11, fontWeight: 600, color: C.steel, marginBottom: 4, letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: "'Barlow Condensed', sans-serif" };
+  const inputStyle = { width: '100%', padding: '9px 12px', borderRadius: 8, background: '#080F1C', border: `1.5px solid ${C.border}`, color: C.ice, fontSize: 14, outline: 'none', fontFamily: "'Barlow', sans-serif", boxSizing: 'border-box' };
 
   return (
-    <div style={{ maxWidth: 860, margin: '0 auto', paddingBottom: 40 }}>
-      {/* Hero */}
-      <div style={{ background: `linear-gradient(160deg, ${C.blue} 0%, ${C.navy} 60%)`, padding: '40px 24px 20px', position: 'relative', borderBottom: `2px solid ${C.red}` }}>
-        <div style={{ display: 'flex', gap: 18, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <div style={{ width: 84, height: 84, borderRadius: '50%', background: profile.avatar_color, border: `4px solid ${tier.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow Condensed'", fontWeight: 900, fontSize: 30, color: '#fff', boxShadow: `0 0 0 2px ${C.dark}, 0 8px 32px ${tier.color}44`, flexShrink: 0 }}>
-            {profile.avatar_initials}
+    <Layout profile={myProfile}>
+      <div style={{ maxWidth: 640, margin: '0 auto', padding: '24px 16px' }}>
+        <div style={{ background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, overflow: 'hidden', marginBottom: 16 }}>
+          <div style={{ height: 100, background: `linear-gradient(135deg, ${C.navy} 0%, ${tier.color}33 50%, ${C.navy} 100%)`, borderBottom: `1px solid ${C.border}`, position: 'relative' }}>
+            <div style={{ position: 'absolute', bottom: -28, left: 20 }}>
+              <Avatar profile={profile} size={64} />
+            </div>
           </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
-              <span style={{ fontFamily: "'Barlow Condensed'", fontWeight: 900, fontSize: 26, color: '#fff' }}>{profile.name}</span>
-              <TierBadge tier={tier} size="lg" />
+          <div style={{ padding: '36px 20px 20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+              <div>
+                <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 26, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.02em' }}>{profile.name}</div>
+                <div style={{ fontSize: 13, color: C.steel }}>@{profile.handle}</div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <TierBadge tier={tier.name} size="md" />
+                {isOwnProfile && !editing && (
+                  <button onClick={openEdit} style={{ padding: '8px 16px', borderRadius: 8, background: 'transparent', border: `1.5px solid ${C.border}`, color: C.ice, fontFamily: "'Barlow', sans-serif", fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>Edit</button>
+                )}
+                {!isOwnProfile && (
+                  <button onClick={handleFollow} disabled={followLoading} style={{
+                    padding: '8px 20px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                    background: following ? C.border : C.red, color: 'white',
+                    fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 14,
+                    letterSpacing: '0.05em',
+                  }}>{followLoading ? '...' : following ? 'Following' : 'Follow'}</button>
+                )}
+              </div>
             </div>
-            <div style={{ color: C.lgray, fontSize: 12, marginBottom: 4 }}>
-              @{profile.handle}
-              {profile.position ? ` · ${profile.position}` : ''}
-              {profile.level ? ` · ${profile.level}` : ''}
+
+            {/* Follow counts */}
+            <div style={{ display: 'flex', gap: 20, marginBottom: 10 }}>
+              <span style={{ fontSize: 13, color: C.steel }}><strong style={{ color: C.ice }}>{followCounts.followers}</strong> Followers</span>
+              <span style={{ fontSize: 13, color: C.steel }}><strong style={{ color: C.ice }}>{followCounts.following}</strong> Following</span>
             </div>
-            {profile.home_rink && <div style={{ color: C.lgray, fontSize: 12 }}>🏒 {profile.home_rink}</div>}
-            {editMode ? (
-              <textarea value={editBio} onChange={e => setEditBio(e.target.value)} rows={2} placeholder="Write your bio..." style={{ marginTop: 8, width: '100%', background: 'rgba(0,0,0,0.3)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px', color: '#fff', fontSize: 13, outline: 'none', resize: 'none' }} />
-            ) : (
-              profile.bio && <div style={{ color: '#E8F4FD', fontSize: 13, marginTop: 8, lineHeight: 1.5 }}>{profile.bio}</div>
+
+            {profile.bio && !editing && <p style={{ color: C.ice, fontSize: 14, lineHeight: 1.5, marginBottom: 10 }}>{profile.bio}</p>}
+            {!editing && (
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                {profile.position && <span style={{ fontSize: 12, color: C.steel }}>🏒 {profile.position}</span>}
+                {profile.level && <span style={{ fontSize: 12, color: C.steel }}>📊 {profile.level}</span>}
+                {profile.home_rink && <span style={{ fontSize: 12, color: C.steel }}>🏟️ {profile.home_rink}</span>}
+              </div>
+            )}
+
+            {editing && (
+              <form onSubmit={saveEdit} style={{ marginTop: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                  <div><label style={labelStyle}>Name</label><input value={editName} onChange={e => setEditName(e.target.value)} required maxLength={80} style={inputStyle}/></div>
+                  <div><label style={labelStyle}>Username</label><input value={editHandle} onChange={e => setEditHandle(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))} required maxLength={40} style={inputStyle}/></div>
+                </div>
+                <div style={{ marginBottom: 12 }}><label style={labelStyle}>Bio</label><textarea value={editBio} onChange={e => setEditBio(e.target.value)} maxLength={200} rows={3} style={{ ...inputStyle, resize: 'vertical' }}/></div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                  <div><label style={labelStyle}>Position</label><select value={editPosition} onChange={e => setEditPosition(e.target.value)} style={inputStyle}>{POSITIONS.map(p => <option key={p} value={p}>{p}</option>)}</select></div>
+                  <div><label style={labelStyle}>Level</label><select value={editLevel} onChange={e => setEditLevel(e.target.value)} style={inputStyle}>{LEVELS.map(l => <option key={l} value={l}>{l}</option>)}</select></div>
+                </div>
+                <div style={{ marginBottom: 16 }}><label style={labelStyle}>Home Rink</label><input value={editRink} onChange={e => setEditRink(e.target.value)} maxLength={100} placeholder="Nationwide Arena, Columbus OH" style={inputStyle}/></div>
+                {saveError && <p style={{ color: C.red, fontSize: 13, marginBottom: 10 }}>{saveError}</p>}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button" onClick={() => setEditing(false)} style={{ padding: '9px 18px', borderRadius: 8, background: 'transparent', border: `1px solid ${C.border}`, color: C.steel, fontFamily: "'Barlow', sans-serif", cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+                  <button type="submit" disabled={saving} style={{ padding: '9px 24px', borderRadius: 8, background: saving ? C.border : C.red, color: 'white', border: 'none', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 15, cursor: 'pointer' }}>{saving ? 'Saving...' : 'Save Changes'}</button>
+                </div>
+              </form>
             )}
           </div>
-          <button onClick={() => editMode ? saveProfile() : setEditMode(true)} style={{ background: editMode ? C.red : 'rgba(0,0,0,0.3)', border: `1px solid ${editMode ? C.red : C.border}`, borderRadius: 8, color: '#fff', padding: '8px 16px', fontFamily: "'Barlow Condensed'", fontWeight: 700, fontSize: 12, letterSpacing: '0.08em' }}>
-            {saving ? 'SAVING...' : editMode ? 'SAVE' : '✏️ EDIT'}
-          </button>
         </div>
 
-        {/* Edit fields */}
-        {editMode && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 14 }}>
+        {/* Stats */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
+          {[['Posts', posts.length], ['Points', (profile.points || 0).toLocaleString()], ['Tier', tier.name]].map(([label, value]) => (
+            <div key={label} style={{ background: C.card, borderRadius: 10, padding: '14px 16px', border: `1px solid ${C.border}`, textAlign: 'center' }}>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 26, color: C.ice, lineHeight: 1 }}>{value}</div>
+              <div style={{ fontSize: 11, color: C.steel, marginTop: 2 }}>{label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Tier Progress */}
+        <div style={{ background: C.card, borderRadius: 14, padding: '16px', border: `1px solid ${C.border}`, marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 14, color: C.ice, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Tier Progress</span>
+            <span style={{ fontSize: 12, color: C.steel }}>{nextTier ? `${(nextTier.min - (profile.points || 0)).toLocaleString()} pts to ${nextTier.name}` : 'Max Tier'}</span>
+          </div>
+          <div style={{ height: 8, background: C.border, borderRadius: 4, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${progress}%`, background: `linear-gradient(90deg, ${tier.color}99, ${tier.color})`, borderRadius: 4, transition: 'width 0.5s ease' }}/>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+            {TIERS.map(t => (
+              <div key={t.name} style={{ textAlign: 'center' }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: (profile.points || 0) >= t.min ? t.color : C.border, margin: '0 auto 2px' }}/>
+                <div style={{ fontSize: 8, color: C.steel }}>{t.name}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Posts */}
+        <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: C.navy, borderRadius: 10, padding: 4, border: `1px solid ${C.border}` }}>
+          {[{ id: 'posts', label: 'Posts' }, { id: 'badges', label: 'Badges' }].map(t => (
+            <button key={t.id} onClick={() => setActiveTab(t.id)} style={{ flex: 1, padding: '8px', borderRadius: 7, border: 'none', background: activeTab === t.id ? C.blue : 'transparent', color: activeTab === t.id ? C.ice : C.steel, fontFamily: "'Barlow', sans-serif", fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>{t.label}</button>
+          ))}
+        </div>
+
+        {activeTab === 'posts' && (
+          posts.length === 0 ? <div style={{ textAlign: 'center', color: C.steel, padding: '40px', fontSize: 14 }}>No posts yet.</div>
+          : posts.map(post => (
+            <div key={post.id} style={{ background: C.card, borderRadius: 12, padding: '14px 16px', border: `1px solid ${C.border}`, marginBottom: 10 }}>
+              {post.tag && <span style={{ display: 'inline-block', marginBottom: 8, fontSize: 10, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '0.06em', padding: '2px 7px', borderRadius: 4, background: (post.tag_color || C.blue) + '22', color: post.tag_color || C.blue }}>{post.tag}</span>}
+              {post.content && <p style={{ fontSize: 14, color: C.ice, lineHeight: 1.5, marginBottom: 8 }}>{post.content}</p>}
+              {post.media_url && (
+                post.media_type === 'video'
+                  ? <video src={post.media_url} controls style={{ width: '100%', maxHeight: 200, borderRadius: 8, marginBottom: 8 }}/>
+                  : <img src={post.media_url} alt="" style={{ width: '100%', maxHeight: 200, objectFit: 'cover', borderRadius: 8, marginBottom: 8 }}/>
+              )}
+              <div style={{ display: 'flex', gap: 16, fontSize: 12, color: C.steel }}>
+                <span>❤️ {post.likes || 0}</span>
+                <span>💬 {post.comment_count || 0}</span>
+                <span style={{ marginLeft: 'auto' }}>{timeAgo(post.created_at)}</span>
+              </div>
+            </div>
+          ))
+        )}
+
+        {activeTab === 'badges' && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
             {[
-              ['Position', editPosition, setEditPosition, ['Forward','Defense','Goalie','Fan / Other']],
-              ['Level', editLevel, setEditLevel, ['Youth','Beer League','Junior','College','Coach','Fan']],
-            ].map(([label, val, setter, opts]) => (
-              <div key={label}>
-                <div style={{ color: C.lgray, fontSize: 10, letterSpacing: '0.1em', fontFamily: "'Barlow Condensed'", fontWeight: 700, marginBottom: 4 }}>{label.toUpperCase()}</div>
-                <select value={val} onChange={e => setter(e.target.value)} style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: `1px solid ${C.border}`, borderRadius: 6, padding: '7px 10px', color: '#fff', fontSize: 12, outline: 'none' }}>
-                  <option value="">Select...</option>
-                  {opts.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
+              { icon: '🏒', label: 'First Post', earned: posts.length > 0 },
+              { icon: '❤️', label: 'First Like', earned: (profile.points || 0) > 0 },
+              { icon: '💬', label: 'Commentator', earned: (profile.points || 0) >= 10 },
+              { icon: '⭐', label: 'Squirt', earned: (profile.points || 0) >= 100 },
+              { icon: '🎯', label: 'Peewee', earned: (profile.points || 0) >= 500 },
+              { icon: '🏆', label: 'Pro', earned: (profile.points || 0) >= 15000 },
+            ].map(badge => (
+              <div key={badge.label} style={{ background: badge.earned ? C.card : C.navy, borderRadius: 12, padding: '16px 8px', textAlign: 'center', border: `1px solid ${C.border}`, opacity: badge.earned ? 1 : 0.4 }}>
+                <div style={{ fontSize: 28, marginBottom: 6 }}>{badge.icon}</div>
+                <div style={{ fontSize: 11, color: C.steel, fontWeight: 600 }}>{badge.label}</div>
               </div>
             ))}
-            <div>
-              <div style={{ color: C.lgray, fontSize: 10, letterSpacing: '0.1em', fontFamily: "'Barlow Condensed'", fontWeight: 700, marginBottom: 4 }}>HOME RINK</div>
-              <input value={editRink} onChange={e => setEditRink(e.target.value)} placeholder="Your rink..." style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: `1px solid ${C.border}`, borderRadius: 6, padding: '7px 10px', color: '#fff', fontSize: 12, outline: 'none' }} />
-            </div>
-          </div>
-        )}
-
-        {/* Stats row */}
-        <div style={{ display: 'flex', marginTop: 16, background: 'rgba(0,0,0,0.25)', borderRadius: 10, overflow: 'hidden' }}>
-          {[['POINTS', profile.points || 0], ['TIER', tier.name.toUpperCase()], ['POSTS', userPosts.length]].map(([l, v], i) => (
-            <div key={l} style={{ flex: 1, padding: '10px 8px', textAlign: 'center', borderRight: i < 2 ? `1px solid rgba(255,255,255,0.1)` : 'none' }}>
-              <div style={{ fontFamily: "'Barlow Condensed'", fontWeight: 900, fontSize: 20, color: i === 1 ? tier.color : '#fff' }}>{v}</div>
-              <div style={{ color: C.mgray, fontSize: 9, letterSpacing: '0.1em', marginTop: 2 }}>{l}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ padding: '20px 24px' }}>
-        {/* Tier progress */}
-        <div style={{ background: C.card, borderRadius: 12, padding: '16px 18px', marginBottom: 16, border: `1px solid ${C.border}` }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-            <div>
-              <div style={{ fontFamily: "'Barlow Condensed'", fontWeight: 800, fontSize: 13, color: '#fff', letterSpacing: '0.08em' }}>TIER PROGRESS</div>
-              <div style={{ color: C.lgray, fontSize: 11, marginTop: 2 }}>Earn points by posting, liking & engaging</div>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontFamily: "'Barlow Condensed'", fontWeight: 900, fontSize: 20, color: tier.color }}>{(profile.points || 0).toLocaleString()}</div>
-              <div style={{ color: C.mgray, fontSize: 10 }}>POINTS</div>
-            </div>
-          </div>
-          {/* All tier pips */}
-          <div style={{ display: 'flex', gap: 3, marginBottom: 6 }}>
-            {TIERS.map((t, i) => (
-              <div key={i} style={{ flex: 1, height: 5, borderRadius: 3, background: i < tier.level ? t.color : i === tier.level - 1 ? t.color : C.border }} />
-            ))}
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-            <span style={{ color: C.mgray, fontSize: 9 }}>Mite</span>
-            <span style={{ color: C.mgray, fontSize: 9 }}>Pro</span>
-          </div>
-          {/* Current tier bar */}
-          <div style={{ background: C.card2, borderRadius: 4, height: 7, overflow: 'hidden', marginBottom: 6 }}>
-            <div style={{ height: '100%', borderRadius: 4, background: `linear-gradient(90deg, ${tier.color}88, ${tier.color})`, width: `${progress}%`, transition: 'width 0.5s ease' }} />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ color: C.lgray, fontSize: 11 }}>
-              <span style={{ color: tier.color, fontWeight: 700 }}>{ptsToNext.toLocaleString()} pts</span> to <span style={{ color: nextTier.color, fontWeight: 700 }}>{nextTier.name}</span>
-            </span>
-            {tier.disc > 0 && (
-              <span style={{ background: `${tier.color}22`, border: `1px solid ${tier.color}44`, color: tier.color, fontSize: 11, padding: '2px 8px', borderRadius: 4, fontFamily: "'Barlow Condensed'", fontWeight: 700 }}>
-                {tier.disc}% MERCH DISCOUNT ACTIVE
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Tabs */}
-        <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}`, marginBottom: 20 }}>
-          {['stats', 'posts', 'badges'].map(t => (
-            <button key={t} onClick={() => setTab(t)} style={{ padding: '10px 18px', background: 'transparent', border: 'none', borderBottom: `3px solid ${tab === t ? C.red : 'transparent'}`, color: tab === t ? '#fff' : C.lgray, fontFamily: "'Barlow Condensed'", fontWeight: 800, fontSize: 13, letterSpacing: '0.1em', cursor: 'pointer' }}>
-              {t.toUpperCase()}
-            </button>
-          ))}
-        </div>
-
-        {tab === 'stats' && (
-          <div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
-              {[['TIER', tier.name, tier.color],['POINTS', profile.points || 0, C.blue],['DISCOUNT', tier.disc > 0 ? `${tier.disc}%` : 'None', '#22C55E']].map(([l,v,c]) => (
-                <div key={l} style={{ background: C.card2, borderRadius: 10, padding: '14px', textAlign: 'center', border: `1px solid ${C.border}` }}>
-                  <div style={{ fontFamily: "'Barlow Condensed'", fontWeight: 900, fontSize: 22, color: c, lineHeight: 1 }}>{v}</div>
-                  <div style={{ color: C.mgray, fontSize: 10, marginTop: 4, letterSpacing: '0.08em' }}>{l}</div>
-                </div>
-              ))}
-            </div>
-            <div style={{ background: C.card2, borderRadius: 10, padding: '16px', border: `1px solid ${C.border}` }}>
-              <div style={{ fontFamily: "'Barlow Condensed'", fontWeight: 700, fontSize: 13, color: '#fff', letterSpacing: '0.08em', marginBottom: 10 }}>HOW TO EARN POINTS</div>
-              {[['Post content','+ 5 pts per post'],['Receive a like','+ 1 pt per like'],['Comment','+ 1 pt per comment'],['Refer a user','+ 30 pts'],['Verified league player','+ 50 pts (one-time)']].map(([a,p]) => (
-                <div key={a} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: `1px solid ${C.border}` }}>
-                  <span style={{ color: C.lgray, fontSize: 13 }}>{a}</span>
-                  <span style={{ color: '#22C55E', fontFamily: "'Barlow Condensed'", fontWeight: 700, fontSize: 13 }}>{p}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {tab === 'posts' && (
-          <div>
-            {loadingPosts ? (
-              <div style={{ color: C.lgray, textAlign: 'center', padding: '40px 0' }}>Loading your posts...</div>
-            ) : userPosts.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px', background: C.card, borderRadius: 12, border: `1px solid ${C.border}` }}>
-                <div style={{ fontSize: 36, marginBottom: 12 }}>🏒</div>
-                <div style={{ color: C.lgray, fontSize: 14 }}>No posts yet. Hit the feed and drop something.</div>
-              </div>
-            ) : (
-              userPosts.map(p => (
-                <div key={p.id} style={{ background: C.card, borderRadius: 10, padding: '12px 14px', marginBottom: 8, border: `1px solid ${C.border}` }}>
-                  <div style={{ background: TAG_COLORS[p.tag] || C.blue, display: 'inline-block', padding: '2px 8px', borderRadius: 4, marginBottom: 6 }}>
-                    <span style={{ fontFamily: "'Barlow Condensed'", fontWeight: 800, fontSize: 9, color: '#fff', letterSpacing: '0.12em' }}>{p.tag}</span>
-                  </div>
-                  <div style={{ color: '#E8F4FD', fontSize: 13, lineHeight: 1.5 }}>{p.content}</div>
-                  <div style={{ color: C.mgray, fontSize: 11, marginTop: 6 }}>🏒 {p.likes || 0} · 💬 {p.comment_count || 0}</div>
-                </div>
-              ))
-            )}
-          </div>
-        )}
-
-        {tab === 'badges' && (
-          <div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-              {[
-                { icon: '🏒', label: 'Welcome to the Ice', desc: 'Joined Rinkd', earned: true, color: C.blue },
-                { icon: '📝', label: 'First Post', desc: 'Made your first post', earned: (profile.points || 0) > 50, color: '#22C55E' },
-                { icon: '🔥', label: 'On a Streak', desc: '7 days active', earned: false, color: C.red },
-                { icon: '🏆', label: 'Hat Trick', desc: '3 posts in one day', earned: false, color: '#F5C842' },
-                { icon: '⭐', label: 'Rising Star', desc: 'Reach Squirt tier', earned: (profile.points || 0) >= 100, color: '#60A5FA' },
-                { icon: '👥', label: 'Community Player', desc: 'Leave 10 comments', earned: false, color: '#8B5CF6' },
-              ].map((b, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: b.earned ? C.card : C.card2, borderRadius: 10, padding: '10px 14px', border: `1px solid ${b.earned ? b.color + '44' : C.border}`, opacity: b.earned ? 1 : 0.5, flex: '1 1 200px' }}>
-                  <span style={{ fontSize: 22 }}>{b.icon}</span>
-                  <div>
-                    <div style={{ fontFamily: "'Barlow Condensed'", fontWeight: 700, fontSize: 13, color: b.earned ? '#fff' : C.lgray }}>{b.label}</div>
-                    <div style={{ color: C.mgray, fontSize: 11 }}>{b.desc}</div>
-                  </div>
-                  {b.earned && <span style={{ marginLeft: 'auto', color: '#22C55E', fontSize: 14 }}>✓</span>}
-                </div>
-              ))}
-            </div>
           </div>
         )}
       </div>
-    </div>
+    </Layout>
   );
 }
-
-const TAG_COLORS = { 'GOAL ALERT':'#D72638','HIGHLIGHT':'#2E5B8C','GAME RECAP':'#22C55E','BEER LEAGUE':'#F59E0B','COACH\'S CORNER':'#60A5FA','QUESTION':'#8B5CF6','TRADE REQUEST':'#F97316','RINKSIDE':'#2E5B8C','POST':'#2E5B8C' };
