@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import Scoresheet from '../components/Scoresheet';
 import { supabase } from '../lib/supabase';
 
 const C = {
@@ -98,6 +99,7 @@ export default function ScorerView() {
   const [goalModal, setGoalModal] = useState(false);
   const [penaltyModal, setPenaltyModal] = useState(false);
   const [goalieModal, setGoalieModal] = useState(null);
+  const [showScoresheet, setShowScoresheet] = useState(false);
   const [goalForm, setGoalForm] = useState({ team_id: '', scorer_number: '', assist1_number: '', assist2_number: '', period: 1, time_in_period: '', is_shootout: false });
   const [penaltyForm, setPenaltyForm] = useState({ team_id: '', player_number: '', severity: 'Minor (2 min)', penalty_type: 'Hooking', period: 1, time_in_period: '' });
   const [goalieForm, setGoalieForm] = useState({ goalie_out_number: '', goalie_in_number: '', period: 1, time_in_period: '' });
@@ -361,6 +363,14 @@ export default function ScorerView() {
         </div>
 
         {/* FINALIZE */}
+        {status === 'final' && (
+          <button onClick={() => setShowScoresheet(true)}
+            style={{ width: '100%', padding: 14, background: '#2E5B8C', border: 'none', borderRadius: 999, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', marginTop: 10, transition: 'all 0.15s' }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#2E5B8C'; e.currentTarget.style.color = '#fff'; }}>
+            📄 Generate Official Scoresheet
+          </button>
+        )}
         {status !== 'final'
           ? <button onClick={() => changePeriod('final')}
               style={{ width: '100%', padding: 14, background: C.red, border: 'none', borderRadius: 999, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', marginTop: 4, transition: 'all 0.15s' }}
@@ -371,6 +381,17 @@ export default function ScorerView() {
           : <div style={{ textAlign: 'center', padding: 14, background: 'rgba(215,38,56,0.1)', border: '0.5px solid rgba(215,38,56,0.3)', borderRadius: 999, fontSize: 14, fontWeight: 700, color: C.red }}>✓ Game Finalized — Standings Updated</div>
         }
       </div>
+
+      {showScoresheet && (
+        <Scoresheet
+          game={game}
+          goals={goals}
+          penalties={penalties}
+          shots={shots}
+          goalieChanges={goalieChanges}
+          onClose={() => setShowScoresheet(false)}
+        />
+      )}
 
       {/* GOAL MODAL */}
       {goalModal && (
