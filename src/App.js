@@ -1,6 +1,7 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
+import { registerServiceWorker } from './lib/push';
 import { getProfile } from './lib/auth';
 import Auth from './pages/Auth';
 import Feed from './pages/Feed';
@@ -75,6 +76,8 @@ export default function App() {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => { registerServiceWorker(); }, []);
 
   return (
     <AuthContext.Provider value={{ user, profile, setProfile, loading }}>

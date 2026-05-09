@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { subscribeToPush, isPushSubscribed } from '../lib/push';
 import Layout, { BRAND_COLORS as C } from '../components/Layout';
 import { Avatar, TierBadge } from '../components/Logos';
 import { updateProfile } from '../lib/auth';
@@ -28,6 +29,20 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
   const [editPosition, setEditPosition] = useState('');
   const [editLevel, setEditLevel] = useState('');
   const [editRink, setEditRink] = useState('');
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+
+  useEffect(() => {
+    isPushSubscribed().then(setPushEnabled);
+  }, []);
+
+  const handleEnableNotifications = async () => {
+    setPushLoading(true);
+    const sub = await subscribeToPush(currentUser?.id);
+    setPushEnabled(!!sub);
+    setPushLoading(false);
+    if (!sub) alert('Could not enable notifications. Please check your browser settings.');
+  };
 
   const profileId = urlUserId || currentUser?.id;
   const isOwnProfile = !urlUserId || urlUserId === currentUser?.id;
@@ -116,7 +131,17 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <TierBadge tier={tier.name} size="md" />
                 {isOwnProfile && !editing && (
+                  <div style={{ display: 'flex', gap: 8 }}>
                   <button onClick={openEdit} style={{ padding: '8px 16px', borderRadius: 8, background: 'transparent', border: `1.5px solid ${C.border}`, color: C.ice, fontFamily: "'Barlow', sans-serif", fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>Edit</button>
+                  {!pushEnabled && (
+                    <button onClick={handleEnableNotifications} disabled={pushLoading} style={{ padding: '8px 16px', borderRadius: 8, background: 'transparent', border: `1.5px solid #2E5B8C`, color: '#8BA3BE', fontFamily: "'Barlow', sans-serif", fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
+                      {pushLoading ? '...' : '🔔 Notify'}
+                    </button>
+                  )}
+                  {pushEnabled && (
+                    <span style={{ padding: '8px 16px', borderRadius: 8, background: 'rgba(46,91,140,0.2)', border: '1px solid #2E5B8C', color: '#8BA3BE', fontSize: 13, fontFamily: "'Barlow', sans-serif" }}>🔔 On</span>
+                  )}
+                  </div>
                 )}
                 {!isOwnProfile && (
                   <button onClick={handleFollow} disabled={followLoading} style={{

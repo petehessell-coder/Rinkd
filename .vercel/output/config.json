@@ -23,11 +23,6 @@
       "handle": "filesystem"
     },
     {
-      "src": "^/survey$",
-      "dest": "/survey.html",
-      "check": true
-    },
-    {
       "src": "^(?:/(.*))$",
       "dest": "/index.html",
       "check": true
