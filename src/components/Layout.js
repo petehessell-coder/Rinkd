@@ -4,13 +4,14 @@ import { RinkdLogo, Avatar } from './Logos';
 import { signOut } from '../lib/auth';
 
 const NAV = [
-  { path: '/feed',      icon: '🏒', label: 'Feed',      active: true },
-  { path: '/rinkside',  icon: '📰', label: 'Rinkside',  badge: 'CONTENT' },
-  { path: '/crease',    icon: '🎬', label: 'Crease',    badge: 'PREMIUM' },
-  { path: '/leagues',   icon: '🏆', label: 'Leagues',   badge: 'COMMUNITY' },
-  { path: '/store',     icon: '🛒', label: 'Store',     badge: 'MERCH' },
-  { path: '/discover',  icon: '🔍', label: 'Discover' },
-  { path: '/profile',   icon: '👤', label: 'Profile' },
+  { path: '/feed',        icon: '🏒', label: 'Feed',        active: true },
+  { path: '/rinkside',    icon: '📰', label: 'Rinkside',    badge: 'CONTENT' },
+  { path: '/crease',      icon: '🎬', label: 'Crease',      badge: 'PREMIUM' },
+  { path: '/leagues',     icon: '🏆', label: 'Leagues',     badge: 'COMMUNITY' },
+  { path: '/store',       icon: '🛒', label: 'Store',       badge: 'MERCH' },
+  { path: '/discover',    icon: '🔍', label: 'Discover' },
+  { path: '/profile',     icon: '👤', label: 'Profile' },
+  { path: '/tournaments', icon: '🥅', label: 'Tournaments' },
 ];
 
 const BRAND_COLORS = {
@@ -52,7 +53,6 @@ export default function Layout({ children, profile }) {
         position: 'fixed',
         left: 0, top: 0, bottom: 0,
         zIndex: 100,
-        '@media (max-width: 768px)': { display: 'none' }
       }} className="sidebar-desktop">
         {/* Logo */}
         <div style={{
@@ -65,10 +65,11 @@ export default function Layout({ children, profile }) {
         </div>
 
         {/* Nav */}
-        <nav style={{ flex: 1, padding: '12px 8px' }}>
+        <nav style={{ flex: 1, padding: '12px 8px', overflowY: 'auto' }}>
           {NAV.map(item => {
             const active = location.pathname === item.path ||
-              (item.path === '/feed' && location.pathname === '/');
+              (item.path === '/feed' && location.pathname === '/') ||
+              (item.path === '/tournaments' && location.pathname.startsWith('/tournament'));
             return (
               <Link key={item.path} to={item.path}
                 style={{
@@ -136,8 +137,7 @@ export default function Layout({ children, profile }) {
               onMouseEnter={e => { e.currentTarget.style.borderColor = BRAND_COLORS.red; e.currentTarget.style.color = BRAND_COLORS.red; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = BRAND_COLORS.border; e.currentTarget.style.color = BRAND_COLORS.steel; }}
             >Sign Out</button>
-            
-            {/* Legal footer */}
+
             <div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <Link to="/privacy" style={{ fontSize: 10, color: BRAND_COLORS.border, textDecoration: 'none' }}
                 onMouseEnter={e => e.currentTarget.style.color = BRAND_COLORS.steel}
@@ -172,9 +172,10 @@ export default function Layout({ children, profile }) {
         padding: '8px 0 max(8px, env(safe-area-inset-bottom))',
       }} className="mobile-nav">
         <div style={{ display: 'flex', justifyContent: 'space-around' }}>
-          {NAV.slice(0, 5).map(item => {
+          {[...NAV.slice(0, 4), NAV[NAV.length - 1]].map(item => {
             const active = location.pathname === item.path ||
-              (item.path === '/feed' && location.pathname === '/');
+              (item.path === '/feed' && location.pathname === '/') ||
+              (item.path === '/tournaments' && location.pathname.startsWith('/tournament'));
             return (
               <Link key={item.path} to={item.path}
                 style={{
