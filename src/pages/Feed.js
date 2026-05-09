@@ -71,6 +71,11 @@ function PostCard({ post, currentUser, likedPosts, onLike, onComment }) {
         </div>
         {post.content && <p style={{ fontSize: 15, color: C.ice, lineHeight: 1.55, marginBottom: 10, wordBreak: 'break-word' }}>{post.content}</p>}
         <MediaDisplay url={post.media_url} type={post.media_type} />
+        {post.livebarn_venue_id && (
+          <a href={"https://watch.livebarn.com/en/videoplayer?venueid=" + post.livebarn_venue_id + "&referrer=rinkd"} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, marginBottom: 10, background: 'rgba(46,91,140,0.2)', border: '1px solid #2E5B8C', color: '#F4F7FA', fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', textDecoration: 'none' }}>
+            <span style={{ fontSize: 16 }}>📺</span> Watch Live on LiveBarn
+          </a>
+        )}
         <div style={{ display: 'flex', gap: 16, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
           <button onClick={() => onLike(post.id)} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: isLiked ? C.red : C.steel, fontSize: 13, fontFamily: "'Barlow', sans-serif", padding: 0 }}>
             <span style={{ fontSize: 16 }}>{isLiked ? '❤️' : '🤍'}</span>
@@ -116,6 +121,7 @@ export default function Feed({ currentUser, profile }) {
   const [selectedTag, setSelectedTag] = useState(null);
   const [posting, setPosting] = useState(false);
   const [tab, setTab] = useState('foryou');
+  const [livebarnId, setLivebarnId] = useState('');
   const [mediaFile, setMediaFile] = useState(null);
   const [mediaPreview, setMediaPreview] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -156,8 +162,8 @@ export default function Feed({ currentUser, profile }) {
       if (error) { setPosting(false); alert('Upload failed. Please try again.'); return; }
       mediaUrl = url; mediaType = mt; setUploadProgress(80);
     }
-    await createPost(currentUser.id, { content: content.trim(), tag: selectedTag?.label || null, tagColor: selectedTag?.color || null, mediaUrl, mediaType });
-    setContent(''); setSelectedTag(null); removeMedia(); setComposerOpen(false); setUploadProgress(0);
+    await createPost(currentUser.id, { content: content.trim(), tag: selectedTag?.label || null, tagColor: selectedTag?.color || null, mediaUrl, mediaType, livebarnVenueId: livebarnId.trim() || null });
+    setContent(''); setSelectedTag(null); setLivebarnId(''); removeMedia(); setComposerOpen(false); setUploadProgress(0);
     await load(); setPosting(false);
   };
 
@@ -214,6 +220,7 @@ export default function Feed({ currentUser, profile }) {
                       style={{ padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: selectedTag?.label === tag.label ? tag.color : tag.color + '22', color: selectedTag?.label === tag.label ? 'white' : tag.color, fontSize: 11, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '0.06em' }}>{tag.label}</button>
                   ))}
                 </div>
+                <input value={livebarnId} onChange={e => setLivebarnId(e.target.value)} placeholder="📺 LiveBarn Venue ID (optional)" style={{ width: '100%', padding: '8px 12px', borderRadius: 8, background: C.navy, border: '1px solid ' + C.border, color: C.ice, fontSize: 13, outline: 'none', fontFamily: "'Barlow', sans-serif", marginBottom: 10, boxSizing: 'border-box' }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <input ref={fileInputRef} type="file" accept="image/*,video/*" onChange={handleMediaSelect} style={{ display: 'none' }} id="media-upload"/>

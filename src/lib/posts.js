@@ -27,7 +27,7 @@ export async function getFollowingPosts(userId, limit = 30) {
   return { data, error };
 }
 
-export async function createPost(authorId, { content, tag, tagColor, mediaUrl, mediaType }) {
+export async function createPost(authorId, { content, tag, tagColor, mediaUrl, mediaType, livebarnVenueId }) {
   const { data, error } = await supabase
     .from('posts')
     .insert({
