@@ -285,8 +285,9 @@ export default function ScorerView() {
       <div style={{ padding: 16 }}>
 
         {/* SCORE */}
-        <SecLabel>Score {saving && <span style={{ color: 'rgba(244,247,250,0.3)', fontWeight: 400, textTransform: 'none', fontSize: 10 }}>saving...</span>}</SecLabel>
-        <Card>
+        <SecLabel>Score &amp; Goals {saving && <span style={{ color: 'rgba(244,247,250,0.3)', fontWeight: 400, textTransform: 'none', fontSize: 10 }}>saving...</span>}</SecLabel>
+        <div style={{background:'#0f2847',border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,overflow:'hidden',marginBottom:16}}>
+        <div style={{padding:'14px 16px',borderBottom:'0.5px solid rgba(46,91,140,0.3)'}}>
           {[[homeTeam, homeScore, 'home'], [awayTeam, awayScore, 'away']].map(([team, score, side], i) => (
             <div key={side} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderTop: i > 0 ? `0.5px solid rgba(244,247,250,0.07)` : 'none', marginTop: i > 0 ? 6 : 0, paddingTop: i > 0 ? 12 : 6 }}>
               <div style={{ fontSize: 16, fontWeight: 700, color: C.ice, flex: 1 }}>{team?.team_name}</div>
@@ -298,7 +299,6 @@ export default function ScorerView() {
             </div>
           ))}
         </Card>
-
         {/* PERIOD */}
         <SecLabel>Period</SecLabel>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 6, marginBottom: 16 }}>
@@ -331,11 +331,10 @@ export default function ScorerView() {
                 onMouseLeave={e => { e.currentTarget.style.background = C.blue; e.currentTarget.style.color = C.ice; }}>+</button>
             </div>
           ))}
-        </Card>
-
-        {/* GOALS */}
-        <SecLabel>Goal Log ({goals.length})</SecLabel>
-        <Card>
+          <div style={{fontSize:10,color:'rgba(244,247,250,0.25)',textAlign:'center',marginTop:6,marginBottom:2}}>Score updates automatically when goals are logged · use +/− to correct</div>
+        </div>
+        <div style={{padding:'14px 16px'}}>
+          <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.1em',color:'rgba(244,247,250,0.3)',textTransform:'uppercase',marginBottom:8}}>Goal Log ({goals.length})</div>
           {goals.length === 0 && <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center', padding: '8px 0' }}>No goals logged yet</div>}
           {goals.map(g => (
             <div key={g.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 0', borderBottom: `0.5px solid rgba(244,247,250,0.06)` }}>
@@ -357,7 +356,8 @@ export default function ScorerView() {
             </div>
           ))}
           <AddBtn onClick={() => { setGoalForm(prev => ({ ...prev, period })); setGoalModal(true); }}>+ Log Goal</AddBtn>
-        </Card>
+        </div>
+        </div>
 
         {/* PENALTIES */}
         <SecLabel>Penalties ({penalties.length})</SecLabel>
