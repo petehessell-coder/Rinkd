@@ -205,4 +205,6 @@ export default function Layout({ children, profile }) {
   );
 }
 
+const BRAND_COLORS = B;
 export { BRAND_COLORS };
+
