@@ -1,0 +1,16 @@
+{
+  "projectId": "prj_fIYsPTQJ0vaYvj1w3kZkodpdqZUH",
+  "orgId": "team_kIYhrLu5tSRKt67rW3BTdYHB",
+  "projectName": "rinkd",
+  "settings": {
+    "createdAt": 1777556465634,
+    "framework": null,
+    "devCommand": null,
+    "installCommand": null,
+    "buildCommand": null,
+    "outputDirectory": null,
+    "rootDirectory": null,
+    "directoryListing": false,
+    "nodeVersion": "24.x"
+  }
+}
