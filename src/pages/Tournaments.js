@@ -24,7 +24,13 @@ export default function Tournaments({ profile }) {
   return (
     <Layout profile={profile}>
       <div style={{ background: '#07111F', minHeight: '100vh', padding: 20, fontFamily: 'Barlow, sans-serif', color: '#F4F7FA' }}>
-        <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 28, marginBottom: 4 }}>TOURNAMENTS</div>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4 }}>
+          <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 28 }}>TOURNAMENTS</div>
+          <button onClick={() => navigate('/tournament/create')}
+            style={{ background: '#D72638', color: '#fff', border: 'none', borderRadius: 999, padding: '9px 18px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            + Create
+          </button>
+        </div>
         <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.4)', marginBottom: 20 }}>Live standings · real-time scoring · LiveBarn streams</div>
 
         {loading && <div style={{ color: 'rgba(244,247,250,0.3)', fontSize: 13 }}>Loading...</div>}
