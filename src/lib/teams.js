@@ -40,7 +40,7 @@ export async function getTeamMembers(teamId) {
     .from('team_members')
     .select('*, profile:profiles(id, name, handle, avatar_color, avatar_initials)')
     .eq('team_id', teamId)
-    .eq('status', 'active')
+    .in('status', ['active', 'pending'])
     .order('role')
     .order('jersey_number');
   if (error) throw error;
@@ -126,7 +126,7 @@ export async function getUserTeams(userId) {
     .from('team_members')
     .select('*, team:teams(*)')
     .eq('user_id', userId)
-    .eq('status', 'active');
+    .in('status', ['active', 'pending']);
   if (error) throw error;
   return data || [];
 }
