@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import ledV from '../assets/led_v.png';
 
 function getLiveBarnUrl(venueId) {
   if (!venueId) return null;
@@ -8,16 +9,7 @@ function getLiveBarnUrl(venueId) {
 }
 
 function LedV({ size = 16 }) {
-  return (
-    <svg width={size * 0.85} height={size} viewBox="0 0 22 26" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="2"  cy="2"  r="1.6" fill="#D72638"/><circle cx="2"  cy="6"  r="1.6" fill="#D72638"/>
-      <circle cx="4"  cy="10" r="1.6" fill="#D72638"/><circle cx="6"  cy="14" r="1.6" fill="#D72638"/>
-      <circle cx="8"  cy="18" r="1.6" fill="#D72638"/><circle cx="10" cy="22" r="1.6" fill="#D72638"/>
-      <circle cx="20" cy="2"  r="1.6" fill="#D72638"/><circle cx="20" cy="6"  r="1.6" fill="#D72638"/>
-      <circle cx="18" cy="10" r="1.6" fill="#D72638"/><circle cx="16" cy="14" r="1.6" fill="#D72638"/>
-      <circle cx="14" cy="18" r="1.6" fill="#D72638"/><circle cx="12" cy="22" r="1.6" fill="#D72638"/>
-    </svg>
-  );
+  return <img src={ledV} alt="Rinkd" width={size} height={size} style={{ objectFit: 'contain', display: 'block' }} />;
 }
 
 const TABS = ['Standings','Schedule','Bracket','Info','Feed'];
