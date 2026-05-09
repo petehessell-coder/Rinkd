@@ -34,7 +34,9 @@ const TIEBREAKER_LABELS = {
   coin_toss: 'Coin toss — Tournament Director',
 };
 
-// ── INPUT COMPONENTS ─────────────────────────────────────────
+const inputStyle = { width: '100%', background: '#07111F', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 8, padding: '10px 12px', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', fontSize: 14, outline: 'none' };
+const selectStyle = { ...inputStyle };
+
 function Field({ label, children }) {
   return (
     <div style={{ marginBottom: 14 }}>
@@ -45,19 +47,15 @@ function Field({ label, children }) {
 }
 
 function Input({ value, onChange, placeholder, type = 'text' }) {
-  return (
-    <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-      style={{ width: '100%', background: '#07111F', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 8, padding: '10px 12px', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', fontSize: 14, outline: 'none' }}
-      onFocus={e => e.target.style.borderColor = '#2E5B8C'}
-      onBlur={e => e.target.style.borderColor = 'rgba(46,91,140,0.5)'}
-    />
-  );
+  return <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+    style={inputStyle}
+    onFocus={e => e.target.style.borderColor = '#2E5B8C'}
+    onBlur={e => e.target.style.borderColor = 'rgba(46,91,140,0.5)'} />;
 }
 
 function Select({ value, onChange, options }) {
   return (
-    <select value={value} onChange={e => onChange(e.target.value)}
-      style={{ width: '100%', background: '#07111F', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 8, padding: '10px 12px', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', fontSize: 14, outline: 'none' }}>
+    <select value={value} onChange={e => onChange(e.target.value)} style={selectStyle}>
       {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
   );
@@ -77,8 +75,8 @@ function Toggle({ value, onChange, label, sub }) {
   );
 }
 
-function Card({ children, style = {} }) {
-  return <div style={{ background: COLORS.card, border: `0.5px solid ${COLORS.border}`, borderRadius: 12, padding: '16px 18px', marginBottom: 12, ...style }}>{children}</div>;
+function Card({ children }) {
+  return <div style={{ background: COLORS.card, border: `0.5px solid ${COLORS.border}`, borderRadius: 12, padding: '16px 18px', marginBottom: 12 }}>{children}</div>;
 }
 
 function SectionLabel({ children }) {
@@ -89,7 +87,6 @@ function Row2({ children }) {
   return <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>{children}</div>;
 }
 
-// ── PROGRESS BAR ─────────────────────────────────────────────
 function Progress({ step }) {
   return (
     <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
@@ -100,22 +97,24 @@ function Progress({ step }) {
   );
 }
 
-// ── BUTTONS ───────────────────────────────────────────────────
 function BtnRow({ onBack, onNext, nextLabel = 'Next →', loading = false }) {
   return (
     <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
       {onBack && <button onClick={onBack} style={{ background: 'rgba(244,247,250,0.08)', color: 'rgba(244,247,250,0.6)', border: 'none', borderRadius: 999, padding: '12px 20px', fontFamily: 'Barlow, sans-serif', fontSize: 14, cursor: 'pointer' }}>← Back</button>}
       <button onClick={onNext} disabled={loading}
         style={{ flex: 1, background: COLORS.red, color: '#fff', border: 'none', borderRadius: 999, padding: 12, fontFamily: 'Barlow, sans-serif', fontSize: 14, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
-        {loading ? 'Saving...' : nextLabel}
+        {loading ? 'Publishing...' : nextLabel}
       </button>
     </div>
   );
 }
 
-// ── STEP 1 — BASICS ───────────────────────────────────────────
+// Period length 1–20
+const periodOptions = Array.from({length:20},(_,i)=>({value:i+1,label:`${i+1} min`}));
+// Points 0–4
+const pointOptions = Array.from({length:5},(_,i)=>({value:i,label:`${i} pt${i!==1?'s':''}`}));
+
 function Step1({ data, onChange, onNext }) {
-  const ok = data.name && data.division && data.start_date && data.end_date && data.venue_name;
   return (
     <>
       <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 22, marginBottom: 4 }}>Create Tournament</div>
@@ -128,8 +127,12 @@ function Step1({ data, onChange, onNext }) {
           <Input value={data.division} onChange={v => onChange('division', v)} placeholder="e.g. 12U AAA, Bantam AA, Adult Rec..." />
         </Field>
         <Row2>
-          <Field label="Start Date"><Input type="date" value={data.start_date} onChange={v => onChange('start_date', v)} /></Field>
-          <Field label="End Date"><Input type="date" value={data.end_date} onChange={v => onChange('end_date', v)} /></Field>
+          <Field label="Start Date">
+            <input type="date" value={data.start_date} onChange={e => onChange('start_date', e.target.value)} style={inputStyle} />
+          </Field>
+          <Field label="End Date">
+            <input type="date" value={data.end_date} onChange={e => onChange('end_date', e.target.value)} style={inputStyle} />
+          </Field>
         </Row2>
         <Field label="Venue / Facility">
           <Input value={data.venue_name} onChange={v => onChange('venue_name', v)} placeholder="e.g. Lakewood Ice Complex" />
@@ -139,12 +142,10 @@ function Step1({ data, onChange, onNext }) {
         </Field>
       </Card>
       <BtnRow onNext={onNext} nextLabel="Next — Format & Rules →" />
-      {!ok && <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.3)', textAlign: 'center', marginTop: 8 }}>Fill in all required fields to continue</div>}
     </>
   );
 }
 
-// ── STEP 2 — FORMAT & RULES ───────────────────────────────────
 function Step2({ data, onChange, onBack, onNext }) {
   const s = data.settings;
   const set = (key, val) => onChange('settings', { ...s, [key]: val });
@@ -165,8 +166,7 @@ function Step2({ data, onChange, onBack, onNext }) {
       <Card>
         <Row2>
           <Field label="Period Length">
-            <Select value={s.period_length_minutes} onChange={v => set('period_length_minutes', parseInt(v))}
-              options={[{value:12,label:'12 min'},{value:15,label:'15 min'},{value:17,label:'17 min'},{value:20,label:'20 min'}]} />
+            <Select value={s.period_length_minutes} onChange={v => set('period_length_minutes', parseInt(v))} options={periodOptions} />
           </Field>
           <Field label="Period Type">
             <Select value={s.period_type} onChange={v => set('period_type', v)}
@@ -179,7 +179,7 @@ function Step2({ data, onChange, onBack, onNext }) {
               options={[{value:2,label:'2 periods'},{value:3,label:'3 periods'}]} />
           </Field>
           <Field label="Max Goal Diff">
-            <Select value={s.max_goal_differential} onChange={v => set('max_goal_differential', v === 'none' ? null : parseInt(v))}
+            <Select value={s.max_goal_differential ?? 'none'} onChange={v => set('max_goal_differential', v==='none'?null:parseInt(v))}
               options={[{value:'none',label:'No limit'},{value:3,label:'3'},{value:5,label:'5'},{value:7,label:'7'}]} />
           </Field>
         </Row2>
@@ -188,34 +188,22 @@ function Step2({ data, onChange, onBack, onNext }) {
       <SectionLabel>Point System</SectionLabel>
       <Card>
         <Row2>
-          <Field label="Win">
-            <Select value={s.points_win} onChange={v => set('points_win', parseInt(v))}
-              options={[{value:2,label:'2 pts'},{value:3,label:'3 pts'}]} />
-          </Field>
-          <Field label="Tie">
-            <Select value={s.points_tie} onChange={v => set('points_tie', parseInt(v))}
-              options={[{value:1,label:'1 pt'},{value:0,label:'0 pts'}]} />
-          </Field>
+          <Field label="Win"><Select value={s.points_win} onChange={v => set('points_win', parseInt(v))} options={pointOptions} /></Field>
+          <Field label="Tie"><Select value={s.points_tie} onChange={v => set('points_tie', parseInt(v))} options={pointOptions} /></Field>
         </Row2>
         <Row2>
-          <Field label="Loss">
-            <Select value={s.points_loss} onChange={v => set('points_loss', parseInt(v))}
-              options={[{value:0,label:'0 pts'}]} />
-          </Field>
-          <Field label="OT/SO Win">
-            <Select value={s.shootout_win_points} onChange={v => set('shootout_win_points', parseInt(v))}
-              options={[{value:2,label:'2 pts'},{value:1,label:'1 pt'}]} />
-          </Field>
+          <Field label="Loss"><Select value={s.points_loss} onChange={v => set('points_loss', parseInt(v))} options={pointOptions} /></Field>
+          <Field label="OT/SO Win"><Select value={s.shootout_win_points} onChange={v => set('shootout_win_points', parseInt(v))} options={pointOptions} /></Field>
         </Row2>
       </Card>
 
       <SectionLabel>Tiebreakers — tap arrows to reorder</SectionLabel>
       <Card>
         {s.tiebreakers.map((key, i) => (
-          <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: i < s.tiebreakers.length - 1 ? '0.5px solid rgba(244,247,250,0.06)' : 'none' }}>
+          <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: i < s.tiebreakers.length-1 ? '0.5px solid rgba(244,247,250,0.06)' : 'none' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <button onClick={() => i > 0 && moveTb(i, i-1)} style={{ background: 'none', border: 'none', color: i > 0 ? 'rgba(244,247,250,0.4)' : 'rgba(244,247,250,0.1)', cursor: i > 0 ? 'pointer' : 'default', fontSize: 12, padding: '0 4px' }}>▲</button>
-              <button onClick={() => i < s.tiebreakers.length - 1 && moveTb(i, i+1)} style={{ background: 'none', border: 'none', color: i < s.tiebreakers.length - 1 ? 'rgba(244,247,250,0.4)' : 'rgba(244,247,250,0.1)', cursor: i < s.tiebreakers.length - 1 ? 'pointer' : 'default', fontSize: 12, padding: '0 4px' }}>▼</button>
+              <button onClick={() => i > 0 && moveTb(i, i-1)} style={{ background: 'none', border: 'none', color: i>0?'rgba(244,247,250,0.4)':'rgba(244,247,250,0.1)', cursor: i>0?'pointer':'default', fontSize: 12, padding: '0 4px' }}>▲</button>
+              <button onClick={() => i < s.tiebreakers.length-1 && moveTb(i, i+1)} style={{ background: 'none', border: 'none', color: i<s.tiebreakers.length-1?'rgba(244,247,250,0.4)':'rgba(244,247,250,0.1)', cursor: i<s.tiebreakers.length-1?'pointer':'default', fontSize: 12, padding: '0 4px' }}>▼</button>
             </div>
             <span style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(46,91,140,0.4)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'rgba(244,247,250,0.6)', flexShrink: 0 }}>{i+1}</span>
             <span style={{ fontSize: 13, color: '#F4F7FA' }}>{TIEBREAKER_LABELS[key]}</span>
@@ -235,33 +223,28 @@ function Step2({ data, onChange, onBack, onNext }) {
   );
 }
 
-// ── STEP 3 — TEAMS & POOLS ────────────────────────────────────
 function Step3({ data, onChange, onBack, onNext }) {
   const [newTeam, setNewTeam] = useState('');
   const [newPool, setNewPool] = useState('A');
   const numPools = data.num_pools || 2;
-  const poolNames = data.pool_names || ['A', 'B'];
+  const poolNames = data.pool_names || ['A','B'];
 
   const addTeam = () => {
     if (!newTeam.trim()) return;
-    onChange('teams', [...(data.teams || []), { name: newTeam.trim(), pool: newPool }]);
+    onChange('teams', [...(data.teams||[]), { name: newTeam.trim(), pool: newPool }]);
     setNewTeam('');
   };
 
-  const removeTeam = (i) => {
-    const t = [...(data.teams || [])];
-    t.splice(i, 1);
-    onChange('teams', t);
+  const removeTeam = i => {
+    const t = [...(data.teams||[])]; t.splice(i,1); onChange('teams', t);
   };
 
   const updatePoolName = (i, val) => {
-    const names = [...poolNames];
-    names[i] = val;
-    onChange('pool_names', names);
+    const names = [...poolNames]; names[i] = val; onChange('pool_names', names);
   };
 
-  const poolColors = ['rgba(215,38,56,0.2)', 'rgba(46,91,140,0.3)', 'rgba(34,197,94,0.2)', 'rgba(245,158,11,0.2)'];
-  const poolTextColors = ['#D72638', '#8BA3BE', '#22C55E', '#F59E0B'];
+  const poolColors = ['rgba(215,38,56,0.2)','rgba(46,91,140,0.3)','rgba(34,197,94,0.2)','rgba(245,158,11,0.2)'];
+  const poolTextColors = ['#D72638','#8BA3BE','#22C55E','#F59E0B'];
 
   return (
     <>
@@ -283,7 +266,7 @@ function Step3({ data, onChange, onBack, onNext }) {
         <Row2>
           {Array.from({length: numPools}, (_, i) => (
             <Field key={i} label={`Pool ${i+1} Name`}>
-              <Input value={poolNames[i] || ''} onChange={v => updatePoolName(i, v)} placeholder={String.fromCharCode(65+i)} />
+              <Input value={poolNames[i]||''} onChange={v => updatePoolName(i, v)} placeholder={String.fromCharCode(65+i)} />
             </Field>
           ))}
         </Row2>
@@ -291,20 +274,20 @@ function Step3({ data, onChange, onBack, onNext }) {
 
       <SectionLabel>Teams ({(data.teams||[]).length})</SectionLabel>
       <Card>
-        {(data.teams || []).map((t, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
-            <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: poolColors[poolNames.indexOf(t.pool)] || poolColors[0], color: poolTextColors[poolNames.indexOf(t.pool)] || poolTextColors[0], letterSpacing: '0.06em' }}>POOL {t.pool}</span>
-            <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#F4F7FA' }}>{t.name}</span>
-            <button onClick={() => removeTeam(i)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.3)', cursor: 'pointer', fontSize: 16, padding: '0 4px' }}>✕</button>
-          </div>
-        ))}
+        {(data.teams||[]).map((t, i) => {
+          const pi = poolNames.indexOf(t.pool);
+          return (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
+              <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: poolColors[pi]||poolColors[0], color: poolTextColors[pi]||poolTextColors[0], letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>POOL {t.pool}</span>
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#F4F7FA' }}>{t.name}</span>
+              <button onClick={() => removeTeam(i)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.3)', cursor: 'pointer', fontSize: 16, padding: '0 4px' }}>✕</button>
+            </div>
+          );
+        })}
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          <input value={newTeam} onChange={e => setNewTeam(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && addTeam()}
-            placeholder="Team name"
-            style={{ flex: 1, background: '#07111F', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 8, padding: '9px 12px', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', fontSize: 13, outline: 'none' }} />
-          <select value={newPool} onChange={e => setNewPool(e.target.value)}
-            style={{ background: '#07111F', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 8, padding: '9px 12px', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', fontSize: 13, outline: 'none' }}>
+          <input value={newTeam} onChange={e => setNewTeam(e.target.value)} onKeyDown={e => e.key==='Enter'&&addTeam()}
+            placeholder="Team name" style={{ flex: 1, ...inputStyle }} />
+          <select value={newPool} onChange={e => setNewPool(e.target.value)} style={{ ...selectStyle, width: 'auto' }}>
             {poolNames.map(p => <option key={p} value={p}>Pool {p}</option>)}
           </select>
           <button onClick={addTeam} style={{ background: COLORS.blue, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Add</button>
@@ -316,33 +299,34 @@ function Step3({ data, onChange, onBack, onNext }) {
   );
 }
 
-// ── STEP 4 — SCHEDULE & PUBLISH ───────────────────────────────
 function Step4({ data, onChange, onBack, onSubmit, loading }) {
   const [newRink, setNewRink] = useState({ name: '', sub_rink: '', live_barn_venue_id: '' });
   const [newGame, setNewGame] = useState({ home: '', away: '', rink: '', time: '' });
   const [scorekeeperEmail, setScorekeeperEmail] = useState('');
 
   const addRink = () => {
-    if (!newRink.name.trim()) return;
-    onChange('rinks', [...(data.rinks || []), { ...newRink }]);
+    if (!newRink.sub_rink.trim() && !newRink.name.trim()) return;
+    onChange('rinks', [...(data.rinks||[]), { ...newRink }]);
     setNewRink({ name: '', sub_rink: '', live_barn_venue_id: '' });
   };
 
-  const removeRink = (i) => {
-    const r = [...(data.rinks || [])]; r.splice(i, 1); onChange('rinks', r);
-  };
+  const removeRink = i => { const r=[...(data.rinks||[])]; r.splice(i,1); onChange('rinks',r); };
 
   const addGame = () => {
     if (!newGame.home || !newGame.away || !newGame.time) return;
-    onChange('games', [...(data.games || []), { ...newGame }]);
-    setNewGame({ home: '', away: '', rink: data.rinks?.[0]?.sub_rink || '', time: '' });
+    onChange('games', [...(data.games||[]), { ...newGame }]);
+    setNewGame({ home: '', away: '', rink: data.rinks?.[0]?.sub_rink||'', time: '' });
   };
 
-  const removeGame = (i) => {
-    const g = [...(data.games || [])]; g.splice(i, 1); onChange('games', g);
+  const removeGame = i => { const g=[...(data.games||[])]; g.splice(i,1); onChange('games',g); };
+
+  const addScorekeeper = () => {
+    if (!scorekeeperEmail.trim()) return;
+    onChange('scorekeepers', [...(data.scorekeepers||[]), scorekeeperEmail.trim()]);
+    setScorekeeperEmail('');
   };
 
-  const teams = (data.teams || []).map(t => t.name);
+  const teams = (data.teams||[]).map(t => t.name);
 
   return (
     <>
@@ -351,10 +335,10 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
 
       <SectionLabel>Rinks</SectionLabel>
       <Card>
-        {(data.rinks || []).map((r, i) => (
+        {(data.rinks||[]).map((r,i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#F4F7FA' }}>{r.sub_rink || r.name}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#F4F7FA' }}>{r.sub_rink||r.name}</div>
               {r.live_barn_venue_id
                 ? <div style={{ fontSize: 11, color: '#D72638', fontWeight: 600 }}>LiveBarn: {r.live_barn_venue_id}</div>
                 : <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.3)' }}>No LiveBarn</div>}
@@ -363,15 +347,12 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
           </div>
         ))}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <input value={newRink.name} onChange={e => setNewRink({...newRink, name: e.target.value})} placeholder="Facility name"
-              style={{ background: '#07111F', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 8, padding: '9px 12px', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', fontSize: 13, outline: 'none' }} />
-            <input value={newRink.sub_rink} onChange={e => setNewRink({...newRink, sub_rink: e.target.value})} placeholder="Rink name (e.g. Rink 1)"
-              style={{ background: '#07111F', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 8, padding: '9px 12px', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', fontSize: 13, outline: 'none' }} />
-          </div>
+          <Row2>
+            <input value={newRink.name} onChange={e => setNewRink({...newRink, name: e.target.value})} placeholder="Facility name" style={inputStyle} />
+            <input value={newRink.sub_rink} onChange={e => setNewRink({...newRink, sub_rink: e.target.value})} placeholder="Rink name (e.g. Rink 1)" style={inputStyle} />
+          </Row2>
           <div style={{ display: 'flex', gap: 8 }}>
-            <input value={newRink.live_barn_venue_id} onChange={e => setNewRink({...newRink, live_barn_venue_id: e.target.value})} placeholder="LiveBarn venue ID (optional)"
-              style={{ flex: 1, background: '#07111F', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 8, padding: '9px 12px', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', fontSize: 13, outline: 'none' }} />
+            <input value={newRink.live_barn_venue_id} onChange={e => setNewRink({...newRink, live_barn_venue_id: e.target.value})} placeholder="LiveBarn venue ID (optional)" style={{ ...inputStyle, flex: 1 }} />
             <button onClick={addRink} style={{ background: COLORS.blue, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Add</button>
           </div>
         </div>
@@ -379,9 +360,11 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
 
       <SectionLabel>Games ({(data.games||[]).length})</SectionLabel>
       <Card>
-        {(data.games || []).map((g, i) => (
+        {(data.games||[]).map((g,i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 0', borderBottom: '0.5px solid rgba(244,247,250,0.06)', fontSize: 12 }}>
-            <span style={{ background: 'rgba(46,91,140,0.25)', borderRadius: 6, padding: '3px 8px', fontSize: 11, fontWeight: 600, color: 'rgba(244,247,250,0.7)', whiteSpace: 'nowrap' }}>{g.time ? new Date(g.time).toLocaleString('en-US',{weekday:'short',hour:'numeric',minute:'2-digit'}) : '—'}</span>
+            <span style={{ background: 'rgba(46,91,140,0.25)', borderRadius: 6, padding: '3px 8px', fontSize: 11, fontWeight: 600, color: 'rgba(244,247,250,0.7)', whiteSpace: 'nowrap' }}>
+              {g.time ? new Date(g.time).toLocaleString('en-US',{weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '—'}
+            </span>
             <span style={{ flex: 1, fontWeight: 600 }}>{g.home}</span>
             <span style={{ color: 'rgba(244,247,250,0.3)', fontSize: 11 }}>vs</span>
             <span style={{ flex: 1, fontWeight: 600, textAlign: 'right' }}>{g.away}</span>
@@ -391,24 +374,21 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
         ))}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 8, alignItems: 'center' }}>
-            <select value={newGame.home} onChange={e => setNewGame({...newGame, home: e.target.value})}
-              style={{ background: '#07111F', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 8, padding: '9px 10px', color: newGame.home ? '#F4F7FA' : 'rgba(244,247,250,0.3)', fontFamily: 'Barlow, sans-serif', fontSize: 12, outline: 'none' }}>
+            <select value={newGame.home} onChange={e => setNewGame({...newGame, home: e.target.value})} style={{ ...selectStyle }}>
               <option value="">Home team</option>
               {teams.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
             <span style={{ color: 'rgba(244,247,250,0.3)', fontSize: 11, textAlign: 'center' }}>vs</span>
-            <select value={newGame.away} onChange={e => setNewGame({...newGame, away: e.target.value})}
-              style={{ background: '#07111F', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 8, padding: '9px 10px', color: newGame.away ? '#F4F7FA' : 'rgba(244,247,250,0.3)', fontFamily: 'Barlow, sans-serif', fontSize: 12, outline: 'none' }}>
+            <select value={newGame.away} onChange={e => setNewGame({...newGame, away: e.target.value})} style={{ ...selectStyle }}>
               <option value="">Away team</option>
               {teams.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8 }}>
             <input type="datetime-local" value={newGame.time} onChange={e => setNewGame({...newGame, time: e.target.value})}
-              style={{ background: '#07111F', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 8, padding: '9px 10px', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', fontSize: 12, outline: 'none' }} />
-            <select value={newGame.rink} onChange={e => setNewGame({...newGame, rink: e.target.value})}
-              style={{ background: '#07111F', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 8, padding: '9px 10px', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', fontSize: 12, outline: 'none' }}>
-              <option value="">Rink</option>
+              style={{ ...inputStyle }} />
+            <select value={newGame.rink} onChange={e => setNewGame({...newGame, rink: e.target.value})} style={{ ...selectStyle }}>
+              <option value="">Select rink</option>
               {(data.rinks||[]).map(r => <option key={r.sub_rink||r.name} value={r.sub_rink||r.name}>{r.sub_rink||r.name}</option>)}
             </select>
             <button onClick={addGame} style={{ background: COLORS.blue, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Add</button>
@@ -420,13 +400,13 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
       <Card>
         <Field label="Invite by Rinkd handle or email">
           <div style={{ display: 'flex', gap: 8 }}>
-            <input value={scorekeeperEmail} onChange={e => setScorekeeperEmail(e.target.value)} placeholder="@handle or email"
-              style={{ flex: 1, background: '#07111F', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 8, padding: '10px 12px', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', fontSize: 13, outline: 'none' }} />
-            <button onClick={() => { if(scorekeeperEmail.trim()){ onChange('scorekeepers', [...(data.scorekeepers||[]), scorekeeperEmail.trim()]); setScorekeeperEmail(''); }}}
-              style={{ background: COLORS.blue, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Invite</button>
+            <input value={scorekeeperEmail} onChange={e => setScorekeeperEmail(e.target.value)}
+              onKeyDown={e => e.key==='Enter'&&addScorekeeper()}
+              placeholder="@handle or email" style={{ flex: 1, ...inputStyle }} />
+            <button onClick={addScorekeeper} style={{ background: COLORS.blue, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Invite</button>
           </div>
         </Field>
-        {(data.scorekeepers||[]).map((s, i) => (
+        {(data.scorekeepers||[]).map((s,i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', fontSize: 13, color: 'rgba(244,247,250,0.6)' }}>
             <span>{s}</span>
             <button onClick={() => { const sc=[...(data.scorekeepers||[])]; sc.splice(i,1); onChange('scorekeepers',sc); }} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.3)', cursor: 'pointer' }}>✕</button>
@@ -440,7 +420,6 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
   );
 }
 
-// ── MAIN COMPONENT ────────────────────────────────────────────
 export default function TournamentCreate({ profile }) {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
@@ -451,7 +430,7 @@ export default function TournamentCreate({ profile }) {
     name: '', division: '', start_date: '', end_date: '',
     venue_name: '', venue_address: '',
     settings: { ...DEFAULT_SETTINGS },
-    num_pools: 2, pool_names: ['A', 'B'],
+    num_pools: 2, pool_names: ['A','B'],
     teams: [], rinks: [], games: [], scorekeepers: [],
   });
 
@@ -467,7 +446,7 @@ export default function TournamentCreate({ profile }) {
       const rinkMap = {};
       for (const r of data.rinks) {
         const { data: rinkRow, error: re } = await supabase.from('rinks')
-          .insert({ name: r.name || data.venue_name, sub_rink: r.sub_rink, address: data.venue_address, live_barn_venue_id: r.live_barn_venue_id || null })
+          .insert({ name: r.name || data.venue_name, sub_rink: r.sub_rink || null, address: data.venue_address, live_barn_venue_id: r.live_barn_venue_id || null })
           .select().single();
         if (re) throw re;
         rinkMap[r.sub_rink || r.name] = rinkRow.id;
@@ -479,12 +458,7 @@ export default function TournamentCreate({ profile }) {
           name: data.name, division: data.division,
           start_date: data.start_date, end_date: data.end_date,
           director_id: user.id, status: 'active',
-          settings: {
-            ...data.settings,
-            venue_name: data.venue_name,
-            venue_address: data.venue_address,
-            pool_names: data.pool_names,
-          },
+          settings: { ...data.settings, venue_name: data.venue_name, venue_address: data.venue_address, pool_names: data.pool_names },
         }).select().single();
       if (te) throw te;
 
@@ -515,7 +489,7 @@ export default function TournamentCreate({ profile }) {
       }
 
       navigate('/tournament/' + t.id);
-    } catch (e) {
+    } catch(e) {
       setError(e.message);
       setLoading(false);
     }
@@ -526,10 +500,10 @@ export default function TournamentCreate({ profile }) {
       <div style={{ background: '#07111F', minHeight: '100vh', padding: 20, fontFamily: 'Barlow, sans-serif', color: '#F4F7FA', maxWidth: 600, margin: '0 auto' }}>
         <Progress step={step} />
         {error && <div style={{ background: 'rgba(215,38,56,0.15)', border: '0.5px solid rgba(215,38,56,0.4)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#D72638' }}>{error}</div>}
-        {step === 1 && <Step1 data={data} onChange={onChange} onNext={() => setStep(2)} />}
-        {step === 2 && <Step2 data={data} onChange={onChange} onBack={() => setStep(1)} onNext={() => setStep(3)} />}
-        {step === 3 && <Step3 data={data} onChange={onChange} onBack={() => setStep(2)} onNext={() => setStep(4)} />}
-        {step === 4 && <Step4 data={data} onChange={onChange} onBack={() => setStep(3)} onSubmit={handleSubmit} loading={loading} />}
+        {step===1 && <Step1 data={data} onChange={onChange} onNext={() => setStep(2)} />}
+        {step===2 && <Step2 data={data} onChange={onChange} onBack={() => setStep(1)} onNext={() => setStep(3)} />}
+        {step===3 && <Step3 data={data} onChange={onChange} onBack={() => setStep(2)} onNext={() => setStep(4)} />}
+        {step===4 && <Step4 data={data} onChange={onChange} onBack={() => setStep(3)} onSubmit={handleSubmit} loading={loading} />}
       </div>
     </Layout>
   );
