@@ -138,14 +138,25 @@ function ManageTeam({ id, profile, navigate }) {
   useEffect(() => { load(); }, [load]);
 
   const handleAddMember = async () => {
-    if (!memberForm.handle.trim()) return;
+    if (!memberForm.name.trim()) { setError('Player name is required'); return; }
     setSaving(true); setError(null);
     try {
-      // Look up user by handle
-      const { data: p } = await supabase.from('profiles').select('id').eq('email', memberForm.email.trim().toLowerCase()).maybeSingle();
-      if (!p) { setError('User not found — check the handle'); setSaving(false); return; }
-      await addTeamMember({ team_id: id, user_id: p.id, role: memberForm.role, jersey_number: memberForm.jersey_number ? parseInt(memberForm.jersey_number) : null, position: memberForm.position, shot_hand: memberForm.shot_hand });
-      setMemberForm({ handle: '', jersey_number: '', position: 'Center', role: 'player', shot_hand: 'left' });
+      let userId = null;
+      if (memberForm.email.trim()) {
+        const { data: p } = await supabase.from('profiles').select('id').eq('email', memberForm.email.trim().toLowerCase()).maybeSingle();
+        if (p) userId = p.id;
+      }
+      await addTeamMember({
+        team_id: id,
+        user_id: userId,
+        role: memberForm.role,
+        jersey_number: memberForm.jersey_number ? parseInt(memberForm.jersey_number) : null,
+        position: memberForm.position,
+        shot_hand: memberForm.shot_hand,
+        invite_name: memberForm.name.trim(),
+        invite_email: memberForm.email.trim() || null,
+      });
+      setMemberForm({ name: '', email: '', jersey_number: '', position: 'Center', role: 'player', shot_hand: 'left' });
       await load();
     } catch(e) { setError(e.message); }
     setSaving(false);
