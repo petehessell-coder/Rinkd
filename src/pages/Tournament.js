@@ -161,13 +161,13 @@ export default function TournamentPage() {
         {activeTab === 'Schedule' && (
           games.length === 0
             ? <div style={{textAlign:'center',color:'rgba(244,247,250,0.3)',fontSize:13,paddingTop:40}}>No games scheduled yet</div>
-            : games.map(g => <GameCard key={g.id} game={g} />)
+            : games.map(g => <GameCard key={g.id} game={g} navigate={navigate} />)
         )}
 
         {activeTab === 'Bracket' && (
           bracketGames.length === 0
             ? <div style={{textAlign:'center',color:'rgba(244,247,250,0.3)',fontSize:13,paddingTop:40}}>Bracket seeds lock when pool play ends</div>
-            : bracketGames.map(g => <GameCard key={g.id} game={g} />)
+            : bracketGames.map(g => <GameCard key={g.id} game={g} navigate={navigate} />)
         )}
 
         {activeTab === 'Info' && <InfoTab tournament={tournament} />}
@@ -181,7 +181,7 @@ export default function TournamentPage() {
   );
 }
 
-function GameCard({ game }) {
+function GameCard({ game, navigate }) {
   const isLive = game.status === 'live';
   const isFinal = game.status === 'final';
   const hasStream = !!game.rink?.live_barn_venue_id;
