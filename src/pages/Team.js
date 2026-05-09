@@ -86,7 +86,7 @@ export default function TeamPage({ profile }) {
       </div>
       <Avatar name={m.profile?.name} color={m.profile?.avatar_color} initials={m.profile?.avatar_initials} size={34} />
       <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{m.profile?.name || 'Unknown'}</div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{m.profile?.name || m.invite_name || 'Unknown'}{m.status === 'pending' && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: 'rgba(245,158,11,0.2)', color: '#F59E0B' }}>INVITED</span>}</div>
         <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)' }}>
           {[m.position, m.shot_hand ? `${m.shot_hand} shot` : null].filter(Boolean).join(' · ')}
         </div>

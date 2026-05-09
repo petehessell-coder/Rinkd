@@ -57,9 +57,10 @@ export async function getTeamGames(teamId) {
   return data || [];
 }
 
-export async function addTeamMember({ team_id, user_id, role, jersey_number, position, shot_hand }) {
+export async function addTeamMember({ team_id, user_id, role, jersey_number, position, shot_hand, invite_email, invite_name }) {
+  const status = user_id ? 'active' : 'pending';
   const { data, error } = await supabase.from('team_members')
-    .insert({ team_id, user_id, role, jersey_number, position, shot_hand, status: 'active' })
+    .insert({ team_id, user_id: user_id || null, role, jersey_number, position, shot_hand, invite_email, invite_name, status })
     .select().single();
   if (error) throw error;
   return data;

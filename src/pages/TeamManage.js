@@ -204,9 +204,14 @@ function ManageTeam({ id, profile, navigate }) {
           <>
             <SectionLabel>Add Player</SectionLabel>
             <Card>
-              <Field label="Rinkd Handle">
-                <input style={inputStyle} value={memberForm.handle} onChange={e => setMemberForm(p => ({ ...p, handle: e.target.value }))} placeholder="@handle" />
-              </Field>
+              <Row2>
+                <Field label="Player Name *">
+                  <input style={inputStyle} value={memberForm.name} onChange={e => setMemberForm(p => ({ ...p, name: e.target.value }))} placeholder="Full name" />
+                </Field>
+                <Field label="Email (for invite)">
+                  <input style={inputStyle} type="email" value={memberForm.email} onChange={e => setMemberForm(p => ({ ...p, email: e.target.value }))} placeholder="player@email.com" />
+                </Field>
+              </Row2>
               <Row2>
                 <Field label="Jersey #"><input style={inputStyle} type="number" value={memberForm.jersey_number} onChange={e => setMemberForm(p => ({ ...p, jersey_number: e.target.value }))} placeholder="#" /></Field>
                 <Field label="Position">
@@ -240,8 +245,13 @@ function ManageTeam({ id, profile, navigate }) {
                 <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
                   <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 16, color: 'rgba(244,247,250,0.3)', width: 24, textAlign: 'center', flexShrink: 0 }}>{m.jersey_number || '—'}</div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>{m.profile?.name}</div>
-                    <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)' }}>{m.position} · @{m.profile?.handle}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>
+                      {m.profile?.name || m.invite_name}
+                      {m.status === 'pending' && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: 'rgba(245,158,11,0.2)', color: '#F59E0B' }}>INVITE PENDING</span>}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)' }}>
+                      {m.position}{m.profile?.handle ? ' · @' + m.profile.handle : m.invite_email ? ' · ' + m.invite_email : ''}
+                    </div>
                   </div>
                   <button onClick={() => removeTeamMember(m.id).then(load)}
                     style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.2)', cursor: 'pointer', fontSize: 16 }}
