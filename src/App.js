@@ -14,6 +14,9 @@ import Discover from './pages/Discover';
 import Tournament from './pages/Tournament';
 import Tournaments from './pages/Tournaments';
 import TournamentCreate from './pages/TournamentCreate';
+import Teams from './pages/Teams';
+import Team from './pages/Team';
+import TeamManage from './pages/TeamManage';
 import ScorerView from './pages/ScorerView';
 
 export const AuthContext = createContext(null);
@@ -44,6 +47,10 @@ function AppRoutes() {
       <Route path="/store" element={<ProtectedRoute><Store profile={profile} /></ProtectedRoute>} />
       <Route path="/discover" element={<ProtectedRoute><Discover currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/tournaments" element={<ProtectedRoute><Tournaments profile={profile} /></ProtectedRoute>} />
+      <Route path="/teams" element={<ProtectedRoute><Teams profile={profile} /></ProtectedRoute>} />
+      <Route path="/team/create" element={<ProtectedRoute><TeamManage profile={profile} /></ProtectedRoute>} />
+      <Route path="/team/:id/manage" element={<ProtectedRoute><TeamManage profile={profile} /></ProtectedRoute>} />
+      <Route path="/team/:id" element={<ProtectedRoute><Team profile={profile} /></ProtectedRoute>} />
       <Route path="/tournament/create" element={<ProtectedRoute><TournamentCreate profile={profile} /></ProtectedRoute>} />
       <Route path="/tournament/:id" element={<ProtectedRoute><Tournament /></ProtectedRoute>} />
       <Route path="/scorer/:gameId" element={<ProtectedRoute><ScorerView /></ProtectedRoute>} />

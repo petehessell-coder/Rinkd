@@ -12,6 +12,7 @@ const NAV = [
   { path: '/discover',    icon: '🔍', label: 'Discover' },
   { path: '/profile',     icon: '👤', label: 'Profile' },
   { path: '/tournaments', icon: '🥅', label: 'Tournaments' },
+  { path: '/teams',       icon: '👥', label: 'Teams' },
 ];
 
 // Bottom quick-nav — always visible on mobile
@@ -42,7 +43,8 @@ export default function Layout({ children, profile }) {
   const isActive = (item) =>
     location.pathname === item.path ||
     (item.path === '/feed' && location.pathname === '/') ||
-    (item.path === '/tournaments' && location.pathname.startsWith('/tournament'));
+    (item.path === '/tournaments' && location.pathname.startsWith('/tournament')) ||
+    (item.path === '/teams' && location.pathname.startsWith('/team'));
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: B.dark, fontFamily: "'Barlow', sans-serif", color: B.ice }}>
