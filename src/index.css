@@ -1,0 +1,15 @@
+
+/* Rinkd dark calendar override */
+.rinkd-cal { background: #0B1F3A !important; border: 0.5px solid rgba(46,91,140,0.5) !important; border-radius: 12px !important; font-family: 'Barlow', sans-serif !important; color: #F4F7FA !important; }
+.rinkd-cal .react-datepicker__header { background: #07111F !important; border-bottom: 0.5px solid rgba(46,91,140,0.4) !important; border-radius: 12px 12px 0 0 !important; }
+.rinkd-cal .react-datepicker__current-month,
+.rinkd-cal .react-datepicker__day-name,
+.rinkd-cal .react-datepicker-year-header { color: #F4F7FA !important; }
+.rinkd-cal .react-datepicker__day { color: #F4F7FA !important; border-radius: 6px !important; }
+.rinkd-cal .react-datepicker__day:hover { background: #2E5B8C !important; }
+.rinkd-cal .react-datepicker__day--selected { background: #D72638 !important; color: #fff !important; }
+.rinkd-cal .react-datepicker__day--outside-month { color: rgba(244,247,250,0.2) !important; }
+.rinkd-cal .react-datepicker__navigation-icon::before { border-color: #F4F7FA !important; }
+.rinkd-cal .react-datepicker__month-select,
+.rinkd-cal .react-datepicker__year-select { background: #07111F !important; color: #F4F7FA !important; border: 0.5px solid rgba(46,91,140,0.5) !important; border-radius: 6px !important; padding: 2px 6px !important; }
+.rinkd-cal .react-datepicker__triangle { display: none !important; }

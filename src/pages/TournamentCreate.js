@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import DatePicker from '../components/DatePicker';
 import { supabase } from '../lib/supabase';
 import Layout from '../components/Layout';
 
@@ -128,10 +129,10 @@ function Step1({ data, onChange, onNext }) {
         </Field>
         <Row2>
           <Field label="Start Date">
-            <input type="date" value={data.start_date} onChange={e => onChange('start_date', e.target.value)} style={inputStyle} />
+            <DatePicker value={data.start_date} onChange={v => onChange('start_date', v)} placeholder="Start date" />
           </Field>
           <Field label="End Date">
-            <input type="date" value={data.end_date} onChange={e => onChange('end_date', e.target.value)} style={inputStyle} />
+            <DatePicker value={data.end_date} onChange={v => onChange('end_date', v)} placeholder="End date" />
           </Field>
         </Row2>
         <Field label="Venue / Facility">
