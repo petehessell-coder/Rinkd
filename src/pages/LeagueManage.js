@@ -4,6 +4,7 @@ import Layout from '../components/Layout';
 import DateTimePicker from '../components/DateTimePicker';
 import { getLeague, getLeagueTeams, getLeagueGames, createLeague, updateLeague, addLeagueTeam, removeLeagueTeam, addLeagueGame, linkLeagueTeam } from '../lib/leagues';
 import { supabase } from '../lib/supabase';
+import { sendLeagueInvite } from '../lib/invites';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 const inputStyle = { width:'100%', background:'#07111F', border:`0.5px solid ${C.border}`, borderRadius:8, padding:'10px 12px', color:C.ice, fontFamily:'Barlow, sans-serif', fontSize:14, outline:'none' };
@@ -150,6 +151,15 @@ function ManageLeague({ id, navigate }) {
       await addLeagueTeam(id, { teamId: team.id, teamName: team.name, logoColor: team.logo_color, logoInitials: team.logo_initials });
       setTeamSearch(''); setSearchResults([]);
       await load();
+      // Send league invite to team manager
+      const { data: mgr } = await supabase
+        .from('profiles')
+        .select('email, name')
+        .eq('id', team.manager_id || '')
+        .maybeSingle();
+      if (mgr?.email) {
+        await sendLeagueInvite({ to_email: mgr.email, to_name: mgr.name, league_name: league?.name });
+      }
     } catch(e) { setError(e.message); }
   };
 

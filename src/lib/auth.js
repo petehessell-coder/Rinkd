@@ -23,6 +23,7 @@ export async function signUp({ email, password, name, handle, position, level, d
 
   const { error: profileError } = await supabase.from('profiles').upsert({
     id: userId,
+    email: email.toLowerCase(),
     name,
     handle: handle.replace('@', ''),
     avatar_color: color,
