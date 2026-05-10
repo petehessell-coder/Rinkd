@@ -246,6 +246,7 @@ function ManageLeague({ id, navigate }) {
                 <div style={{ flex: 1, height: '0.5px', background: 'rgba(244,247,250,0.1)' }} />
               </div>
               <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+              <input style={{width:'100%',background:'#07111F',border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:8,padding:'10px 12px',color:'#F4F7FA',fontFamily:'Barlow,sans-serif',fontSize:14,outline:'none',marginBottom:8}} type='email' value={unlinkedEmail} onChange={e => setUnlinkedEmail(e.target.value)} placeholder='Manager email (optional — sends league invite)' />
                 <button onClick={handleAddUnlinkedTeam}
                   style={{ background: 'rgba(46,91,140,0.2)', border: `0.5px solid ${C.border}`, borderRadius: 8, padding: '9px 16px', color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap' }}
                   onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
