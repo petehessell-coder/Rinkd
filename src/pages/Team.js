@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { getTeam, getTeamMembers, getTeamGames, getUserRoleOnTeam, requestToJoin } from '../lib/teams';
+import RsvpBlock from '../components/RsvpBlock';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 
@@ -114,6 +115,7 @@ export default function TeamPage({ profile }) {
             {g.is_home ? 'vs.' : '@'} {g.opponent}
           </div>
           {g.location && <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>{g.location}</div>}
+          {g.status === 'scheduled' && <RsvpBlock gameId={g.id} compact={true} />}
         </div>
         {g.status === 'final'
           ? <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 14, color: isWin ? '#22C55E' : isLoss ? C.red : C.ice }}>
