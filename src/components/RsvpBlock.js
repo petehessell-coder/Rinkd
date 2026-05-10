@@ -44,7 +44,7 @@ export default function RsvpBlock({ gameId, compact = false }) {
         setMyRsvp(updated);
         setRsvps(prev => {
           const filtered = prev.filter(r => r.user_id !== userId);
-          return [...filtered, updated];
+          return [...filtered, { ...updated, user_id: userId, status }];
         });
       }
     } catch(e) { console.error(e); }
