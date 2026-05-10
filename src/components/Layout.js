@@ -44,7 +44,8 @@ export default function Layout({ children, profile }) {
     location.pathname === item.path ||
     (item.path === '/feed' && location.pathname === '/') ||
     (item.path === '/tournaments' && location.pathname.startsWith('/tournament')) ||
-    (item.path === '/teams' && location.pathname.startsWith('/team'));
+    (item.path === '/teams' && location.pathname.startsWith('/team')) ||
+    (item.path === '/leagues' && location.pathname.startsWith('/league'));
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: B.dark, fontFamily: "'Barlow', sans-serif", color: B.ice }}>
