@@ -104,18 +104,32 @@ export default function TeamPage({ profile }) {
     const isWin = g.status === 'final' && teamScore > oppScore;
     const isLoss = g.status === 'final' && teamScore < oppScore;
     const date = new Date(g.start_time);
+    const isLeagueGame = g._source === 'league';
+    const gameUrl = isLeagueGame ? `/league-game/${g.id}?type=league` : null;
+
     return (
-      <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
+      <div key={g.id}
+        onClick={() => gameUrl && navigate(gameUrl)}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)', cursor: gameUrl ? 'pointer' : 'default' }}
+        onMouseEnter={e => { if (gameUrl) e.currentTarget.style.background = 'rgba(46,91,140,0.08)'; }}
+        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
         <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(244,247,250,0.4)', width: 48, flexShrink: 0, lineHeight: 1.4 }}>
           {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}<br/>
           {date.toLocaleDateString('en-US', { weekday: 'short' })}
         </div>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>
-            {g.is_home ? 'vs.' : '@'} {g.opponent}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>
+              {g.is_home ? 'vs.' : '@'} {g.opponent}
+            </div>
+            {isLeagueGame && g._league_name && (
+              <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: 'rgba(46,91,140,0.3)', color: '#8BA3BE', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>
+                {g._league_name}
+              </span>
+            )}
           </div>
           {g.location && <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>{g.location}</div>}
-          {g.status === 'scheduled' && <RsvpBlock gameId={g.id} compact={true} />}
+          {g.status === 'scheduled' && !isLeagueGame && <RsvpBlock gameId={g.id} compact={true} />}
         </div>
         {g.status === 'final'
           ? <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 14, color: isWin ? '#22C55E' : isLoss ? C.red : C.ice }}>
