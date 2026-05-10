@@ -78,9 +78,9 @@ export async function getLeagueGames(leagueId) {
   return data || [];
 }
 
-export async function addLeagueGame({ league_id, home_team_id, away_team_id, rink_id, location, start_time }) {
+export async function addLeagueGame({ league_id, home_team_id, away_team_id, rink_id, location, start_time, live_barn_venue_id }) {
   const { data, error } = await supabase.from('league_games')
-    .insert({ league_id, home_team_id, away_team_id, rink_id, location, start_time, status: 'scheduled' })
+    .insert({ league_id, home_team_id, away_team_id, rink_id, location, start_time, live_barn_venue_id: live_barn_venue_id || null, status: 'scheduled' })
     .select().single();
   if (error) throw error;
   return data;

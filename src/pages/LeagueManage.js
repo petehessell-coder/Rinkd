@@ -111,7 +111,7 @@ function ManageLeague({ id, navigate }) {
   const [error, setError] = useState(null);
   const [teamSearch, setTeamSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
-  const [gameForm, setGameForm] = useState({ home_team_id: '', away_team_id: '', location: '', start_time: '' });
+  const [gameForm, setGameForm] = useState({ home_team_id: '', away_team_id: '', location: '', start_time: '', live_barn_venue_id: '' });
   const [linkingTeam, setLinkingTeam] = useState(null);
   const [linkSearch, setLinkSearch] = useState('');
   const [linkResults, setLinkResults] = useState([]);
@@ -168,7 +168,7 @@ function ManageLeague({ id, navigate }) {
     if (!gameForm.home_team_id || !gameForm.away_team_id || !gameForm.start_time) { setError('Home team, away team, and time required'); return; }
     try {
       await addLeagueGame({ league_id: id, ...gameForm });
-      setGameForm(p => ({ ...p, location: '', start_time: '' }));
+      setGameForm(p => ({ ...p, location: '', start_time: '', live_barn_venue_id: '' }));
       await load();
     } catch(e) { setError(e.message); }
   };
@@ -317,6 +317,7 @@ function ManageLeague({ id, navigate }) {
                 </select>
               </Field>
               <Field label="Location"><input style={inputStyle} value={gameForm.location} onChange={e => setGameForm(p => ({ ...p, location: e.target.value }))} placeholder="Rink / arena name" /></Field>
+              <Field label="LiveBarn Venue ID (optional)"><input style={inputStyle} value={gameForm.live_barn_venue_id} onChange={e => setGameForm(p => ({ ...p, live_barn_venue_id: e.target.value }))} placeholder="e.g. 12345" /></Field>
               <Field label="Date & Time"><DateTimePicker value={gameForm.start_time} onChange={v => setGameForm(p => ({ ...p, start_time: v }))} placeholder="Select date & time" /></Field>
               <Btn onClick={handleAddGame}>+ Add Game</Btn>
             </Card>
