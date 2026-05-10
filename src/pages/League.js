@@ -209,6 +209,16 @@ export default function LeaguePage({ profile }) {
         </div>
 
         <div style={{ padding: 16 }}>
+          {league.status === 'draft' && (
+            <div style={{ background: 'rgba(245,158,11,0.1)', border: '0.5px solid rgba(245,158,11,0.4)', borderRadius: 10, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 18 }}>⏳</span>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#F59E0B' }}>League activation pending</div>
+                <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.5)', marginTop: 2 }}>The commissioner is still setting up the schedule. You'll be notified when the season goes live.</div>
+              </div>
+            </div>
+          )}
+
 
           {/* SCHEDULE TAB */}
           {activeTab === 'Schedule' && (

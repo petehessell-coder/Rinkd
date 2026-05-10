@@ -113,6 +113,7 @@ function ManageLeague({ id, navigate }) {
   const [teamSearch, setTeamSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [gameForm, setGameForm] = useState({ home_team_id: '', away_team_id: '', location: '', start_time: '', live_barn_venue_id: '' });
+  const [unlinkedEmail, setUnlinkedEmail] = useState('');
   const [linkingTeam, setLinkingTeam] = useState(null);
   const [linkSearch, setLinkSearch] = useState('');
   const [linkResults, setLinkResults] = useState([]);
@@ -158,7 +159,7 @@ function ManageLeague({ id, navigate }) {
         .eq('id', team.manager_id || '')
         .maybeSingle();
       if (mgr?.email) {
-        await sendLeagueInvite({ to_email: mgr.email, to_name: mgr.name, league_name: league?.name });
+        await sendLeagueInvite({ to_email: mgr.email, to_name: mgr.name, league_name: league?.name, league_id: id, division: league?.division, season: league?.season });
       }
     } catch(e) { setError(e.message); }
   };
@@ -167,7 +168,10 @@ function ManageLeague({ id, navigate }) {
     if (!teamSearch.trim()) { setError('Enter a team name first'); return; }
     try {
       await addLeagueTeam(id, { teamName: teamSearch.trim(), logoColor: DEFAULT_TEAM_COLOR, logoInitials: teamSearch.trim().split(' ').map(w=>w[0]).join('').slice(0,3).toUpperCase() });
-      setTeamSearch(''); setSearchResults([]);
+      if (unlinkedEmail.trim()) {
+        await sendLeagueInvite({ to_email: unlinkedEmail.trim(), league_name: league?.name, league_id: id, division: league?.division, season: league?.season });
+      }
+      setTeamSearch(''); setUnlinkedEmail(''); setSearchResults([]);
       await load();
     } catch(e) { setError(e.message); }
   };
