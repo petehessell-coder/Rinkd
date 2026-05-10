@@ -35,7 +35,7 @@ export async function updateLeague(id, updates) {
 export async function getLeagueTeams(leagueId) {
   const { data, error } = await supabase
     .from('league_teams')
-    .select('*, team:teams(id, name, logo_color, logo_initials, home_rink, location)')
+    .select('*, team_name, logo_color, logo_initials, team:teams(id, name, logo_color, logo_initials, home_rink, location)')
     .eq('league_id', leagueId)
     .order('joined_at');
   if (error) throw error;

@@ -261,10 +261,10 @@ export default function LeaguePage({ profile }) {
                     style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)', cursor: 'pointer' }}
                     onMouseEnter={e => e.currentTarget.style.background = 'rgba(46,91,140,0.1)'}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                    <TeamLogo team={lt.team} size={36} />
+                    <TeamLogo team={lt.team || { name: lt.team_name, logo_color: lt.logo_color, logo_initials: lt.logo_initials }} size={36} />
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{lt.team?.name}</div>
-                      <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>{lt.team?.home_rink || lt.team?.location}</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{lt.team?.name || lt.team_name}</div>
+                      <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>{lt.team?.home_rink || lt.team?.location || ''}</div>
                     </div>
                     <div style={{ color: 'rgba(244,247,250,0.25)', fontSize: 18 }}>›</div>
                   </div>
