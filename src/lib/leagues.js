@@ -68,8 +68,8 @@ export async function getLeagueGames(leagueId) {
   const { data, error } = await supabase
     .from('league_games')
     .select(`*,
-      home_lt:league_teams!home_team_id(id, team:teams(id, name, logo_color, logo_initials)),
-      away_lt:league_teams!away_team_id(id, team:teams(id, name, logo_color, logo_initials)),
+      home_lt:league_teams!home_team_id(id, team_name, logo_color, logo_initials, team:teams(id, name, logo_color, logo_initials)),
+      away_lt:league_teams!away_team_id(id, team_name, logo_color, logo_initials, team:teams(id, name, logo_color, logo_initials)),
       rink:rinks(id, name, sub_rink, live_barn_venue_id)
     `)
     .eq('league_id', leagueId)
