@@ -7,7 +7,7 @@
     "build",
     "--prod"
   ],
-  "cliVersion": "53.3.1",
+  "cliVersion": "53.3.2",
   "builds": [
     {
       "require": "@vercel/static-build",
