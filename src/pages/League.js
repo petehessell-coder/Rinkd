@@ -39,7 +39,8 @@ function GameRow({ game, isCommissioner, navigate }) {
   const isLive = game.status === 'live';
   const isFinal = game.status === 'final';
   const date = new Date(game.start_time);
-  const hasStream = !!game.rink?.live_barn_venue_id;
+  const venueId = game.live_barn_venue_id || game.rink?.live_barn_venue_id;
+  const hasStream = !!venueId;
   const liveBarnUrl = getLiveBarnUrl(venueId);
 
   return (
