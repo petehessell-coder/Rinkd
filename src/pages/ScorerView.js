@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import Scoresheet from '../components/Scoresheet';
 import { supabase } from '../lib/supabase';
 
@@ -85,6 +85,8 @@ function Row2({ children }) {
 export default function ScorerView() {
   const { gameId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isLeague = searchParams.get('type') === 'league';
   const [game, setGame] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -105,9 +107,13 @@ export default function ScorerView() {
   const [goalieForm, setGoalieForm] = useState({ goalie_out_number: '', goalie_in_number: '', period: 1, time_in_period: '' });
 
   const load = useCallback(async () => {
-    const { data: g } = await supabase.from('games')
-      .select('*, home_team:tournament_teams!home_team_id(id,team_name), away_team:tournament_teams!away_team_id(id,team_name), rink:rinks(name,sub_rink), tournament:tournaments(name)')
-      .eq('id', gameId).single();
+    const { data: g } = isLeague
+      ? await supabase.from('league_games')
+          .select('*, home_team:league_teams!home_team_id(id, team:teams(id,name)), away_team:league_teams!away_team_id(id, team:teams(id,name)), rink:rinks(name,sub_rink), league:leagues(name)')
+          .eq('id', gameId).single()
+      : await supabase.from('games')
+          .select('*, home_team:tournament_teams!home_team_id(id,team_name), away_team:tournament_teams!away_team_id(id,team_name), rink:rinks(name,sub_rink), tournament:tournaments(name)')
+          .eq('id', gameId).single();
     if (!g) { navigate(-1); return; }
     setGame(g);
     setHomeScore(g.home_score || 0);
@@ -135,7 +141,7 @@ export default function ScorerView() {
 
   const updateScore = async (hs, as, p, st) => {
     setSaving(true);
-    await supabase.from('games').update({ home_score: hs, away_score: as, period: p, status: st }).eq('id', gameId);
+    await supabase.from(isLeague ? 'league_games' : 'games').update({ home_score: hs, away_score: as, period: p, status: st }).eq('id', gameId);
     setSaving(false);
   };
 
@@ -220,8 +226,14 @@ export default function ScorerView() {
 
   if (loading) return <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif' }}>Loading game...</div>;
 
-  const homeTeam = game.home_team;
-  const awayTeam = game.away_team;
+  // League games nest team under league_team
+  const homeTeam = isLeague
+    ? { id: game.home_team?.id, team_name: game.home_team?.team?.name || game.home_team?.team_name }
+    : game.home_team;
+  const awayTeamRaw = isLeague
+    ? { id: game.away_team?.id, team_name: game.away_team?.team?.name || game.away_team?.team_name }
+    : game.away_team;
+  const awayTeam = isLeague ? awayTeamRaw : game.away_team;
   const periodLabel = (p) => p === 1 ? '1st' : p === 2 ? '2nd' : p === 3 ? '3rd' : p === 4 ? 'OT' : 'SO';
   const severityColor = (s) => s.includes('Major') || s.includes('Match') ? C.red : '#F59E0B';
   const teamName = (id) => id === homeTeam?.id ? homeTeam?.team_name : awayTeam?.team_name;
@@ -234,7 +246,7 @@ export default function ScorerView() {
         <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.6)', fontSize: 13, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>← Games</button>
         <div style={{ textAlign: 'center', flex: 1 }}>
           <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 15, color: '#F4F7FA' }}>{homeTeam?.team_name} vs {awayTeam?.team_name}</div>
-          <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>{game.rink?.sub_rink} · {game.tournament?.name}</div>
+          <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>{game.rink?.sub_rink} · {isLeague ? game.league?.name : game.tournament?.name}</div>
         </div>
         <span style={{ background: status === 'live' ? 'rgba(215,38,56,0.15)' : status === 'final' ? 'rgba(244,247,250,0.08)' : 'rgba(46,91,140,0.3)', color: status === 'live' ? C.red : status === 'final' ? 'rgba(244,247,250,0.5)' : '#F4F7FA', fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20, whiteSpace: 'nowrap' }}>
           {status === 'live' ? '● LIVE' : status === 'final' ? 'FINAL' : 'SCHEDULED'}

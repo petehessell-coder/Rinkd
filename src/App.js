@@ -60,6 +60,7 @@ function AppRoutes() {
       <Route path="/tournament/create" element={<ProtectedRoute><TournamentCreate profile={profile} /></ProtectedRoute>} />
       <Route path="/tournament/:id" element={<ProtectedRoute><Tournament /></ProtectedRoute>} />
       <Route path="/scorer/:gameId" element={<ProtectedRoute><ScorerView /></ProtectedRoute>} />
+      <Route path="/league-scorer/:gameId" element={<ProtectedRoute><ScorerView /></ProtectedRoute>} />
       <Route path="/privacy" element={<Legal />} />
       <Route path="/terms" element={<Legal />} />
       <Route path="*" element={<Navigate to="/feed" replace />} />

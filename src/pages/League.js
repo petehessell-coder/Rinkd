@@ -14,7 +14,7 @@ function TeamLogo({ team, size = 32 }) {
   );
 }
 
-function GameRow({ game, showAll }) {
+function GameRow({ game, showAll, isCommissioner, navigate }) {
   const home = game.home_lt?.team;
   const away = game.away_lt?.team;
   const isLive = game.status === 'live';
@@ -61,6 +61,14 @@ function GameRow({ game, showAll }) {
           </span>
         )}
       </div>
+        {isCommissioner && !isFinal && (
+          <button onClick={() => navigate('/league-scorer/' + game.id + '?type=league')}
+            style={{ marginTop: 8, width: '100%', padding: '8px', background: 'rgba(46,91,140,0.2)', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 8, color: '#F4F7FA', fontFamily: 'Barlow,sans-serif', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(46,91,140,0.2)'; e.currentTarget.style.color = '#F4F7FA'; }}>
+            ✏️ Open Scorer View
+          </button>
+        )}
     </div>
   );
 }
@@ -171,19 +179,19 @@ export default function LeaguePage({ profile }) {
                   {liveGames.length > 0 && (
                     <>
                       <div style={secLabel}>Live Now</div>
-                      <div style={card}>{liveGames.map(g => <GameRow key={g.id} game={g} />)}</div>
+                      <div style={card}>{liveGames.map(g => <GameRow key={g.id} game={g} isCommissioner={isCommissioner} navigate={navigate} />)}</div>
                     </>
                   )}
                   {upcomingGames.length > 0 && (
                     <>
                       <div style={secLabel}>Upcoming</div>
-                      <div style={card}>{upcomingGames.slice(0, 5).map(g => <GameRow key={g.id} game={g} />)}</div>
+                      <div style={card}>{upcomingGames.slice(0, 5).map(g => <GameRow key={g.id} game={g} isCommissioner={isCommissioner} navigate={navigate} />)}</div>
                     </>
                   )}
                   {recentGames.length > 0 && (
                     <>
                       <div style={secLabel}>Recent Results</div>
-                      <div style={card}>{recentGames.map(g => <GameRow key={g.id} game={g} />)}</div>
+                      <div style={card}>{recentGames.map(g => <GameRow key={g.id} game={g} isCommissioner={isCommissioner} navigate={navigate} />)}</div>
                     </>
                   )}
                   {games.length === 0 && <div style={{ textAlign: 'center', color: 'rgba(244,247,250,0.3)', fontSize: 13, padding: '40px 0' }}>No games scheduled yet</div>}
@@ -205,7 +213,7 @@ export default function LeaguePage({ profile }) {
                   {Object.entries(allGamesByWeek).map(([week, wGames]) => (
                     <div key={week}>
                       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'rgba(244,247,250,0.3)', textTransform: 'uppercase', marginBottom: 8, marginTop: 4 }}>{week}</div>
-                      <div style={card}>{wGames.map(g => <GameRow key={g.id} game={g} />)}</div>
+                      <div style={card}>{wGames.map(g => <GameRow key={g.id} game={g} isCommissioner={isCommissioner} navigate={navigate} />)}</div>
                     </div>
                   ))}
                 </>
