@@ -14,61 +14,96 @@ function TeamLogo({ team, size = 32 }) {
   );
 }
 
-function GameRow({ game, showAll, isCommissioner, navigate }) {
+function GameRow({ game, isCommissioner, navigate }) {
   const home = game.home_lt?.team || { name: game.home_lt?.team_name, logo_color: game.home_lt?.logo_color, logo_initials: game.home_lt?.logo_initials };
   const away = game.away_lt?.team || { name: game.away_lt?.team_name, logo_color: game.away_lt?.logo_color, logo_initials: game.away_lt?.logo_initials };
   const isLive = game.status === 'live';
   const isFinal = game.status === 'final';
   const date = new Date(game.start_time);
+  const hasStream = !!game.rink?.live_barn_venue_id;
+  const liveBarnUrl = hasStream ? `https://watch.livebarn.com/en/videoplayer?venueid=${game.rink.live_barn_venue_id}&referrer=rinkd&promo=RINKD10` : null;
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(244,247,250,0.4)', width: 44, flexShrink: 0, lineHeight: 1.5 }}>
-        {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}<br/>
-        {date.toLocaleDateString('en-US', { weekday: 'short' })}
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-          <TeamLogo team={home} size={20} />
-          <span style={{ fontSize: 13, fontWeight: 600, color: C.ice, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{home?.name}</span>
+    <div style={{ padding: '12px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {/* Date */}
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(244,247,250,0.4)', width: 44, flexShrink: 0, lineHeight: 1.5 }}>
+          {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}<br/>
+          {date.toLocaleDateString('en-US', { weekday: 'short' })}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <TeamLogo team={away} size={20} />
-          <span style={{ fontSize: 13, fontWeight: 600, color: C.ice, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{away?.name}</span>
-        </div>
-        {(game.location || game.rink) && (
-          <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.35)', marginTop: 3 }}>
-            📍 {game.rink ? `${game.rink.sub_rink} · ${game.rink.name}` : game.location}
+        {/* Teams */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+            <TeamLogo team={home} size={20} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.ice, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{home?.name || '—'}</span>
           </div>
-        )}
-      </div>
-      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-        {isLive && (
-          <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <TeamLogo team={away} size={20} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.ice, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{away?.name || '—'}</span>
+          </div>
+          {(game.location || game.rink) && (
+            <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.35)', marginTop: 3 }}>
+              📍 {game.rink ? `${game.rink.sub_rink} · ${game.rink.name}` : game.location}
+            </div>
+          )}
+        </div>
+        {/* Score / Time */}
+        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+          {isLive && <>
             <span style={{ background: C.red, color: '#fff', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, display: 'block', marginBottom: 4 }}>● LIVE</span>
             <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 16, color: C.ice }}>{game.home_score} – {game.away_score}</span>
-          </>
-        )}
-        {isFinal && (
-          <>
+          </>}
+          {isFinal && <>
             <span style={{ background: 'rgba(244,247,250,0.08)', color: 'rgba(244,247,250,0.4)', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, display: 'block', marginBottom: 4 }}>FINAL</span>
             <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 16, color: C.ice }}>{game.home_score} – {game.away_score}</span>
-          </>
-        )}
-        {!isLive && !isFinal && (
-          <span style={{ background: 'rgba(46,91,140,0.4)', color: C.steel, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>
-            {date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-          </span>
-        )}
+          </>}
+          {!isLive && !isFinal && (
+            <span style={{ background: 'rgba(46,91,140,0.4)', color: C.steel, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>
+              {date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+            </span>
+          )}
+        </div>
       </div>
-        {isCommissioner && !isFinal && (
-          <button onClick={() => navigate('/league-scorer/' + game.id + '?type=league')}
-            style={{ marginTop: 8, width: '100%', padding: '8px', background: 'rgba(46,91,140,0.2)', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 8, color: '#F4F7FA', fontFamily: 'Barlow,sans-serif', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(46,91,140,0.2)'; e.currentTarget.style.color = '#F4F7FA'; }}>
-            ✏️ Open Scorer View
+
+      {/* Watch with LiveBarn */}
+      {hasStream && !isFinal && (
+        <div style={{ marginTop: 10 }}>
+          <button onClick={() => window.open(liveBarnUrl, '_blank', 'noopener')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: '#FFFFFF', color: '#0B1F3A', border: 'none', borderRadius: 999, padding: '8px 14px 8px 8px', fontFamily: 'Barlow, sans-serif', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s' }}
+            onMouseEnter={e => e.currentTarget.style.background = '#ddeaf7'}
+            onMouseLeave={e => e.currentTarget.style.background = '#FFFFFF'}>
+            <span style={{ width: 22, height: 22, background: '#07111F', borderRadius: 4, border: '1px solid rgba(215,38,56,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="13" height="15" viewBox="0 0 22 26" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="2" cy="2" r="1.6" fill="#D72638"/><circle cx="2" cy="6" r="1.6" fill="#D72638"/>
+                <circle cx="4" cy="10" r="1.6" fill="#D72638"/><circle cx="6" cy="14" r="1.6" fill="#D72638"/>
+                <circle cx="8" cy="18" r="1.6" fill="#D72638"/><circle cx="10" cy="22" r="1.6" fill="#D72638"/>
+                <circle cx="20" cy="2" r="1.6" fill="#D72638"/><circle cx="20" cy="6" r="1.6" fill="#D72638"/>
+                <circle cx="18" cy="10" r="1.6" fill="#D72638"/><circle cx="16" cy="14" r="1.6" fill="#D72638"/>
+                <circle cx="14" cy="18" r="1.6" fill="#D72638"/><circle cx="12" cy="22" r="1.6" fill="#D72638"/>
+              </svg>
+            </span>
+            <span style={{ color: '#111', fontWeight: 700 }}>Watch with</span>
+            <svg height="13" viewBox="0 0 112 28" xmlns="http://www.w3.org/2000/svg">
+              <path d="M5 17 Q8 9 13 7" stroke="#5a8fcc" strokeWidth="2" fill="none" strokeLinecap="round"/>
+              <path d="M2 21 Q7 7 14 4" stroke="#4a7abb" strokeWidth="1.4" fill="none" strokeLinecap="round" opacity="0.5"/>
+              <path d="M8 14 Q11 9 13 8" stroke="#7aaade" strokeWidth="2" fill="none" strokeLinecap="round"/>
+              <text x="17" y="21" fontFamily="Arial Black,sans-serif" fontWeight="900" fontSize="17" fill="#2E6DB4">Live</text>
+              <text x="56" y="21" fontFamily="Arial Black,sans-serif" fontWeight="900" fontSize="17" fill="#7a8fa8">Barn</text>
+            </svg>
           </button>
-        )}
+          <div style={{ fontSize: 10, color: 'rgba(244,247,250,0.3)', marginTop: 5 }}>✓ Code <strong style={{ color: '#D72638' }}>RINKD10</strong> auto-applied</div>
+        </div>
+      )}
+
+      {/* Scorer View */}
+      {isCommissioner && !isFinal && (
+        <button onClick={() => navigate('/league-scorer/' + game.id + '?type=league')}
+          style={{ marginTop: 8, width: '100%', padding: '8px', background: 'rgba(46,91,140,0.2)', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 8, color: '#F4F7FA', fontFamily: 'Barlow,sans-serif', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' }}
+          onMouseEnter={e => { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(46,91,140,0.2)'; e.currentTarget.style.color = '#F4F7FA'; }}>
+          ✏️ Open Scorer View
+        </button>
+      )}
     </div>
   );
 }
