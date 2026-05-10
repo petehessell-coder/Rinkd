@@ -42,9 +42,18 @@ export async function getLeagueTeams(leagueId) {
   return data || [];
 }
 
-export async function addLeagueTeam(leagueId, teamId, division = '') {
+export async function addLeagueTeam(leagueId, { teamId = null, teamName, logoColor, logoInitials, division = '' }) {
   const { data, error } = await supabase.from('league_teams')
-    .insert({ league_id: leagueId, team_id: teamId, division })
+    .insert({ league_id: leagueId, team_id: teamId || null, team_name: teamName, logo_color: logoColor, logo_initials: logoInitials, division })
+    .select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function linkLeagueTeam(leagueTeamId, teamId) {
+  const { data, error } = await supabase.from('league_teams')
+    .update({ team_id: teamId })
+    .eq('id', leagueTeamId)
     .select().single();
   if (error) throw error;
   return data;

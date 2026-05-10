@@ -2,12 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import DateTimePicker from '../components/DateTimePicker';
-import { getLeague, getLeagueTeams, getLeagueGames, createLeague, updateLeague, addLeagueTeam, removeLeagueTeam, addLeagueGame } from '../lib/leagues';
+import { getLeague, getLeagueTeams, getLeagueGames, createLeague, updateLeague, addLeagueTeam, removeLeagueTeam, addLeagueGame, linkLeagueTeam } from '../lib/leagues';
 import { supabase } from '../lib/supabase';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 const inputStyle = { width:'100%', background:'#07111F', border:`0.5px solid ${C.border}`, borderRadius:8, padding:'10px 12px', color:C.ice, fontFamily:'Barlow, sans-serif', fontSize:14, outline:'none' };
 const LOGO_COLORS = ['#D72638','#2E5B8C','#22C55E','#F59E0B','#8B5CF6','#0EA5E9','#EC4899','#0B1F3A'];
+const DEFAULT_TEAM_COLOR = '#2E5B8C';
 
 function Field({ label, children }) {
   return (
@@ -111,6 +112,9 @@ function ManageLeague({ id, navigate }) {
   const [teamSearch, setTeamSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [gameForm, setGameForm] = useState({ home_team_id: '', away_team_id: '', location: '', start_time: '' });
+  const [linkingTeam, setLinkingTeam] = useState(null);
+  const [linkSearch, setLinkSearch] = useState('');
+  const [linkResults, setLinkResults] = useState([]);
 
   const load = useCallback(async () => {
     try {
@@ -132,13 +136,33 @@ function ManageLeague({ id, navigate }) {
     return () => clearTimeout(t);
   }, [teamSearch]);
 
-  const handleAddTeam = async (team) => {
+  useEffect(() => {
+    if (!linkSearch.trim()) { setLinkResults([]); return; }
+    const t = setTimeout(async () => {
+      const { data } = await supabase.from('teams').select('id, name, logo_color, logo_initials').ilike('name', `%${linkSearch}%`).limit(5);
+      setLinkResults(data || []);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [linkSearch]);
+
+  const handleAddLinkedTeam = async (team) => {
     try {
-      await addLeagueTeam(id, team.id);
+      await addLeagueTeam(id, { teamId: team.id, teamName: team.name, logoColor: team.logo_color, logoInitials: team.logo_initials });
       setTeamSearch(''); setSearchResults([]);
       await load();
     } catch(e) { setError(e.message); }
   };
+
+  const handleAddUnlinkedTeam = async () => {
+    if (!teamSearch.trim()) { setError('Enter a team name first'); return; }
+    try {
+      await addLeagueTeam(id, { teamName: teamSearch.trim(), logoColor: DEFAULT_TEAM_COLOR, logoInitials: teamSearch.trim().split(' ').map(w=>w[0]).join('').slice(0,3).toUpperCase() });
+      setTeamSearch(''); setSearchResults([]);
+      await load();
+    } catch(e) { setError(e.message); }
+  };
+
+
 
   const handleAddGame = async () => {
     if (!gameForm.home_team_id || !gameForm.away_team_id || !gameForm.start_time) { setError('Home team, away team, and time required'); return; }
@@ -176,51 +200,106 @@ function ManageLeague({ id, navigate }) {
         {error && <div style={{ background: 'rgba(215,38,56,0.15)', border: '0.5px solid rgba(215,38,56,0.4)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: C.red }}>{error}</div>}
 
         {/* TEAMS */}
+        {/* TEAMS */}
         {activeTab === 'Teams' && (
           <>
             <SecLabel>Add Team</SecLabel>
             <Card>
-              <Field label="Search teams by name">
-                <input style={inputStyle} value={teamSearch} onChange={e => setTeamSearch(e.target.value)} placeholder="Search Rinkd teams..." />
+              <Field label="Team Name *">
+                <input style={inputStyle} value={teamSearch} onChange={e => setTeamSearch(e.target.value)}
+                  placeholder="Type a team name..." />
               </Field>
               {searchResults.length > 0 && (
-                <div style={{ border: `0.5px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }}>
+                <div style={{ border: `0.5px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(244,247,250,0.35)', padding: '6px 12px', letterSpacing: '0.08em', textTransform: 'uppercase', background: 'rgba(46,91,140,0.15)' }}>Rinkd Teams — click to add & link</div>
                   {searchResults.map(t => (
-                    <div key={t.id} onClick={() => handleAddTeam(t)}
+                    <div key={t.id} onClick={() => handleAddLinkedTeam(t)}
                       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderBottom: '0.5px solid rgba(244,247,250,0.06)', cursor: 'pointer' }}
                       onMouseEnter={e => e.currentTarget.style.background = 'rgba(46,91,140,0.2)'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                       <div style={{ width: 28, height: 28, borderRadius: 5, background: t.logo_color || C.blue, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 11, color: '#fff' }}>
                         {t.logo_initials || t.name.slice(0, 2).toUpperCase()}
                       </div>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>{t.name}</span>
-                      <span style={{ marginLeft: 'auto', fontSize: 11, color: 'rgba(244,247,250,0.4)' }}>+ Add</span>
+                      <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: C.ice }}>{t.name}</span>
+                      <span style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)' }}>+ Link</span>
                     </div>
                   ))}
                 </div>
               )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ flex: 1, height: '0.5px', background: 'rgba(244,247,250,0.1)' }} />
+                <span style={{ fontSize: 11, color: 'rgba(244,247,250,0.3)' }}>or add without a Rinkd page</span>
+                <div style={{ flex: 1, height: '0.5px', background: 'rgba(244,247,250,0.1)' }} />
+              </div>
+              <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+                <button onClick={handleAddUnlinkedTeam}
+                  style={{ background: 'rgba(46,91,140,0.2)', border: `0.5px solid ${C.border}`, borderRadius: 8, padding: '9px 16px', color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(46,91,140,0.2)'; e.currentTarget.style.color = C.ice; }}>
+                  + Add "{teamSearch || 'Team'}"
+                </button>
+              </div>
             </Card>
 
             <SecLabel>League Teams ({teams.length})</SecLabel>
             <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
-              {teams.length === 0 && <div style={{ padding: 16, fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center' }}>No teams yet — search above to add</div>}
-              {teams.map(lt => (
-                <div key={lt.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
-                  <div style={{ width: 28, height: 28, borderRadius: 5, background: lt.team?.logo_color || C.blue, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 11, color: '#fff' }}>
-                    {lt.team?.logo_initials || (lt.team?.name || '?').slice(0, 2).toUpperCase()}
+              {teams.length === 0 && <div style={{ padding: 16, fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center' }}>No teams yet — add above</div>}
+              {teams.map(lt => {
+                const name = lt.team?.name || lt.team_name || 'Unknown';
+                const color = lt.team?.logo_color || lt.logo_color || C.blue;
+                const initials = lt.team?.logo_initials || lt.logo_initials || name.slice(0, 2).toUpperCase();
+                const isLinked = !!lt.team_id;
+                return (
+                  <div key={lt.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
+                    <div style={{ width: 32, height: 32, borderRadius: 6, background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 12, color: '#fff', flexShrink: 0 }}>
+                      {initials}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>{name}</div>
+                      {!isLinked && <div style={{ fontSize: 10, color: '#F59E0B', fontWeight: 700, marginTop: 2 }}>No Rinkd page · <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setLinkingTeam(lt)}>Link team</span></div>}
+                      {isLinked && <div style={{ fontSize: 10, color: '#22C55E', marginTop: 2 }}>✓ Linked to Rinkd</div>}
+                    </div>
+                    <button onClick={() => removeLeagueTeam(lt.id).then(load)}
+                      style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.2)', cursor: 'pointer', fontSize: 16 }}
+                      onMouseEnter={e => e.currentTarget.style.color = C.red}
+                      onMouseLeave={e => e.currentTarget.style.color = 'rgba(244,247,250,0.2)'}>✕</button>
                   </div>
-                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: C.ice }}>{lt.team?.name}</span>
-                  <button onClick={() => removeLeagueTeam(lt.id).then(load)}
-                    style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.2)', cursor: 'pointer', fontSize: 16 }}
-                    onMouseEnter={e => e.currentTarget.style.color = C.red}
-                    onMouseLeave={e => e.currentTarget.style.color = 'rgba(244,247,250,0.2)'}>✕</button>
-                </div>
-              ))}
+                );
+              })}
             </div>
+
+            {/* Link team modal */}
+            {linkingTeam && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+                <div style={{ background: C.navy, borderRadius: '16px 16px 0 0', padding: 20, width: '100%', maxWidth: 480, borderTop: `0.5px solid ${C.border}` }}>
+                  <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice, marginBottom: 4 }}>Link to Rinkd Team</div>
+                  <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.4)', marginBottom: 14 }}>Search for the team's Rinkd page to link stats and roster</div>
+                  <input style={inputStyle} value={linkSearch} onChange={e => setLinkSearch(e.target.value)} placeholder="Search team name..." autoFocus />
+                  {linkResults.length > 0 && (
+                    <div style={{ border: `0.5px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', marginTop: 8 }}>
+                      {linkResults.map(t => (
+                        <div key={t.id} onClick={async () => { await linkLeagueTeam(linkingTeam.id, t.id); setLinkingTeam(null); setLinkSearch(''); setLinkResults([]); await load(); }}
+                          style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderBottom: '0.5px solid rgba(244,247,250,0.06)', cursor: 'pointer' }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(46,91,140,0.2)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                          <div style={{ width: 28, height: 28, borderRadius: 5, background: t.logo_color || C.blue, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 11, color: '#fff' }}>
+                            {t.logo_initials || t.name.slice(0, 2).toUpperCase()}
+                          </div>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>{t.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+                    <button onClick={() => { setLinkingTeam(null); setLinkSearch(''); setLinkResults([]); }}
+                      style={{ flex: 1, padding: 12, background: 'rgba(244,247,250,0.08)', border: 'none', borderRadius: 999, color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 14, cursor: 'pointer' }}>Cancel</button>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
 
-        {/* SCHEDULE */}
         {activeTab === 'Schedule' && (
           <>
             <SecLabel>Add Game</SecLabel>
