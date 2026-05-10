@@ -180,7 +180,7 @@ function GameCard({ game, navigate }) {
   const url = getLiveBarnUrl(game.rink?.live_barn_venue_id);
 
   return (
-    <div style={{background:'#0f2847',border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,padding:'14px 16px',marginBottom:10}}>
+    <div onClick={() => navigate('/game/' + game.id)} style={{background:'#0f2847',border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,padding:'14px 16px',marginBottom:10,cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.border='0.5px solid rgba(46,91,140,0.8)'} onMouseLeave={e=>e.currentTarget.style.border='0.5px solid rgba(46,91,140,0.4)'}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,gap:8}}>
         {isLive && <span style={{background:'#D72638',color:'#fff',fontSize:11,fontWeight:700,padding:'4px 11px',borderRadius:20}}>● LIVE</span>}
         {isFinal && <span style={{background:'rgba(244,247,250,0.08)',color:'rgba(244,247,250,0.4)',fontSize:11,fontWeight:700,padding:'4px 11px',borderRadius:20}}>FINAL</span>}

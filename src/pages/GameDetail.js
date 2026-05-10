@@ -1,0 +1,313 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
+import Layout from '../components/Layout';
+
+const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
+
+function getLiveBarnUrl(venueId) {
+  if (!venueId) return null;
+  return `https://watch.livebarn.com/en/videoplayer?venueid=${venueId}&referrer=rinkd&promo=RINKD10`;
+}
+
+function LedV({ size = 16 }) {
+  return (
+    <svg width={size * 0.85} height={size} viewBox="0 0 22 26" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="2"  cy="2"  r="1.6" fill="#D72638"/><circle cx="2"  cy="6"  r="1.6" fill="#D72638"/>
+      <circle cx="4"  cy="10" r="1.6" fill="#D72638"/><circle cx="6"  cy="14" r="1.6" fill="#D72638"/>
+      <circle cx="8"  cy="18" r="1.6" fill="#D72638"/><circle cx="10" cy="22" r="1.6" fill="#D72638"/>
+      <circle cx="20" cy="2"  r="1.6" fill="#D72638"/><circle cx="20" cy="6"  r="1.6" fill="#D72638"/>
+      <circle cx="18" cy="10" r="1.6" fill="#D72638"/><circle cx="16" cy="14" r="1.6" fill="#D72638"/>
+      <circle cx="14" cy="18" r="1.6" fill="#D72638"/><circle cx="12" cy="22" r="1.6" fill="#D72638"/>
+    </svg>
+  );
+}
+
+function LiveBarnWordmark({ dark = false }) {
+  const liveColor = dark ? '#2E6DB4' : '#5a9fd4';
+  const barnColor = dark ? '#7a8fa8' : '#a0b4c8';
+  return (
+    <svg height="14" viewBox="0 0 90 22" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
+      <path d="M3 14 Q6 6 11 4" stroke={liveColor} strokeWidth="1.8" fill="none" strokeLinecap="round"/>
+      <path d="M1 17 Q5 5 12 2" stroke={liveColor} strokeWidth="1.2" fill="none" strokeLinecap="round" opacity="0.5"/>
+      <text x="14" y="17" fontFamily="Arial Black,sans-serif" fontWeight="900" fontSize="14" fill={liveColor}>Live</text>
+      <text x="48" y="17" fontFamily="Arial Black,sans-serif" fontWeight="900" fontSize="14" fill={barnColor}>Barn</text>
+    </svg>
+  );
+}
+
+function SecLabel({ children }) {
+  return <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'rgba(244,247,250,0.3)', textTransform: 'uppercase', marginBottom: 8, marginTop: 4 }}>{children}</div>;
+}
+
+function Card({ children }) {
+  return <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>{children}</div>;
+}
+
+export default function GameDetail({ profile }) {
+  const { gameId } = useParams();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isLeague = searchParams.get('type') === 'league';
+
+  const [game, setGame] = useState(null);
+  const [goals, setGoals] = useState([]);
+  const [penalties, setPenalties] = useState([]);
+  const [shots, setShots] = useState([]);
+  const [goalieChanges, setGoalieChanges] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    try {
+      const { data: g } = isLeague
+        ? await supabase.from('league_games')
+            .select('*, home_lt:league_teams!home_team_id(id, team_name, logo_color, logo_initials, team:teams(id,name,logo_color,logo_initials)), away_lt:league_teams!away_team_id(id, team_name, logo_color, logo_initials, team:teams(id,name,logo_color,logo_initials)), rink:rinks(name,sub_rink,live_barn_venue_id), league:leagues(name)')
+            .eq('id', gameId).single()
+        : await supabase.from('games')
+            .select('*, home_team:tournament_teams!home_team_id(id,team_name), away_team:tournament_teams!away_team_id(id,team_name), rink:rinks(name,sub_rink,live_barn_venue_id), tournament:tournaments(name)')
+            .eq('id', gameId).single();
+
+      setGame(g);
+
+      const [{ data: gl }, { data: pl }, { data: sl }, { data: gc }] = await Promise.all([
+        supabase.from('game_goals').select('*').eq('game_id', gameId).order('period').order('time_in_period'),
+        supabase.from('game_penalties').select('*').eq('game_id', gameId).order('period').order('time_in_period'),
+        supabase.from('game_shots').select('*').eq('game_id', gameId),
+        supabase.from('game_goalie_changes').select('*').eq('game_id', gameId).order('period').order('time_in_period'),
+      ]);
+
+      setGoals(gl || []);
+      setPenalties(pl || []);
+      setShots(sl || []);
+      setGoalieChanges(gc || []);
+    } catch(e) { console.error(e); }
+    setLoading(false);
+  }, [gameId, isLeague]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) return (
+    <Layout profile={profile}>
+      <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Loading...</div>
+    </Layout>
+  );
+
+  if (!game) return (
+    <Layout profile={profile}>
+      <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Game not found</div>
+    </Layout>
+  );
+
+  // Normalize team data for both tournament and league games
+  const homeTeam = isLeague
+    ? { id: game.home_lt?.id, name: game.home_lt?.team?.name || game.home_lt?.team_name, logo_color: game.home_lt?.team?.logo_color || game.home_lt?.logo_color, logo_initials: game.home_lt?.team?.logo_initials || game.home_lt?.logo_initials }
+    : { id: game.home_team?.id, name: game.home_team?.team_name, logo_color: '#1a4a7a', logo_initials: (game.home_team?.team_name || '?').split(' ').map(w=>w[0]).slice(0,3).join('') };
+
+  const awayTeam = isLeague
+    ? { id: game.away_lt?.id, name: game.away_lt?.team?.name || game.away_lt?.team_name, logo_color: game.away_lt?.team?.logo_color || game.away_lt?.logo_color, logo_initials: game.away_lt?.team?.logo_initials || game.away_lt?.logo_initials }
+    : { id: game.away_team?.id, name: game.away_team?.team_name, logo_color: '#6b1520', logo_initials: (game.away_team?.team_name || '?').split(' ').map(w=>w[0]).slice(0,3).join('') };
+
+  const context = isLeague ? game.league?.name : game.tournament?.name;
+  const venueId = game.live_barn_venue_id || game.rink?.live_barn_venue_id;
+  const hasStream = !!venueId && game.status !== 'final';
+  const liveBarnUrl = getLiveBarnUrl(venueId);
+  const isLive = game.status === 'live';
+  const isFinal = game.status === 'final';
+
+  const periodLabel = (p) => p === 1 ? '1st' : p === 2 ? '2nd' : p === 3 ? '3rd' : p === 4 ? 'OT' : 'SO';
+  const teamName = (id) => id === homeTeam.id ? homeTeam.name : awayTeam.name;
+  const teamColor = (id) => id === homeTeam.id ? (homeTeam.logo_color || '#1a4a7a') : (awayTeam.logo_color || '#6b1520');
+  const severityColor = (s) => s?.includes('Major') || s?.includes('Match') ? C.red : '#F59E0B';
+  const severityLabel = (s) => s?.includes('Major') || s?.includes('Match') ? 'MAJOR' : s?.includes('Double') ? 'DBL MIN' : 'MINOR';
+
+  // Shots totals per team
+  const homeShots = shots.filter(s => s.team_id === homeTeam.id).reduce((a, s) => a + (s.count || 0), 0);
+  const awayShots = shots.filter(s => s.team_id === awayTeam.id).reduce((a, s) => a + (s.count || 0), 0);
+  const maxShots = Math.max(homeShots, awayShots, 1);
+
+  return (
+    <Layout profile={profile}>
+      <div style={{ background: C.dark, minHeight: '100vh', fontFamily: 'Barlow, sans-serif', color: C.ice, maxWidth: 600, margin: '0 auto', paddingBottom: 40 }}>
+
+        {/* HEADER */}
+        <div style={{ background: C.navy, padding: '14px 16px', borderBottom: `0.5px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.6)', fontSize: 13, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap' }}>← Back</button>
+          <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', textAlign: 'center', flex: 1 }}>
+            {context}{game.rink ? ` · ${game.rink.sub_rink || game.rink.name}` : ''}
+          </div>
+          <div style={{ width: 60 }} />
+        </div>
+
+        {/* SCORE BOX */}
+        <div style={{ background: 'linear-gradient(135deg,#0B1F3A 0%,#112236 100%)', padding: '24px 16px 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 16 }}>
+            {/* Home team */}
+            <div style={{ flex: 1, textAlign: 'center' }}>
+              <div style={{ width: 52, height: 52, borderRadius: 10, background: homeTeam.logo_color || C.blue, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: '#fff', margin: '0 auto 8px' }}>
+                {homeTeam.logo_initials || '?'}
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.ice }}>{homeTeam.name}</div>
+            </div>
+
+            {/* Score */}
+            <div style={{ textAlign: 'center', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 56, color: C.ice, lineHeight: 1 }}>{game.home_score ?? 0}</span>
+                <span style={{ fontSize: 24, color: 'rgba(244,247,250,0.3)', fontWeight: 300 }}>–</span>
+                <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 56, color: C.ice, lineHeight: 1 }}>{game.away_score ?? 0}</span>
+              </div>
+              <div style={{ textAlign: 'center', marginTop: 6 }}>
+                {isLive && <span style={{ background: C.red, color: '#fff', fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20, letterSpacing: '0.06em' }}>● LIVE · {periodLabel(game.period)}</span>}
+                {isFinal && <span style={{ background: 'rgba(244,247,250,0.08)', color: 'rgba(244,247,250,0.4)', fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>FINAL</span>}
+                {!isLive && !isFinal && <span style={{ background: 'rgba(46,91,140,0.4)', color: C.steel, fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>SCHEDULED</span>}
+              </div>
+              {game.start_time && <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 6 }}>{new Date(game.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>}
+            </div>
+
+            {/* Away team */}
+            <div style={{ flex: 1, textAlign: 'center' }}>
+              <div style={{ width: 52, height: 52, borderRadius: 10, background: awayTeam.logo_color || '#6b1520', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: '#fff', margin: '0 auto 8px' }}>
+                {awayTeam.logo_initials || '?'}
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.ice }}>{awayTeam.name}</div>
+            </div>
+          </div>
+
+          {/* Stats bar */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', borderTop: `0.5px solid rgba(46,91,140,0.3)`, background: C.navy }}>
+            {[
+              { num: homeShots, label: `${homeTeam.logo_initials || 'HM'} Shots` },
+              { num: goals.length, label: 'Goals' },
+              { num: awayShots, label: `${awayTeam.logo_initials || 'AW'} Shots` },
+            ].map((s, i) => (
+              <div key={i} style={{ padding: '10px 0', textAlign: 'center', borderRight: i < 2 ? '0.5px solid rgba(46,91,140,0.2)' : 'none' }}>
+                <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice }}>{s.num}</div>
+                <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(244,247,250,0.3)', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 2 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ padding: 16 }}>
+
+          {/* LIVEBARN */}
+          {hasStream && (
+            <>
+              <button onClick={() => window.open(liveBarnUrl, '_blank')}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: C.navy, border: `0.5px solid ${C.border}`, borderRadius: 10, padding: '12px 16px', cursor: 'pointer', transition: 'all 0.15s', marginBottom: 8 }}
+                onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.querySelector('.watch-text').style.color = C.navy; e.currentTarget.querySelector('.led-wrap').style.borderColor = 'rgba(215,38,56,0.5)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = C.navy; e.currentTarget.querySelector('.watch-text').style.color = C.ice; }}>
+                <span className="led-wrap" style={{ width: 28, height: 28, background: '#07111F', borderRadius: 6, border: `1px solid rgba(215,38,56,0.5)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <LedV size={16} />
+                </span>
+                <span className="watch-text" style={{ fontSize: 13, fontWeight: 700, color: C.ice, transition: 'color 0.15s' }}>Watch with</span>
+                <LiveBarnWordmark />
+              </button>
+              <div style={{ background: 'rgba(215,38,56,0.08)', border: '0.5px solid rgba(215,38,56,0.3)', borderRadius: 7, padding: '7px 11px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                <div style={{ fontSize: 10, color: 'rgba(244,247,250,0.5)', lineHeight: 1.6 }}>Rinkd members save · ✓ Code <strong style={{ color: C.red }}>RINKD10</strong> auto-applied</div>
+                <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 14, color: C.red, marginLeft: 10 }}>10% off</div>
+              </div>
+            </>
+          )}
+
+          {/* GOAL LOG */}
+          {goals.length > 0 && (
+            <>
+              <SecLabel>Goal Log ({goals.length})</SecLabel>
+              <Card>
+                {goals.map(g => (
+                  <div key={g.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
+                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: teamColor(g.team_id), flexShrink: 0, marginTop: 4 }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>
+                        {g.scorer_number ? `#${g.scorer_number}` : 'Unknown'}
+                        {g.assist1_number ? ` — assist: #${g.assist1_number}` : ' — unassisted'}
+                        {g.assist2_number ? `, #${g.assist2_number}` : ''}
+                        {g.is_shootout ? ' (SO)' : ''}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>
+                        {teamName(g.team_id)} · {periodLabel(g.period)}{g.time_in_period ? ` · ${g.time_in_period}` : ''}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </Card>
+            </>
+          )}
+
+          {/* PENALTIES */}
+          {penalties.length > 0 && (
+            <>
+              <SecLabel>Penalties ({penalties.length})</SecLabel>
+              <Card>
+                {penalties.map(p => (
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20, whiteSpace: 'nowrap', marginTop: 2, background: `${severityColor(p.severity)}22`, color: severityColor(p.severity) }}>
+                      {severityLabel(p.severity)}
+                    </span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>
+                        {p.player_number ? `#${p.player_number} ` : ''}{teamName(p.team_id)} — {p.penalty_type}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>
+                        {periodLabel(p.period)}{p.time_in_period ? ` · ${p.time_in_period}` : ''} · {p.duration_minutes} min
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </Card>
+            </>
+          )}
+
+          {/* SHOTS */}
+          {(homeShots > 0 || awayShots > 0) && (
+            <>
+              <SecLabel>Shots on Goal</SecLabel>
+              <Card>
+                {[[homeTeam, homeShots], [awayTeam, awayShots]].map(([team, count], i) => (
+                  <div key={team.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderTop: i > 0 ? '0.5px solid rgba(244,247,250,0.06)' : 'none' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: C.ice, width: 140, flexShrink: 0 }}>{team.name}</span>
+                    <div style={{ flex: 1, height: 6, background: 'rgba(244,247,250,0.08)', borderRadius: 3 }}>
+                      <div style={{ width: `${(count / maxShots) * 100}%`, height: 6, background: C.blue, borderRadius: 3, transition: 'width 0.5s' }} />
+                    </div>
+                    <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, color: C.ice, width: 28, textAlign: 'right' }}>{count}</span>
+                  </div>
+                ))}
+              </Card>
+            </>
+          )}
+
+          {/* GOALIE CHANGES */}
+          {goalieChanges.length > 0 && (
+            <>
+              <SecLabel>Goalie Changes</SecLabel>
+              <Card>
+                {goalieChanges.map(c => (
+                  <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>
+                        {teamName(c.team_id)} — #{c.goalie_out_number || '?'} → #{c.goalie_in_number || '?'}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>
+                        {periodLabel(c.period)}{c.time_in_period ? ` · ${c.time_in_period}` : ''}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </Card>
+            </>
+          )}
+
+          {/* Empty state */}
+          {goals.length === 0 && penalties.length === 0 && homeShots === 0 && (
+            <div style={{ textAlign: 'center', color: 'rgba(244,247,250,0.3)', fontSize: 13, padding: '40px 0' }}>
+              <div style={{ fontSize: 32, marginBottom: 10 }}>🏒</div>
+              {isFinal ? 'No stats recorded for this game' : 'Stats will appear here once the game starts'}
+            </div>
+          )}
+
+        </div>
+      </div>
+    </Layout>
+  );
+}

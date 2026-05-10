@@ -44,7 +44,7 @@ function GameRow({ game, isCommissioner, navigate }) {
   const liveBarnUrl = getLiveBarnUrl(venueId);
 
   return (
-    <div style={{ padding: '12px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
+    <div onClick={() => navigate('/league-game/' + game.id + '?type=league')} style={{ padding: '12px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)', cursor: 'pointer' }} onMouseEnter={e=>e.currentTarget.style.background='rgba(46,91,140,0.08)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {/* Date */}
         <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(244,247,250,0.4)', width: 44, flexShrink: 0, lineHeight: 1.5 }}>

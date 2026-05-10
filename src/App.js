@@ -20,6 +20,7 @@ import LeagueManage from './pages/LeagueManage';
 import Team from './pages/Team';
 import TeamManage from './pages/TeamManage';
 import ScorerView from './pages/ScorerView';
+import GameDetail from './pages/GameDetail';
 
 export const AuthContext = createContext(null);
 export function useAuth() { return useContext(AuthContext); }
@@ -60,6 +61,8 @@ function AppRoutes() {
       <Route path="/tournament/create" element={<ProtectedRoute><TournamentCreate profile={profile} /></ProtectedRoute>} />
       <Route path="/tournament/:id" element={<ProtectedRoute><Tournament /></ProtectedRoute>} />
       <Route path="/scorer/:gameId" element={<ProtectedRoute><ScorerView /></ProtectedRoute>} />
+      <Route path="/game/:gameId" element={<ProtectedRoute><GameDetail profile={profile} /></ProtectedRoute>} />
+      <Route path="/league-game/:gameId" element={<ProtectedRoute><GameDetail profile={profile} /></ProtectedRoute>} />
       <Route path="/league-scorer/:gameId" element={<ProtectedRoute><ScorerView /></ProtectedRoute>} />
       <Route path="/privacy" element={<Legal />} />
       <Route path="/terms" element={<Legal />} />
