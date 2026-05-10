@@ -5,6 +5,7 @@ import { Avatar, TierBadge } from '../components/Logos';
 import { updateProfile } from '../lib/auth';
 import { getTier, getTierProgress, getNextTier, TIERS } from '../lib/tiers';
 import { supabase } from '../lib/supabase';
+import { getPlayerLeagueStats } from '../lib/stats';
 import { useParams } from 'react-router-dom';
 import { followUser, unfollowUser, isFollowing, getFollowCounts, timeAgo } from '../lib/posts';
 
@@ -22,6 +23,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
   const [following, setFollowing] = useState(false);
   const [followCounts, setFollowCounts] = useState({ followers: 0, following: 0 });
   const [followLoading, setFollowLoading] = useState(false);
+  const [leagueStats, setLeagueStats] = useState([]);
 
   const [editName, setEditName] = useState('');
   const [editHandle, setEditHandle] = useState('');
@@ -56,6 +58,8 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
     }
     if (profileId) {
       const { data } = await supabase.from('posts').select('*').eq('author_id', profileId).order('created_at', { ascending: false });
+      const stats = await getPlayerLeagueStats(profileId);
+      setLeagueStats(stats);
       setPosts(data || []);
       const counts = await getFollowCounts(profileId);
       setFollowCounts(counts);
@@ -222,7 +226,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
 
         {/* Posts */}
         <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: C.navy, borderRadius: 10, padding: 4, border: `1px solid ${C.border}` }}>
-          {[{ id: 'posts', label: 'Posts' }, { id: 'badges', label: 'Badges' }].map(t => (
+          {[{ id: 'posts', label: 'Posts' }, { id: 'stats', label: 'Stats' }, { id: 'badges', label: 'Badges' }].map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)} style={{ flex: 1, padding: '8px', borderRadius: 7, border: 'none', background: activeTab === t.id ? C.blue : 'transparent', color: activeTab === t.id ? C.ice : C.steel, fontFamily: "'Barlow', sans-serif", fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>{t.label}</button>
           ))}
         </div>
@@ -247,6 +251,39 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
           ))
         )}
 
+
+        {activeTab === 'stats' && (
+          <div>
+            {leagueStats.length === 0 ? (
+              <div style={{ textAlign: 'center', color: C.steel, padding: '40px', fontSize: 14 }}>
+                <div style={{ fontSize: 32, marginBottom: 10 }}>🏒</div>
+                No league stats yet. Play in a league to see your stats here.
+              </div>
+            ) : leagueStats.map((s, i) => (
+              <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px', marginBottom: 12 }}>
+                {/* League + team header */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 8, background: s.team_logo_color || '#2E5B8C', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 14, color: '#fff', flexShrink: 0 }}>
+                    {s.team_logo_initials || s.team_name?.slice(0,2).toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: C.ice }}>{s.team_name} · #{s.jersey_number}</div>
+                    <div style={{ fontSize: 11, color: C.steel, marginTop: 2 }}>{s.league_name}{s.season ? ` · ${s.season}` : ''}{s.division ? ` · ${s.division}` : ''}</div>
+                  </div>
+                </div>
+                {/* Stat grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
+                  {[['GP', s.gp], ['G', s.goals], ['A', s.assists], ['PTS', s.points], ['PIM', s.pim]].map(([label, val]) => (
+                    <div key={label} style={{ background: '#07111F', borderRadius: 8, padding: '10px 0', textAlign: 'center' }}>
+                      <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: label === 'PTS' ? 22 : 18, color: label === 'PTS' ? '#D72638' : C.ice, lineHeight: 1 }}>{val}</div>
+                      <div style={{ fontSize: 9, fontWeight: 700, color: C.steel, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 3 }}>{label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         {activeTab === 'badges' && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
             {[
