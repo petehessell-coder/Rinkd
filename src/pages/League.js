@@ -15,8 +15,8 @@ function TeamLogo({ team, size = 32 }) {
 }
 
 function GameRow({ game, showAll, isCommissioner, navigate }) {
-  const home = game.home_lt?.team;
-  const away = game.away_lt?.team;
+  const home = game.home_lt?.team || { name: game.home_lt?.team_name, logo_color: game.home_lt?.logo_color, logo_initials: game.home_lt?.logo_initials };
+  const away = game.away_lt?.team || { name: game.away_lt?.team_name, logo_color: game.away_lt?.logo_color, logo_initials: game.away_lt?.logo_initials };
   const isLive = game.status === 'live';
   const isFinal = game.status === 'final';
   const date = new Date(game.start_time);
