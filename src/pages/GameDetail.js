@@ -56,6 +56,7 @@ export default function GameDetail({ profile }) {
   const [shots, setShots] = useState([]);
   const [goalieChanges, setGoalieChanges] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isOrganizer, setIsOrganizer] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -68,6 +69,17 @@ export default function GameDetail({ profile }) {
             .eq('id', gameId).single();
 
       setGame(g);
+      // Check if current user is organizer
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        if (isLeague) {
+          const { data: league } = await supabase.from('leagues').select('commissioner_id').eq('id', g.league_id || g.home_lt?.league_id).maybeSingle();
+          setIsOrganizer(league?.commissioner_id === user.id);
+        } else {
+          const { data: tourn } = await supabase.from('tournaments').select('director_id').eq('id', g.tournament_id).maybeSingle();
+          setIsOrganizer(tourn?.director_id === user.id);
+        }
+      }
 
       const [{ data: gl }, { data: pl }, { data: sl }, { data: gc }] = await Promise.all([
         supabase.from('game_goals').select('*').eq('game_id', gameId).order('period').order('time_in_period'),
@@ -208,6 +220,16 @@ export default function GameDetail({ profile }) {
                 <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 14, color: C.red, marginLeft: 10 }}>10% off</div>
               </div>
             </>
+          )}
+
+          {/* SCORER VIEW BUTTON */}
+          {isOrganizer && !isFinal && (
+            <button onClick={() => navigate(isLeague ? `/league-scorer/${gameId}?type=league` : `/scorer/${gameId}`)}
+              style={{ width: '100%', padding: '11px', background: 'rgba(46,91,140,0.2)', border: `0.5px solid ${C.border}`, borderRadius: 10, color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(46,91,140,0.2)'; e.currentTarget.style.color = C.ice; }}>
+              ✏️ Open Scorer View
+            </button>
           )}
 
           {/* GOAL LOG */}
