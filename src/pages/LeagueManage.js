@@ -307,13 +307,13 @@ function ManageLeague({ id, navigate }) {
               <Field label="Home Team">
                 <select style={inputStyle} value={gameForm.home_team_id} onChange={e => setGameForm(p => ({ ...p, home_team_id: e.target.value }))}>
                   <option value="">Select home team</option>
-                  {teams.map(lt => <option key={lt.id} value={lt.id}>{lt.team?.name}</option>)}
+                  {teams.map(lt => <option key={lt.id} value={lt.id}>{lt.team?.name || lt.team_name}</option>)}
                 </select>
               </Field>
               <Field label="Away Team">
                 <select style={inputStyle} value={gameForm.away_team_id} onChange={e => setGameForm(p => ({ ...p, away_team_id: e.target.value }))}>
                   <option value="">Select away team</option>
-                  {teams.map(lt => <option key={lt.id} value={lt.id}>{lt.team?.name}</option>)}
+                  {teams.map(lt => <option key={lt.id} value={lt.id}>{lt.team?.name || lt.team_name}</option>)}
                 </select>
               </Field>
               <Field label="Location"><input style={inputStyle} value={gameForm.location} onChange={e => setGameForm(p => ({ ...p, location: e.target.value }))} placeholder="Rink / arena name" /></Field>
