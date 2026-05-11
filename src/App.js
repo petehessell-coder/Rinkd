@@ -7,6 +7,8 @@ import Feed from './pages/Feed';
 import Profile from './pages/Profile';
 import Rinkside from './pages/Rinkside';
 import Crease from './pages/Crease';
+import CreaseShow from './pages/CreaseShow';
+import CreaseEpisode from './pages/CreaseEpisode';
 import Leagues from './pages/Leagues';
 import Store from './pages/Store';
 import Legal from './pages/Legal';
@@ -53,7 +55,9 @@ function AppRoutes() {
       <Route path="/profile" element={<ProtectedRoute><Profile currentUser={user} profile={profile} onProfileUpdate={setProfile} /></ProtectedRoute>} />
       <Route path="/profile/:userId" element={<ProtectedRoute><Profile currentUser={user} profile={profile} onProfileUpdate={setProfile} /></ProtectedRoute>} />
       <Route path="/rinkside" element={<ProtectedRoute><Rinkside profile={profile} /></ProtectedRoute>} />
-      <Route path="/crease" element={<ProtectedRoute><Crease profile={profile} /></ProtectedRoute>} />
+      <Route path="/crease" element={<ProtectedRoute><Crease currentUser={user} profile={profile} /></ProtectedRoute>} />
+      <Route path="/crease/:slug" element={<ProtectedRoute><CreaseShow currentUser={user} profile={profile} /></ProtectedRoute>} />
+      <Route path="/crease/:showSlug/:episodeNumber" element={<ProtectedRoute><CreaseEpisode currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/leagues" element={<ProtectedRoute><Leagues profile={profile} /></ProtectedRoute>} />
       <Route path="/store" element={<ProtectedRoute><Store profile={profile} /></ProtectedRoute>} />
       <Route path="/discover" element={<ProtectedRoute><Discover currentUser={user} profile={profile} /></ProtectedRoute>} />
