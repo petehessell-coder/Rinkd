@@ -226,6 +226,42 @@ export default function LeaguePage({ profile }) {
           {/* SCHEDULE TAB */}
           {activeTab === 'Schedule' && (
             <>
+              {games.length > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+                  <button
+                    onClick={() => {
+                      // Live league calendar — refreshes when commissioners reschedule.
+                      const base = 'tbpoopsyhfuqcbugrjbh.supabase.co/functions/v1/schedule-ics';
+                      const webcalUrl = `webcal://${base}?league=${league.id}`;
+                      const httpsUrl = `https://${base}?league=${league.id}`;
+                      const ua = (navigator.userAgent || '').toLowerCase();
+                      const isAppleish = /iphone|ipad|ipod|macintosh/.test(ua);
+                      if (isAppleish) {
+                        window.location.href = webcalUrl;
+                      } else {
+                        try {
+                          navigator.clipboard?.writeText(httpsUrl);
+                          // eslint-disable-next-line no-alert
+                          alert('Live league calendar link copied!\n\nPaste it into Google Calendar → Other calendars → From URL, or any app that subscribes to .ics feeds. The full league schedule will auto-refresh.');
+                        } catch {
+                          window.location.href = webcalUrl;
+                        }
+                      }
+                    }}
+                    style={{
+                      fontSize: 12, fontWeight: 700, letterSpacing: '0.04em',
+                      padding: '8px 16px', borderRadius: 999,
+                      background: C.red, border: 'none',
+                      color: '#fff', cursor: 'pointer',
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      fontFamily: "'Barlow', sans-serif", transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = C.red; e.currentTarget.style.color = '#fff'; }}>
+                    📡 Subscribe to League Calendar
+                  </button>
+                </div>
+              )}
               {!showAll ? (
                 <>
                   {liveGames.length > 0 && (

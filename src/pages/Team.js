@@ -318,7 +318,43 @@ export default function TeamPage({ profile }) {
           {activeTab === 'Schedule' && (
             <>
               {games.length > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => {
+                      // Live calendar subscription (auto-refreshes when games change).
+                      // webcal:// hands off to the OS default calendar app on iOS/macOS;
+                      // on Android/desktop browsers we fall back to copying the https URL
+                      // so the user can paste it into Google Calendar / Outlook.
+                      const base = 'tbpoopsyhfuqcbugrjbh.supabase.co/functions/v1/schedule-ics';
+                      const webcalUrl = `webcal://${base}?team=${team.id}`;
+                      const httpsUrl = `https://${base}?team=${team.id}`;
+                      const ua = (navigator.userAgent || '').toLowerCase();
+                      const isAppleish = /iphone|ipad|ipod|macintosh/.test(ua);
+                      if (isAppleish) {
+                        window.location.href = webcalUrl;
+                      } else {
+                        try {
+                          navigator.clipboard?.writeText(httpsUrl);
+                          // eslint-disable-next-line no-alert
+                          alert('Live calendar link copied!\n\nPaste it into Google Calendar → Other calendars → From URL, or any app that subscribes to .ics feeds. The schedule will auto-refresh.');
+                        } catch {
+                          window.location.href = webcalUrl;
+                        }
+                      }
+                    }}
+                    style={{
+                      fontSize: 12, fontWeight: 700, letterSpacing: '0.04em',
+                      padding: '8px 16px', borderRadius: 999,
+                      background: C.red,
+                      border: 'none',
+                      color: '#fff', cursor: 'pointer',
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      fontFamily: "'Barlow', sans-serif", transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = C.red; e.currentTarget.style.color = '#fff'; }}>
+                    📡 Subscribe (Live)
+                  </button>
                   <button
                     onClick={() => {
                       const events = games.map(g => {
