@@ -5,6 +5,7 @@ import { getTeam, getTeamMembers, getTeamGames, getUserRoleOnTeam, requestToJoin
 import RsvpBlock from '../components/RsvpBlock';
 import MapLink from '../components/MapLink';
 import CalendarButton from '../components/CalendarButton';
+import { buildIcsMulti, downloadIcs } from '../lib/ics';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 
@@ -297,6 +298,54 @@ export default function TeamPage({ profile }) {
           {/* SCHEDULE TAB */}
           {activeTab === 'Schedule' && (
             <>
+              {games.length > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+                  <button
+                    onClick={() => {
+                      const events = games.map(g => {
+                        const isLeagueG = g._source === 'league';
+                        const opp = g.opponent || '';
+                        const title = `🏒 ${team.name} ${g.is_home ? 'vs.' : '@'} ${opp}`.trim();
+                        const venueParts = [];
+                        if (g.rink) {
+                          const rinkName = [g.rink.sub_rink, g.rink.name].filter(Boolean).join(' · ');
+                          if (rinkName) venueParts.push(rinkName);
+                          if (g.rink.address) venueParts.push(g.rink.address);
+                        } else if (g.location) {
+                          venueParts.push(g.location);
+                        }
+                        const descLines = [];
+                        if (isLeagueG && g._league_name) descLines.push(`League: ${g._league_name}`);
+                        descLines.push(`Status: ${g.status || 'scheduled'}`);
+                        descLines.push('Added from Rinkd · rinkd.app');
+                        return {
+                          uid: `${g.id}@rinkd.app`,
+                          title,
+                          start: g.start_time,
+                          durationMinutes: 90,
+                          location: venueParts.join(' — '),
+                          description: descLines.join('\n'),
+                        };
+                      });
+                      const ics = buildIcsMulti(events, `${team.name} schedule`);
+                      const safeName = team.name.replace(/[^\w\-]+/g, '_');
+                      downloadIcs(ics, `${safeName}_schedule.ics`);
+                    }}
+                    style={{
+                      fontSize: 12, fontWeight: 700, letterSpacing: '0.04em',
+                      padding: '8px 16px', borderRadius: 999,
+                      background: 'rgba(46,91,140,0.25)',
+                      border: '0.5px solid rgba(46,91,140,0.6)',
+                      color: C.ice, cursor: 'pointer',
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      fontFamily: "'Barlow', sans-serif", transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(46,91,140,0.25)'; e.currentTarget.style.color = C.ice; }}>
+                    📅 Add Full Schedule
+                  </button>
+                </div>
+              )}
               {recentGames.length > 0 && (
                 <>
                   <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'rgba(244,247,250,0.3)', textTransform: 'uppercase', marginBottom: 8 }}>Recent</div>

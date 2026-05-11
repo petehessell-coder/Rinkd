@@ -87,6 +87,49 @@ export function buildIcs({ uid, title, start, end, durationMinutes = 90, locatio
   return lines.map(fold).join('\r\n') + '\r\n';
 }
 
+/**
+ * Build a single .ics calendar containing multiple VEVENT blocks — for
+ * "Add full schedule" exports.
+ *
+ * @param {Array} events  Each item: same shape as buildIcs() opts.
+ * @param {string} [calendarName]  Optional X-WR-CALNAME / NAME hint shown by
+ *                                 some clients (Apple Calendar respects this).
+ */
+export function buildIcsMulti(events, calendarName) {
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Rinkd//Rinkd//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+  ];
+  if (calendarName) {
+    lines.push(`NAME:${escapeText(calendarName)}`);
+    lines.push(`X-WR-CALNAME:${escapeText(calendarName)}`);
+  }
+  for (const ev of events) {
+    if (!ev || !ev.start) continue;
+    const startDate = (ev.start instanceof Date) ? ev.start : new Date(ev.start);
+    const endDate = ev.end
+      ? ((ev.end instanceof Date) ? ev.end : new Date(ev.end))
+      : new Date(startDate.getTime() + ((ev.durationMinutes || 90) * 60 * 1000));
+    lines.push(
+      'BEGIN:VEVENT',
+      `UID:${ev.uid || (Date.now() + Math.random() + '@rinkd.app')}`,
+      `DTSTAMP:${toUtc(new Date())}`,
+      `DTSTART:${toUtc(startDate)}`,
+      `DTEND:${toUtc(endDate)}`,
+      `SUMMARY:${escapeText(ev.title || 'Rinkd game')}`,
+    );
+    if (ev.location)    lines.push(`LOCATION:${escapeText(ev.location)}`);
+    if (ev.description) lines.push(`DESCRIPTION:${escapeText(ev.description)}`);
+    if (ev.url)         lines.push(`URL:${escapeText(ev.url)}`);
+    lines.push('END:VEVENT');
+  }
+  lines.push('END:VCALENDAR');
+  return lines.map(fold).join('\r\n') + '\r\n';
+}
+
 /** Trigger a download (or open-with-Calendar on iOS) for a built ICS string. */
 export function downloadIcs(ics, filename = 'rinkd-game.ics') {
   const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
