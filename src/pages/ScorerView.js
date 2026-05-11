@@ -396,7 +396,7 @@ export default function ScorerView() {
 
       {showScoresheet && (
         <Scoresheet
-          game={game}
+          game={{ ...game, home_score: homeScore, away_score: awayScore }}
           goals={goals}
           penalties={penalties}
           shots={shots}
