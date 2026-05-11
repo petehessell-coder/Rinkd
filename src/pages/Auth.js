@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RinkdLogo } from '../components/Logos';
+import { RinkdLogo, Wordmark } from '../components/Logos';
 import { signIn, signUp } from '../lib/auth';
 import DownloadCTA from '../components/DownloadCTA';
 
@@ -102,8 +102,9 @@ export default function Auth() {
         justifyContent: 'center', padding: '60px 80px',
         borderRight: `1px solid ${C.border}`,
       }} className="auth-hero">
-        <div style={{ marginBottom: 48 }}>
+        <div style={{ marginBottom: 32, display: 'flex', alignItems: 'center', gap: 18 }}>
           <RinkdLogo size={100} />
+          <Wordmark height={72} />
         </div>
         <h1 style={{
           fontFamily: "'Barlow Condensed', sans-serif",

@@ -6,8 +6,24 @@ export function RinkdLogo({ size = 40, showText = false }) {
   return (
     <div style={{ display:'flex', alignItems:'center', gap:10 }}>
       <img src={LOGO_B64} alt="Rinkd" style={{ width:size, height:size, objectFit:'cover', borderRadius:'18%' }}/>
-      {showText && <span style={{ fontFamily:"'Barlow Condensed',sans-serif", fontWeight:900, fontStyle:'italic', fontSize:size*0.6, color:'#F4F7FA', letterSpacing:'0.05em', textTransform:'uppercase', lineHeight:1 }}>RINKD</span>}
+      {showText && (
+        <img
+          src="/rinkd-wordmark.png"
+          alt="Rinkd"
+          style={{ height: Math.round(size * 0.72), width: 'auto', display: 'block' }}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * Standalone wordmark for hero/login spots. Use anywhere we'd otherwise
+ * render "Rinkd" as Barlow Condensed Italic text.
+ */
+export function Wordmark({ height = 60, style, src = '/rinkd-wordmark-large.png' }) {
+  return (
+    <img src={src} alt="Rinkd" style={{ height, width: 'auto', display: 'block', ...style }} />
   );
 }
 
