@@ -16,17 +16,52 @@ const TAGS = [
   { label: 'Question', color: '#8BA3BE' },
 ];
 
-function MediaDisplay({ url, type }) {
-  if (!url) return null;
-  if (type === 'video') return (
-    <div style={{ borderRadius: 10, overflow: 'hidden', marginBottom: 10, background: '#000' }}>
-      <video src={url} controls playsInline preload="metadata" style={{ width: '100%', maxHeight: 400, display: 'block' }}/>
+// Tap-to-fullscreen lightbox so highlight clips and goal photos actually look
+// like highlight clips and goal photos.
+function MediaLightbox({ url, type, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
+  }, [onClose]);
+  return (
+    <div onClick={onClose}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <button onClick={onClose}
+        style={{ position: 'absolute', top: 14, right: 14, background: 'rgba(255,255,255,0.1)', color: '#fff', border: 'none', borderRadius: 999, width: 40, height: 40, fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>
+        ×
+      </button>
+      {type === 'video'
+        ? <video src={url} controls autoPlay playsInline style={{ maxWidth: '100%', maxHeight: '92vh', borderRadius: 10 }} onClick={e => e.stopPropagation()}/>
+        : <img src={url} alt="Post media" style={{ maxWidth: '100%', maxHeight: '92vh', borderRadius: 10, objectFit: 'contain' }} onClick={e => e.stopPropagation()}/>}
     </div>
   );
+}
+
+function MediaDisplay({ url, type }) {
+  const [open, setOpen] = useState(false);
+  if (!url) return null;
+  if (type === 'video') return (
+    <>
+      <div style={{ borderRadius: 10, overflow: 'hidden', marginBottom: 10, background: '#000', position: 'relative' }}>
+        <video src={url} controls playsInline preload="metadata" style={{ width: '100%', maxHeight: 400, display: 'block' }}/>
+        <button onClick={() => setOpen(true)} title="Open fullscreen"
+          style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer' }}>
+          ⤢
+        </button>
+      </div>
+      {open && <MediaLightbox url={url} type="video" onClose={() => setOpen(false)} />}
+    </>
+  );
   return (
-    <div style={{ borderRadius: 10, overflow: 'hidden', marginBottom: 10 }}>
-      <img src={url} alt="Post" style={{ width: '100%', maxHeight: 500, objectFit: 'cover', display: 'block' }} loading="lazy"/>
-    </div>
+    <>
+      <div onClick={() => setOpen(true)} style={{ borderRadius: 10, overflow: 'hidden', marginBottom: 10, cursor: 'zoom-in' }}>
+        <img src={url} alt="Post" style={{ width: '100%', maxHeight: 500, objectFit: 'cover', display: 'block' }} loading="lazy"/>
+      </div>
+      {open && <MediaLightbox url={url} type="image" onClose={() => setOpen(false)} />}
+    </>
   );
 }
 
@@ -146,8 +181,18 @@ export default function Feed({ currentUser, profile }) {
   const handleMediaSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    // Hard cap — Supabase free plan caps single uploads ~50MB, and big mobile clips
+    // bomb out on flaky rinks-wifi anyway. Fail fast with a clear message.
+    const isVideo = file.type.startsWith('video');
+    const maxMB = isVideo ? 50 : 10;
+    if (file.size > maxMB * 1024 * 1024) {
+      // eslint-disable-next-line no-alert
+      alert(`${isVideo ? 'Video' : 'Image'} is ${(file.size / 1024 / 1024).toFixed(1)}MB — max ${maxMB}MB. Trim a highlight or compress and try again.`);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
     setMediaFile(file);
-    setMediaPreview({ url: URL.createObjectURL(file), type: file.type.startsWith('video') ? 'video' : 'image' });
+    setMediaPreview({ url: URL.createObjectURL(file), type: isVideo ? 'video' : 'image' });
   };
 
   const removeMedia = () => { setMediaFile(null); setMediaPreview(null); if (fileInputRef.current) fileInputRef.current.value = ''; };
