@@ -6,6 +6,7 @@ import RsvpBlock from '../components/RsvpBlock';
 import MapLink from '../components/MapLink';
 import CalendarButton from '../components/CalendarButton';
 import LineupModal from '../components/LineupModal';
+import TeamFeed from '../components/TeamFeed';
 import { buildIcsMulti, downloadIcs } from '../lib/ics';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
@@ -20,7 +21,7 @@ function Avatar({ name, color, initials, size = 34 }) {
   );
 }
 
-export default function TeamPage({ profile }) {
+export default function TeamPage({ currentUser, profile }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const [team, setTeam] = useState(null);
@@ -425,10 +426,7 @@ export default function TeamPage({ profile }) {
 
           {/* FEED TAB */}
           {activeTab === 'Feed' && (
-            <div style={{ textAlign: 'center', color: 'rgba(244,247,250,0.3)', fontSize: 13, padding: '40px 0' }}>
-              <div style={{ fontSize: 32, marginBottom: 10 }}>📣</div>
-              Team feed coming soon
-            </div>
+            <TeamFeed teamId={team.id} currentUser={currentUser} isMember={isMember} />
           )}
 
           {/* INFO TAB */}

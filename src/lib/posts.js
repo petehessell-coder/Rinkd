@@ -27,7 +27,7 @@ export async function getFollowingPosts(userId, limit = 30) {
   return { data, error };
 }
 
-export async function createPost(authorId, { content, tag, tagColor, mediaUrl, mediaType, livebarnVenueId }) {
+export async function createPost(authorId, { content, tag, tagColor, mediaUrl, mediaType, livebarnVenueId, teamId }) {
   const { data, error } = await supabase
     .from('posts')
     .insert({
@@ -37,6 +37,7 @@ export async function createPost(authorId, { content, tag, tagColor, mediaUrl, m
       tag_color: tagColor || null,
       media_url: mediaUrl || null,
       media_type: mediaType || null,
+      team_id: teamId || null,
       likes: 0,
       comment_count: 0,
       repost_count: 0,
@@ -44,6 +45,16 @@ export async function createPost(authorId, { content, tag, tagColor, mediaUrl, m
     })
     .select()
     .single();
+  return { data, error };
+}
+
+export async function getTeamPosts(teamId, limit = 50) {
+  const { data, error } = await supabase
+    .from('posts')
+    .select(`*, profiles(id, name, handle, avatar_color, avatar_initials, tier, position)`)
+    .eq('team_id', teamId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
   return { data, error };
 }
 

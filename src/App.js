@@ -65,7 +65,7 @@ function AppRoutes() {
       <Route path="/league/:id" element={<ProtectedRoute><League profile={profile} /></ProtectedRoute>} />
       <Route path="/team/create" element={<ProtectedRoute><TeamManage profile={profile} /></ProtectedRoute>} />
       <Route path="/team/:id/manage" element={<ProtectedRoute><TeamManage profile={profile} /></ProtectedRoute>} />
-      <Route path="/team/:id" element={<ProtectedRoute><Team profile={profile} /></ProtectedRoute>} />
+      <Route path="/team/:id" element={<ProtectedRoute><Team currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/tournament/create" element={<ProtectedRoute><TournamentCreate profile={profile} /></ProtectedRoute>} />
       <Route path="/tournament/:id" element={<ProtectedRoute><Tournament /></ProtectedRoute>} />
       <Route path="/scorer/:gameId" element={<ProtectedRoute><ScorerView /></ProtectedRoute>} />
