@@ -174,19 +174,26 @@ export default function GameDetail({ profile }) {
         {/* HEADER */}
         <div style={{ background: C.navy, padding: '14px 16px', borderBottom: `0.5px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.6)', fontSize: 13, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap' }}>← Back</button>
-          <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', textAlign: 'center', flex: 1 }}>
-            {context}
-            {game.rink && (
-              <>
-                {' · '}
-                <MapLink rink={game.rink} icon="" style={{ color: 'inherit', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 2 }} />
-              </>
-            )}
-            {isTeamGame && game.location && (
-              <>
-                {' · '}
-                <MapLink text={game.location} icon="" style={{ color: 'inherit', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 2 }} />
-              </>
+          <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', textAlign: 'center', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span>
+              {context}
+              {game.rink ? ` · ${[game.rink.sub_rink, game.rink.name].filter(Boolean).join(' · ')}` : ''}
+              {isTeamGame && game.location ? ` · ${game.location}` : ''}
+            </span>
+            {(game.rink || (isTeamGame && game.location)) && (
+              <MapLink rink={game.rink} text={isTeamGame ? game.location : undefined} icon=""
+                style={{
+                  fontSize: 10, fontWeight: 700, letterSpacing: '0.04em',
+                  padding: '3px 9px', borderRadius: 999,
+                  background: 'rgba(46,91,140,0.25)',
+                  border: '0.5px solid rgba(46,91,140,0.6)',
+                  color: C.ice, textDecoration: 'none',
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  whiteSpace: 'nowrap',
+                  fontFamily: "'Barlow', sans-serif",
+                }}>
+                📍 Directions
+              </MapLink>
             )}
           </div>
           <div style={{ width: 60 }} />

@@ -135,10 +135,24 @@ export default function TeamPage({ profile }) {
               </span>
             )}
           </div>
-          {g.location && (
-            <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}
+          {(g.location || g.rink) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}
               onClick={e => e.stopPropagation()}>
-              <MapLink text={g.location} style={{ color: 'inherit', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 2 }} />
+              <span style={{ fontSize: 11, color: 'rgba(244,247,250,0.5)' }}>
+                {g.rink ? [g.rink.sub_rink, g.rink.name].filter(Boolean).join(' · ') : g.location}
+              </span>
+              <MapLink rink={g.rink} text={g.location} icon=""
+                style={{
+                  fontSize: 10, fontWeight: 700, letterSpacing: '0.04em',
+                  padding: '3px 9px', borderRadius: 999,
+                  background: 'rgba(46,91,140,0.25)',
+                  border: '0.5px solid rgba(46,91,140,0.6)',
+                  color: C.ice, textDecoration: 'none',
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  fontFamily: "'Barlow', sans-serif",
+                }}>
+                📍 Directions
+              </MapLink>
             </div>
           )}
           {g.status === 'scheduled' && <RsvpBlock gameId={g.id} compact={false} />}
@@ -170,7 +184,23 @@ export default function TeamPage({ profile }) {
             <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.45)', marginTop: 4 }}>
               {[team.division, team.level, team.location].filter(Boolean).join(' · ')}
             </div>
-            {team.home_rink && <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.3)', marginTop: 2 }}>🏟 <MapLink text={team.home_rink} icon="" style={{ color: 'inherit', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 2 }} /></div>}
+            {team.home_rink && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11, color: 'rgba(244,247,250,0.45)' }}>🏟 {team.home_rink}</span>
+                <MapLink text={team.home_rink} icon=""
+                  style={{
+                    fontSize: 10, fontWeight: 700, letterSpacing: '0.04em',
+                    padding: '3px 9px', borderRadius: 999,
+                    background: 'rgba(46,91,140,0.25)',
+                    border: '0.5px solid rgba(46,91,140,0.6)',
+                    color: C.ice, textDecoration: 'none',
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    fontFamily: "'Barlow', sans-serif",
+                  }}>
+                  📍 Directions
+                </MapLink>
+              </div>
+            )}
           </div>
           {isManager && (
             <button onClick={() => navigate(`/team/${id}/manage`)}
