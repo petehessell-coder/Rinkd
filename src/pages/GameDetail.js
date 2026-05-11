@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import Layout from '../components/Layout';
 import RsvpBlock from '../components/RsvpBlock';
 import MapLink from '../components/MapLink';
+import CalendarButton from '../components/CalendarButton';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 
@@ -194,6 +195,10 @@ export default function GameDetail({ profile }) {
                 }}>
                 📍 Directions
               </MapLink>
+            )}
+            {!isFinal && (
+              <CalendarButton game={game}
+                homeName={homeTeam?.name} awayName={awayTeam?.name} />
             )}
           </div>
           <div style={{ width: 60 }} />
