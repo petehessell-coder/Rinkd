@@ -105,13 +105,15 @@ export default function TeamPage({ profile }) {
     const isLoss = g.status === 'final' && teamScore < oppScore;
     const date = new Date(g.start_time);
     const isLeagueGame = g._source === 'league';
-    const gameUrl = isLeagueGame ? `/league-game/${g.id}?type=league` : null;
+    // Every game has a detail page now — tournament/team-only games route to /game/:id,
+    // league games route to /league-game/:id?type=league.
+    const gameUrl = isLeagueGame ? `/league-game/${g.id}?type=league` : `/game/${g.id}`;
 
     return (
       <div key={g.id}
-        onClick={() => gameUrl && navigate(gameUrl)}
-        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)', cursor: gameUrl ? 'pointer' : 'default' }}
-        onMouseEnter={e => { if (gameUrl) e.currentTarget.style.background = 'rgba(46,91,140,0.08)'; }}
+        onClick={() => navigate(gameUrl)}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)', cursor: 'pointer' }}
+        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(46,91,140,0.08)'; }}
         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
         <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(244,247,250,0.4)', width: 48, flexShrink: 0, lineHeight: 1.4 }}>
           {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}<br/>
@@ -129,14 +131,20 @@ export default function TeamPage({ profile }) {
             )}
           </div>
           {g.location && <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>{g.location}</div>}
-          {g.status === 'scheduled' && <RsvpBlock gameId={g.id} compact={true} />}
+          {g.status === 'scheduled' && (
+            // stop the row's onClick from firing when tapping a button or avatar
+            <div onClick={e => e.stopPropagation()}>
+              <RsvpBlock gameId={g.id} compact={false} />
+            </div>
+          )}
         </div>
         {g.status === 'final'
           ? <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 14, color: isWin ? '#22C55E' : isLoss ? C.red : C.ice }}>
               {isWin ? 'W' : isLoss ? 'L' : 'T'} {teamScore}–{oppScore}
             </div>
-          : <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.3)' }}>
-              {date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+          : <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.3)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span>{date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
+              <span style={{ fontSize: 14, color: 'rgba(244,247,250,0.25)' }}>›</span>
             </div>
         }
       </div>
