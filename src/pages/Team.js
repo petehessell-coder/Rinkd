@@ -131,12 +131,7 @@ export default function TeamPage({ profile }) {
             )}
           </div>
           {g.location && <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>{g.location}</div>}
-          {g.status === 'scheduled' && (
-            // stop the row's onClick from firing when tapping a button or avatar
-            <div onClick={e => e.stopPropagation()}>
-              <RsvpBlock gameId={g.id} compact={false} />
-            </div>
-          )}
+          {g.status === 'scheduled' && <RsvpBlock gameId={g.id} compact={false} />}
         </div>
         {g.status === 'final'
           ? <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 14, color: isWin ? '#22C55E' : isLoss ? C.red : C.ice }}>

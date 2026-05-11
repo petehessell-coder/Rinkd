@@ -63,7 +63,8 @@ export default function RsvpBlock({ gameId, compact = false }) {
   const outCount   = useMemo(() => rsvps.filter(r => r.status === 'out').length,   [rsvps]);
   const maybeCount = useMemo(() => rsvps.filter(r => r.status === 'maybe').length, [rsvps]);
 
-  const handleRsvp = async (status) => {
+  const handleRsvp = async (status, e) => {
+    if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
     if (!userId || saving) return;
     setSaving(true);
 
@@ -124,7 +125,7 @@ export default function RsvpBlock({ gameId, compact = false }) {
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
 
         {/* I'm In */}
-        <button onClick={() => handleRsvp('in')} disabled={saving}
+        <button onClick={(e) => handleRsvp('in', e)} disabled={saving}
           style={{ ...btnBase, background: myRsvp?.status === 'in' ? B.green : 'rgba(34,197,94,0.15)', color: myRsvp?.status === 'in' ? '#ffffff' : B.green }}
           onMouseEnter={e => { if (!saving) e.currentTarget.style.opacity = '0.8'; }}
           onMouseLeave={e => e.currentTarget.style.opacity = saving ? '0.7' : '1'}>
@@ -132,7 +133,7 @@ export default function RsvpBlock({ gameId, compact = false }) {
         </button>
 
         {/* I'm Out */}
-        <button onClick={() => handleRsvp('out')} disabled={saving}
+        <button onClick={(e) => handleRsvp('out', e)} disabled={saving}
           style={{ ...btnBase, background: myRsvp?.status === 'out' ? B.red : '#1E3A5C', color: myRsvp?.status === 'out' ? '#ffffff' : B.steel }}
           onMouseEnter={e => { if (!saving) e.currentTarget.style.opacity = '0.8'; }}
           onMouseLeave={e => e.currentTarget.style.opacity = saving ? '0.7' : '1'}>
@@ -140,7 +141,7 @@ export default function RsvpBlock({ gameId, compact = false }) {
         </button>
 
         {/* Maybe — formerly "Who's In", which made the count next to it ambiguous. */}
-        <button onClick={() => handleRsvp('maybe')} disabled={saving}
+        <button onClick={(e) => handleRsvp('maybe', e)} disabled={saving}
           style={{ ...btnBase, background: myRsvp?.status === 'maybe' ? B.amber : 'transparent', color: myRsvp?.status === 'maybe' ? '#ffffff' : B.steel, opacity: saving ? 0.7 : myRsvp?.status === 'maybe' ? 1 : 0.6 }}
           onMouseEnter={e => { if (!saving) e.currentTarget.style.opacity = '0.85'; }}
           onMouseLeave={e => e.currentTarget.style.opacity = saving ? '0.7' : myRsvp?.status === 'maybe' ? '1' : '0.6'}>
