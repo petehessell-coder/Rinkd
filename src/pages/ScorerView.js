@@ -396,7 +396,7 @@ export default function ScorerView() {
 
       {showScoresheet && (
         <Scoresheet
-          game={game}
+          game={isLeague ? { ...game, home_lt: { id: game.home_team?.id, team_name: homeTeam?.team_name, team: { name: homeTeam?.team_name } }, away_lt: { id: game.away_team?.id, team_name: awayTeam?.team_name, team: { name: awayTeam?.team_name } } } : game}
           goals={goals}
           penalties={penalties}
           shots={shots}
