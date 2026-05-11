@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { getTeam, getTeamMembers, getTeamGames, getUserRoleOnTeam, requestToJoin } from '../lib/teams';
 import RsvpBlock from '../components/RsvpBlock';
+import MapLink from '../components/MapLink';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 
@@ -134,7 +135,12 @@ export default function TeamPage({ profile }) {
               </span>
             )}
           </div>
-          {g.location && <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>{g.location}</div>}
+          {g.location && (
+            <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}
+              onClick={e => e.stopPropagation()}>
+              <MapLink text={g.location} style={{ color: 'inherit', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 2 }} />
+            </div>
+          )}
           {g.status === 'scheduled' && <RsvpBlock gameId={g.id} compact={false} />}
         </div>
         {g.status === 'final'
@@ -164,7 +170,7 @@ export default function TeamPage({ profile }) {
             <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.45)', marginTop: 4 }}>
               {[team.division, team.level, team.location].filter(Boolean).join(' · ')}
             </div>
-            {team.home_rink && <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.3)', marginTop: 2 }}>🏟 {team.home_rink}</div>}
+            {team.home_rink && <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.3)', marginTop: 2 }}>🏟 <MapLink text={team.home_rink} icon="" style={{ color: 'inherit', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 2 }} /></div>}
           </div>
           {isManager && (
             <button onClick={() => navigate(`/team/${id}/manage`)}
@@ -294,7 +300,7 @@ export default function TeamPage({ profile }) {
                 ['Division', team.division],
                 ['Level', team.level],
                 ['Location', team.location],
-                ['Home Rink', team.home_rink],
+                ['Home Rink', team.home_rink ? <MapLink text={team.home_rink} icon="" style={{ color: C.ice, textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 2 }} /> : null],
                 ['Manager', team.manager ? `@${team.manager.handle}` : '—'],
               ].filter(([, v]) => v).map(([k, v]) => (
                 <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>

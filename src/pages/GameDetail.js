@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import Layout from '../components/Layout';
 import RsvpBlock from '../components/RsvpBlock';
+import MapLink from '../components/MapLink';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 
@@ -175,8 +176,18 @@ export default function GameDetail({ profile }) {
           <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.6)', fontSize: 13, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap' }}>← Back</button>
           <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', textAlign: 'center', flex: 1 }}>
             {context}
-            {game.rink ? ` · ${game.rink.sub_rink || game.rink.name}` : ''}
-            {isTeamGame && game.location ? ` · ${game.location}` : ''}
+            {game.rink && (
+              <>
+                {' · '}
+                <MapLink rink={game.rink} icon="" style={{ color: 'inherit', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 2 }} />
+              </>
+            )}
+            {isTeamGame && game.location && (
+              <>
+                {' · '}
+                <MapLink text={game.location} icon="" style={{ color: 'inherit', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 2 }} />
+              </>
+            )}
           </div>
           <div style={{ width: 60 }} />
         </div>

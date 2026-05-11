@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
+import MapLink from '../components/MapLink';
 import { getLeague, getLeagueTeams, getLeagueGames, getLeagueStandings, getUserLeagueRole } from '../lib/leagues';
 
 
@@ -63,7 +64,9 @@ function GameRow({ game, isCommissioner, navigate }) {
           </div>
           {(game.location || game.rink) && (
             <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.35)', marginTop: 3 }}>
-              📍 {game.rink ? `${game.rink.sub_rink} · ${game.rink.name}` : game.location}
+              {game.rink
+                ? <MapLink rink={game.rink} style={{ color: 'inherit' }} />
+                : <MapLink text={game.location} style={{ color: 'inherit' }} />}
             </div>
           )}
         </div>

@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase';
 import { getPlayerLeagueStats } from '../lib/stats';
 import { useParams } from 'react-router-dom';
 import { followUser, unfollowUser, isFollowing, getFollowCounts, timeAgo } from '../lib/posts';
+import MapLink from '../components/MapLink';
 
 const POSITIONS = ['Forward', 'Defense', 'Goalie', 'Coach', 'Parent', 'Official', 'Fan'];
 const LEVELS = ['Youth (Mite-Bantam)', 'Youth (Midget)', 'High School', 'Junior (Tier I)', 'Junior (Tier II/III)', 'College', 'Minor Pro', 'Beer League', 'Adult Rec', 'Fan'];
@@ -169,7 +170,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
               <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
                 {profile.position && <span style={{ fontSize: 12, color: C.steel }}>🏒 {profile.position}</span>}
                 {profile.level && <span style={{ fontSize: 12, color: C.steel }}>📊 {profile.level}</span>}
-                {profile.home_rink && <span style={{ fontSize: 12, color: C.steel }}>🏟️ {profile.home_rink}</span>}
+                {profile.home_rink && <span style={{ fontSize: 12, color: C.steel }}>🏟️ <MapLink text={profile.home_rink} icon="" style={{ color: 'inherit', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 2 }} /></span>}
               </div>
             )}
 

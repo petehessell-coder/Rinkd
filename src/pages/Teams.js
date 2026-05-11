@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { listTeams } from '../lib/teams';
+import MapLink from '../components/MapLink';
 
 export default function Teams({ profile }) {
   const navigate = useNavigate();
@@ -75,7 +76,11 @@ export default function Teams({ profile }) {
               <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.45)', marginTop: 3 }}>
                 {[team.division, team.level, team.location].filter(Boolean).join(' · ')}
               </div>
-              {team.home_rink && <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.3)', marginTop: 2 }}>🏟 {team.home_rink}</div>}
+              {team.home_rink && (
+                <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.3)', marginTop: 2 }} onClick={e => e.stopPropagation()}>
+                  🏟 <MapLink text={team.home_rink} icon="" style={{ color: 'inherit', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 2 }} />
+                </div>
+              )}
             </div>
             <div style={{ color: 'rgba(244,247,250,0.25)', fontSize: 18 }}>›</div>
           </div>
