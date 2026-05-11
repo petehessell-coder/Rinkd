@@ -13,8 +13,8 @@ const ROLE_BADGE_COLOR = {
 
 const NAV = [
   { path: '/feed',        icon: '🏒', label: 'Feed' },
-  { path: '/rinkside',    icon: '📰', label: 'Rinkside',    badge: 'CONTENT' },
-  { path: '/crease',      icon: '🎬', label: 'Crease',      badge: 'PREMIUM' },
+  { path: '/rinkside',    iconImg: '/rinkside-logo.png', label: 'Rinkside', badge: 'CONTENT' },
+  { path: '/crease',      iconImg: '/crease-logo.png',   label: 'Crease',   badge: 'PREMIUM' },
   { path: '/leagues',     icon: '🏆', label: 'Leagues',     badge: 'COMMUNITY' },
   { path: '/store',       icon: '🛒', label: 'Store',       badge: 'MERCH' },
   { path: '/discover',    icon: '🔍', label: 'Discover' },
@@ -26,10 +26,22 @@ const NAV = [
 // Bottom quick-nav — always visible on mobile
 const BOTTOM_NAV = [
   { path: '/feed',     icon: '🏒', label: 'Feed' },
-  { path: '/rinkside', icon: '📰', label: 'Rinkside' },
-  { path: '/crease',   icon: '🎬', label: 'Crease' },
+  { path: '/rinkside', iconImg: '/rinkside-logo.png', label: 'Rinkside' },
+  { path: '/crease',   iconImg: '/crease-logo.png',   label: 'Crease' },
   { path: '/store',    icon: '🛒', label: 'Store' },
 ];
+
+// Renders either a PNG logo (for brand sub-pages like Rinkside/Crease) or the
+// item's emoji icon. Keeps the rest of the layout code tidy.
+function NavIcon({ item, size }) {
+  if (item.iconImg) {
+    return (
+      <img src={item.iconImg} alt="" width={size} height={size}
+        style={{ width: size, height: size, borderRadius: size * 0.22, objectFit: 'cover', display: 'block', flexShrink: 0 }} />
+    );
+  }
+  return <span style={{ fontSize: size, lineHeight: 1 }}>{item.icon}</span>;
+}
 
 const B = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
@@ -100,7 +112,7 @@ export default function Layout({ children, profile }) {
                 onMouseEnter={e => { if (!active) e.currentTarget.style.background = B.border + '66'; }}
                 onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}>
                 {active && <div style={{ position: 'absolute', left: 0, top: '20%', bottom: '20%', width: 3, background: B.red, borderRadius: '0 3px 3px 0' }} />}
-                <span style={{ fontSize: 18 }}>{item.icon}</span>
+                <NavIcon item={item} size={22} />
                 <span>{item.label}</span>
                 {item.badge && (
                   <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '0.08em', background: B.border, color: B.steel, padding: '2px 5px', borderRadius: 3 }}>{item.badge}</span>
@@ -234,7 +246,7 @@ export default function Layout({ children, profile }) {
                   onClick={() => setMenuOpen(false)}
                   style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 12px', borderRadius: 10, marginBottom: 2, textDecoration: 'none', background: active ? B.blue + '33' : 'transparent', color: active ? B.ice : B.steel, fontWeight: active ? 600 : 400, fontSize: 16, position: 'relative' }}>
                   {active && <div style={{ position: 'absolute', left: 0, top: '20%', bottom: '20%', width: 3, background: B.red, borderRadius: '0 3px 3px 0' }} />}
-                  <span style={{ fontSize: 20 }}>{item.icon}</span>
+                  <NavIcon item={item} size={24} />
                   <span>{item.label}</span>
                   {item.badge && (
                     <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '0.08em', background: B.border, color: B.steel, padding: '2px 6px', borderRadius: 3 }}>{item.badge}</span>
@@ -267,7 +279,7 @@ export default function Layout({ children, profile }) {
             return (
               <Link key={item.path} to={item.path}
                 style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '4px 8px', textDecoration: 'none', color: active ? B.ice : B.steel, minWidth: 50 }}>
-                <span style={{ fontSize: 20, lineHeight: 1 }}>{item.icon}</span>
+                <NavIcon item={item} size={22} />
                 <span style={{ fontSize: 10, fontWeight: active ? 600 : 400 }}>{item.label}</span>
                 {active && <div style={{ width: 4, height: 4, borderRadius: '50%', background: B.red }} />}
               </Link>

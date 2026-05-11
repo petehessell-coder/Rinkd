@@ -71,11 +71,10 @@ export default function CreasePage({ currentUser, profile }) {
         <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px 60px' }}>
           {/* Hero */}
           <div style={{ marginBottom: 24, textAlign: 'center', paddingTop: 12 }}>
-            <div style={{ display: 'inline-block', background: 'rgba(215,38,56,0.15)', color: C.red, fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', padding: '4px 12px', borderRadius: 999, marginBottom: 12, border: '1px solid rgba(215,38,56,0.3)' }}>
+            <img src="/crease-logo.png" alt="Crease"
+              style={{ width: 140, height: 140, borderRadius: 28, marginBottom: 14, boxShadow: '0 18px 40px rgba(0,0,0,0.5)' }} />
+            <div style={{ display: 'block', background: 'rgba(215,38,56,0.15)', color: C.red, fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', padding: '4px 12px', borderRadius: 999, marginBottom: 10, border: '1px solid rgba(215,38,56,0.3)', width: 'fit-content', marginLeft: 'auto', marginRight: 'auto' }}>
               The Premium
-            </div>
-            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 48, lineHeight: 1, letterSpacing: '-0.02em', textTransform: 'uppercase', marginBottom: 6 }}>
-              Crease
             </div>
             <div style={{ fontSize: 14, color: C.steel, maxWidth: 480, margin: '0 auto', lineHeight: 1.55 }}>
               Original shows for the hockey lifer. Long-form interviews, locker-room debates, and the conversations the league won't have anywhere else.

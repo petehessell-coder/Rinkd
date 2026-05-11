@@ -25,6 +25,8 @@ export default function CreasePaywall({ episodeTitle, showTitle, compact = false
       color: C.ice,
       fontFamily: "'Barlow', sans-serif",
     }}>
+      <img src="/crease-logo.png" alt="Crease"
+        style={{ width: compact ? 56 : 84, height: compact ? 56 : 84, borderRadius: compact ? 12 : 18, marginBottom: 12, boxShadow: '0 10px 24px rgba(0,0,0,0.4)' }} />
       <div style={{
         display: 'inline-block',
         background: 'rgba(215,38,56,0.15)',
@@ -38,7 +40,7 @@ export default function CreasePaywall({ episodeTitle, showTitle, compact = false
         marginBottom: 12,
         border: '1px solid rgba(215,38,56,0.3)',
       }}>
-        🔒 Crease Premium
+        Crease Premium
       </div>
 
       <div style={{

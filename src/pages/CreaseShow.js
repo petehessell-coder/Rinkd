@@ -66,8 +66,9 @@ export default function CreaseShowPage({ currentUser, profile }) {
         </div>
 
         <div style={{ maxWidth: 820, margin: '-60px auto 0', padding: '0 16px 60px', position: 'relative' }}>
-          <div style={{ display: 'inline-block', background: 'rgba(215,38,56,0.15)', color: C.red, fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', padding: '4px 10px', borderRadius: 999, marginBottom: 10, border: '1px solid rgba(215,38,56,0.3)' }}>
-            🔒 Crease Premium
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(215,38,56,0.15)', color: C.red, fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', padding: '4px 12px 4px 4px', borderRadius: 999, marginBottom: 10, border: '1px solid rgba(215,38,56,0.3)' }}>
+            <img src="/crease-logo.png" alt="" style={{ width: 22, height: 22, borderRadius: 5, display: 'block' }} />
+            Crease Premium
           </div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 40, lineHeight: 1.05, letterSpacing: '-0.01em', textTransform: 'uppercase', marginBottom: 6 }}>
             {show.title}
