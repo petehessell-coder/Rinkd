@@ -1,0 +1,209 @@
+import { supabase } from './supabase';
+
+const TEMPLATE_HEADERS = ['name', 'jersey_number', 'position', 'email'];
+
+/** Build a downloadable CSV template managers can fill in. */
+export function buildRosterCsvTemplate() {
+  const rows = [
+    TEMPLATE_HEADERS,
+    ['Mike Anderson', '11', 'Forward', 'mike@example.com'],
+    ['Tom Becker',    '17', 'Defense', 'tom@example.com'],
+    ['Jordan Kim',     '1', 'Goalie',  'jordan@example.com'],
+  ];
+  return rows.map(r => r.map(csvEscape).join(',')).join('\r\n') + '\r\n';
+}
+
+function csvEscape(v) {
+  const s = String(v == null ? '' : v);
+  if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+export function downloadRosterTemplate() {
+  const blob = new Blob([buildRosterCsvTemplate()], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'rinkd-roster-template.csv';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 600);
+}
+
+// Minimal RFC-4180 CSV parser. Handles quoted fields, embedded commas, escaped quotes.
+function parseCsvText(text) {
+  const rows = [];
+  let row = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { cur += '"'; i++; }
+        else { inQuotes = false; }
+      } else {
+        cur += c;
+      }
+    } else {
+      if (c === '"')      inQuotes = true;
+      else if (c === ',') { row.push(cur); cur = ''; }
+      else if (c === '\n'){ row.push(cur); rows.push(row); row = []; cur = ''; }
+      else if (c === '\r'){ /* swallow; LF closes the row */ }
+      else                 cur += c;
+    }
+  }
+  if (cur || row.length) { row.push(cur); rows.push(row); }
+  return rows;
+}
+
+const ALIASES = {
+  jersey: 'jersey_number',
+  number: 'jersey_number',
+  '#': 'jersey_number',
+  player: 'name',
+  player_name: 'name',
+  full_name: 'name',
+  pos: 'position',
+  email_address: 'email',
+  e_mail: 'email',
+};
+
+/**
+ * Parse + validate a roster CSV string. Returns { headers, rows, errors }.
+ * Each row gets a `rowErrors` array; only rows with no errors will be uploaded.
+ */
+export function parseRoster(text) {
+  const raw = parseCsvText(text).filter(r => r.some(c => (c || '').trim() !== ''));
+  if (raw.length === 0) return { headers: [], rows: [], errors: ['That file is empty.'] };
+
+  const header = raw[0].map(h => (h || '').trim().toLowerCase().replace(/\s+/g, '_'));
+  const normalized = header.map(h => ALIASES[h] || h);
+
+  const idx = {};
+  for (const t of TEMPLATE_HEADERS) idx[t] = normalized.indexOf(t);
+
+  const errors = [];
+  if (idx.name === -1)  errors.push('Missing required column: name');
+  if (idx.email === -1) errors.push('Missing required column: email');
+
+  const seen = new Set();
+  const parsed = [];
+  for (let r = 1; r < raw.length; r++) {
+    const row = raw[r];
+    const get = (k) => idx[k] >= 0 ? (row[idx[k]] || '').trim() : '';
+    const item = {
+      name: get('name'),
+      jersey_number: get('jersey_number'),
+      position: get('position'),
+      email: get('email').toLowerCase(),
+    };
+    const rowErrors = [];
+    if (!item.name)                                              rowErrors.push('name required');
+    if (!item.email)                                              rowErrors.push('email required');
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item.email))      rowErrors.push('invalid email');
+    if (item.jersey_number && !/^\d+$/.test(item.jersey_number))  rowErrors.push('jersey must be a number');
+    if (item.email && seen.has(item.email))                       rowErrors.push('duplicate email');
+    seen.add(item.email);
+    parsed.push({
+      ...item,
+      jersey_number: item.jersey_number ? parseInt(item.jersey_number, 10) : null,
+      rowErrors,
+    });
+  }
+
+  return { headers: normalized, rows: parsed, errors };
+}
+
+/**
+ * INSERT pending team_members for each valid row, then call the existing
+ * send-invite Edge Function (which uses Resend) for each new row.
+ *
+ * Returns { inserted, sent, errors[] }.
+ */
+export async function uploadRoster({ teamId, teamName, invitedBy, rows }) {
+  const valid = (rows || []).filter(r => !r.rowErrors || r.rowErrors.length === 0);
+  if (valid.length === 0) return { inserted: 0, sent: 0, errors: ['No valid rows to upload.'] };
+
+  // Skip any emails that already exist on this team (idempotent re-upload)
+  const emails = valid.map(r => r.email);
+  const { data: existing } = await supabase
+    .from('team_members')
+    .select('invite_email')
+    .eq('team_id', teamId)
+    .in('invite_email', emails);
+  const skipSet = new Set((existing || []).map(r => r.invite_email));
+  const toInsert = valid.filter(r => !skipSet.has(r.email));
+
+  if (toInsert.length === 0) {
+    return { inserted: 0, sent: 0, errors: [], skipped: valid.length };
+  }
+
+  const inserts = toInsert.map(r => ({
+    team_id: teamId,
+    invite_name: r.name,
+    invite_email: r.email,
+    jersey_number: r.jersey_number,
+    position: r.position || null,
+    role: (r.position || '').toLowerCase() === 'goalie' ? 'goalie' : 'player',
+    status: 'pending',
+  }));
+
+  const { data: insertedRows, error: insertError } = await supabase
+    .from('team_members')
+    .insert(inserts)
+    .select('id, invite_email, invite_name');
+
+  if (insertError) return { inserted: 0, sent: 0, errors: [insertError.message] };
+
+  const inviteResults = await Promise.allSettled(
+    (insertedRows || []).map(row =>
+      supabase.functions.invoke('send-invite', {
+        body: {
+          type: 'team_invite',
+          to_email: row.invite_email,
+          to_name: row.invite_name,
+          team_name: teamName,
+          invited_by: invitedBy,
+        },
+      })
+    )
+  );
+
+  let sent = 0;
+  const errors = [];
+  inviteResults.forEach((r, i) => {
+    const email = insertedRows[i]?.invite_email || '?';
+    if (r.status === 'fulfilled' && !r.value?.error) sent++;
+    else errors.push(`${email}: ${r.status === 'rejected' ? r.reason : JSON.stringify(r.value?.error || 'send failed')}`);
+  });
+
+  return {
+    inserted: insertedRows.length,
+    sent,
+    errors,
+    skipped: valid.length - toInsert.length,
+  };
+}
+
+/**
+ * Auto-link pending invites when a user signs up. Called from auth.signUp
+ * after the new auth.users row is created. Finds team_members rows with
+ * matching invite_email + status='pending' and binds them to the new user.
+ */
+export async function linkPendingInvitesForUser(userId, email) {
+  if (!userId || !email) return { linked: 0 };
+  const { data, error } = await supabase
+    .from('team_members')
+    .update({ user_id: userId, status: 'active', joined_at: new Date().toISOString() })
+    .is('user_id', null)
+    .eq('status', 'pending')
+    .eq('invite_email', String(email).toLowerCase())
+    .select('id');
+  if (error) {
+    // eslint-disable-next-line no-console
+    console.warn('[roster] linkPendingInvitesForUser failed:', error.message);
+    return { linked: 0, error };
+  }
+  return { linked: data?.length || 0 };
+}

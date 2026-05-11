@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { linkPendingInvitesForUser } from './roster';
 
 export async function signUp({ email, password, name, handle, position, level, dob }) {
   // COPPA check
@@ -38,6 +39,20 @@ export async function signUp({ email, password, name, handle, position, level, d
   });
 
   if (profileError) console.error('Profile creation error:', profileError);
+
+  // If a team manager invited this user before they signed up, link them up now.
+  // Quiet failure — the signup itself still succeeds.
+  try {
+    const { linked } = await linkPendingInvitesForUser(userId, email);
+    if (linked > 0) {
+      // eslint-disable-next-line no-console
+      console.info(`[signUp] auto-linked ${linked} pending team invite${linked === 1 ? '' : 's'}.`);
+    }
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[signUp] linkPendingInvitesForUser threw:', e?.message || e);
+  }
+
   return { data, error: null };
 }
 

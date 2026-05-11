@@ -4,6 +4,7 @@ import Layout from '../components/Layout';
 import DateTimePicker from '../components/DateTimePicker';
 import { getTeam, getTeamMembers, getTeamGames, getJoinRequests, createTeam, updateTeam, addTeamMember, removeTeamMember, updateTeamMember, addTeamGame, approveJoinRequest, denyJoinRequest } from '../lib/teams';
 import { supabase } from '../lib/supabase';
+import RosterUpload from '../components/RosterUpload';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 const inputStyle = { width:'100%', background:'#07111F', border:`0.5px solid ${C.border}`, borderRadius:8, padding:'10px 12px', color:C.ice, fontFamily:'Barlow, sans-serif', fontSize:14, outline:'none' };
@@ -214,6 +215,20 @@ function ManageTeam({ id, profile, navigate }) {
         {/* ROSTER */}
         {activeTab === 'Roster' && (
           <>
+            <SectionLabel>Bulk Roster Upload</SectionLabel>
+            <Card>
+              <div style={{ fontSize: 13, color: C.steel, lineHeight: 1.6, marginBottom: 12 }}>
+                Got the whole team in a spreadsheet? Drop a CSV and we'll send every player
+                a Rinkd signup invite. They'll appear on your roster as <strong style={{ color: '#F59E0B' }}>INVITED</strong> until they sign up.
+              </div>
+              <RosterUpload
+                teamId={id}
+                teamName={team?.name || 'your team'}
+                invitedBy={profile?.name}
+                onComplete={load}
+              />
+            </Card>
+
             <SectionLabel>Add Player</SectionLabel>
             <Card>
               <Row2>
