@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { subscribeToPush, isPushSubscribed } from '../lib/push';
+import { subscribeToPush, isPushSubscribed, unsubscribeFromPush } from '../lib/push';
 import Layout, { BRAND_COLORS as C } from '../components/Layout';
 import { Avatar, TierBadge } from '../components/Logos';
 import { updateProfile } from '../lib/auth';
@@ -44,7 +44,15 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
     const sub = await subscribeToPush(currentUser?.id);
     setPushEnabled(!!sub);
     setPushLoading(false);
-    if (!sub) alert('Could not enable notifications. Please check your browser settings.');
+    if (!sub) alert('Could not enable notifications. Check your browser settings — if you blocked them earlier, you’ll need to allow them in site permissions first.');
+  };
+
+  const handleDisableNotifications = async () => {
+    if (!window.confirm('Turn off push notifications? You’ll still see in-app messages.')) return;
+    setPushLoading(true);
+    await unsubscribeFromPush(currentUser?.id);
+    setPushEnabled(false);
+    setPushLoading(false);
   };
 
   const profileId = urlUserId || currentUser?.id;
@@ -144,7 +152,11 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                     </button>
                   )}
                   {pushEnabled && (
-                    <span style={{ padding: '8px 16px', borderRadius: 8, background: 'rgba(46,91,140,0.2)', border: '1px solid #2E5B8C', color: '#8BA3BE', fontSize: 13, fontFamily: "'Barlow', sans-serif" }}>🔔 On</span>
+                    <button onClick={handleDisableNotifications} disabled={pushLoading}
+                      title="Click to turn off"
+                      style={{ padding: '8px 16px', borderRadius: 8, background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.5)', color: '#22C55E', fontSize: 13, fontFamily: "'Barlow', sans-serif", cursor: pushLoading ? 'not-allowed' : 'pointer', fontWeight: 600 }}>
+                      {pushLoading ? '...' : '🔔 On'}
+                    </button>
                   )}
                   </div>
                 )}

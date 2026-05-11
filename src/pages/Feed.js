@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Layout, { BRAND_COLORS as C } from '../components/Layout';
 import { Avatar, TierBadge } from '../components/Logos';
 import { getPosts, getFollowingPosts, createPost, toggleLike, getLikedPosts, getComments, createComment, uploadMedia, timeAgo } from '../lib/posts';
+import PushPrompt from '../components/PushPrompt';
 
 const TAGS = [
   { label: 'Goal Alert', color: '#D72638' },
@@ -178,6 +179,8 @@ export default function Feed({ currentUser, profile }) {
     <Layout profile={profile}>
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '24px 16px' }}>
         <h1 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 32, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.02em', marginBottom: 20 }}>Feed</h1>
+
+        <PushPrompt userId={currentUser?.id} />
         
         <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: C.navy, borderRadius: 10, padding: 4, border: `1px solid ${C.border}` }}>
           {[{ id: 'foryou', label: 'For You' }, { id: 'following', label: 'Following' }, { id: 'leagues', label: 'Leagues' }].map(t => (

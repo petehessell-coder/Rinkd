@@ -58,3 +58,43 @@ export async function isPushSubscribed() {
     return !!sub;
   } catch { return false; }
 }
+
+/**
+ * Drop the current push subscription. Removes both the browser-side
+ * subscription and the row in push_subscriptions so we stop sending.
+ */
+export async function unsubscribeFromPush(userId) {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) await sub.unsubscribe();
+    if (userId) {
+      const { supabase } = await import('./supabase');
+      await supabase.from('push_subscriptions').delete().eq('user_id', userId);
+    }
+    return true;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[push] unsubscribe failed:', err);
+    return false;
+  }
+}
+
+/**
+ * Returns the high-level state needed to decide what to show in UI:
+ *   'unsupported' — browser/device can't do push
+ *   'denied'      — user blocked notifications at the OS/browser level
+ *   'default'     — never been asked
+ *   'granted-off' — granted but no active subscription (or removed)
+ *   'subscribed'  — granted + active subscription
+ */
+export async function getPushState() {
+  if (typeof window === 'undefined' || typeof Notification === 'undefined' ||
+      !('serviceWorker' in navigator) || !('PushManager' in window)) {
+    return 'unsupported';
+  }
+  if (Notification.permission === 'denied')  return 'denied';
+  if (Notification.permission === 'default') return 'default';
+  return (await isPushSubscribed()) ? 'subscribed' : 'granted-off';
+}
