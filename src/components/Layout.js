@@ -1,7 +1,14 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { RinkdLogo, Avatar } from './Logos';
 import { signOut } from '../lib/auth';
+import { useUserRole, roleMenuSections } from '../lib/userRole';
+
+const ROLE_BADGE_COLOR = {
+  commissioner: '#D72638',
+  manager:      '#F59E0B',
+  player:       '#2E5B8C',
+};
 
 const NAV = [
   { path: '/feed',        icon: '🏒', label: 'Feed' },
@@ -33,12 +40,38 @@ export default function Layout({ children, profile }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [roleOpen, setRoleOpen] = useState(false);
+  const role = useUserRole(profile?.id);
+  const roleSections = roleMenuSections(role);
+  const roleMenuRef = useRef(null);
+
+  // Close the role dropdown when clicking outside it
+  useEffect(() => {
+    if (!roleOpen) return undefined;
+    const onDocClick = (e) => {
+      if (roleMenuRef.current && !roleMenuRef.current.contains(e.target)) {
+        setRoleOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [roleOpen]);
+
+  // Close on route change
+  useEffect(() => {
+    setRoleOpen(false);
+    setMenuOpen(false);
+  }, [location.pathname]);
 
   const handleSignOut = async () => {
     await signOut();
+    setRoleOpen(false);
     setMenuOpen(false);
     navigate('/');
   };
+
+  const roleLabel = role.charAt(0).toUpperCase() + role.slice(1);
+  const roleColor = ROLE_BADGE_COLOR[role] || B.blue;
 
   const isActive = (item) =>
     location.pathname === item.path ||
@@ -76,19 +109,53 @@ export default function Layout({ children, profile }) {
           })}
         </nav>
         {profile && (
-          <div style={{ padding: '16px', borderTop: `1px solid ${B.border}` }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <div ref={roleMenuRef} style={{ padding: '16px', borderTop: `1px solid ${B.border}`, position: 'relative' }}>
+            {/* Avatar block doubles as the dropdown trigger */}
+            <button
+              onClick={() => setRoleOpen(v => !v)}
+              aria-expanded={roleOpen}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: 0, background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', color: 'inherit' }}>
               <Avatar profile={profile} size={34} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: B.ice, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.name}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: B.ice, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.name}</span>
+                  <span style={{ fontSize: 9, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '0.08em', textTransform: 'uppercase', background: roleColor + '33', color: roleColor, padding: '2px 6px', borderRadius: 4, whiteSpace: 'nowrap' }}>{roleLabel}</span>
+                </div>
                 <div style={{ fontSize: 11, color: B.steel }}>@{profile.handle}</div>
               </div>
-            </div>
-            <button onClick={handleSignOut} style={{ width: '100%', padding: '8px', borderRadius: 8, background: 'transparent', border: `1px solid ${B.border}`, color: B.steel, fontSize: 13, cursor: 'pointer', fontFamily: "'Barlow', sans-serif", transition: 'all 0.15s' }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = B.red; e.currentTarget.style.color = B.red; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = B.border; e.currentTarget.style.color = B.steel; }}>
-              Sign Out
+              <span style={{ fontSize: 11, color: B.steel, transform: roleOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▾</span>
             </button>
+
+            {/* Dropdown opens upward so it doesn't get clipped at the bottom of the viewport */}
+            {roleOpen && (
+              <div style={{ position: 'absolute', left: 12, right: 12, bottom: 'calc(100% - 8px)', background: B.card, border: `1px solid ${B.border}`, borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.4)', overflow: 'hidden', zIndex: 110 }}>
+                {roleSections.map((section, idx) => (
+                  <div key={section.label} style={{ borderTop: idx === 0 ? 'none' : `1px solid ${B.border}` }}>
+                    <div style={{ padding: '8px 12px 4px', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: B.steel, textTransform: 'uppercase', fontFamily: "'Barlow Condensed', sans-serif" }}>{section.label}</div>
+                    {section.items.map(item => (
+                      <Link key={item.path} to={item.path}
+                        onClick={() => setRoleOpen(false)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', textDecoration: 'none', color: B.ice, fontSize: 13, transition: 'background 0.12s' }}
+                        onMouseEnter={e => e.currentTarget.style.background = B.border + '66'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                        <span style={{ fontSize: 16 }}>{item.icon}</span>
+                        <span>{item.label}</span>
+                      </Link>
+                    ))}
+                  </div>
+                ))}
+                <div style={{ borderTop: `1px solid ${B.border}` }}>
+                  <button onClick={handleSignOut}
+                    style={{ width: '100%', padding: '10px 12px', textAlign: 'left', background: 'transparent', border: 'none', color: B.steel, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 10, transition: 'all 0.12s' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = B.border + '66'; e.currentTarget.style.color = B.red; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = B.steel; }}>
+                    <span style={{ fontSize: 16 }}>⎋</span>
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <Link to="/privacy" style={{ fontSize: 10, color: B.border, textDecoration: 'none' }} onMouseEnter={e => e.currentTarget.style.color = B.steel} onMouseLeave={e => e.currentTarget.style.color = B.border}>Privacy</Link>
               <Link to="/terms" style={{ fontSize: 10, color: B.border, textDecoration: 'none' }} onMouseEnter={e => e.currentTarget.style.color = B.steel} onMouseLeave={e => e.currentTarget.style.color = B.border}>Terms</Link>
@@ -128,10 +195,31 @@ export default function Layout({ children, profile }) {
           {profile && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: `1px solid ${B.border}` }}>
               <Avatar profile={profile} size={40} />
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 600, color: B.ice }}>{profile.name}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: B.ice }}>{profile.name}</span>
+                  <span style={{ fontSize: 9, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '0.08em', textTransform: 'uppercase', background: roleColor + '33', color: roleColor, padding: '2px 6px', borderRadius: 4 }}>{roleLabel}</span>
+                </div>
                 <div style={{ fontSize: 12, color: B.steel }}>@{profile.handle}</div>
               </div>
+            </div>
+          )}
+
+          {/* Role-based menu sections — same items as the desktop dropdown */}
+          {profile && (
+            <div style={{ padding: '8px 12px', borderBottom: `1px solid ${B.border}` }}>
+              {roleSections.map(section => (
+                <div key={section.label} style={{ marginBottom: 6 }}>
+                  <div style={{ padding: '8px 12px 4px', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: B.steel, textTransform: 'uppercase', fontFamily: "'Barlow Condensed', sans-serif" }}>{section.label}</div>
+                  {section.items.map(item => (
+                    <Link key={item.path} to={item.path} onClick={() => setMenuOpen(false)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '11px 12px', borderRadius: 10, textDecoration: 'none', color: B.ice, fontSize: 15 }}>
+                      <span style={{ fontSize: 18 }}>{item.icon}</span>
+                      <span>{item.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              ))}
             </div>
           )}
 
