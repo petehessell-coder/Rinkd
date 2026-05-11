@@ -78,7 +78,7 @@ export default function GameDetail({ profile }) {
         g = r.data;
       } else {
         const r = await supabase.from('games')
-          .select('*, home_team:tournament_teams!home_team_id(id,team_name), away_team:tournament_teams!away_team_id(id,team_name), rink:rinks(name,sub_rink,live_barn_venue_id), tournament:tournaments(name)')
+          .select('*, home_team:tournament_teams!home_team_id(id,team_name,pool,seed), away_team:tournament_teams!away_team_id(id,team_name,pool,seed), rink:rinks(name,sub_rink,live_barn_venue_id), tournament:tournaments(id,name,division)')
           .eq('id', gameId).single();
         g = r.data;
       }
@@ -151,6 +151,25 @@ export default function GameDetail({ profile }) {
       : { id: game.away_team?.id, name: game.away_team?.team_name, logo_color: '#6b1520', logo_initials: (game.away_team?.team_name || '?').split(' ').map(w=>w[0]).slice(0,3).join('') };
 
   const context = isLeague ? game.league?.name : isTeamGame ? (game.team?.name || 'Team game') : game.tournament?.name;
+
+  // Tournament-specific framing — pulled out so it only computes for tournament games.
+  const isTournamentGame = !isLeague && !isTeamGame && !!game.tournament_id;
+  const tournamentRoundLabel = (() => {
+    if (!isTournamentGame) return null;
+    const r = (game.round || '').toLowerCase();
+    if (r === 'pool' || r === '') {
+      // Pool play: show "Pool A" if both teams are in the same pool, else "Pool A vs Pool B"
+      const hp = game.home_team?.pool, ap = game.away_team?.pool;
+      if (hp && ap && hp === ap) return `Pool ${hp}`;
+      if (hp || ap)               return `Pool ${hp || '?'} vs Pool ${ap || '?'}`;
+      return 'Pool play';
+    }
+    if (r === 'quarterfinal' || r === 'qf') return 'Quarterfinal';
+    if (r === 'semifinal'    || r === 'sf') return 'Semifinal';
+    if (r === 'final'        || r === 'championship') return 'Championship';
+    // Unknown round → title-case it
+    return r.replace(/\b\w/g, c => c.toUpperCase());
+  })();
   const venueId = game.live_barn_venue_id || game.rink?.live_barn_venue_id;
   const hasStream = !!venueId && game.status !== 'final';
   const liveBarnUrl = getLiveBarnUrl(venueId);
@@ -174,7 +193,10 @@ export default function GameDetail({ profile }) {
 
         {/* HEADER */}
         <div style={{ background: C.navy, padding: '14px 16px', borderBottom: `0.5px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.6)', fontSize: 13, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap' }}>← Back</button>
+          <button onClick={() => isTournamentGame && game.tournament?.id ? navigate(`/tournament/${game.tournament.id}`) : navigate(-1)}
+            style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.6)', fontSize: 13, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap' }}>
+            ← {isTournamentGame && game.tournament?.name ? game.tournament.name : 'Back'}
+          </button>
           <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', textAlign: 'center', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap' }}>
             <span>
               {context}
@@ -206,6 +228,19 @@ export default function GameDetail({ profile }) {
 
         {/* SCORE BOX */}
         <div style={{ background: 'linear-gradient(135deg,#0B1F3A 0%,#112236 100%)', padding: '24px 16px 0' }}>
+          {tournamentRoundLabel && (
+            <div style={{ textAlign: 'center', marginBottom: 16 }}>
+              <span style={{
+                display: 'inline-block', padding: '4px 14px', borderRadius: 20,
+                background: 'rgba(215,38,56,0.12)', border: '0.5px solid rgba(215,38,56,0.4)',
+                color: C.red, fontSize: 10, fontWeight: 700, letterSpacing: '0.12em',
+                textTransform: 'uppercase', fontFamily: "'Barlow Condensed', sans-serif",
+              }}>
+                {tournamentRoundLabel}
+                {game.tournament?.division ? ` · ${game.tournament.division}` : ''}
+              </span>
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 16 }}>
             {/* Home team */}
             <div style={{ flex: 1, textAlign: 'center' }}>
@@ -213,6 +248,13 @@ export default function GameDetail({ profile }) {
                 {homeTeam.logo_initials || '?'}
               </div>
               <div style={{ fontSize: 13, fontWeight: 700, color: C.ice }}>{homeTeam.name}</div>
+              {isTournamentGame && (game.home_team?.pool || game.home_team?.seed) && (
+                <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.45)', marginTop: 4, fontFamily: "'Barlow Condensed', sans-serif", textTransform: 'uppercase' }}>
+                  {game.home_team?.pool ? `Pool ${game.home_team.pool}` : ''}
+                  {game.home_team?.pool && game.home_team?.seed ? ' · ' : ''}
+                  {game.home_team?.seed ? `Seed ${game.home_team.seed}` : ''}
+                </div>
+              )}
             </div>
 
             {/* Score */}
@@ -236,6 +278,13 @@ export default function GameDetail({ profile }) {
                 {awayTeam.logo_initials || '?'}
               </div>
               <div style={{ fontSize: 13, fontWeight: 700, color: C.ice }}>{awayTeam.name}</div>
+              {isTournamentGame && (game.away_team?.pool || game.away_team?.seed) && (
+                <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.45)', marginTop: 4, fontFamily: "'Barlow Condensed', sans-serif", textTransform: 'uppercase' }}>
+                  {game.away_team?.pool ? `Pool ${game.away_team.pool}` : ''}
+                  {game.away_team?.pool && game.away_team?.seed ? ' · ' : ''}
+                  {game.away_team?.seed ? `Seed ${game.away_team.seed}` : ''}
+                </div>
+              )}
             </div>
           </div>
 
