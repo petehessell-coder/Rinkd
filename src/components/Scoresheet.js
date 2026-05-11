@@ -47,8 +47,8 @@ export default function Scoresheet({ game, goals, penalties, shots, goalieChange
   const rink = game.rink ? ((game.rink.sub_rink || "") + " · " + game.rink.name).replace(/^\s*·\s*/, "") : "";
   const periodLabel = (p) => p === 1 ? "1st" : p === 2 ? "2nd" : p === 3 ? "3rd" : p === 4 ? "OT" : "SO";
   const teamName = (id) => {
-    if (isLeague) return id === game.home_lt?.id ? homeTeam : awayTeam;
-    return id === game.home_team?.id ? homeTeam : awayTeam;
+    const homeId = game.home_lt?.id || game.home_team?.id;
+    return id === homeId ? homeTeam : awayTeam;
   };
 
   const buildDoc = () => {
