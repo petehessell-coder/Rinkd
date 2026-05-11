@@ -109,7 +109,7 @@ export default function ScorerView() {
   const load = useCallback(async () => {
     const { data: g } = isLeague
       ? await supabase.from('league_games')
-          .select('*, home_team:league_teams!home_team_id(id, team:teams(id,name)), away_team:league_teams!away_team_id(id, team:teams(id,name)), rink:rinks(name,sub_rink), league:leagues(name)')
+          .select('*, home_team:league_teams!home_team_id(id, team_name, team:teams(id,name)), away_team:league_teams!away_team_id(id, team_name, team:teams(id,name)), rink:rinks(name,sub_rink), league:leagues(name)')
           .eq('id', gameId).single()
       : await supabase.from('games')
           .select('*, home_team:tournament_teams!home_team_id(id,team_name), away_team:tournament_teams!away_team_id(id,team_name), rink:rinks(name,sub_rink), tournament:tournaments(name)')
