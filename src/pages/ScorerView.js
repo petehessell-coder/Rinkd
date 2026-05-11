@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import Scoresheet from '../components/Scoresheet';
 import { supabase } from '../lib/supabase';
+import { useWakeLock } from '../lib/useWakeLock';
 
 const C = {
   dark: '#07111F', navy: '#0B1F3A', blue: '#2E5B8C',
@@ -87,6 +88,9 @@ export default function ScorerView() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isLeague = searchParams.get('type') === 'league';
+
+  // Keep the screen awake while a scorer is running the game.
+  useWakeLock(true);
   const [game, setGame] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
