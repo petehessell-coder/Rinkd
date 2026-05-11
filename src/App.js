@@ -9,6 +9,7 @@ import Rinkside from './pages/Rinkside';
 import Crease from './pages/Crease';
 import CreaseShow from './pages/CreaseShow';
 import CreaseEpisode from './pages/CreaseEpisode';
+import Survey from './pages/Survey';
 import Leagues from './pages/Leagues';
 import Store from './pages/Store';
 import Legal from './pages/Legal';
@@ -51,6 +52,8 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={user ? <Navigate to="/feed" replace /> : <Auth />} />
       <Route path="/login" element={user ? <Navigate to="/feed" replace /> : <Auth />} />
+      {/* Survey is public — accessible from auth screen, marketing pages, and embedded in feeds */}
+      <Route path="/survey" element={<Survey />} />
       <Route path="/feed" element={<ProtectedRoute><Feed currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Profile currentUser={user} profile={profile} onProfileUpdate={setProfile} /></ProtectedRoute>} />
       <Route path="/profile/:userId" element={<ProtectedRoute><Profile currentUser={user} profile={profile} onProfileUpdate={setProfile} /></ProtectedRoute>} />

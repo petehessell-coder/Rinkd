@@ -18,9 +18,9 @@ export default function Rinkside({ profile }) {
         <div style={{ color: C.steel, fontSize: 15, maxWidth: 480, margin: '0 auto 28px', lineHeight: 1.55 }}>
           Daily hockey news, highlights, and creator content built for the Rinkd community. Coming soon.
         </div>
-        <a href="/survey"
+        <a href="https://rinkd.app/survey" target="_blank" rel="noopener noreferrer"
           style={{ display: 'inline-block', background: C.red, color: '#fff', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 15, padding: '12px 28px', borderRadius: 999, textDecoration: 'none', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          Take the Survey
+          Take the Survey →
         </a>
       </div>
     </Layout>
