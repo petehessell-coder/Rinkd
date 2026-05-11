@@ -21,8 +21,9 @@ import Team from './pages/Team';
 import TeamManage from './pages/TeamManage';
 import ScorerView from './pages/ScorerView';
 import GameDetail from './pages/GameDetail';
-import { VolunteerCoordinatorPage, DuesTrackerPage } from './pages/ComingSoon';
+import { DuesTrackerPage } from './pages/ComingSoon';
 import AdminPanel from './pages/AdminPanel';
+import VolunteerCoordinator from './pages/VolunteerCoordinator';
 
 export const AuthContext = createContext(null);
 export function useAuth() { return useContext(AuthContext); }
@@ -72,7 +73,7 @@ function AppRoutes() {
       <Route path="/league-game/:gameId" element={<ProtectedRoute><GameDetail profile={profile} /></ProtectedRoute>} />
       <Route path="/league-scorer/:gameId" element={<ProtectedRoute><ScorerView /></ProtectedRoute>} />
       {/* Role-based dropdown stubs (Phase 1 item 4) */}
-      <Route path="/volunteer-coordinator" element={<ProtectedRoute><VolunteerCoordinatorPage profile={profile} /></ProtectedRoute>} />
+      <Route path="/volunteer-coordinator" element={<ProtectedRoute><VolunteerCoordinator profile={profile} /></ProtectedRoute>} />
       <Route path="/dues-tracker" element={<ProtectedRoute><DuesTrackerPage profile={profile} /></ProtectedRoute>} />
       <Route path="/admin" element={<ProtectedRoute><AdminPanel profile={profile} /></ProtectedRoute>} />
       <Route path="/privacy" element={<Legal />} />
