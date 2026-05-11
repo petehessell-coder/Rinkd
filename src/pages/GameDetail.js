@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import Layout from '../components/Layout';
+import RsvpBlock from '../components/RsvpBlock';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 
@@ -220,6 +221,14 @@ export default function GameDetail({ profile }) {
                 <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 14, color: C.red, marginLeft: 10 }}>10% off</div>
               </div>
             </>
+          )}
+
+          {/* PLAYER RSVP — scheduled games only */}
+          {game.status === 'scheduled' && (
+            <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 10, padding: '10px 14px 12px', marginBottom: 14 }}>
+              <SecLabel>Are you in?</SecLabel>
+              <RsvpBlock gameId={gameId} compact={false} />
+            </div>
           )}
 
           {/* SCORER VIEW BUTTON */}
