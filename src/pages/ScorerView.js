@@ -196,7 +196,6 @@ export default function ScorerView() {
       duration_minutes: PENALTY_DURATIONS[penaltyForm.severity] || 2,
       period: penaltyForm.period, time_in_period: penaltyForm.time_in_period || null,
     }).select().single();
-    if (error) { console.error("penalty error:", error); }
     if (data) setPenalties(prev => [data, ...prev]);
     setPenaltyModal(false);
     setPenaltyForm(prev => ({ ...prev, player_number: '', time_in_period: '' }));
