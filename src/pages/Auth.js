@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RinkdLogo } from '../components/Logos';
 import { signIn, signUp } from '../lib/auth';
+import DownloadCTA from '../components/DownloadCTA';
 
 const C = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
@@ -202,6 +203,8 @@ export default function Auth() {
                 fontWeight: 700, fontSize: 14, letterSpacing: '0.08em', textTransform: 'uppercase',
               }}>📋 Take Our Community Survey →</a>
             </div>
+
+            <DownloadCTA />
             <p style={{ textAlign: 'center', marginTop: 24, color: C.steel, fontSize: 14 }}>
               New to Rinkd?{' '}
               <button onClick={() => { setMode('signup'); setStep(1); setError(''); }}
