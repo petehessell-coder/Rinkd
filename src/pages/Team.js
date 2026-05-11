@@ -5,6 +5,7 @@ import { getTeam, getTeamMembers, getTeamGames, getUserRoleOnTeam, requestToJoin
 import RsvpBlock from '../components/RsvpBlock';
 import MapLink from '../components/MapLink';
 import CalendarButton from '../components/CalendarButton';
+import LineupModal from '../components/LineupModal';
 import { buildIcsMulti, downloadIcs } from '../lib/ics';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
@@ -30,6 +31,7 @@ export default function TeamPage({ profile }) {
   const [activeTab, setActiveTab] = useState('Roster');
   const [joinRequested, setJoinRequested] = useState(false);
   const [joinLoading, setJoinLoading] = useState(false);
+  const [lineupGame, setLineupGame] = useState(null); // game object whose lineup modal is open
 
   const load = useCallback(async () => {
     try {
@@ -157,6 +159,23 @@ export default function TeamPage({ profile }) {
               </MapLink>
               {g.status === 'scheduled' && (
                 <CalendarButton game={g} teamLabel={`${team.name} ${g.is_home ? 'vs.' : '@'} ${g.opponent || ''}`.trim()} />
+              )}
+              {isManager && g.status === 'scheduled' && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setLineupGame(g); }}
+                  style={{
+                    fontSize: 10, fontWeight: 700, letterSpacing: '0.04em',
+                    padding: '3px 9px', borderRadius: 999,
+                    background: 'rgba(46,91,140,0.25)',
+                    border: '0.5px solid rgba(46,91,140,0.6)',
+                    color: C.ice, cursor: 'pointer',
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    fontFamily: "'Barlow', sans-serif", whiteSpace: 'nowrap',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(46,91,140,0.25)'; e.currentTarget.style.color = C.ice; }}>
+                  📋 Lineup
+                </button>
               )}
             </div>
           )}
@@ -396,6 +415,23 @@ export default function TeamPage({ profile }) {
 
         </div>
       </div>
+
+      {lineupGame && (
+        <LineupModal
+          open={true}
+          onClose={() => setLineupGame(null)}
+          onSaved={load}
+          gameId={lineupGame.id}
+          gameSource={lineupGame._source === 'league' ? 'league' : 'team'}
+          teamId={id}
+          /* For league games, game_goals.team_id is the league_team.id, not the real team.id.
+             Pick the league_team id matching whichever side we're playing on this game. */
+          lineupTeamId={lineupGame._source === 'league'
+            ? (lineupGame.is_home ? lineupGame.home_team_id : lineupGame.away_team_id)
+            : id}
+          gameTitle={`${team.name} ${lineupGame.is_home ? 'vs.' : '@'} ${lineupGame.opponent || ''} · ${new Date(lineupGame.start_time).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`}
+        />
+      )}
     </Layout>
   );
 }

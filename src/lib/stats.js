@@ -38,12 +38,42 @@ export async function getPlayerLeagueStats(userId) {
         .eq('away_team_id', lt.id)
         .eq('status', 'final');
 
-      const allGameIds = [
+      const teamGameIds = [
         ...(homeGames || []).map(g => g.id),
         ...(awayGames || []).map(g => g.id),
       ];
 
-      if (allGameIds.length === 0) continue;
+      if (teamGameIds.length === 0) continue;
+
+      // Roster-aware GP: only count finalized games this player was actually
+      // on the lineup for. Fall back to "all team games" when no lineup has
+      // been recorded yet (preserves stats for leagues that haven't started
+      // using the lineup feature).
+      const { data: lineupRows } = await supabase
+        .from('game_lineups')
+        .select('game_id')
+        .eq('team_id', lt.id)
+        .eq('user_id', userId)
+        .in('game_id', teamGameIds);
+
+      const playedGameIds = (lineupRows || []).map(r => r.game_id);
+      const hasLineups = playedGameIds.length > 0;
+      // The game window for stats: only games we know the player was rostered
+      // for. If no lineup data exists at all for ANY of this team's finals,
+      // assume the legacy behavior (whole team's games) so we don't silently
+      // drop existing stats.
+      const { count: totalLineupCount } = await supabase
+        .from('game_lineups')
+        .select('id', { count: 'exact', head: true })
+        .eq('team_id', lt.id)
+        .in('game_id', teamGameIds);
+      const useLineups = (totalLineupCount || 0) > 0;
+      const allGameIds = useLineups ? playedGameIds : teamGameIds;
+
+      if (allGameIds.length === 0) {
+        // Player not on any saved lineup for this team yet — skip
+        continue;
+      }
 
       // Goals scored by this jersey number on this team's games
       const { data: goalsScored } = await supabase
