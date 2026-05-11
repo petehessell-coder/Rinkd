@@ -105,9 +105,13 @@ export default function TeamPage({ profile }) {
     const isLoss = g.status === 'final' && teamScore < oppScore;
     const date = new Date(g.start_time);
     const isLeagueGame = g._source === 'league';
-    // Every game has a detail page now — tournament/team-only games route to /game/:id,
-    // league games route to /league-game/:id?type=league.
-    const gameUrl = isLeagueGame ? `/league-game/${g.id}?type=league` : `/game/${g.id}`;
+    // Route by source so GameDetail queries the right table:
+    //   league   → /league-game/:id?type=league
+    //   team-only → /game/:id?type=team  (team_games table)
+    //   tournament → /game/:id  (games table — not exposed via Team schedule today)
+    const gameUrl = isLeagueGame
+      ? `/league-game/${g.id}?type=league`
+      : `/game/${g.id}?type=team`;
 
     return (
       <div key={g.id}

@@ -49,7 +49,9 @@ export default function GameDetail({ profile }) {
   const { gameId } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const isLeague = searchParams.get('type') === 'league';
+  const gameType = searchParams.get('type'); // 'league' | 'team' | null (= tournament)
+  const isLeague = gameType === 'league';
+  const isTeamGame = gameType === 'team';
 
   const [game, setGame] = useState(null);
   const [goals, setGoals] = useState([]);
@@ -61,41 +63,56 @@ export default function GameDetail({ profile }) {
 
   const load = useCallback(async () => {
     try {
-      const { data: g } = isLeague
-        ? await supabase.from('league_games')
-            .select('*, home_lt:league_teams!home_team_id(id, team_name, logo_color, logo_initials, team:teams(id,name,logo_color,logo_initials)), away_lt:league_teams!away_team_id(id, team_name, logo_color, logo_initials, team:teams(id,name,logo_color,logo_initials)), rink:rinks(name,sub_rink,live_barn_venue_id), league:leagues(name)')
-            .eq('id', gameId).single()
-        : await supabase.from('games')
-            .select('*, home_team:tournament_teams!home_team_id(id,team_name), away_team:tournament_teams!away_team_id(id,team_name), rink:rinks(name,sub_rink,live_barn_venue_id), tournament:tournaments(name)')
-            .eq('id', gameId).single();
+      let g = null;
+      if (isLeague) {
+        const r = await supabase.from('league_games')
+          .select('*, home_lt:league_teams!home_team_id(id, team_name, logo_color, logo_initials, team:teams(id,name,logo_color,logo_initials)), away_lt:league_teams!away_team_id(id, team_name, logo_color, logo_initials, team:teams(id,name,logo_color,logo_initials)), rink:rinks(name,sub_rink,live_barn_venue_id), league:leagues(name)')
+          .eq('id', gameId).single();
+        g = r.data;
+      } else if (isTeamGame) {
+        const r = await supabase.from('team_games')
+          .select('*, team:teams(id,name,logo_color,logo_initials,manager_id)')
+          .eq('id', gameId).single();
+        g = r.data;
+      } else {
+        const r = await supabase.from('games')
+          .select('*, home_team:tournament_teams!home_team_id(id,team_name), away_team:tournament_teams!away_team_id(id,team_name), rink:rinks(name,sub_rink,live_barn_venue_id), tournament:tournaments(name)')
+          .eq('id', gameId).single();
+        g = r.data;
+      }
 
+      if (!g) { setLoading(false); return; }
       setGame(g);
-      // Check if current user is organizer
+
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         if (isLeague) {
           const { data: league } = await supabase.from('leagues').select('commissioner_id').eq('id', g.league_id || g.home_lt?.league_id).maybeSingle();
           setIsOrganizer(league?.commissioner_id === user.id);
+        } else if (isTeamGame) {
+          setIsOrganizer(g.team?.manager_id === user.id);
         } else {
           const { data: tourn } = await supabase.from('tournaments').select('director_id').eq('id', g.tournament_id).maybeSingle();
           setIsOrganizer(tourn?.director_id === user.id);
         }
       }
 
-      const [{ data: gl }, { data: pl }, { data: sl }, { data: gc }] = await Promise.all([
-        supabase.from('game_goals').select('*').eq('game_id', gameId).order('period').order('time_in_period'),
-        supabase.from('game_penalties').select('*').eq('game_id', gameId).order('period').order('time_in_period'),
-        supabase.from('game_shots').select('*').eq('game_id', gameId),
-        supabase.from('game_goalie_changes').select('*').eq('game_id', gameId).order('period').order('time_in_period'),
-      ]);
-
-      setGoals(gl || []);
-      setPenalties(pl || []);
-      setShots(sl || []);
-      setGoalieChanges(gc || []);
-    } catch(e) { console.error(e); }
+      // team_games don't have nested scoring tables — skip those lookups
+      if (!isTeamGame) {
+        const [{ data: gl }, { data: pl }, { data: sl }, { data: gc }] = await Promise.all([
+          supabase.from('game_goals').select('*').eq('game_id', gameId).order('period').order('time_in_period'),
+          supabase.from('game_penalties').select('*').eq('game_id', gameId).order('period').order('time_in_period'),
+          supabase.from('game_shots').select('*').eq('game_id', gameId),
+          supabase.from('game_goalie_changes').select('*').eq('game_id', gameId).order('period').order('time_in_period'),
+        ]);
+        setGoals(gl || []);
+        setPenalties(pl || []);
+        setShots(sl || []);
+        setGoalieChanges(gc || []);
+      }
+    } catch(e) { console.error('[GameDetail] load failed', e); }
     setLoading(false);
-  }, [gameId, isLeague]);
+  }, [gameId, isLeague, isTeamGame]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -111,16 +128,27 @@ export default function GameDetail({ profile }) {
     </Layout>
   );
 
-  // Normalize team data for both tournament and league games
+  // Normalize team data across league, team-only, and tournament shapes.
+  const ourTeam = isTeamGame
+    ? { id: game.team?.id, name: game.team?.name, logo_color: game.team?.logo_color || '#1a4a7a', logo_initials: game.team?.logo_initials || (game.team?.name || '?').slice(0,2).toUpperCase() }
+    : null;
+  const opponentBubble = isTeamGame
+    ? { id: null, name: game.opponent, logo_color: '#6b1520', logo_initials: (game.opponent || '?').slice(0,2).toUpperCase() }
+    : null;
+
   const homeTeam = isLeague
     ? { id: game.home_lt?.id, name: game.home_lt?.team?.name || game.home_lt?.team_name, logo_color: game.home_lt?.team?.logo_color || game.home_lt?.logo_color, logo_initials: game.home_lt?.team?.logo_initials || game.home_lt?.logo_initials }
-    : { id: game.home_team?.id, name: game.home_team?.team_name, logo_color: '#1a4a7a', logo_initials: (game.home_team?.team_name || '?').split(' ').map(w=>w[0]).slice(0,3).join('') };
+    : isTeamGame
+      ? (game.is_home ? ourTeam : opponentBubble)
+      : { id: game.home_team?.id, name: game.home_team?.team_name, logo_color: '#1a4a7a', logo_initials: (game.home_team?.team_name || '?').split(' ').map(w=>w[0]).slice(0,3).join('') };
 
   const awayTeam = isLeague
     ? { id: game.away_lt?.id, name: game.away_lt?.team?.name || game.away_lt?.team_name, logo_color: game.away_lt?.team?.logo_color || game.away_lt?.logo_color, logo_initials: game.away_lt?.team?.logo_initials || game.away_lt?.logo_initials }
-    : { id: game.away_team?.id, name: game.away_team?.team_name, logo_color: '#6b1520', logo_initials: (game.away_team?.team_name || '?').split(' ').map(w=>w[0]).slice(0,3).join('') };
+    : isTeamGame
+      ? (game.is_home ? opponentBubble : ourTeam)
+      : { id: game.away_team?.id, name: game.away_team?.team_name, logo_color: '#6b1520', logo_initials: (game.away_team?.team_name || '?').split(' ').map(w=>w[0]).slice(0,3).join('') };
 
-  const context = isLeague ? game.league?.name : game.tournament?.name;
+  const context = isLeague ? game.league?.name : isTeamGame ? (game.team?.name || 'Team game') : game.tournament?.name;
   const venueId = game.live_barn_venue_id || game.rink?.live_barn_venue_id;
   const hasStream = !!venueId && game.status !== 'final';
   const liveBarnUrl = getLiveBarnUrl(venueId);
@@ -146,7 +174,9 @@ export default function GameDetail({ profile }) {
         <div style={{ background: C.navy, padding: '14px 16px', borderBottom: `0.5px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.6)', fontSize: 13, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap' }}>← Back</button>
           <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', textAlign: 'center', flex: 1 }}>
-            {context}{game.rink ? ` · ${game.rink.sub_rink || game.rink.name}` : ''}
+            {context}
+            {game.rink ? ` · ${game.rink.sub_rink || game.rink.name}` : ''}
+            {isTeamGame && game.location ? ` · ${game.location}` : ''}
           </div>
           <div style={{ width: 60 }} />
         </div>
@@ -186,19 +216,21 @@ export default function GameDetail({ profile }) {
             </div>
           </div>
 
-          {/* Stats bar */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', borderTop: `0.5px solid rgba(46,91,140,0.3)`, background: C.navy }}>
-            {[
-              { num: homeShots, label: `${homeTeam.logo_initials || 'HM'} Shots` },
-              { num: goals.length, label: 'Goals' },
-              { num: awayShots, label: `${awayTeam.logo_initials || 'AW'} Shots` },
-            ].map((s, i) => (
-              <div key={i} style={{ padding: '10px 0', textAlign: 'center', borderRight: i < 2 ? '0.5px solid rgba(46,91,140,0.2)' : 'none' }}>
-                <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice }}>{s.num}</div>
-                <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(244,247,250,0.3)', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 2 }}>{s.label}</div>
-              </div>
-            ))}
-          </div>
+          {/* Stats bar — only shown for league/tournament games where we track shots+goals */}
+          {!isTeamGame && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', borderTop: `0.5px solid rgba(46,91,140,0.3)`, background: C.navy }}>
+              {[
+                { num: homeShots, label: `${homeTeam.logo_initials || 'HM'} Shots` },
+                { num: goals.length, label: 'Goals' },
+                { num: awayShots, label: `${awayTeam.logo_initials || 'AW'} Shots` },
+              ].map((s, i) => (
+                <div key={i} style={{ padding: '10px 0', textAlign: 'center', borderRight: i < 2 ? '0.5px solid rgba(46,91,140,0.2)' : 'none' }}>
+                  <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice }}>{s.num}</div>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(244,247,250,0.3)', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 2 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div style={{ padding: 16 }}>
@@ -231,8 +263,8 @@ export default function GameDetail({ profile }) {
             </div>
           )}
 
-          {/* SCORER VIEW BUTTON */}
-          {isOrganizer && !isFinal && (
+          {/* SCORER VIEW BUTTON — team-only games don't have a scoresheet */}
+          {isOrganizer && !isFinal && !isTeamGame && (
             <button onClick={() => navigate(isLeague ? `/league-scorer/${gameId}?type=league` : `/scorer/${gameId}`)}
               style={{ width: '100%', padding: '11px', background: 'rgba(46,91,140,0.2)', border: `0.5px solid ${C.border}`, borderRadius: 10, color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
               onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
