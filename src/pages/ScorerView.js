@@ -227,7 +227,6 @@ export default function ScorerView() {
   if (loading) return <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif' }}>Loading game...</div>;
 
   // League games nest team under league_team
-  console.log("game.home_team:", JSON.stringify(game.home_team));
   const homeTeam = isLeague
     ? { id: game.home_team?.id, team_name: game.home_team?.team?.name || game.home_team?.team_name }
     : game.home_team;
@@ -397,7 +396,7 @@ export default function ScorerView() {
 
       {showScoresheet && (
         <Scoresheet
-          game={{ ...game, _homeTeamName: homeTeam?.team_name, _awayTeamName: awayTeam?.team_name }}
+          game={game}
           goals={goals}
           penalties={penalties}
           shots={shots}

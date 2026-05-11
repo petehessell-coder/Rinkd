@@ -41,8 +41,8 @@ export default function Scoresheet({ game, goals, penalties, shots, goalieChange
   const [phase, setPhase] = useState("sign");
   const [status, setStatus] = useState({ pdf:"pending", storage:"pending", email:"pending" });
 
-  const homeTeam = game._homeTeamName || (isLeague ? (game.home_lt?.team?.name || game.home_lt?.team_name || "Home") : (game.home_team?.team_name || "Home"));
-  const awayTeam = game._awayTeamName || (isLeague ? (game.away_lt?.team?.name || game.away_lt?.team_name || "Away") : (game.away_team?.team_name || "Away"));
+  const homeTeam = isLeague ? (game.home_team?.team?.name || game.home_team?.team_name || game.home_lt?.team?.name || game.home_lt?.team_name || "Home") : (game.home_team?.team_name || "Home");
+  const awayTeam = isLeague ? (game.away_team?.team?.name || game.away_team?.team_name || game.away_lt?.team?.name || game.away_lt?.team_name || "Away") : (game.away_team?.team_name || "Away");
   const contextName = isLeague ? (game.league?.name || "League") : (game.tournament?.name || "Tournament");
   const rink = game.rink ? ((game.rink.sub_rink || "") + " · " + game.rink.name).replace(/^\s*·\s*/, "") : "";
   const periodLabel = (p) => p === 1 ? "1st" : p === 2 ? "2nd" : p === 3 ? "3rd" : p === 4 ? "OT" : "SO";
