@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { RinkdLogo, Avatar } from './Logos';
 import { signOut } from '../lib/auth';
 import { useUserRole, roleMenuSections } from '../lib/userRole';
+import InstallButton from './InstallButton';
 
 const ROLE_BADGE_COLOR = {
   commissioner: '#D72638',
@@ -145,6 +146,7 @@ export default function Layout({ children, profile }) {
                   </div>
                 ))}
                 <div style={{ borderTop: `1px solid ${B.border}` }}>
+                  <InstallButton onAction={() => setRoleOpen(false)} />
                   <button onClick={handleSignOut}
                     style={{ width: '100%', padding: '10px 12px', textAlign: 'left', background: 'transparent', border: 'none', color: B.steel, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 10, transition: 'all 0.12s' }}
                     onMouseEnter={e => { e.currentTarget.style.background = B.border + '66'; e.currentTarget.style.color = B.red; }}
@@ -242,9 +244,10 @@ export default function Layout({ children, profile }) {
             })}
           </nav>
 
-          {/* Sign out */}
+          {/* Install + sign out */}
           <div style={{ padding: '12px 16px', borderTop: `1px solid ${B.border}` }}>
-            <button onClick={handleSignOut} style={{ width: '100%', padding: '11px', borderRadius: 8, background: 'transparent', border: `1px solid ${B.border}`, color: B.steel, fontSize: 14, cursor: 'pointer', fontFamily: "'Barlow', sans-serif" }}>
+            <InstallButton onAction={() => setMenuOpen(false)} />
+            <button onClick={handleSignOut} style={{ width: '100%', padding: '11px', borderRadius: 8, background: 'transparent', border: `1px solid ${B.border}`, color: B.steel, fontSize: 14, cursor: 'pointer', fontFamily: "'Barlow', sans-serif", marginTop: 8 }}>
               Sign Out
             </button>
             <div style={{ marginTop: 10, display: 'flex', gap: 12 }}>
