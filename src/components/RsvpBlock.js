@@ -1,77 +1,108 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { getRsvp, getGameRsvps, upsertRsvp, deleteRsvp } from '../lib/rsvp';
+import { getGameRsvps, upsertRsvp, deleteRsvp } from '../lib/rsvp';
 
 const B = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
   ice: '#F4F7FA', steel: '#8BA3BE', dark: '#07111F',
-  green: '#22C55E', card: '#112236', border: '#1E3A5C',
+  green: '#22C55E', amber: '#F59E0B',
+  card: '#112236', border: '#1E3A5C',
 };
 
+// Dedupe rsvps by user_id — keeps the most recent row only.
+// Defensive: even though the DB has a UNIQUE(game_id,user_id) constraint, this
+// prevents transient duplicates if an optimistic row and a freshly-loaded row
+// briefly coexist after a network refresh.
+function dedupeByUser(list) {
+  const byUser = new Map();
+  for (const r of list) {
+    if (!r || !r.user_id) continue;
+    byUser.set(r.user_id, r);
+  }
+  return Array.from(byUser.values());
+}
+
 export default function RsvpBlock({ gameId, compact = false }) {
-  const [myRsvp, setMyRsvp] = useState(null);
-  const [rsvps, setRsvps] = useState([]);
-  const [userId, setUserId] = useState(null);
+  const [rsvps, setRsvps]     = useState([]);   // canonical list for this game
+  const [userId, setUserId]   = useState(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving]   = useState(false);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setLoading(false); return; }
+    if (!user) { if (mounted.current) setLoading(false); return; }
+    const all = await getGameRsvps(gameId);
+    if (!mounted.current) return;
     setUserId(user.id);
-    const [mine, all] = await Promise.all([
-      getRsvp(gameId, user.id),
-      getGameRsvps(gameId),
-    ]);
-    setMyRsvp(mine);
-    setRsvps(all);
+    setRsvps(dedupeByUser(all));
     setLoading(false);
   }, [gameId]);
 
   useEffect(() => { load(); }, [load]);
 
+  // Refresh when the tab regains focus so counts stay live as teammates RSVP.
+  useEffect(() => {
+    const onVis = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [load]);
+
+  // Single source of truth: derive myRsvp from rsvps. No separate myRsvp state.
+  const myRsvp = useMemo(
+    () => rsvps.find(r => r.user_id === userId) || null,
+    [rsvps, userId]
+  );
+
+  const inCount    = useMemo(() => rsvps.filter(r => r.status === 'in').length,    [rsvps]);
+  const outCount   = useMemo(() => rsvps.filter(r => r.status === 'out').length,   [rsvps]);
+  const maybeCount = useMemo(() => rsvps.filter(r => r.status === 'maybe').length, [rsvps]);
+
   const handleRsvp = async (status) => {
     if (!userId || saving) return;
     setSaving(true);
 
-    // Optimistic update — instant UI feedback
-    const prevRsvp = myRsvp;
     const prevRsvps = rsvps;
+    const currentStatus = myRsvp?.status;
+    const togglingOff = currentStatus === status;
 
-    if (myRsvp?.status === status) {
-      // Toggle off
-      setMyRsvp(null);
+    // Optimistic update — always operate by user_id, then dedupe.
+    if (togglingOff) {
       setRsvps(prev => prev.filter(r => r.user_id !== userId));
     } else {
-      const optimistic = { id: myRsvp?.id || 'temp', game_id: gameId, user_id: userId, status, profile: myRsvp?.profile };
-      setMyRsvp(optimistic);
-      setRsvps(prev => {
-        const filtered = prev.filter(r => r.user_id !== userId);
-        return [...filtered, optimistic];
-      });
+      const optimistic = {
+        id: myRsvp?.id || `temp-${userId}`,
+        game_id: gameId,
+        user_id: userId,
+        status,
+        profile: myRsvp?.profile,
+      };
+      setRsvps(prev => dedupeByUser([
+        ...prev.filter(r => r.user_id !== userId),
+        optimistic,
+      ]));
     }
 
     try {
-      if (prevRsvp?.status === status) {
+      if (togglingOff) {
         await deleteRsvp(gameId, userId);
       } else {
         await upsertRsvp(gameId, userId, status);
       }
-      // Refresh from DB to get accurate counts + profiles
+      // Refresh from DB to get accurate counts + profiles.
       await load();
-    } catch(e) {
-      console.error(e);
-      // Rollback on error
-      setMyRsvp(prevRsvp);
-      setRsvps(prevRsvps);
+    } catch (e) {
+      console.error('[RSVP] save failed', e);
+      if (mounted.current) setRsvps(prevRsvps);   // rollback
+    } finally {
+      if (mounted.current) setSaving(false);
     }
-
-    setSaving(false);
   };
-
-  const inCount    = rsvps.filter(r => r.status === 'in').length;
-  const outCount   = rsvps.filter(r => r.status === 'out').length;
-  const maybeCount = rsvps.filter(r => r.status === 'maybe').length;
 
   if (loading) return null;
   if (!userId) return null;
@@ -90,30 +121,30 @@ export default function RsvpBlock({ gameId, compact = false }) {
 
   return (
     <div style={{ marginTop: 10 }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
 
         {/* I'm In */}
-        <button onClick={() => handleRsvp('in')}
+        <button onClick={() => handleRsvp('in')} disabled={saving}
           style={{ ...btnBase, background: myRsvp?.status === 'in' ? B.green : 'rgba(34,197,94,0.15)', color: myRsvp?.status === 'in' ? '#ffffff' : B.green }}
-          onMouseEnter={e => e.currentTarget.style.opacity = '0.8'}
+          onMouseEnter={e => { if (!saving) e.currentTarget.style.opacity = '0.8'; }}
           onMouseLeave={e => e.currentTarget.style.opacity = saving ? '0.7' : '1'}>
-          ✓ I'm In{inCount > 0 ? ` (${inCount})` : ''}
+          {`✓ I'm In${inCount > 0 ? ` (${inCount})` : ''}`}
         </button>
 
         {/* I'm Out */}
-        <button onClick={() => handleRsvp('out')}
+        <button onClick={() => handleRsvp('out')} disabled={saving}
           style={{ ...btnBase, background: myRsvp?.status === 'out' ? B.red : '#1E3A5C', color: myRsvp?.status === 'out' ? '#ffffff' : B.steel }}
-          onMouseEnter={e => e.currentTarget.style.opacity = '0.8'}
+          onMouseEnter={e => { if (!saving) e.currentTarget.style.opacity = '0.8'; }}
           onMouseLeave={e => e.currentTarget.style.opacity = saving ? '0.7' : '1'}>
-          ✗ I'm Out{outCount > 0 ? ` (${outCount})` : ''}
+          {`✗ I'm Out${outCount > 0 ? ` (${outCount})` : ''}`}
         </button>
 
-        {/* Who's In */}
-        <button onClick={() => handleRsvp('maybe')}
-          style={{ ...btnBase, background: 'none', color: myRsvp?.status === 'maybe' ? B.ice : B.steel, opacity: saving ? 0.7 : myRsvp?.status === 'maybe' ? 1 : 0.5 }}
-          onMouseEnter={e => e.currentTarget.style.opacity = '0.8'}
-          onMouseLeave={e => e.currentTarget.style.opacity = saving ? '0.7' : myRsvp?.status === 'maybe' ? '1' : '0.5'}>
-          ? Who's In{maybeCount > 0 ? ` (${maybeCount})` : ''}
+        {/* Maybe — formerly "Who's In", which made the count next to it ambiguous. */}
+        <button onClick={() => handleRsvp('maybe')} disabled={saving}
+          style={{ ...btnBase, background: myRsvp?.status === 'maybe' ? B.amber : 'transparent', color: myRsvp?.status === 'maybe' ? '#ffffff' : B.steel, opacity: saving ? 0.7 : myRsvp?.status === 'maybe' ? 1 : 0.6 }}
+          onMouseEnter={e => { if (!saving) e.currentTarget.style.opacity = '0.85'; }}
+          onMouseLeave={e => e.currentTarget.style.opacity = saving ? '0.7' : myRsvp?.status === 'maybe' ? '1' : '0.6'}>
+          {`? Maybe${maybeCount > 0 ? ` (${maybeCount})` : ''}`}
         </button>
 
       </div>
@@ -123,7 +154,7 @@ export default function RsvpBlock({ gameId, compact = false }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
           <div style={{ display: 'flex' }}>
             {rsvps.filter(r => r.status === 'in').slice(0, 5).map((r, i) => (
-              <div key={r.id || i} style={{
+              <div key={r.id || r.user_id || i} style={{
                 width: 24, height: 24, borderRadius: '50%',
                 background: r.profile?.avatar_color || B.blue,
                 border: `2px solid ${B.navy}`,
@@ -142,6 +173,7 @@ export default function RsvpBlock({ gameId, compact = false }) {
               ? `${rsvps.find(r => r.status === 'in')?.profile?.name?.split(' ')[0] || 'Someone'} is in`
               : `${inCount} players in`}
             {outCount > 0 && ` · ${outCount} out`}
+            {maybeCount > 0 && ` · ${maybeCount} maybe`}
           </span>
         </div>
       )}
