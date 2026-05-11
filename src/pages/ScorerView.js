@@ -189,13 +189,14 @@ export default function ScorerView() {
 
   const savePenalty = async () => {
     if (!penaltyForm.team_id) return;
-    const { data } = await supabase.from('game_penalties').insert({
+    const { data, error } = await supabase.from('game_penalties').insert({
       game_id: gameId, team_id: penaltyForm.team_id,
       player_number: penaltyForm.player_number ? parseInt(penaltyForm.player_number) : null,
       penalty_type: penaltyForm.penalty_type, severity: penaltyForm.severity,
       duration_minutes: PENALTY_DURATIONS[penaltyForm.severity] || 2,
       period: penaltyForm.period, time_in_period: penaltyForm.time_in_period || null,
     }).select().single();
+    if (error) { console.error("penalty error:", error); }
     if (data) setPenalties(prev => [data, ...prev]);
     setPenaltyModal(false);
     setPenaltyForm(prev => ({ ...prev, player_number: '', time_in_period: '' }));
