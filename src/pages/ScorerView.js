@@ -401,6 +401,7 @@ export default function ScorerView() {
           penalties={penalties}
           shots={shots}
           goalieChanges={goalieChanges}
+          isLeague={isLeague}
           onClose={() => setShowScoresheet(false)}
         />
       )}
