@@ -30,7 +30,12 @@ function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return (
     <div style={{ minHeight: '100vh', background: '#07111F', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow', sans-serif", color: '#8BA3BE', fontSize: 15 }}>
-      <div style={{ textAlign: 'center' }}><div style={{ fontSize: 48, marginBottom: 16 }}>🏒</div><div>Loading Rinkd...</div></div>
+      <div style={{ textAlign: 'center' }}>
+        <img src="/icon-192.png" alt="Rinkd" width="72" height="72"
+          style={{ display: 'block', margin: '0 auto 16px', borderRadius: 16, animation: 'rinkd-pulse 1.6s ease-in-out infinite' }} />
+        <div>Loading Rinkd...</div>
+        <style>{`@keyframes rinkd-pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.65; transform: scale(0.96); } }`}</style>
+      </div>
     </div>
   );
   return user ? children : <Navigate to="/" replace />;

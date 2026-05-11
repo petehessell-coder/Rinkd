@@ -34,24 +34,24 @@ function detectStandalone() {
 // Step-by-step instructions per platform target — independent of the current device
 const INSTRUCTIONS = {
   ios: {
-    title: 'Install on iPhone or iPad',
+    title: 'Pop Rinkd on your iPhone',
+    intro: 'Three taps and you’re skating. Safari only — Apple won’t let other browsers add to your home screen.',
     steps: [
-      'Open rinkd.app in Safari (Chrome/Firefox on iOS can’t install — Apple’s restriction).',
-      'Tap the Share button (square with up-arrow) at the bottom of Safari.',
-      'Scroll down and tap Add to Home Screen.',
-      'Tap Add in the top-right corner.',
+      'Hit the Share button at the bottom of Safari (square with the arrow flying out the top).',
+      'Scroll down a sec and tap Add to Home Screen.',
+      'Tap Add in the top right. That’s it — Rinkd lives on your home screen now.',
     ],
-    note: "Once installed, Rinkd opens like a native app with no browser bar.",
+    note: "On Chrome or Firefox? Copy rinkd.app, paste it into Safari, then come back here.",
   },
   android: {
-    title: 'Install on Android',
+    title: 'Pop Rinkd on your Android',
+    intro: 'Quick install from Chrome. Works in Samsung Internet too.',
     steps: [
-      'Open rinkd.app in Chrome (Samsung Internet works too).',
-      'Tap the ⋮ menu in the top-right.',
-      'Tap Install app or Add to Home Screen.',
-      'Confirm by tapping Install.',
+      'Open the ⋮ menu in Chrome’s top-right corner.',
+      'Tap Install app (it might say Add to Home Screen — same thing).',
+      'Confirm Install. Done.',
     ],
-    note: 'If the option doesn’t appear yet, browse the site for a minute first — Chrome wants to see real engagement.',
+    note: 'If you don’t see the install option yet, poke around the app for a minute first. Chrome wants to know you actually like us before it offers.',
   },
 };
 
@@ -148,6 +148,7 @@ export default function DownloadCTA() {
                 {INSTRUCTIONS[platform].title}
               </div>
             </div>
+            <p style={{ fontSize: 13, lineHeight: 1.6, color: B.steel, marginBottom: 14 }}>{INSTRUCTIONS[platform].intro}</p>
             <ol style={{ paddingLeft: 18, fontSize: 13, lineHeight: 1.7, marginBottom: 6 }}>
               {INSTRUCTIONS[platform].steps.map((s, i) => <li key={i} style={{ marginBottom: 4 }}>{s}</li>)}
             </ol>

@@ -138,60 +138,66 @@ export default function InstallButton({ onAction }) {
 function InstallInstructions({ platform }) {
   const list = { fontSize: 13, lineHeight: 1.7, paddingLeft: 18, marginBottom: 6 };
   const note = { fontSize: 11, color: B.steel, marginTop: 10, lineHeight: 1.5 };
+  const intro = { fontSize: 13, lineHeight: 1.6, color: B.steel, marginBottom: 12 };
 
   if (platform === 'ios-safari') {
     return (
       <>
+        <div style={intro}>Three taps and Rinkd lives on your home screen like a real app.</div>
         <ol style={list}>
-          <li>Tap the <strong>Share</strong> button (square with the up arrow at the bottom of Safari).</li>
-          <li>Scroll down and tap <strong>Add to Home Screen</strong>.</li>
-          <li>Tap <strong>Add</strong> in the top-right corner.</li>
+          <li>Hit the <strong>Share</strong> button at the bottom of Safari (square with the arrow flying out the top).</li>
+          <li>Scroll down a sec and tap <strong>Add to Home Screen</strong>.</li>
+          <li>Tap <strong>Add</strong> in the top right. Done.</li>
         </ol>
-        <div style={note}>iOS doesn't let websites trigger install — these three taps is the most direct path.</div>
+        <div style={note}>Apple only lets Safari do this. If you're in Chrome or Firefox on iOS, switch to Safari first.</div>
       </>
     );
   }
   if (platform === 'ios-other') {
     return (
       <>
-        <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-          On iOS, only <strong>Safari</strong> can add a website to your Home Screen. Open <strong>rinkd.app in Safari</strong>, then tap Share → Add to Home Screen.
+        <div style={intro}>
+          Apple only lets <strong>Safari</strong> add sites to your home screen — not its fault, that's just how iOS works.
         </div>
-        <div style={note}>Apple restricts this to Safari only — it's not a Rinkd limitation.</div>
+        <div style={list}>
+          Copy <strong>rinkd.app</strong>, open Safari, paste it in, then tap Share → Add to Home Screen.
+        </div>
       </>
     );
   }
   if (platform === 'android-chrome') {
     return (
       <>
+        <div style={intro}>Quick install from Chrome's menu.</div>
         <ol style={list}>
-          <li>Tap the <strong>⋮</strong> menu (top-right of Chrome).</li>
-          <li>Tap <strong>Install app</strong> or <strong>Add to Home Screen</strong>.</li>
-          <li>Confirm <strong>Install</strong>.</li>
+          <li>Open the <strong>⋮</strong> menu in Chrome's top-right.</li>
+          <li>Tap <strong>Install app</strong> (it might say <strong>Add to Home Screen</strong> — same thing).</li>
+          <li>Tap <strong>Install</strong> to confirm.</li>
         </ol>
-        <div style={note}>If the option doesn't appear yet, Chrome wants you to use the site a bit first — try again in a minute.</div>
+        <div style={note}>If you don't see the install option yet, poke around the app for a minute first. Chrome wants to know you like us before it offers.</div>
       </>
     );
   }
   if (platform === 'android-other') {
     return (
       <>
-        <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-          Open this page in <strong>Chrome</strong>, then use the ⋮ menu → <strong>Install app</strong>.
+        <div style={intro}>
+          Pop this page open in <strong>Chrome</strong> (or Samsung Internet) — then ⋮ menu → <strong>Install app</strong>.
         </div>
-        <div style={note}>Most browsers other than Chrome don't support installing web apps on Android.</div>
+        <div style={note}>Most other Android browsers don't support installing web apps.</div>
       </>
     );
   }
   // desktop-chrome and fallback
   return (
     <>
+      <div style={intro}>Easy on desktop — there's usually an install icon right in your address bar.</div>
       <ol style={list}>
-        <li>Look for the <strong>install icon</strong> at the right of the address bar (looks like a monitor with a down-arrow).</li>
-        <li>Or open the <strong>⋮ menu → Cast, save, and share → Install Rinkd…</strong></li>
+        <li>Look at the right side of your address bar for an <strong>install icon</strong> (small monitor with a down-arrow).</li>
+        <li>Or open <strong>⋮ menu → Cast, save, and share → Install Rinkd…</strong></li>
         <li>Click <strong>Install</strong>.</li>
       </ol>
-      <div style={note}>Works in Chrome, Edge, Arc, and Brave on desktop. Firefox doesn't support PWA install today.</div>
+      <div style={note}>Works in Chrome, Edge, Arc, and Brave. Firefox still doesn't support installing web apps.</div>
     </>
   );
 }
