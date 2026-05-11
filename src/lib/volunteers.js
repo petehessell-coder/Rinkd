@@ -6,7 +6,11 @@ import { supabase } from './supabase';
  * Players claim a slot to sign up; manager can hand-assign instead.
  */
 
-const PROFILE_SELECT = 'profile:profiles(id, name, handle, avatar_color, avatar_initials)';
+// Embed the profile of whoever's signed up (or null if open). The FK
+// volunteer_slots.assigned_user_id → profiles.id is added via migration so
+// PostgREST can resolve this join automatically.
+const SLOT_SELECT_TEAM     = '*, assigned_user:profiles!volunteer_slots_assigned_user_fkey(id, name, handle, avatar_color, avatar_initials)';
+const SLOT_SELECT_MULTI    = '*, team:teams(id, name, logo_color, logo_initials), assigned_user:profiles!volunteer_slots_assigned_user_fkey(id, name, handle, avatar_color, avatar_initials)';
 
 // ── Reads ─────────────────────────────────────────────────────────────────────
 
@@ -14,7 +18,7 @@ const PROFILE_SELECT = 'profile:profiles(id, name, handle, avatar_color, avatar_
 export async function listTeamSlots(teamId) {
   const { data, error } = await supabase
     .from('volunteer_slots')
-    .select(`*, assigned:${PROFILE_SELECT}`.replace('profile:', 'assigned_user_id:'))
+    .select(SLOT_SELECT_TEAM)
     .eq('team_id', teamId)
     .order('slot_time', { ascending: true, nullsFirst: false });
   if (error) throw error;
@@ -26,7 +30,7 @@ export async function listSlotsForTeams(teamIds) {
   if (!teamIds || teamIds.length === 0) return [];
   const { data, error } = await supabase
     .from('volunteer_slots')
-    .select('*, team:teams(id, name, logo_color, logo_initials), assigned_user:profiles!assigned_user_id(id, name, handle, avatar_color, avatar_initials)')
+    .select(SLOT_SELECT_MULTI)
     .in('team_id', teamIds)
     .order('slot_time', { ascending: true, nullsFirst: false });
   if (error) throw error;
