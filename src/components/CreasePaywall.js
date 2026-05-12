@@ -6,14 +6,20 @@ const C = {
 };
 
 /**
- * Premium gate shown to users without an active Crease subscription. We don't
- * actually take payment here yet — the CTA fires window.location to the Stripe
- * Checkout URL set in REACT_APP_CREASE_CHECKOUT_URL. Once webhooks land, a
- * successful checkout writes to crease_subscriptions and this paywall vanishes
- * for the user automatically.
+ * Premium gate shown to users without an active Crease subscription.
+ *
+ * Payments are NOT live yet. Stays in "early access waitlist" mode until both:
+ *   - REACT_APP_CREASE_PAYMENTS_LIVE=1 is set in Vercel
+ *   - REACT_APP_CREASE_CHECKOUT_URL points at a real Stripe Checkout URL
+ *
+ * Until then, the CTA collects interest via mailto so you can hand-onboard
+ * beta supporters by flipping profiles.is_premium = true on their row.
  */
 export default function CreasePaywall({ episodeTitle, showTitle, compact = false }) {
-  const checkoutUrl = process.env.REACT_APP_CREASE_CHECKOUT_URL || 'mailto:hello@rinkd.app?subject=Crease%20Premium';
+  const paymentsLive = process.env.REACT_APP_CREASE_PAYMENTS_LIVE === '1';
+  const checkoutUrl = paymentsLive
+    ? (process.env.REACT_APP_CREASE_CHECKOUT_URL || 'mailto:hello@rinkd.app?subject=Crease%20Premium')
+    : 'mailto:hello@rinkd.app?subject=Crease%20Early%20Access&body=Count%20me%20in%20when%20Crease%20launches.';
 
   return (
     <div style={{
@@ -101,11 +107,13 @@ export default function CreasePaywall({ episodeTitle, showTitle, compact = false
           letterSpacing: '0.05em',
           textTransform: 'uppercase',
         }}>
-        Subscribe to Crease →
+        {paymentsLive ? 'Subscribe to Crease →' : 'Get Early Access →'}
       </a>
 
       <div style={{ fontSize: 11, color: C.steel, marginTop: 12 }}>
-        $4.99/mo · Cancel anytime · Free 7-day trial
+        {paymentsLive
+          ? '$4.99/mo · Cancel anytime · Free 7-day trial'
+          : 'Crease launches with original shows soon — join the early-access list'}
       </div>
     </div>
   );

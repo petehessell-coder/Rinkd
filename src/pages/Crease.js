@@ -79,12 +79,18 @@ export default function CreasePage({ currentUser, profile }) {
             <div style={{ fontSize: 14, color: C.steel, maxWidth: 480, margin: '0 auto', lineHeight: 1.55 }}>
               Original shows for the hockey lifer. Long-form interviews, locker-room debates, and the conversations the league won't have anywhere else.
             </div>
-            {!hasAccess && currentUser && (
-              <a href={process.env.REACT_APP_CREASE_CHECKOUT_URL || 'mailto:hello@rinkd.app?subject=Crease%20Premium'}
-                style={{ display: 'inline-block', marginTop: 16, padding: '11px 22px', background: C.red, color: '#fff', textDecoration: 'none', borderRadius: 999, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 14, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                Start 7-day free trial · $4.99/mo
-              </a>
-            )}
+            {!hasAccess && currentUser && (() => {
+              const paymentsLive = process.env.REACT_APP_CREASE_PAYMENTS_LIVE === '1';
+              const href = paymentsLive
+                ? (process.env.REACT_APP_CREASE_CHECKOUT_URL || 'mailto:hello@rinkd.app?subject=Crease%20Premium')
+                : 'mailto:hello@rinkd.app?subject=Crease%20Early%20Access&body=Count%20me%20in%20when%20Crease%20launches.';
+              return (
+                <a href={href}
+                  style={{ display: 'inline-block', marginTop: 16, padding: '11px 22px', background: C.red, color: '#fff', textDecoration: 'none', borderRadius: 999, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 14, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                  {paymentsLive ? 'Start 7-day free trial · $4.99/mo' : 'Join Crease Early-Access List'}
+                </a>
+              );
+            })()}
             {hasAccess && (
               <div style={{ marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#22C55E', fontWeight: 600 }}>
                 ✓ Crease Premium active

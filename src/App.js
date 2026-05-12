@@ -10,6 +10,8 @@ import Crease from './pages/Crease';
 import CreaseShow from './pages/CreaseShow';
 import CreaseEpisode from './pages/CreaseEpisode';
 import Survey from './pages/Survey';
+import RinksideArticle from './pages/RinksideArticle';
+import RinksideEditor from './pages/RinksideEditor';
 import Leagues from './pages/Leagues';
 import Store from './pages/Store';
 import Legal from './pages/Legal';
@@ -57,7 +59,10 @@ function AppRoutes() {
       <Route path="/feed" element={<ProtectedRoute><Feed currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Profile currentUser={user} profile={profile} onProfileUpdate={setProfile} /></ProtectedRoute>} />
       <Route path="/profile/:userId" element={<ProtectedRoute><Profile currentUser={user} profile={profile} onProfileUpdate={setProfile} /></ProtectedRoute>} />
-      <Route path="/rinkside" element={<ProtectedRoute><Rinkside profile={profile} /></ProtectedRoute>} />
+      <Route path="/rinkside" element={<ProtectedRoute><Rinkside currentUser={user} profile={profile} /></ProtectedRoute>} />
+      <Route path="/rinkside/new" element={<ProtectedRoute><RinksideEditor currentUser={user} profile={profile} /></ProtectedRoute>} />
+      <Route path="/rinkside/:slug/edit" element={<ProtectedRoute><RinksideEditor currentUser={user} profile={profile} /></ProtectedRoute>} />
+      <Route path="/rinkside/:slug" element={<ProtectedRoute><RinksideArticle currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/crease" element={<ProtectedRoute><Crease currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/crease/:slug" element={<ProtectedRoute><CreaseShow currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/crease/:showSlug/:episodeNumber" element={<ProtectedRoute><CreaseEpisode currentUser={user} profile={profile} /></ProtectedRoute>} />
