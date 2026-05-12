@@ -10,6 +10,7 @@ import { useParams } from 'react-router-dom';
 import { followUser, unfollowUser, isFollowing, getFollowCounts, timeAgo, uploadMedia } from '../lib/posts';
 import MapLink from '../components/MapLink';
 import { track } from '../lib/analytics';
+import { classifyImage } from '../lib/imageModeration';
 
 const POSITIONS = ['Forward', 'Defense', 'Goalie', 'Coach', 'Parent', 'Official', 'Fan'];
 const LEVELS = ['Youth (Mite-Bantam)', 'Youth (Midget)', 'High School', 'Junior (Tier I)', 'Junior (Tier II/III)', 'College', 'Minor Pro', 'Beer League', 'Adult Rec', 'Fan'];
@@ -105,6 +106,13 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
       e.target.value = '';
       return;
     }
+    const coverVerdict = await classifyImage(file);
+    if (!coverVerdict.ok) {
+      alert('Looks like this image may violate Rinkd\'s community guidelines. Try a different one.');
+      e.target.value = '';
+      track('upload_blocked_nsfw', { label: coverVerdict.label, score: coverVerdict.score, scope: 'cover' });
+      return;
+    }
     setCoverUploading(true);
     const { url, error } = await uploadMedia(file, currentUser.id);
     if (error || !url) { setCoverUploading(false); alert('Upload failed. Try again.'); return; }
@@ -122,6 +130,13 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
     if (file.size > 5 * 1024 * 1024) {
       alert(`Avatar is ${(file.size / 1024 / 1024).toFixed(1)}MB — max 5MB.`);
       e.target.value = '';
+      return;
+    }
+    const avatarVerdict = await classifyImage(file);
+    if (!avatarVerdict.ok) {
+      alert('Looks like this image may violate Rinkd\'s community guidelines. Try a different one.');
+      e.target.value = '';
+      track('upload_blocked_nsfw', { label: avatarVerdict.label, score: avatarVerdict.score, scope: 'avatar' });
       return;
     }
     setAvatarUploading(true);

@@ -7,6 +7,7 @@ import {
 } from '../lib/posts';
 import { track } from '../lib/analytics';
 import { FeedSkeleton, EmptyState } from './Skeletons';
+import { classifyImage } from '../lib/imageModeration';
 
 const C = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
@@ -171,7 +172,7 @@ export default function TeamFeed({ teamId, currentUser, isMember }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const onMediaSelect = (e) => {
+  const onMediaSelect = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const isVideo = file.type.startsWith('video');
@@ -180,6 +181,15 @@ export default function TeamFeed({ teamId, currentUser, isMember }) {
       alert(`${isVideo ? 'Video' : 'Image'} is ${(file.size / 1024 / 1024).toFixed(1)}MB — max ${maxMB}MB.`);
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
+    }
+    if (!isVideo) {
+      const verdict = await classifyImage(file);
+      if (!verdict.ok) {
+        alert('Looks like this image may violate Rinkd\'s community guidelines. Try a different one.');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        track('upload_blocked_nsfw', { label: verdict.label, score: verdict.score, scope: 'team' });
+        return;
+      }
     }
     setMediaFile(file);
     setMediaPreview({ url: URL.createObjectURL(file), type: isVideo ? 'video' : 'image' });

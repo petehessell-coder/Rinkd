@@ -6,6 +6,7 @@ import { getPosts, getFollowingPosts, createPost, toggleLike, getLikedPosts, get
 import PushPrompt from '../components/PushPrompt';
 import { track } from '../lib/analytics';
 import { FeedSkeleton, EmptyState } from '../components/Skeletons';
+import { classifyImage } from '../lib/imageModeration';
 
 const TAGS = [
   { label: 'Goal Alert', color: '#D72638' },
@@ -181,7 +182,7 @@ export default function Feed({ currentUser, profile }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleMediaSelect = (e) => {
+  const handleMediaSelect = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     // Hard cap — Supabase free plan caps single uploads ~50MB, and big mobile clips
@@ -193,6 +194,17 @@ export default function Feed({ currentUser, profile }) {
       alert(`${isVideo ? 'Video' : 'Image'} is ${(file.size / 1024 / 1024).toFixed(1)}MB — max ${maxMB}MB. Trim a highlight or compress and try again.`);
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
+    }
+    // Client-side NSFW check (images only). Runs entirely in the browser.
+    if (!isVideo) {
+      const verdict = await classifyImage(file);
+      if (!verdict.ok) {
+        // eslint-disable-next-line no-alert
+        alert('Looks like this image may violate Rinkd\'s community guidelines. Try a different one.');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        track('upload_blocked_nsfw', { label: verdict.label, score: verdict.score });
+        return;
+      }
     }
     setMediaFile(file);
     setMediaPreview({ url: URL.createObjectURL(file), type: isVideo ? 'video' : 'image' });

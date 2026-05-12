@@ -22,6 +22,7 @@ import TournamentCreate from './pages/TournamentCreate';
 import TournamentManage from './pages/TournamentManage';
 import AdminAnalytics from './pages/AdminAnalytics';
 import AdminFeedback from './pages/AdminFeedback';
+import AdminModeration from './pages/AdminModeration';
 import Settings from './pages/Settings';
 import { setSentryUser } from './lib/sentry';
 import Notifications from './pages/Notifications';
@@ -105,6 +106,7 @@ function AppRoutes() {
       <Route path="/tournament/:id/manage" element={<ProtectedRoute><TournamentManage currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/admin/analytics" element={<ProtectedRoute><AdminAnalytics currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/admin/feedback" element={<ProtectedRoute><AdminFeedback currentUser={user} profile={profile} /></ProtectedRoute>} />
+      <Route path="/admin/moderation" element={<ProtectedRoute><AdminModeration currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/notifications" element={<ProtectedRoute><Notifications currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/tournament/:id" element={<ProtectedRoute><Tournament currentUser={user} profile={profile} /></ProtectedRoute>} />
