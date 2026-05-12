@@ -320,7 +320,7 @@ export default function Auth() {
               fontWeight: 900, fontStyle: 'italic',
               fontSize: 32, color: C.ice, marginBottom: 6, textTransform: 'uppercase',
             }}>
-              {step === 1 ? 'Join the Ice' : step === 2 ? 'Your Identity' : 'Your Hockey'}
+              {step === 1 ? 'Lace \'Em Up' : step === 2 ? 'Your Identity' : 'Your Hockey'}
             </h2>
             <p style={{ color: C.steel, marginBottom: 24, fontSize: 13 }}>
               {step === 1 ? 'Create your account' : step === 2 ? 'How you\'ll appear on Rinkd' : 'Tell us about your game'}
