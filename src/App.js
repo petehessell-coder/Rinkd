@@ -23,6 +23,7 @@ import TournamentManage from './pages/TournamentManage';
 import AdminAnalytics from './pages/AdminAnalytics';
 import Notifications from './pages/Notifications';
 import OnboardingModal from './components/OnboardingModal';
+import ErrorBoundary from './components/ErrorBoundary';
 import Teams from './pages/Teams';
 import League from './pages/League';
 import LeagueManage from './pages/LeagueManage';
@@ -136,8 +137,10 @@ export default function App() {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, profile, setProfile, loading }}>
-      <BrowserRouter><AppRoutes /></BrowserRouter>
-    </AuthContext.Provider>
+    <ErrorBoundary>
+      <AuthContext.Provider value={{ user, profile, setProfile, loading }}>
+        <BrowserRouter><AppRoutes /></BrowserRouter>
+      </AuthContext.Provider>
+    </ErrorBoundary>
   );
 }

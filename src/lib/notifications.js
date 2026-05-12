@@ -53,19 +53,34 @@ export async function deleteNotification(id) {
 /**
  * Subscribe to realtime inserts/updates for the current user. Returns an
  * unsubscribe function.
+ *
+ * The channel name includes a per-call random suffix because supabase-js reuses
+ * channels with the same name. Under React StrictMode (and on remounts) this
+ * caused "cannot add postgres_changes callbacks after subscribe()" throws that
+ * bubbled out of useEffect and blanked the app. A unique name per call avoids
+ * the collision and the try/catch makes the whole call non-fatal regardless.
  */
 export function subscribe(userId, onChange) {
   if (!userId) return () => {};
-  const channel = supabase
-    .channel(`notifications:${userId}`)
-    .on('postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'notifications', filter: `recipient_id=eq.${userId}` },
-      (payload) => onChange?.('insert', payload.new))
-    .on('postgres_changes',
-      { event: 'UPDATE', schema: 'public', table: 'notifications', filter: `recipient_id=eq.${userId}` },
-      (payload) => onChange?.('update', payload.new))
-    .subscribe();
-  return () => supabase.removeChannel(channel);
+  let channel = null;
+  try {
+    const name = `notifications:${userId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+    channel = supabase
+      .channel(name)
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `recipient_id=eq.${userId}` },
+        (payload) => { try { onChange?.('insert', payload.new); } catch { /* swallow */ } })
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'notifications', filter: `recipient_id=eq.${userId}` },
+        (payload) => { try { onChange?.('update', payload.new); } catch { /* swallow */ } })
+      .subscribe();
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[notifications] realtime subscribe failed; falling back to polling-only:', err);
+  }
+  return () => {
+    try { if (channel) supabase.removeChannel(channel); } catch { /* swallow */ }
+  };
 }
 
 export const KIND_META = {

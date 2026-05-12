@@ -17,8 +17,10 @@ export default function NotificationBell({ userId, size = 22, color }) {
     let cancelled = false;
 
     const refresh = async () => {
-      const c = await getUnreadCount();
-      if (!cancelled) setCount(c);
+      try {
+        const c = await getUnreadCount();
+        if (!cancelled) setCount(c);
+      } catch { /* swallow — bell silently stays at last known count */ }
     };
     refresh();
 
@@ -27,14 +29,17 @@ export default function NotificationBell({ userId, size = 22, color }) {
     // Refresh whenever the tab becomes visible again
     const onVis = () => { if (document.visibilityState === 'visible') refresh(); };
     document.addEventListener('visibilitychange', onVis);
-    // Realtime listener
-    const unsub = subscribe(userId, () => refresh());
+    // Realtime listener — wrapped in try/catch defensively. Polling continues
+    // either way, so the user still gets updated counts.
+    let unsub = () => {};
+    try { unsub = subscribe(userId, () => refresh()); }
+    catch { /* swallow — polling-only is fine */ }
 
     return () => {
       cancelled = true;
       clearInterval(interval);
       document.removeEventListener('visibilitychange', onVis);
-      unsub();
+      try { unsub(); } catch { /* swallow */ }
     };
   }, [userId]);
 
