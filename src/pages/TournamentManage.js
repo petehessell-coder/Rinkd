@@ -72,7 +72,8 @@ export default function TournamentManagePage({ currentUser, profile }) {
     }
   };
 
-  useEffect(() => { load(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // load() reads id from useParams; safe to depend only on id.
+  useEffect(() => { load(); }, [id]);
 
   if (loading) return (
     <Layout profile={profile}>
