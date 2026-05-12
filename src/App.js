@@ -24,6 +24,7 @@ import AdminAnalytics from './pages/AdminAnalytics';
 import AdminFeedback from './pages/AdminFeedback';
 import AdminModeration from './pages/AdminModeration';
 import Settings from './pages/Settings';
+import Landing from './pages/Landing';
 import { setSentryUser } from './lib/sentry';
 import Notifications from './pages/Notifications';
 import OnboardingModal from './components/OnboardingModal';
@@ -74,7 +75,10 @@ function AppRoutes() {
       />
     )}
     <Routes>
-      <Route path="/" element={user ? <Navigate to="/feed" replace /> : <Auth />} />
+      {/* Root: Landing handles the "first time mobile visitor" install pitch
+          and falls through to Auth for desktop, installed PWA, or "continue
+          in browser" tap. /login always goes straight to Auth (no marketing). */}
+      <Route path="/" element={user ? <Navigate to="/feed" replace /> : <Landing />} />
       <Route path="/login" element={user ? <Navigate to="/feed" replace /> : <Auth />} />
       {/* Survey is public — accessible from auth screen, marketing pages, and embedded in feeds */}
       <Route path="/survey" element={<Survey />} />
