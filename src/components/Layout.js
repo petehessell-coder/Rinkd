@@ -1,42 +1,36 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { RinkdLogo, Avatar, LeaguesNavIcon, ProfileNavIcon, TournamentsNavIcon } from './Logos';
+import { RinkdLogo, Avatar, ProfileNavIcon } from './Logos';
 import { signOut } from '../lib/auth';
-import { useUserRole, roleMenuSections } from '../lib/userRole';
-import InstallButton from './InstallButton';
 import NotificationBell from './NotificationBell';
 import HelpButton from './HelpButton';
+import MoreDrawer from './MoreDrawer';
 
-const ROLE_BADGE_COLOR = {
-  commissioner: '#D72638',
-  manager:      '#F59E0B',
-  player:       '#2E5B8C',
+const B = {
+  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
+  ice: '#F4F7FA', steel: '#8BA3BE', dark: '#07111F',
+  card: '#112236', border: '#1E3A5C',
 };
 
+// ============================================================================
+// Sprint 4D.5 — Complexity Diet
+//
+// Primary nav is now FIVE items on desktop sidebar AND mobile bottom bar:
+//   Feed · Teams · Notifications · Profile · More
+//
+// Demoted destinations (Rinkside, Crease, Store, Discover, Tournaments,
+// Leagues, Admin pages) live inside the More drawer. Their direct URLs still
+// work — we just stopped front-loading them on day one.
+// ============================================================================
+
 const NAV = [
-  { path: '/feed',        icon: '🏒', label: 'Feed' },
-  { path: '/rinkside',    iconImg: '/rinkside-logo.png', label: 'Rinkside', badge: 'CONTENT' },
-  { path: '/crease',      iconImg: '/crease-logo.png',   label: 'Crease',   badge: 'PREMIUM' },
-  { path: '/leagues',     IconNode: LeaguesNavIcon,     label: 'Leagues',     badge: 'COMMUNITY' },
-  { path: '/store',       icon: '🛒', label: 'Store',       badge: 'MERCH' },
-  { path: '/discover',    icon: '🔍', label: 'Discover' },
-  { path: '/profile',     IconNode: ProfileNavIcon,     label: 'Profile' },
-  { path: '/tournaments', IconNode: TournamentsNavIcon, label: 'Tournaments' },
-  { path: '/teams',       icon: '👥', label: 'Teams' },
+  { path: '/feed',          icon: '🏒',  label: 'Feed' },
+  { path: '/teams',         icon: '👥',  label: 'Teams' },
+  { path: '/notifications', icon: '🔔',  label: 'Notifications', showBadge: true },
+  { path: '/profile',       IconNode: ProfileNavIcon, label: 'Profile' },
+  { path: '__more',         icon: '⋯',  label: 'More', isMore: true },
 ];
 
-// Bottom quick-nav — always visible on mobile
-const BOTTOM_NAV = [
-  { path: '/feed',     icon: '🏒', label: 'Feed' },
-  { path: '/rinkside', iconImg: '/rinkside-logo.png', label: 'Rinkside' },
-  { path: '/crease',   iconImg: '/crease-logo.png',   label: 'Crease' },
-  { path: '/store',    icon: '🛒', label: 'Store' },
-];
-
-// Renders one of three icon styles depending on what the nav item provides:
-//   1. iconImg → PNG/JPG file (Rinkside, Crease — uses the brand logo squares)
-//   2. IconNode → a React SVG component (Leagues, Profile, Tournaments)
-//   3. icon → emoji string (Feed, Store, Discover, Teams)
 function NavIcon({ item, size }) {
   if (item.iconImg) {
     return (
@@ -51,149 +45,118 @@ function NavIcon({ item, size }) {
   return <span style={{ fontSize: size, lineHeight: 1 }}>{item.icon}</span>;
 }
 
-const B = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
-  ice: '#F4F7FA', steel: '#8BA3BE', dark: '#07111F',
-  card: '#112236', border: '#1E3A5C',
-};
-
 export default function Layout({ children, profile }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [roleOpen, setRoleOpen] = useState(false);
-  const role = useUserRole(profile?.id);
-  const roleSections = roleMenuSections(role);
-  const roleMenuRef = useRef(null);
+  const [moreOpen, setMoreOpen] = useState(false);
 
-  // Close the role dropdown when clicking outside it
-  useEffect(() => {
-    if (!roleOpen) return undefined;
-    const onDocClick = (e) => {
-      if (roleMenuRef.current && !roleMenuRef.current.contains(e.target)) {
-        setRoleOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
-  }, [roleOpen]);
-
-  // Close on route change
-  useEffect(() => {
-    setRoleOpen(false);
-    setMenuOpen(false);
-  }, [location.pathname]);
+  // Close drawer on route change
+  useEffect(() => { setMoreOpen(false); }, [location.pathname]);
 
   const handleSignOut = async () => {
     await signOut();
-    setRoleOpen(false);
-    setMenuOpen(false);
     navigate('/');
   };
-
-  const roleLabel = role.charAt(0).toUpperCase() + role.slice(1);
-  const roleColor = ROLE_BADGE_COLOR[role] || B.blue;
 
   const isActive = (item) =>
     location.pathname === item.path ||
     (item.path === '/feed' && location.pathname === '/') ||
-    (item.path === '/tournaments' && location.pathname.startsWith('/tournament')) ||
-    (item.path === '/teams' && location.pathname.startsWith('/team')) ||
-    (item.path === '/leagues' && location.pathname.startsWith('/league'));
+    location.pathname.startsWith(item.path + '/');
+
+  // Click handler for the More nav item — opens the drawer instead of navigating
+  const renderNavLink = (item, opts) => {
+    const { size, isVertical, active } = opts;
+    if (item.isMore) {
+      return (
+        <button onClick={() => setMoreOpen(true)}
+          style={{
+            display: 'flex', alignItems: isVertical ? 'center' : 'center',
+            flexDirection: isVertical ? 'column' : 'row',
+            gap: isVertical ? 3 : 12,
+            padding: isVertical ? '4px 8px' : '11px 12px',
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            color: B.steel, fontFamily: 'inherit',
+            width: isVertical ? undefined : '100%',
+            borderRadius: isVertical ? 0 : 10,
+            fontSize: isVertical ? 10 : 15,
+            position: 'relative',
+            transition: 'all 0.15s',
+          }}
+          onMouseEnter={e => { if (!isVertical) e.currentTarget.style.background = B.border + '66'; }}
+          onMouseLeave={e => { if (!isVertical) e.currentTarget.style.background = 'transparent'; }}>
+          <span style={{ fontSize: isVertical ? 20 : size, lineHeight: 1, fontWeight: 700 }}>⋯</span>
+          <span>More</span>
+        </button>
+      );
+    }
+    return (
+      <Link to={item.path}
+        style={{
+          display: 'flex', alignItems: 'center',
+          flexDirection: isVertical ? 'column' : 'row',
+          gap: isVertical ? 3 : 12,
+          padding: isVertical ? '4px 8px' : '11px 12px',
+          borderRadius: isVertical ? 0 : 10,
+          textDecoration: 'none',
+          background: !isVertical && active ? B.blue + '33' : 'transparent',
+          color: active ? B.ice : B.steel,
+          fontWeight: active ? 600 : 400,
+          fontSize: isVertical ? 10 : 15,
+          transition: 'all 0.15s',
+          position: 'relative',
+          minWidth: isVertical ? 50 : undefined,
+        }}
+        onMouseEnter={e => { if (!isVertical && !active) e.currentTarget.style.background = B.border + '66'; }}
+        onMouseLeave={e => { if (!isVertical && !active) e.currentTarget.style.background = 'transparent'; }}>
+        {active && !isVertical && <div style={{ position: 'absolute', left: 0, top: '20%', bottom: '20%', width: 3, background: B.red, borderRadius: '0 3px 3px 0' }} />}
+        <span style={{ position: 'relative', display: 'inline-flex' }}>
+          <NavIcon item={item} size={size} />
+          {item.showBadge && profile?.id && (
+            <BellBadge userId={profile.id} />
+          )}
+        </span>
+        <span style={{ fontWeight: isVertical && active ? 600 : undefined }}>{item.label}</span>
+        {active && isVertical && <div style={{ width: 4, height: 4, borderRadius: '50%', background: B.red }} />}
+      </Link>
+    );
+  };
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: B.dark, fontFamily: "'Barlow', sans-serif", color: B.ice }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: B.dark, color: B.ice, fontFamily: "'Barlow', sans-serif" }}>
 
       {/* ─── DESKTOP SIDEBAR ─── */}
-      <aside style={{ width: 240, background: B.navy, borderRight: `1px solid ${B.border}`, display: 'flex', flexDirection: 'column', position: 'fixed', left: 0, top: 0, bottom: 0, zIndex: 100 }} className="sidebar-desktop">
-        <div style={{ padding: '24px 20px 20px', borderBottom: `1px solid ${B.border}` }}>
+      <aside className="sidebar-desktop" style={{ width: 240, background: B.navy, borderRight: `1px solid ${B.border}`, padding: '24px 0 16px', position: 'fixed', top: 0, bottom: 0, left: 0, display: 'flex', flexDirection: 'column' }}>
+
+        {/* Brand */}
+        <div style={{ padding: '0 18px 18px' }}>
           <Link to="/feed" style={{ textDecoration: 'none' }}>
-            <RinkdLogo size={44} showText />
+            <RinkdLogo size={40} showText />
           </Link>
         </div>
-        <nav style={{ flex: 1, padding: '12px 8px', overflowY: 'auto' }}>
-          {NAV.map(item => {
-            const active = isActive(item);
-            return (
-              <Link key={item.path} to={item.path}
-                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 12px', borderRadius: 10, marginBottom: 2, textDecoration: 'none', background: active ? B.blue + '33' : 'transparent', color: active ? B.ice : B.steel, fontWeight: active ? 600 : 400, fontSize: 15, transition: 'all 0.15s', position: 'relative' }}
-                onMouseEnter={e => { if (!active) e.currentTarget.style.background = B.border + '66'; }}
-                onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}>
-                {active && <div style={{ position: 'absolute', left: 0, top: '20%', bottom: '20%', width: 3, background: B.red, borderRadius: '0 3px 3px 0' }} />}
-                <NavIcon item={item} size={22} />
-                <span>{item.label}</span>
-                {item.badge && (
-                  <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '0.08em', background: B.border, color: B.steel, padding: '2px 5px', borderRadius: 3 }}>{item.badge}</span>
-                )}
-              </Link>
-            );
-          })}
-        </nav>
-        {profile && (
-          <div ref={roleMenuRef} style={{ padding: '16px', borderTop: `1px solid ${B.border}`, position: 'relative' }}>
-            {/* Notification bell sits above the user dropdown so unread badge is visible */}
-            <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <NotificationBell userId={profile.id} size={20} color={B.steel} />
-              <Link to="/notifications" style={{ color: B.steel, fontSize: 12, textDecoration: 'none' }}>Notifications</Link>
+
+        {/* Primary nav (5 items) */}
+        <nav style={{ flex: 1, padding: '0 10px' }}>
+          {NAV.map(item => (
+            <div key={item.path} style={{ marginBottom: 2 }}>
+              {renderNavLink(item, { size: 22, isVertical: false, active: !item.isMore && isActive(item) })}
             </div>
-            {/* Avatar block doubles as the dropdown trigger */}
-            <button
-              onClick={() => setRoleOpen(v => !v)}
-              aria-expanded={roleOpen}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: 0, background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', color: 'inherit' }}>
-              <Avatar profile={profile} size={34} />
+          ))}
+        </nav>
+
+        {/* Footer: simple avatar block. No role badge, no dropdown. */}
+        {profile && (
+          <div style={{ padding: '12px 16px', borderTop: `1px solid ${B.border}` }}>
+            <Link to="/profile" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'inherit' }}>
+              <Avatar profile={profile} size={36} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: B.ice, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.name}</span>
-                  <span style={{ fontSize: 9, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '0.08em', textTransform: 'uppercase', background: roleColor + '33', color: roleColor, padding: '2px 6px', borderRadius: 4, whiteSpace: 'nowrap' }}>{roleLabel}</span>
-                </div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: B.ice, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.name}</div>
                 <div style={{ fontSize: 11, color: B.steel }}>@{profile.handle}</div>
               </div>
-              <span style={{ fontSize: 11, color: B.steel, transform: roleOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▾</span>
-            </button>
-
-            {/* Dropdown opens upward so it doesn't get clipped at the bottom of the viewport */}
-            {roleOpen && (
-              <div style={{ position: 'absolute', left: 12, right: 12, bottom: 'calc(100% - 8px)', background: B.card, border: `1px solid ${B.border}`, borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.4)', overflow: 'hidden', zIndex: 110 }}>
-                {roleSections.map((section, idx) => (
-                  <div key={section.label} style={{ borderTop: idx === 0 ? 'none' : `1px solid ${B.border}` }}>
-                    <div style={{ padding: '8px 12px 4px', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: B.steel, textTransform: 'uppercase', fontFamily: "'Barlow Condensed', sans-serif" }}>{section.label}</div>
-                    {section.items.map(item => (
-                      <Link key={item.path} to={item.path}
-                        onClick={() => setRoleOpen(false)}
-                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', textDecoration: 'none', color: B.ice, fontSize: 13, transition: 'background 0.12s' }}
-                        onMouseEnter={e => e.currentTarget.style.background = B.border + '66'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                        <span style={{ fontSize: 16 }}>{item.icon}</span>
-                        <span>{item.label}</span>
-                      </Link>
-                    ))}
-                  </div>
-                ))}
-                <div style={{ borderTop: `1px solid ${B.border}` }}>
-                  <Link to="/settings" onClick={() => setRoleOpen(false)}
-                    style={{ width: '100%', padding: '10px 12px', textAlign: 'left', background: 'transparent', border: 'none', color: B.ice, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', boxSizing: 'border-box' }}
-                    onMouseEnter={e => e.currentTarget.style.background = B.border + '66'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                    <span style={{ fontSize: 16 }}>⚙️</span>
-                    <span>Settings</span>
-                  </Link>
-                  <InstallButton onAction={() => setRoleOpen(false)} />
-                  <button onClick={handleSignOut}
-                    style={{ width: '100%', padding: '10px 12px', textAlign: 'left', background: 'transparent', border: 'none', color: B.steel, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 10, transition: 'all 0.12s' }}
-                    onMouseEnter={e => { e.currentTarget.style.background = B.border + '66'; e.currentTarget.style.color = B.red; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = B.steel; }}>
-                    <span style={{ fontSize: 16 }}>⎋</span>
-                    <span>Sign Out</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <Link to="/privacy" style={{ fontSize: 10, color: B.border, textDecoration: 'none' }} onMouseEnter={e => e.currentTarget.style.color = B.steel} onMouseLeave={e => e.currentTarget.style.color = B.border}>Privacy</Link>
-              <Link to="/terms" style={{ fontSize: 10, color: B.border, textDecoration: 'none' }} onMouseEnter={e => e.currentTarget.style.color = B.steel} onMouseLeave={e => e.currentTarget.style.color = B.border}>Terms</Link>
-              <span style={{ fontSize: 10, color: B.border }}>© 2026 Rinkd LLC</span>
+            </Link>
+            <div style={{ marginTop: 10, display: 'flex', gap: 10, fontSize: 10, color: B.border }}>
+              <Link to="/privacy" style={{ color: B.border, textDecoration: 'none' }}>Privacy</Link>
+              <Link to="/terms" style={{ color: B.border, textDecoration: 'none' }}>Terms</Link>
+              <span style={{ marginLeft: 'auto' }}>© 2026</span>
             </div>
           </div>
         )}
@@ -209,121 +172,23 @@ export default function Layout({ children, profile }) {
         <Link to="/feed" style={{ textDecoration: 'none' }}>
           <RinkdLogo size={32} showText />
         </Link>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {profile?.id && <NotificationBell userId={profile.id} size={22} />}
-        <button onClick={() => setMenuOpen(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 6, display: 'flex', flexDirection: 'column', gap: 5 }}>
-          <div style={{ width: 22, height: 2, background: B.ice, borderRadius: 2 }} />
-          <div style={{ width: 22, height: 2, background: B.ice, borderRadius: 2 }} />
-          <div style={{ width: 22, height: 2, background: B.ice, borderRadius: 2 }} />
-        </button>
-        </div>
       </div>
 
-      {/* ─── MOBILE HAMBURGER MENU (full screen) ─── */}
-      {menuOpen && (
-        <div style={{ display: 'none', position: 'fixed', inset: 0, background: B.navy, zIndex: 300, flexDirection: 'column', overflowY: 'auto', paddingBottom: 80 }} className="mobile-menu-open">
-          {/* Menu header */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 16px 12px', borderBottom: `1px solid ${B.border}` }}>
-            <RinkdLogo size={36} showText />
-            <button onClick={() => setMenuOpen(false)} style={{ background: 'none', border: 'none', color: B.steel, fontSize: 24, cursor: 'pointer', padding: 4 }}>✕</button>
-          </div>
-
-          {/* Profile */}
-          {profile && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: `1px solid ${B.border}` }}>
-              <Avatar profile={profile} size={40} />
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 15, fontWeight: 600, color: B.ice }}>{profile.name}</span>
-                  <span style={{ fontSize: 9, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '0.08em', textTransform: 'uppercase', background: roleColor + '33', color: roleColor, padding: '2px 6px', borderRadius: 4 }}>{roleLabel}</span>
-                </div>
-                <div style={{ fontSize: 12, color: B.steel }}>@{profile.handle}</div>
-              </div>
-            </div>
-          )}
-
-          {/* Role-based menu sections — same items as the desktop dropdown */}
-          {profile && (
-            <div style={{ padding: '8px 12px', borderBottom: `1px solid ${B.border}` }}>
-              {roleSections.map(section => (
-                <div key={section.label} style={{ marginBottom: 6 }}>
-                  <div style={{ padding: '8px 12px 4px', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: B.steel, textTransform: 'uppercase', fontFamily: "'Barlow Condensed', sans-serif" }}>{section.label}</div>
-                  {section.items.map(item => (
-                    <Link key={item.path} to={item.path} onClick={() => setMenuOpen(false)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '11px 12px', borderRadius: 10, textDecoration: 'none', color: B.ice, fontSize: 15 }}>
-                      <span style={{ fontSize: 18 }}>{item.icon}</span>
-                      <span>{item.label}</span>
-                    </Link>
-                  ))}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* All nav items */}
-          <nav style={{ padding: '8px 12px', flex: 1 }}>
-            {NAV.map(item => {
-              const active = isActive(item);
-              return (
-                <Link key={item.path} to={item.path}
-                  onClick={() => setMenuOpen(false)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 12px', borderRadius: 10, marginBottom: 2, textDecoration: 'none', background: active ? B.blue + '33' : 'transparent', color: active ? B.ice : B.steel, fontWeight: active ? 600 : 400, fontSize: 16, position: 'relative' }}>
-                  {active && <div style={{ position: 'absolute', left: 0, top: '20%', bottom: '20%', width: 3, background: B.red, borderRadius: '0 3px 3px 0' }} />}
-                  <NavIcon item={item} size={24} />
-                  <span>{item.label}</span>
-                  {item.badge && (
-                    <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '0.08em', background: B.border, color: B.steel, padding: '2px 6px', borderRadius: 3 }}>{item.badge}</span>
-                  )}
-                </Link>
-              );
-            })}
-          </nav>
-
-          {/* Settings + Install + sign out */}
-          <div style={{ padding: '12px 16px', borderTop: `1px solid ${B.border}` }}>
-            <Link to="/settings" onClick={() => setMenuOpen(false)}
-              style={{ width: '100%', padding: '11px', borderRadius: 8, background: 'transparent', border: `1px solid ${B.border}`, color: B.ice, fontSize: 14, cursor: 'pointer', fontFamily: "'Barlow', sans-serif", marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, textDecoration: 'none', boxSizing: 'border-box' }}>
-              <span>⚙️</span><span>Settings</span>
-            </Link>
-            <InstallButton onAction={() => setMenuOpen(false)} />
-            <button onClick={handleSignOut} style={{ width: '100%', padding: '11px', borderRadius: 8, background: 'transparent', border: `1px solid ${B.border}`, color: B.steel, fontSize: 14, cursor: 'pointer', fontFamily: "'Barlow', sans-serif", marginTop: 8 }}>
-              Sign Out
-            </button>
-            <div style={{ marginTop: 10, display: 'flex', gap: 12 }}>
-              <Link to="/privacy" onClick={() => setMenuOpen(false)} style={{ fontSize: 11, color: B.border, textDecoration: 'none' }}>Privacy</Link>
-              <Link to="/terms" onClick={() => setMenuOpen(false)} style={{ fontSize: 11, color: B.border, textDecoration: 'none' }}>Terms</Link>
-              <span style={{ fontSize: 11, color: B.border }}>© 2026 Rinkd LLC</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ─── MOBILE BOTTOM NAV (quick access) ─── */}
+      {/* ─── MOBILE BOTTOM NAV ─── */}
+      {/* Same 5 items as desktop. No more hamburger — "More" drawer covers everything. */}
       <nav style={{ display: 'none', position: 'fixed', bottom: 0, left: 0, right: 0, background: B.navy, borderTop: `1px solid ${B.border}`, zIndex: 200, padding: '8px 0 max(8px, env(safe-area-inset-bottom))' }} className="mobile-nav">
         <div style={{ display: 'flex', justifyContent: 'space-around' }}>
-          {BOTTOM_NAV.map(item => {
-            const active = isActive(item);
-            return (
-              <Link key={item.path} to={item.path}
-                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '4px 8px', textDecoration: 'none', color: active ? B.ice : B.steel, minWidth: 50 }}>
-                <NavIcon item={item} size={22} />
-                <span style={{ fontSize: 10, fontWeight: active ? 600 : 400 }}>{item.label}</span>
-                {active && <div style={{ width: 4, height: 4, borderRadius: '50%', background: B.red }} />}
-              </Link>
-            );
-          })}
-          {/* Hamburger as 5th item */}
-          <button onClick={() => setMenuOpen(true)}
-            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '4px 8px', background: 'none', border: 'none', cursor: 'pointer', color: B.steel, minWidth: 50 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', marginBottom: 2 }}>
-              <div style={{ width: 18, height: 2, background: B.steel, borderRadius: 2 }} />
-              <div style={{ width: 18, height: 2, background: B.steel, borderRadius: 2 }} />
-              <div style={{ width: 18, height: 2, background: B.steel, borderRadius: 2 }} />
+          {NAV.map(item => (
+            <div key={item.path}>
+              {renderNavLink(item, { size: 22, isVertical: true, active: !item.isMore && isActive(item) })}
             </div>
-            <span style={{ fontSize: 10, fontWeight: 400 }}>More</span>
-          </button>
+          ))}
         </div>
       </nav>
+
+      {/* More drawer */}
+      <MoreDrawer open={moreOpen} onClose={() => setMoreOpen(false)} userId={profile?.id} onSignOut={handleSignOut} />
 
       <style>{`
         @media (max-width: 768px) {
@@ -331,7 +196,6 @@ export default function Layout({ children, profile }) {
           .main-content { margin-left: 0 !important; padding-top: 52px; padding-bottom: 72px; }
           .mobile-topbar { display: flex !important; }
           .mobile-nav { display: block !important; }
-          .mobile-menu-open { display: flex !important; }
         }
       `}</style>
 
@@ -341,6 +205,42 @@ export default function Layout({ children, profile }) {
   );
 }
 
+/**
+ * Tiny inline component that shows the unread-count red dot on the
+ * Notifications nav item. Mounted only when there's a logged-in user.
+ */
+function BellBadge({ userId }) {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { getUnreadCount, subscribe } = await import('../lib/notifications');
+        const refresh = async () => {
+          const c = await getUnreadCount();
+          if (!cancelled) setCount(c);
+        };
+        refresh();
+        const interval = setInterval(refresh, 45_000);
+        const unsub = subscribe(userId, refresh);
+        return () => { clearInterval(interval); unsub(); };
+      } catch { /* swallow */ }
+    })();
+    return () => { cancelled = true; };
+  }, [userId]);
+  if (!count) return null;
+  return (
+    <span style={{
+      position: 'absolute', top: -4, right: -6,
+      background: B.red, color: '#fff',
+      minWidth: 14, height: 14, borderRadius: 999,
+      padding: '0 3px', fontSize: 9, fontWeight: 700,
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      border: `2px solid ${B.navy}`, lineHeight: 1,
+    }}>{count > 99 ? '99+' : count}</span>
+  );
+}
+
 const BRAND_COLORS = B;
 export { BRAND_COLORS };
-

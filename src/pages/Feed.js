@@ -7,6 +7,7 @@ import PushPrompt from '../components/PushPrompt';
 import { track } from '../lib/analytics';
 import { FeedSkeleton, EmptyState } from '../components/Skeletons';
 import { classifyImage } from '../lib/imageModeration';
+import RinksideFeaturedCard from '../components/RinksideFeaturedCard';
 
 const TAGS = [
   { label: 'Goal Alert', color: '#D72638' },
@@ -160,7 +161,9 @@ export default function Feed({ currentUser, profile }) {
   const [content, setContent] = useState('');
   const [selectedTag, setSelectedTag] = useState(null);
   const [posting, setPosting] = useState(false);
-  const [tab, setTab] = useState('foryou');
+  // 4D.5-3: default to "following" so new users see signal, not noise.
+  // "For You" is still available as a secondary tab for discovery.
+  const [tab, setTab] = useState('following');
   const [livebarnId, setLivebarnId] = useState('');
   const [mediaFile, setMediaFile] = useState(null);
   const [mediaPreview, setMediaPreview] = useState(null);
@@ -244,7 +247,7 @@ export default function Feed({ currentUser, profile }) {
         <PushPrompt userId={currentUser?.id} />
         
         <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: C.navy, borderRadius: 10, padding: 4, border: `1px solid ${C.border}` }}>
-          {[{ id: 'foryou', label: 'For You' }, { id: 'following', label: 'Following' }, { id: 'leagues', label: 'Leagues' }].map(t => (
+          {[{ id: 'following', label: 'Following' }, { id: 'foryou', label: 'For You' }, { id: 'leagues', label: 'Leagues' }].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, padding: '8px', borderRadius: 7, border: 'none', background: tab === t.id ? C.blue : 'transparent', color: tab === t.id ? C.ice : C.steel, fontFamily: "'Barlow', sans-serif", fontWeight: tab === t.id ? 600 : 400, fontSize: 14, cursor: 'pointer', transition: 'all 0.15s' }}>{t.label}</button>
           ))}
         </div>
@@ -303,6 +306,10 @@ export default function Feed({ currentUser, profile }) {
             )}
           </div>
         )}
+
+        {/* Rinkside Featured Story — surfaces the content brand without forcing
+            it into the primary nav. Dismissable per-session. */}
+        <RinksideFeaturedCard />
 
         {loading ? (
           <FeedSkeleton count={4} />
