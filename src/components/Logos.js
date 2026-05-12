@@ -131,6 +131,57 @@ export function TournamentsNavIcon({ size = 22 }) {
   );
 }
 
+// Chirp — Rinkd's original nav mark for the Feed.
+// The word "CHIRP" flies out of an open beak. Deliberately anti-Twitter:
+// no smooth songbird curves, no rounded blue, no soft serif. This is angular
+// red, italic Barlow Condensed, scoreboard energy. The beak is a wedge
+// (two triangles + an ice-white pupil eye dot). Wordmark is rotated -12°
+// so it feels mid-flight.
+//
+// viewBox is intentionally 2.5:1 (56 × 22). The component supports an `inline`
+// prop — when true (used inside the nav) it renders the FULL wordmark; when
+// false (default), it renders just the beak/eye square (for cases where we
+// need a square block, like a fallback avatar background).
+export function ChirpNavIcon({ size = 22, inline = true }) {
+  if (!inline) {
+    // Compact square version — just the open beak + eye. Used anywhere we
+    // need a 1:1 icon shape (e.g. notifications, settings rows).
+    return (
+      <svg width={size} height={size} viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
+        {/* Upper jaw */}
+        <path d="M2 11 L17 4 L17 10 Z" fill="#D72638"/>
+        {/* Lower jaw (open) */}
+        <path d="M2 11 L17 18 L17 12 Z" fill="#D72638"/>
+        {/* Eye — ice white with navy pupil */}
+        <circle cx="6.5" cy="8.8" r="1.7" fill="#F4F7FA"/>
+        <circle cx="6.5" cy="8.8" r="0.75" fill="#0B1F3A"/>
+      </svg>
+    );
+  }
+  // Full wordmark — word coming out of the open beak. Renders wider than tall.
+  // We scale height to the requested size and let width follow the 2.5:1 ratio.
+  const w = Math.round(size * 2.5);
+  return (
+    <svg width={w} height={size} viewBox="0 0 56 22" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
+      {/* Upper jaw of the beak */}
+      <path d="M0 11 L13 5 L13 10 Z" fill="#D72638"/>
+      {/* Lower jaw of the beak — opened to let the word fly out */}
+      <path d="M0 11 L13 17 L13 12 Z" fill="#D72638"/>
+      {/* Eye — ice white with navy pupil. Sits on the upper jaw. */}
+      <circle cx="4" cy="9" r="1.4" fill="#F4F7FA"/>
+      <circle cx="4" cy="9" r="0.6" fill="#0B1F3A"/>
+      {/* The chirp itself — the word flying out, rotated like it's mid-air */}
+      <text x="14" y="14"
+        fontFamily="'Barlow Condensed', 'Arial Black', sans-serif"
+        fontStyle="italic" fontWeight="900"
+        fontSize="15"
+        fill="#D72638"
+        transform="rotate(-12, 14, 14)"
+        letterSpacing="0.4">CHIRP</text>
+    </svg>
+  );
+}
+
 export function TierBadge({ tier, size = 'sm' }) {
   const colors = { Mite:'#8BA3BE',Squirt:'#22C55E',Peewee:'#0EA5E9',Bantam:'#F59E0B',Midget:'#8B5CF6',Junior:'#D72638',Pro:'#F4F7FA' };
   const color = colors[tier]||'#8BA3BE';

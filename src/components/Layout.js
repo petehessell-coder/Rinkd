@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { RinkdLogo, Avatar, ProfileNavIcon } from './Logos';
+import { RinkdLogo, Avatar, ProfileNavIcon, ChirpNavIcon } from './Logos';
 import { signOut } from '../lib/auth';
 import NotificationBell from './NotificationBell';
 import HelpButton from './HelpButton';
@@ -24,7 +24,7 @@ const B = {
 // ============================================================================
 
 const NAV = [
-  { path: '/feed',          icon: '🏒',  label: 'Feed' },
+  { path: '/feed',          IconNode: ChirpNavIcon, iconProps: { inline: false }, label: 'Chirps' },
   { path: '/teams',         icon: '👥',  label: 'Teams' },
   { path: '/notifications', icon: '🔔',  label: 'Notifications', showBadge: true },
   { path: '/profile',       IconNode: ProfileNavIcon, label: 'Profile' },
@@ -40,7 +40,9 @@ function NavIcon({ item, size }) {
   }
   if (item.IconNode) {
     const Icon = item.IconNode;
-    return <Icon size={size} />;
+    // iconProps lets a nav entry pass component-specific options (e.g. the
+    // Chirp icon supports an `inline` prop that toggles wordmark vs. square).
+    return <Icon size={size} {...(item.iconProps || {})} />;
   }
   return <span style={{ fontSize: size, lineHeight: 1 }}>{item.icon}</span>;
 }

@@ -84,7 +84,7 @@ export default function NotificationsPage({ currentUser, profile }) {
               icon="🔔"
               title={filter === 'unread' ? 'All caught up' : 'No notifications yet'}
               body={filter === 'unread' ? 'You\'ve read everything. Go drop a goal.' : 'When teammates like your posts, comment, follow you, or your team has a game coming up, you\'ll see it here.'}
-              cta={{ label: 'Back to Feed', onClick: () => navigate('/feed') }}
+              cta={{ label: 'Back to Chirps', onClick: () => navigate('/feed') }}
             />
           ) : (
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>

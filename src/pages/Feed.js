@@ -227,7 +227,12 @@ export default function Feed({ currentUser, profile }) {
       mediaUrl = url; mediaType = mt; setUploadProgress(80);
     }
     await createPost(currentUser.id, { content: content.trim(), tag: selectedTag?.label || null, tagColor: selectedTag?.color || null, mediaUrl, mediaType, livebarnVenueId: livebarnId.trim() || null });
-    track('post_created', { has_media: !!mediaUrl, media_type: mediaType, tag: selectedTag?.label, scope: 'global', livebarn: !!livebarnId.trim() });
+    // Fire both events during the rename window. `post_created` keeps historical
+    // continuity in dashboards; `chirp_created` is the going-forward name and
+    // will become canonical once we backfill old data and retire the legacy event.
+    const eventProps = { has_media: !!mediaUrl, media_type: mediaType, tag: selectedTag?.label, scope: 'global', livebarn: !!livebarnId.trim() };
+    track('post_created', eventProps);
+    track('chirp_created', eventProps);
     setContent(''); setSelectedTag(null); setLivebarnId(''); removeMedia(); setComposerOpen(false); setUploadProgress(0);
     await load(); setPosting(false);
   };
@@ -242,7 +247,7 @@ export default function Feed({ currentUser, profile }) {
   return (
     <Layout profile={profile}>
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '24px 16px' }}>
-        <h1 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 32, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.02em', marginBottom: 20 }}>Feed</h1>
+        <h1 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 32, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.02em', marginBottom: 20 }}>Chirps</h1>
 
         {/* Beta banner — sets expectations for new public testers. Disable later
             via REACT_APP_BETA_BANNER=0 once we exit beta. */}
@@ -281,14 +286,14 @@ export default function Feed({ currentUser, profile }) {
             {!composerOpen ? (
               <button onClick={() => setComposerOpen(true)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer' }}>
                 <Avatar profile={profile} size={36} />
-                <span style={{ flex: 1, color: C.steel, fontSize: 15, fontFamily: "'Barlow', sans-serif", textAlign: 'left' }}>What's happening on the ice?</span>
-                <span style={{ padding: '6px 14px', borderRadius: 8, background: C.red, color: 'white', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 13 }}>POST</span>
+                <span style={{ flex: 1, color: C.steel, fontSize: 15, fontFamily: "'Barlow', sans-serif", textAlign: 'left' }}>What's the chirp?</span>
+                <span style={{ padding: '6px 14px', borderRadius: 8, background: C.red, color: 'white', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 13 }}>CHIRP</span>
               </button>
             ) : (
               <form onSubmit={handlePost} style={{ padding: '14px 16px' }}>
                 <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
                   <Avatar profile={profile} size={36} />
-                  <textarea value={content} onChange={e => setContent(e.target.value)} placeholder="What's happening on the ice?" maxLength={500} rows={3} autoFocus
+                  <textarea value={content} onChange={e => setContent(e.target.value)} placeholder="What's the chirp?" maxLength={500} rows={3} autoFocus
                     style={{ flex: 1, padding: '10px 12px', borderRadius: 10, background: C.navy, border: `1.5px solid ${C.blue}`, color: C.ice, fontSize: 15, outline: 'none', resize: 'none', fontFamily: "'Barlow', sans-serif", lineHeight: 1.5 }}/>
                 </div>
                 {mediaPreview && (
@@ -322,7 +327,7 @@ export default function Feed({ currentUser, profile }) {
                     <button type="button" onClick={() => { setComposerOpen(false); removeMedia(); }} style={{ padding: '8px 16px', borderRadius: 8, background: 'transparent', border: `1px solid ${C.border}`, color: C.steel, fontFamily: "'Barlow', sans-serif", cursor: 'pointer', fontSize: 13 }}>Cancel</button>
                     <button type="submit" disabled={(!content.trim() && !mediaFile) || posting}
                       style={{ padding: '8px 20px', borderRadius: 8, background: (content.trim() || mediaFile) ? C.red : C.border, color: 'white', border: 'none', cursor: 'pointer', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 15, letterSpacing: '0.05em' }}>
-                      {posting ? 'Posting...' : 'Post It →'}
+                      {posting ? 'Chirping...' : 'Drop a Chirp →'}
                     </button>
                   </div>
                 </div>
@@ -340,9 +345,9 @@ export default function Feed({ currentUser, profile }) {
         ) : posts.length === 0 ? (
           <EmptyState
             icon="🏒"
-            title={tab === 'following' ? 'Your following feed is quiet' : 'No posts yet'}
-            body={tab === 'following' ? 'Follow some players and teams to see their highlights and updates here.' : 'Be the first to drop something on the ice. Photos, video clips, goal alerts — all welcome.'}
-            cta={tab === 'following' ? { label: 'Discover Players', onClick: () => navigate('/discover') } : { label: 'Drop a Post', onClick: () => setComposerOpen(true) }}
+            title={tab === 'following' ? 'Your following feed is quiet' : 'No chirps yet'}
+            body={tab === 'following' ? 'Follow some players and teams to see their highlights and updates here.' : 'Be the first to chirp. Photos, video clips, goal alerts, locker-room takes — all welcome.'}
+            cta={tab === 'following' ? { label: 'Discover Players', onClick: () => navigate('/discover') } : { label: 'Drop a Chirp', onClick: () => setComposerOpen(true) }}
           />
         ) : posts.map(post => (
           <PostCard key={post.id} post={post} currentUser={currentUser} likedPosts={likedPosts} onLike={handleLike} onComment={load} />
