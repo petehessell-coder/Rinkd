@@ -244,6 +244,30 @@ export default function Feed({ currentUser, profile }) {
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '24px 16px' }}>
         <h1 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 32, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.02em', marginBottom: 20 }}>Feed</h1>
 
+        {/* Beta banner — sets expectations for new public testers. Disable later
+            via REACT_APP_BETA_BANNER=0 once we exit beta. */}
+        {process.env.REACT_APP_BETA_BANNER !== '0' && (
+          <div style={{
+            background: 'rgba(245,158,11,0.12)',
+            border: '1px solid rgba(245,158,11,0.35)',
+            borderRadius: 10,
+            padding: '10px 14px',
+            marginBottom: 14,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            fontSize: 13,
+            color: C.ice,
+            lineHeight: 1.5,
+          }}>
+            <span style={{ fontSize: 18, flexShrink: 0 }}>🚧</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ color: '#F59E0B', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: 11, marginRight: 6 }}>Public beta</span>
+              Expect some rough edges. Tap the <strong style={{ color: '#fff' }}>❓</strong> button anywhere to report bugs or share ideas.
+            </div>
+          </div>
+        )}
+
         <PushPrompt userId={currentUser?.id} />
         
         <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: C.navy, borderRadius: 10, padding: 4, border: `1px solid ${C.border}` }}>

@@ -53,6 +53,26 @@ export async function signUp({ email, password, name, handle, position, level, d
     console.warn('[signUp] linkPendingInvitesForUser threw:', e?.message || e);
   }
 
+  // Auto-follow the top 3 active users so the new user's Following feed isn't
+  // empty on landing. Quiet failure — signup succeeds regardless. These follows
+  // can be unfollowed at any time from the followed user's profile.
+  try {
+    const { data: topUsers } = await supabase
+      .from('profiles')
+      .select('id')
+      .neq('id', userId)
+      .order('points', { ascending: false, nullsFirst: false })
+      .limit(3);
+    if (topUsers?.length) {
+      await supabase.from('follows').insert(
+        topUsers.map((u) => ({ follower_id: userId, following_id: u.id }))
+      );
+    }
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[signUp] auto-follow seeded users failed:', e?.message || e);
+  }
+
   return { data, error: null };
 }
 
