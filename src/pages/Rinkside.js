@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
+import SEO from '../components/SEO';
 import { listArticles, listCategories } from '../lib/rinkside';
 import { useUserRole } from '../lib/userRole';
+import { CardGridSkeleton, EmptyState } from '../components/Skeletons';
 
 const C = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
@@ -112,6 +114,12 @@ export default function Rinkside({ currentUser, profile }) {
 
   return (
     <Layout profile={profile} currentPage="rinkside">
+      <SEO
+        title="Rinkside · Daily hockey reporting"
+        description="Features, training, and community storytelling from the Rinkd editorial team. The hockey magazine built for the rest of us."
+        image="https://rinkd.app/rinkside-logo.png"
+        url="https://rinkd.app/rinkside"
+      />
       <div style={{ background: C.dark, minHeight: '100vh', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>
         <div style={{ maxWidth: 1080, margin: '0 auto', padding: '24px 16px 60px' }}>
           {/* Hero */}
@@ -153,12 +161,16 @@ export default function Rinkside({ currentUser, profile }) {
           )}
 
           {loading ? (
-            <div style={{ textAlign: 'center', color: C.steel, padding: '40px 0' }}>Loading articles…</div>
+            <CardGridSkeleton count={6} />
           ) : articles.length === 0 ? (
-            <div style={{ textAlign: 'center', color: C.steel, padding: '40px 0' }}>
-              <div style={{ fontSize: 40, marginBottom: 10 }}>📰</div>
-              No articles yet — check back soon.
-            </div>
+            <EmptyState
+              icon="📰"
+              title={activeCategory ? `No ${activeCategory} stories yet` : 'The presses are warming up'}
+              body={activeCategory ? 'Try another category or take a look at everything we\'ve published so far.' : 'Rinkside articles are dropping soon. In the meantime, help us shape what we cover.'}
+              cta={activeCategory
+                ? { label: 'See All Articles', onClick: () => setActiveCategory(null) }
+                : { label: 'Take the Survey', onClick: () => window.open('https://rinkd.app/survey', '_blank') }}
+            />
           ) : (
             <>
               {featured && <FeatureCard a={featured} onOpen={() => navigate(`/rinkside/${featured.slug}`)} />}

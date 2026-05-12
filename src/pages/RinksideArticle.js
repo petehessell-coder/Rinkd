@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { getArticleBySlug, incrementView, renderMarkdown } from '../lib/rinkside';
 import { useUserRole } from '../lib/userRole';
+import { track } from '../lib/analytics';
+import SEO from '../components/SEO';
 
 const C = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
@@ -26,7 +28,10 @@ export default function RinksideArticle({ currentUser, profile }) {
       const { data } = await getArticleBySlug(slug);
       setArticle(data);
       setLoading(false);
-      if (data?.id) incrementView(data.id);
+      if (data?.id) {
+        incrementView(data.id);
+        track('article_read', { slug: data.slug, title: data.title, category: data.category });
+      }
     })();
   }, [slug]);
 
@@ -53,6 +58,13 @@ export default function RinksideArticle({ currentUser, profile }) {
 
   return (
     <Layout profile={profile} currentPage="rinkside">
+      <SEO
+        title={article.title}
+        description={article.subtitle || `${article.author_name || 'Rinkside'} · Rinkd hockey reporting and features`}
+        image={article.hero_image_url}
+        type="article"
+        url={`https://rinkd.app/rinkside/${article.slug}`}
+      />
       <div style={{ background: C.dark, minHeight: '100vh', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>
         {/* Hero */}
         {article.hero_image_url && (

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RinkdLogo, Wordmark } from '../components/Logos';
 import { signIn, signUp } from '../lib/auth';
+import { track } from '../lib/analytics';
 import DownloadCTA from '../components/DownloadCTA';
 
 const C = {
@@ -73,8 +74,8 @@ export default function Auth() {
     setLoading(true); setError('');
     const { error: err } = await signIn({ email: form.email, password: form.password });
     setLoading(false);
-    if (err) setError(err.message);
-    else navigate('/feed');
+    if (err) { track('login_failed', { reason: err.message?.slice(0, 80) }); setError(err.message); }
+    else { track('login_success'); navigate('/feed'); }
   };
 
   const handleSignup = async (e) => {
@@ -84,9 +85,13 @@ export default function Auth() {
     const { error: err } = await signUp(form);
     setLoading(false);
     if (err) {
+      track('signup_failed', { reason: err.message?.slice(0, 80) });
       if (err.message?.includes('13')) setMode('coppa');
       else setError(err.message);
-    } else navigate('/feed');
+    } else {
+      track('signup_success', { position: form.position, level: form.level });
+      navigate('/feed');
+    }
   };
 
   return (

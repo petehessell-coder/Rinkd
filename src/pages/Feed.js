@@ -4,6 +4,8 @@ import Layout, { BRAND_COLORS as C } from '../components/Layout';
 import { Avatar, TierBadge } from '../components/Logos';
 import { getPosts, getFollowingPosts, createPost, toggleLike, getLikedPosts, getComments, createComment, uploadMedia, timeAgo } from '../lib/posts';
 import PushPrompt from '../components/PushPrompt';
+import { track } from '../lib/analytics';
+import { FeedSkeleton, EmptyState } from '../components/Skeletons';
 
 const TAGS = [
   { label: 'Goal Alert', color: '#D72638' },
@@ -149,6 +151,7 @@ function PostCard({ post, currentUser, likedPosts, onLike, onComment }) {
 }
 
 export default function Feed({ currentUser, profile }) {
+  const navigate = useNavigate();
   const [posts, setPosts] = useState([]);
   const [likedPosts, setLikedPosts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -209,6 +212,7 @@ export default function Feed({ currentUser, profile }) {
       mediaUrl = url; mediaType = mt; setUploadProgress(80);
     }
     await createPost(currentUser.id, { content: content.trim(), tag: selectedTag?.label || null, tagColor: selectedTag?.color || null, mediaUrl, mediaType, livebarnVenueId: livebarnId.trim() || null });
+    track('post_created', { has_media: !!mediaUrl, media_type: mediaType, tag: selectedTag?.label, scope: 'global', livebarn: !!livebarnId.trim() });
     setContent(''); setSelectedTag(null); setLivebarnId(''); removeMedia(); setComposerOpen(false); setUploadProgress(0);
     await load(); setPosting(false);
   };
@@ -289,12 +293,14 @@ export default function Feed({ currentUser, profile }) {
         )}
 
         {loading ? (
-          <div style={{ textAlign: 'center', color: C.steel, padding: '48px 0', fontSize: 15 }}>Loading...</div>
+          <FeedSkeleton count={4} />
         ) : posts.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '60px 24px', color: C.steel }}>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>🏒</div>
-            <p>{tab === 'following' ? 'Follow some players to see their posts here.' : 'No posts yet. Be the first to drop something on the ice.'}</p>
-          </div>
+          <EmptyState
+            icon="🏒"
+            title={tab === 'following' ? 'Your following feed is quiet' : 'No posts yet'}
+            body={tab === 'following' ? 'Follow some players and teams to see their highlights and updates here.' : 'Be the first to drop something on the ice. Photos, video clips, goal alerts — all welcome.'}
+            cta={tab === 'following' ? { label: 'Discover Players', onClick: () => navigate('/discover') } : { label: 'Drop a Post', onClick: () => setComposerOpen(true) }}
+          />
         ) : posts.map(post => (
           <PostCard key={post.id} post={post} currentUser={currentUser} likedPosts={likedPosts} onLike={handleLike} onComment={load} />
         ))}

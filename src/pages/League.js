@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
+import SEO from '../components/SEO';
 import MapLink from '../components/MapLink';
 import { getLeague, getLeagueTeams, getLeagueGames, getLeagueStandings, getUserLeagueRole } from '../lib/leagues';
 
@@ -156,6 +157,11 @@ export default function LeaguePage({ profile }) {
 
   return (
     <Layout profile={profile}>
+      <SEO
+        title={`${league.name}${league.division ? ' · ' + league.division : ''}`}
+        description={`${league.name} on Rinkd. Live standings, full schedule, and team pages for the ${league.division || 'league'}.`}
+        url={`https://rinkd.app/league/${league.id}`}
+      />
       <div style={{ background: C.dark, minHeight: '100vh', fontFamily: 'Barlow, sans-serif', color: C.ice }}>
 
         {/* BANNER */}

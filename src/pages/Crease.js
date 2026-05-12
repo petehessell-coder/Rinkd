@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
+import SEO from '../components/SEO';
+import { CardGridSkeleton, EmptyState } from '../components/Skeletons';
 import { listShows, hasCreaseAccess } from '../lib/crease';
 
 const C = {
@@ -67,6 +69,12 @@ export default function CreasePage({ currentUser, profile }) {
 
   return (
     <Layout profile={profile} currentPage="crease">
+      <SEO
+        title="Crease · Original hockey shows"
+        description="Long-form interviews, locker-room debates, and the conversations the league won't have anywhere else. Crease is the premium content layer of Rinkd."
+        image="https://rinkd.app/crease-logo.png"
+        url="https://rinkd.app/crease"
+      />
       <div style={{ background: C.dark, minHeight: '100vh', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>
         <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px 60px' }}>
           {/* Hero */}
@@ -99,9 +107,14 @@ export default function CreasePage({ currentUser, profile }) {
           </div>
 
           {loading ? (
-            <div style={{ textAlign: 'center', color: C.steel, padding: '40px 0' }}>Loading shows…</div>
+            <CardGridSkeleton count={4} />
           ) : shows.length === 0 ? (
-            <div style={{ textAlign: 'center', color: C.steel, padding: '40px 0' }}>No shows yet — check back soon.</div>
+            <EmptyState
+              icon="🎬"
+              title="Crease is loading the schedule"
+              body="Original shows are dropping soon. Join the early-access list and we'll let you know the moment episode one is live."
+              cta={{ label: 'Join Early Access', onClick: () => { window.location.href = 'mailto:hello@rinkd.app?subject=Crease%20Early%20Access'; } }}
+            />
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
               {shows.map((s) => (

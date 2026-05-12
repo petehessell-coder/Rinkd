@@ -7,6 +7,7 @@ import MapLink from '../components/MapLink';
 import CalendarButton from '../components/CalendarButton';
 import LineupModal from '../components/LineupModal';
 import TeamFeed from '../components/TeamFeed';
+import SEO from '../components/SEO';
 import { buildIcsMulti, downloadIcs } from '../lib/ics';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
@@ -197,6 +198,11 @@ export default function TeamPage({ currentUser, profile }) {
 
   return (
     <Layout profile={profile}>
+      <SEO
+        title={`${team.name}${team.level ? ' · ' + team.level : ''}`}
+        description={`${team.name} — ${members.length} player${members.length === 1 ? '' : 's'}${team.home_rink ? ` · ${team.home_rink}` : ''}. Follow schedule, lineups, and roster on Rinkd.`}
+        url={`https://rinkd.app/team/${team.id}`}
+      />
       <div style={{ background: C.dark, minHeight: '100vh', fontFamily: 'Barlow, sans-serif', color: C.ice }}>
 
         {/* TEAM BANNER */}

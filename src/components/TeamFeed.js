@@ -5,6 +5,8 @@ import {
   getTeamPosts, createPost, toggleLike, getLikedPosts,
   getComments, createComment, uploadMedia, timeAgo,
 } from '../lib/posts';
+import { track } from '../lib/analytics';
+import { FeedSkeleton, EmptyState } from './Skeletons';
 
 const C = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
@@ -203,6 +205,7 @@ export default function TeamFeed({ teamId, currentUser, isMember }) {
       teamId,
     });
     if (error) { setPosting(false); alert('Failed to post. Try again.'); return; }
+    track('post_created', { has_media: !!mediaUrl, media_type: mediaType, tag: selectedTag?.label, scope: 'team', team_id: teamId });
     setContent(''); setSelectedTag(null); removeMedia(); setComposerOpen(false);
     await load(); setPosting(false);
   };
@@ -269,14 +272,14 @@ export default function TeamFeed({ teamId, currentUser, isMember }) {
 
       {/* POSTS */}
       {loading ? (
-        <div style={{ textAlign: 'center', color: C.steel, padding: '40px 0', fontSize: 14 }}>Loading…</div>
+        <FeedSkeleton count={2} />
       ) : posts.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '40px 24px', color: C.steel }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>📣</div>
-          <p style={{ fontSize: 14, lineHeight: 1.5, margin: 0 }}>
-            {isMember ? 'Nothing here yet. Be the first to share with the team.' : 'No team posts yet.'}
-          </p>
-        </div>
+        <EmptyState
+          icon="📣"
+          title={isMember ? 'Nothing here yet' : 'No team posts yet'}
+          body={isMember ? 'Be the first to share with the team — practice notes, game recaps, locker-room hype.' : 'When the team starts sharing updates, they\'ll show up here.'}
+          cta={isMember && currentUser ? { label: 'Drop a Post', onClick: () => setComposerOpen(true) } : null}
+        />
       ) : posts.map(post => (
         <PostCard key={post.id} post={post} currentUser={currentUser}
           isLiked={likedPosts.includes(post.id)} onLike={onLike}

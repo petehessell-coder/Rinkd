@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { track } from '../lib/analytics';
 
 const C = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
@@ -17,6 +18,11 @@ const C = {
  */
 export default function CreasePaywall({ episodeTitle, showTitle, compact = false }) {
   const paymentsLive = process.env.REACT_APP_CREASE_PAYMENTS_LIVE === '1';
+
+  // Fire once per mount — gives us conversion-funnel data even before payments are live.
+  useEffect(() => {
+    track('crease_paywall_shown', { show: showTitle, episode: episodeTitle, payments_live: paymentsLive, compact });
+  }, [showTitle, episodeTitle, paymentsLive, compact]);
   const checkoutUrl = paymentsLive
     ? (process.env.REACT_APP_CREASE_CHECKOUT_URL || 'mailto:hello@rinkd.app?subject=Crease%20Premium')
     : 'mailto:hello@rinkd.app?subject=Crease%20Early%20Access&body=Count%20me%20in%20when%20Crease%20launches.';
@@ -92,7 +98,7 @@ export default function CreasePaywall({ episodeTitle, showTitle, compact = false
         </div>
       )}
 
-      <a href={checkoutUrl}
+      <a href={checkoutUrl} onClick={() => track('crease_subscribe_clicked', { show: showTitle, episode: episodeTitle, payments_live: paymentsLive })}
         style={{
           display: 'inline-block',
           background: C.red,
