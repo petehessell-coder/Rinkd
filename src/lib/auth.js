@@ -74,13 +74,24 @@ export async function getProfile(userId) {
 }
 
 export async function updateProfile(userId, updates) {
-  // Filter only allowed fields to prevent freezing from invalid data
-  const allowed = ['name', 'bio', 'position', 'level', 'home_rink', 'handle'];
+  // Whitelist of fields a user may write to their own profile. Adding to this
+  // list is how we enable new editable surfaces (avatar, cover, etc.).
+  // Sensitive columns (points, tier, is_premium, welcome_seen, etc.) are
+  // intentionally excluded — those are set server-side via triggers, admin
+  // tools, or Stripe webhooks.
+  const allowed = [
+    'name', 'bio', 'position', 'level', 'home_rink', 'handle',
+    'avatar_url', 'avatar_color', 'avatar_initials', 'cover_image_url',
+  ];
   const filtered = {};
   for (const key of allowed) {
     if (updates[key] !== undefined) filtered[key] = updates[key];
   }
-  
+
+  if (Object.keys(filtered).length === 0) {
+    return { data: null, error: { message: 'No editable fields provided' } };
+  }
+
   const { data, error } = await supabase
     .from('profiles')
     .update(filtered)
