@@ -37,6 +37,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
   const [pushLoading, setPushLoading] = useState(false);
   const [activity, setActivity] = useState([]);
   const [coverUploading, setCoverUploading] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
   useEffect(() => {
     isPushSubscribed().then(setPushEnabled);
@@ -115,6 +116,25 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
     track('cover_photo_uploaded');
   };
 
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentUser) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert(`Avatar is ${(file.size / 1024 / 1024).toFixed(1)}MB — max 5MB.`);
+      e.target.value = '';
+      return;
+    }
+    setAvatarUploading(true);
+    const { url, error } = await uploadMedia(file, currentUser.id);
+    if (error || !url) { setAvatarUploading(false); alert('Upload failed. Try again.'); return; }
+    const { error: uErr } = await updateProfile(currentUser.id, { avatar_url: url });
+    setAvatarUploading(false);
+    if (uErr) { alert('Save failed: ' + uErr.message); return; }
+    setProfile((p) => ({ ...p, avatar_url: url }));
+    onProfileUpdate?.({ ...profile, avatar_url: url });
+    track('avatar_uploaded');
+  };
+
   const handleFollow = async () => {
     if (!currentUser || isOwnProfile) return;
     track(following ? 'unfollow' : 'follow', { target_user_id: profileId });
@@ -188,7 +208,25 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
               </>
             )}
             <div style={{ position: 'absolute', bottom: -28, left: 20 }}>
-              <Avatar profile={profile} size={72} />
+              {isOwnProfile ? (
+                <>
+                  <input id="avatar-upload" type="file" accept="image/*" onChange={handleAvatarUpload} style={{ display: 'none' }} />
+                  <label htmlFor="avatar-upload" title="Change profile picture"
+                    style={{ cursor: 'pointer', display: 'inline-block', position: 'relative' }}>
+                    <Avatar profile={profile} size={72} />
+                    <span style={{
+                      position: 'absolute', right: -2, bottom: -2,
+                      width: 24, height: 24, borderRadius: '50%',
+                      background: avatarUploading ? C.border : C.red, color: '#fff',
+                      border: '2px solid #07111F',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 12, lineHeight: 1,
+                    }}>{avatarUploading ? '…' : '📷'}</span>
+                  </label>
+                </>
+              ) : (
+                <Avatar profile={profile} size={72} />
+              )}
             </div>
           </div>
           <div style={{ padding: '36px 20px 20px' }}>

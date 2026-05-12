@@ -6,13 +6,9 @@ import RsvpBlock from '../components/RsvpBlock';
 import MapLink from '../components/MapLink';
 import CalendarButton from '../components/CalendarButton';
 import { LedR } from '../components/Logos';
+import { getLiveBarnUrl } from '../lib/livebarn';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
-
-function getLiveBarnUrl(venueId) {
-  if (!venueId) return null;
-  return `https://watch.livebarn.com/en/videoplayer?venueid=${venueId}&referrer=rinkd&promo=RINKD10`;
-}
 
 function LiveBarnWordmark({ dark = false }) {
   const liveColor = dark ? '#2E6DB4' : '#5a9fd4';
@@ -159,8 +155,8 @@ export default function GameDetail({ profile }) {
     return r.replace(/\b\w/g, c => c.toUpperCase());
   })();
   const venueId = game.live_barn_venue_id || game.rink?.live_barn_venue_id;
-  const hasStream = !!venueId && game.status !== 'final';
   const liveBarnUrl = getLiveBarnUrl(venueId);
+  const hasStream = !!liveBarnUrl && game.status !== 'final';  // only real, non-placeholder IDs
   const isLive = game.status === 'live';
   const isFinal = game.status === 'final';
 

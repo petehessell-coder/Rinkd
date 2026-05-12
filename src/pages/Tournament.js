@@ -2,11 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { LedR } from '../components/Logos';
-
-function getLiveBarnUrl(venueId) {
-  if (!venueId) return null;
-  return 'https://watch.livebarn.com/en/videoplayer?venueid=' + venueId + '&referrer=rinkd&promo=RINKD10';
-}
+import { getLiveBarnUrl } from '../lib/livebarn';
 
 
 const TABS = ['Standings','Schedule','Bracket','Info','Feed'];
@@ -181,8 +177,8 @@ export default function TournamentPage({ currentUser }) {
 function GameCard({ game, navigate }) {
   const isLive = game.status === 'live';
   const isFinal = game.status === 'final';
-  const hasStream = !!game.rink?.live_barn_venue_id;
   const url = getLiveBarnUrl(game.rink?.live_barn_venue_id);
+  const hasStream = !!url;  // only "true" when the venue ID is real, not a placeholder
 
   return (
     <div onClick={() => navigate('/game/' + game.id)} style={{background:'#0f2847',border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,padding:'14px 16px',marginBottom:10,cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.border='0.5px solid rgba(46,91,140,0.8)'} onMouseLeave={e=>e.currentTarget.style.border='0.5px solid rgba(46,91,140,0.4)'}>

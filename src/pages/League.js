@@ -5,12 +5,7 @@ import SEO from '../components/SEO';
 import MapLink from '../components/MapLink';
 import { getLeague, getLeagueTeams, getLeagueGames, getLeagueStandings, getUserLeagueRole } from '../lib/leagues';
 import { LedR } from '../components/Logos';
-
-
-function getLiveBarnUrl(venueId) {
-  if (!venueId) return null;
-  return 'https://watch.livebarn.com/en/videoplayer?venueid=' + venueId + '&referrer=rinkd&promo=RINKD10';
-}
+import { getLiveBarnUrl } from '../lib/livebarn';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 const TABS = ['Schedule', 'Standings', 'Teams', 'Info'];
@@ -30,8 +25,8 @@ function GameRow({ game, isCommissioner, navigate }) {
   const isFinal = game.status === 'final';
   const date = new Date(game.start_time);
   const venueId = game.live_barn_venue_id || game.rink?.live_barn_venue_id;
-  const hasStream = !!venueId;
   const liveBarnUrl = getLiveBarnUrl(venueId);
+  const hasStream = !!liveBarnUrl;  // only real, non-placeholder venue IDs count
 
   return (
     <div onClick={() => navigate('/league-game/' + game.id + '?type=league')} style={{ padding: '12px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)', cursor: 'pointer' }} onMouseEnter={e=>e.currentTarget.style.background='rgba(46,91,140,0.08)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>

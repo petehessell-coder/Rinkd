@@ -24,6 +24,7 @@ import AdminAnalytics from './pages/AdminAnalytics';
 import Notifications from './pages/Notifications';
 import OnboardingModal from './components/OnboardingModal';
 import ErrorBoundary from './components/ErrorBoundary';
+import ResetPassword from './pages/ResetPassword';
 import Teams from './pages/Teams';
 import League from './pages/League';
 import LeagueManage from './pages/LeagueManage';
@@ -73,6 +74,8 @@ function AppRoutes() {
       <Route path="/login" element={user ? <Navigate to="/feed" replace /> : <Auth />} />
       {/* Survey is public — accessible from auth screen, marketing pages, and embedded in feeds */}
       <Route path="/survey" element={<Survey />} />
+      {/* Password recovery — public, handles the magic-link redirect from Supabase */}
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/feed" element={<ProtectedRoute><Feed currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Profile currentUser={user} profile={profile} onProfileUpdate={setProfile} /></ProtectedRoute>} />
       <Route path="/profile/:userId" element={<ProtectedRoute><Profile currentUser={user} profile={profile} onProfileUpdate={setProfile} /></ProtectedRoute>} />

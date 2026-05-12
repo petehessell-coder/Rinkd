@@ -57,7 +57,10 @@ function Input({ label, ...props }) {
 
 export default function Auth() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState('login'); // login | signup | coppa
+  const [mode, setMode] = useState('login'); // login | signup | coppa | forgot
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotBusy, setForgotBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [step, setStep] = useState(1); // signup steps 1,2,3
@@ -76,6 +79,20 @@ export default function Auth() {
     setLoading(false);
     if (err) { track('login_failed', { reason: err.message?.slice(0, 80) }); setError(err.message); }
     else { track('login_success'); navigate('/feed'); }
+  };
+
+  const handleForgot = async (e) => {
+    e.preventDefault();
+    if (!forgotEmail.trim()) return;
+    setForgotBusy(true); setError('');
+    const { supabase } = await import('../lib/supabase');
+    const { error: err } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim(), {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setForgotBusy(false);
+    if (err) { track('password_reset_request_failed', { reason: err.message?.slice(0, 80) }); setError(err.message); return; }
+    track('password_reset_requested');
+    setForgotSent(true);
   };
 
   const handleSignup = async (e) => {
@@ -172,6 +189,51 @@ export default function Auth() {
               fontWeight: 700, fontSize: 16, cursor: 'pointer',
             }}>Back to Login</button>
           </div>
+        ) : mode === 'forgot' ? (
+          <>
+            <h2 style={{
+              fontFamily: "'Barlow Condensed', sans-serif",
+              fontWeight: 900, fontStyle: 'italic',
+              fontSize: 32, color: C.ice, marginBottom: 8, textTransform: 'uppercase',
+            }}>Reset Password</h2>
+            <p style={{ color: C.steel, marginBottom: 24, fontSize: 14 }}>
+              {forgotSent
+                ? "If an account exists for that email, a reset link is on the way. Check your inbox (and spam folder)."
+                : "Enter your email and we'll send you a link to reset your password."}
+            </p>
+            {!forgotSent ? (
+              <form onSubmit={handleForgot}>
+                <Input label="Email" type="email" value={forgotEmail}
+                  onChange={e => setForgotEmail(e.target.value)} placeholder="you@example.com" required />
+                {error && <p style={{ color: C.red, fontSize: 13, marginBottom: 12 }}>{error}</p>}
+                <button type="submit" disabled={forgotBusy || !forgotEmail.trim()} style={{
+                  width: '100%', padding: '14px', borderRadius: 10,
+                  background: forgotBusy ? C.border : C.red, color: 'white', border: 'none',
+                  fontFamily: "'Barlow Condensed', sans-serif",
+                  fontWeight: 700, fontStyle: 'italic', fontSize: 18, textTransform: 'uppercase',
+                  cursor: forgotBusy ? 'not-allowed' : 'pointer', letterSpacing: '0.05em',
+                }}>
+                  {forgotBusy ? 'Sending…' : 'Send Reset Link →'}
+                </button>
+              </form>
+            ) : (
+              <button onClick={() => { setMode('login'); setError(''); }} style={{
+                width: '100%', padding: '13px', borderRadius: 10,
+                background: C.red, color: 'white', border: 'none',
+                fontFamily: "'Barlow Condensed', sans-serif",
+                fontWeight: 700, fontStyle: 'italic', fontSize: 16, textTransform: 'uppercase',
+                cursor: 'pointer', letterSpacing: '0.05em',
+              }}>
+                Back to Sign In
+              </button>
+            )}
+            <div style={{ textAlign: 'center', marginTop: 18 }}>
+              <button onClick={() => { setMode('login'); setError(''); }}
+                style={{ background: 'none', border: 'none', color: C.steel, fontSize: 13, cursor: 'pointer', fontFamily: "'Barlow', sans-serif" }}>
+                ← Back to login
+              </button>
+            </div>
+          </>
         ) : mode === 'login' ? (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 8 }}>
@@ -205,6 +267,13 @@ export default function Auth() {
               }}>
                 {loading ? 'Signing In...' : 'Sign In →'}
               </button>
+              <div style={{ textAlign: 'center', marginTop: 12 }}>
+                <button type="button"
+                  onClick={() => { setMode('forgot'); setForgotEmail(form.email); setForgotSent(false); setError(''); }}
+                  style={{ background: 'none', border: 'none', color: C.steel, fontSize: 13, cursor: 'pointer', fontFamily: "'Barlow', sans-serif", textDecoration: 'underline', textUnderlineOffset: 3 }}>
+                  Forgot password?
+                </button>
+              </div>
             </form>
 
             <div style={{ textAlign: 'center', marginTop: 20 }}>

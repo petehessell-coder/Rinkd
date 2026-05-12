@@ -78,5 +78,33 @@ export function TierBadge({ tier, size = 'sm' }) {
 export function Avatar({ profile, size = 36 }) {
   const tierColors = { Mite:'#8BA3BE',Squirt:'#22C55E',Peewee:'#0EA5E9',Bantam:'#F59E0B',Midget:'#8B5CF6',Junior:'#D72638',Pro:'#F4F7FA' };
   const borderColor = tierColors[profile?.tier]||'#8BA3BE';
-  return <div style={{ width:size,height:size,borderRadius:'50%',background:profile?.avatar_color||'#2E5B8C',display:'flex',alignItems:'center',justifyContent:'center',fontSize:size*0.35,fontWeight:700,color:'white',fontFamily:"'Barlow',sans-serif",border:`2px solid ${borderColor}`,flexShrink:0 }}>{profile?.avatar_initials||'?'}</div>;
+  const common = {
+    width: size, height: size, borderRadius: '50%',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    border: `2px solid ${borderColor}`, flexShrink: 0,
+    overflow: 'hidden',
+  };
+  // Photo avatar — falls back to initials+color if the image errors out (deleted bucket object, broken URL).
+  if (profile?.avatar_url) {
+    return (
+      <div style={common}>
+        <img
+          src={profile.avatar_url}
+          alt={profile?.name || ''}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+        />
+      </div>
+    );
+  }
+  return (
+    <div style={{
+      ...common,
+      background: profile?.avatar_color || '#2E5B8C',
+      fontSize: size * 0.35, fontWeight: 700, color: 'white',
+      fontFamily: "'Barlow',sans-serif",
+    }}>
+      {profile?.avatar_initials || '?'}
+    </div>
+  );
 }
