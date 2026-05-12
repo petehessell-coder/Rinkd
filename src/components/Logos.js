@@ -18,6 +18,46 @@ export function RinkdLogo({ size = 40, showText = false }) {
 }
 
 /**
+ * Glowing LED-scoreboard R icon — used on LiveBarn watch buttons and
+ * anywhere we need a tiny "Rinkd mark" that matches the bigger RinkdLogo.
+ * Pure SVG so it scales crisply at any size.
+ */
+export function LedR({ size = 16, glowId = 'rinkd-led-glow' }) {
+  return (
+    <svg viewBox="0 0 37 42" width={size} height={size} fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
+      <defs>
+        <filter id={glowId} x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="1.2" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+      {/* OFF dots — dark matrix */}
+      {[4, 9, 14, 19, 24, 29, 34].map((x) =>
+        [4, 9, 14, 19, 24, 29, 34, 39].map((y) => (
+          <circle key={`off-${x}-${y}`} cx={x} cy={y} r="1.6" fill="#1a3050" />
+        ))
+      )}
+      {/* ON dots — red glowing R shape */}
+      {[
+        [4, 4], [9, 4], [14, 4], [19, 4], [24, 4],
+        [4, 9], [29, 9],
+        [4, 14], [29, 14],
+        [4, 19], [9, 19], [14, 19], [19, 19], [24, 19],
+        [4, 24], [19, 24],
+        [4, 29], [24, 29],
+        [4, 34], [29, 34],
+        [4, 39], [34, 39],
+      ].map(([x, y]) => (
+        <circle key={`on-${x}-${y}`} cx={x} cy={y} r="1.8" fill="#D72638" filter={`url(#${glowId})`} />
+      ))}
+    </svg>
+  );
+}
+
+/**
  * Standalone wordmark for hero/login spots. Use anywhere we'd otherwise
  * render "Rinkd" as Barlow Condensed Italic text.
  */

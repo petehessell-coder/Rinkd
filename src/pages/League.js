@@ -4,24 +4,12 @@ import Layout from '../components/Layout';
 import SEO from '../components/SEO';
 import MapLink from '../components/MapLink';
 import { getLeague, getLeagueTeams, getLeagueGames, getLeagueStandings, getUserLeagueRole } from '../lib/leagues';
+import { LedR } from '../components/Logos';
 
 
 function getLiveBarnUrl(venueId) {
   if (!venueId) return null;
   return 'https://watch.livebarn.com/en/videoplayer?venueid=' + venueId + '&referrer=rinkd&promo=RINKD10';
-}
-
-function LedV({ size = 16 }) {
-  return (
-    <svg width={size * 0.85} height={size} viewBox="0 0 22 26" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="2"  cy="2"  r="1.6" fill="#D72638"/><circle cx="2"  cy="6"  r="1.6" fill="#D72638"/>
-      <circle cx="4"  cy="10" r="1.6" fill="#D72638"/><circle cx="6"  cy="14" r="1.6" fill="#D72638"/>
-      <circle cx="8"  cy="18" r="1.6" fill="#D72638"/><circle cx="10" cy="22" r="1.6" fill="#D72638"/>
-      <circle cx="20" cy="2"  r="1.6" fill="#D72638"/><circle cx="20" cy="6"  r="1.6" fill="#D72638"/>
-      <circle cx="18" cy="10" r="1.6" fill="#D72638"/><circle cx="16" cy="14" r="1.6" fill="#D72638"/>
-      <circle cx="14" cy="18" r="1.6" fill="#D72638"/><circle cx="12" cy="22" r="1.6" fill="#D72638"/>
-    </svg>
-  );
 }
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
@@ -92,7 +80,7 @@ function GameRow({ game, isCommissioner, navigate }) {
       {/* Watch with LiveBarn — matches tournament style */}
       {hasStream && !isFinal && (
         <button onClick={() => window.open(liveBarnUrl, '_blank')} style={{display:'inline-flex',alignItems:'center',gap:7,background:'#FFFFFF',color:'#0B1F3A',border:'none',borderRadius:999,padding:'8px 14px 8px 8px',fontFamily:'Barlow,sans-serif',fontSize:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap',marginTop:10}}>
-          <span style={{width:24,height:24,background:'#07111F',borderRadius:5,border:'1px solid rgba(215,38,56,0.5)',display:'flex',alignItems:'center',justifyContent:'center'}}><LedV size={16}/></span>
+          <span style={{width:24,height:24,background:'#07111F',borderRadius:5,border:'1px solid rgba(215,38,56,0.5)',display:'flex',alignItems:'center',justifyContent:'center'}}><LedR size={16}/></span>
           Watch with LiveBarn
         </button>
       )}

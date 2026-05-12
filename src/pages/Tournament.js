@@ -1,16 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import ledV from '../assets/led_v.png';
+import { LedR } from '../components/Logos';
 
 function getLiveBarnUrl(venueId) {
   if (!venueId) return null;
   return 'https://watch.livebarn.com/en/videoplayer?venueid=' + venueId + '&referrer=rinkd&promo=RINKD10';
 }
 
-function LedV({ size = 16 }) {
-  return <img src={ledV} alt="Rinkd" width={size} height={size} style={{ objectFit: 'contain', display: 'block' }} />;
-}
 
 const TABS = ['Standings','Schedule','Bracket','Info','Feed'];
 
@@ -195,7 +192,7 @@ function GameCard({ game, navigate }) {
         {!isLive && !isFinal && <span style={{background:'#2E5B8C',color:'#F4F7FA',fontSize:11,fontWeight:700,padding:'4px 11px',borderRadius:20}}>{game.start_time ? new Date(game.start_time).toLocaleString('en-US',{weekday:'short',hour:'numeric',minute:'2-digit'}) : 'TBD'}</span>}
         {hasStream && !isFinal && (
           <button onClick={() => window.open(url, '_blank')} style={{display:'inline-flex',alignItems:'center',gap:7,background:'#FFFFFF',color:'#0B1F3A',border:'none',borderRadius:999,padding:'8px 14px 8px 8px',fontFamily:'Barlow,sans-serif',fontSize:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
-            <span style={{width:24,height:24,background:'#07111F',borderRadius:5,border:'1px solid rgba(215,38,56,0.5)',display:'flex',alignItems:'center',justifyContent:'center'}}><LedV size={16}/></span>
+            <span style={{width:24,height:24,background:'#07111F',borderRadius:5,border:'1px solid rgba(215,38,56,0.5)',display:'flex',alignItems:'center',justifyContent:'center'}}><LedR size={16}/></span>
             Watch with LiveBarn
           </button>
         )}

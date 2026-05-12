@@ -5,25 +5,13 @@ import Layout from '../components/Layout';
 import RsvpBlock from '../components/RsvpBlock';
 import MapLink from '../components/MapLink';
 import CalendarButton from '../components/CalendarButton';
+import { LedR } from '../components/Logos';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 
 function getLiveBarnUrl(venueId) {
   if (!venueId) return null;
   return `https://watch.livebarn.com/en/videoplayer?venueid=${venueId}&referrer=rinkd&promo=RINKD10`;
-}
-
-function LedV({ size = 16 }) {
-  return (
-    <svg width={size * 0.85} height={size} viewBox="0 0 22 26" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="2"  cy="2"  r="1.6" fill="#D72638"/><circle cx="2"  cy="6"  r="1.6" fill="#D72638"/>
-      <circle cx="4"  cy="10" r="1.6" fill="#D72638"/><circle cx="6"  cy="14" r="1.6" fill="#D72638"/>
-      <circle cx="8"  cy="18" r="1.6" fill="#D72638"/><circle cx="10" cy="22" r="1.6" fill="#D72638"/>
-      <circle cx="20" cy="2"  r="1.6" fill="#D72638"/><circle cx="20" cy="6"  r="1.6" fill="#D72638"/>
-      <circle cx="18" cy="10" r="1.6" fill="#D72638"/><circle cx="16" cy="14" r="1.6" fill="#D72638"/>
-      <circle cx="14" cy="18" r="1.6" fill="#D72638"/><circle cx="12" cy="22" r="1.6" fill="#D72638"/>
-    </svg>
-  );
 }
 
 function LiveBarnWordmark({ dark = false }) {
@@ -315,7 +303,7 @@ export default function GameDetail({ profile }) {
                 onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.querySelector('.watch-text').style.color = C.navy; e.currentTarget.querySelector('.led-wrap').style.borderColor = 'rgba(215,38,56,0.5)'; }}
                 onMouseLeave={e => { e.currentTarget.style.background = C.navy; e.currentTarget.querySelector('.watch-text').style.color = C.ice; }}>
                 <span className="led-wrap" style={{ width: 28, height: 28, background: '#07111F', borderRadius: 6, border: `1px solid rgba(215,38,56,0.5)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <LedV size={16} />
+                  <LedR size={16} />
                 </span>
                 <span className="watch-text" style={{ fontSize: 13, fontWeight: 700, color: C.ice, transition: 'color 0.15s' }}>Watch with</span>
                 <LiveBarnWordmark />
