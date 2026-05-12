@@ -89,11 +89,22 @@ export async function getLikedPosts(userId) {
 }
 
 export async function getComments(postId) {
-  const { data } = await supabase
+  // Explicit FK hint — there's only one FK from comments → profiles
+  // (comments_author_id_fkey) but being explicit means the embed can never get
+  // ambiguous if new relationships land later.
+  const { data, error } = await supabase
     .from('comments')
-    .select(`*, profiles(id, name, handle, avatar_color, avatar_initials, tier)`)
+    .select(`*, profiles!comments_author_id_fkey(id, name, handle, avatar_color, avatar_initials, tier)`)
     .eq('post_id', postId)
     .order('created_at', { ascending: true });
+  if (error) {
+    // eslint-disable-next-line no-console
+    console.warn('[comments] load failed:', error);
+    // Graceful fallback: fetch without the embed so users at least see the text.
+    const { data: fallback } = await supabase
+      .from('comments').select('*').eq('post_id', postId).order('created_at', { ascending: true });
+    return fallback || [];
+  }
   return data || [];
 }
 
