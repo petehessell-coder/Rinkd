@@ -21,6 +21,8 @@ import Tournaments from './pages/Tournaments';
 import TournamentCreate from './pages/TournamentCreate';
 import TournamentManage from './pages/TournamentManage';
 import AdminAnalytics from './pages/AdminAnalytics';
+import Notifications from './pages/Notifications';
+import OnboardingModal from './components/OnboardingModal';
 import Teams from './pages/Teams';
 import League from './pages/League';
 import LeagueManage from './pages/LeagueManage';
@@ -52,7 +54,19 @@ function ProtectedRoute({ children }) {
 
 function AppRoutes() {
   const { user, profile, setProfile } = useAuth();
+  // Fire the onboarding modal the first time a fresh signup lands logged in.
+  // welcome_seen flips to true once they finish or skip — never re-shows.
+  const showOnboarding = !!user && !!profile && profile.welcome_seen === false;
   return (
+    <>
+    {showOnboarding && (
+      <OnboardingModal
+        currentUser={user}
+        profile={profile}
+        onProfileUpdate={setProfile}
+        onClose={() => setProfile({ ...profile, welcome_seen: true })}
+      />
+    )}
     <Routes>
       <Route path="/" element={user ? <Navigate to="/feed" replace /> : <Auth />} />
       <Route path="/login" element={user ? <Navigate to="/feed" replace /> : <Auth />} />
@@ -83,6 +97,7 @@ function AppRoutes() {
       <Route path="/tournament/create" element={<ProtectedRoute><TournamentCreate profile={profile} /></ProtectedRoute>} />
       <Route path="/tournament/:id/manage" element={<ProtectedRoute><TournamentManage currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/admin/analytics" element={<ProtectedRoute><AdminAnalytics currentUser={user} profile={profile} /></ProtectedRoute>} />
+      <Route path="/notifications" element={<ProtectedRoute><Notifications currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/tournament/:id" element={<ProtectedRoute><Tournament currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/scorer/:gameId" element={<ProtectedRoute><ScorerView /></ProtectedRoute>} />
       <Route path="/game/:gameId" element={<ProtectedRoute><GameDetail profile={profile} /></ProtectedRoute>} />
@@ -96,6 +111,7 @@ function AppRoutes() {
       <Route path="/terms" element={<Legal />} />
       <Route path="*" element={<Navigate to="/feed" replace />} />
     </Routes>
+    </>
   );
 }
 

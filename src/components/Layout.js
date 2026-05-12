@@ -4,6 +4,7 @@ import { RinkdLogo, Avatar } from './Logos';
 import { signOut } from '../lib/auth';
 import { useUserRole, roleMenuSections } from '../lib/userRole';
 import InstallButton from './InstallButton';
+import NotificationBell from './NotificationBell';
 
 const ROLE_BADGE_COLOR = {
   commissioner: '#D72638',
@@ -123,6 +124,11 @@ export default function Layout({ children, profile }) {
         </nav>
         {profile && (
           <div ref={roleMenuRef} style={{ padding: '16px', borderTop: `1px solid ${B.border}`, position: 'relative' }}>
+            {/* Notification bell sits above the user dropdown so unread badge is visible */}
+            <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <NotificationBell userId={profile.id} size={20} color={B.steel} />
+              <Link to="/notifications" style={{ color: B.steel, fontSize: 12, textDecoration: 'none' }}>Notifications</Link>
+            </div>
             {/* Avatar block doubles as the dropdown trigger */}
             <button
               onClick={() => setRoleOpen(v => !v)}
@@ -189,11 +195,14 @@ export default function Layout({ children, profile }) {
         <Link to="/feed" style={{ textDecoration: 'none' }}>
           <RinkdLogo size={32} showText />
         </Link>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {profile?.id && <NotificationBell userId={profile.id} size={22} />}
         <button onClick={() => setMenuOpen(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 6, display: 'flex', flexDirection: 'column', gap: 5 }}>
           <div style={{ width: 22, height: 2, background: B.ice, borderRadius: 2 }} />
           <div style={{ width: 22, height: 2, background: B.ice, borderRadius: 2 }} />
           <div style={{ width: 22, height: 2, background: B.ice, borderRadius: 2 }} />
         </button>
+        </div>
       </div>
 
       {/* ─── MOBILE HAMBURGER MENU (full screen) ─── */}

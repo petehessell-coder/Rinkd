@@ -7,8 +7,9 @@ import { getTier, getTierProgress, getNextTier, TIERS } from '../lib/tiers';
 import { supabase } from '../lib/supabase';
 import { getPlayerLeagueStats } from '../lib/stats';
 import { useParams } from 'react-router-dom';
-import { followUser, unfollowUser, isFollowing, getFollowCounts, timeAgo } from '../lib/posts';
+import { followUser, unfollowUser, isFollowing, getFollowCounts, timeAgo, uploadMedia } from '../lib/posts';
 import MapLink from '../components/MapLink';
+import { track } from '../lib/analytics';
 
 const POSITIONS = ['Forward', 'Defense', 'Goalie', 'Coach', 'Parent', 'Official', 'Fan'];
 const LEVELS = ['Youth (Mite-Bantam)', 'Youth (Midget)', 'High School', 'Junior (Tier I)', 'Junior (Tier II/III)', 'College', 'Minor Pro', 'Beer League', 'Adult Rec', 'Fan'];
@@ -34,6 +35,8 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
   const [editRink, setEditRink] = useState('');
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
+  const [activity, setActivity] = useState([]);
+  const [coverUploading, setCoverUploading] = useState(false);
 
   useEffect(() => {
     isPushSubscribed().then(setPushEnabled);
@@ -76,13 +79,45 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
         const f = await isFollowing(currentUser.id, profileId);
         setFollowing(f);
       }
+      // Recent activity = posts + comments, last 20, newest first.
+      const { data: comments } = await supabase
+        .from('comments')
+        .select('id, content, created_at, post_id, posts(content, author_id)')
+        .eq('author_id', profileId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      const acts = [
+        ...(data || []).map((p) => ({ kind: 'post', id: p.id, at: p.created_at, post: p })),
+        ...(comments || []).map((c) => ({ kind: 'comment', id: c.id, at: c.created_at, comment: c })),
+      ].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 20);
+      setActivity(acts);
     }
   }, [profileId, isOwnProfile, myProfile, currentUser]);
 
   useEffect(() => { loadProfile(); }, [loadProfile]);
 
+  const handleCoverUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentUser) return;
+    if (file.size > 10 * 1024 * 1024) {
+      alert(`Cover photo is ${(file.size / 1024 / 1024).toFixed(1)}MB — max 10MB.`);
+      e.target.value = '';
+      return;
+    }
+    setCoverUploading(true);
+    const { url, error } = await uploadMedia(file, currentUser.id);
+    if (error || !url) { setCoverUploading(false); alert('Upload failed. Try again.'); return; }
+    const { error: uErr } = await updateProfile(currentUser.id, { cover_image_url: url });
+    setCoverUploading(false);
+    if (uErr) { alert('Save failed: ' + uErr.message); return; }
+    setProfile((p) => ({ ...p, cover_image_url: url }));
+    onProfileUpdate?.({ ...profile, cover_image_url: url });
+    track('cover_photo_uploaded');
+  };
+
   const handleFollow = async () => {
     if (!currentUser || isOwnProfile) return;
+    track(following ? 'unfollow' : 'follow', { target_user_id: profileId });
     setFollowLoading(true);
     if (following) {
       await unfollowUser(currentUser.id, profileId);
@@ -130,9 +165,30 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
     <Layout profile={myProfile}>
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '24px 16px' }}>
         <div style={{ background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, overflow: 'hidden', marginBottom: 16 }}>
-          <div style={{ height: 100, background: `linear-gradient(135deg, ${C.navy} 0%, ${tier.color}33 50%, ${C.navy} 100%)`, borderBottom: `1px solid ${C.border}`, position: 'relative' }}>
+          <div style={{
+            height: 140,
+            background: profile.cover_image_url
+              ? `linear-gradient(180deg, rgba(7,17,31,0.1) 0%, rgba(7,17,31,0.55) 100%), url(${profile.cover_image_url}) center/cover`
+              : `linear-gradient(135deg, ${C.navy} 0%, ${tier.color}33 50%, ${C.navy} 100%)`,
+            borderBottom: `1px solid ${C.border}`, position: 'relative',
+          }}>
+            {isOwnProfile && (
+              <>
+                <input id="cover-upload" type="file" accept="image/*" onChange={handleCoverUpload} style={{ display: 'none' }} />
+                <label htmlFor="cover-upload" title="Change cover photo"
+                  style={{
+                    position: 'absolute', top: 10, right: 10,
+                    background: 'rgba(0,0,0,0.55)', color: '#fff',
+                    border: '1px solid rgba(255,255,255,0.15)', borderRadius: 999,
+                    padding: '5px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                    fontFamily: 'Barlow, sans-serif', display: 'inline-flex', alignItems: 'center', gap: 6,
+                  }}>
+                  {coverUploading ? 'Uploading…' : profile.cover_image_url ? '📷 Change cover' : '📷 Add cover'}
+                </label>
+              </>
+            )}
             <div style={{ position: 'absolute', bottom: -28, left: 20 }}>
-              <Avatar profile={profile} size={64} />
+              <Avatar profile={profile} size={72} />
             </div>
           </div>
           <div style={{ padding: '36px 20px 20px' }}>
@@ -208,6 +264,28 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
           </div>
         </div>
 
+        {/* Season totals — quick view across all leagues */}
+        {leagueStats.length > 0 && (() => {
+          const tot = leagueStats.reduce((acc, s) => ({
+            gp: acc.gp + (s.gp || 0), goals: acc.goals + (s.goals || 0),
+            assists: acc.assists + (s.assists || 0), points: acc.points + (s.points || 0),
+            pim: acc.pim + (s.pim || 0),
+          }), { gp: 0, goals: 0, assists: 0, points: 0, pim: 0 });
+          return (
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14, marginBottom: 16 }}>
+              <div style={{ fontSize: 10, color: C.steel, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 8 }}>Season Totals · across {leagueStats.length} league{leagueStats.length === 1 ? '' : 's'}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
+                {[['GP', tot.gp], ['G', tot.goals], ['A', tot.assists], ['PTS', tot.points], ['PIM', tot.pim]].map(([label, val]) => (
+                  <div key={label} style={{ background: '#07111F', borderRadius: 8, padding: '10px 0', textAlign: 'center' }}>
+                    <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: label === 'PTS' ? 24 : 20, color: label === 'PTS' ? C.red : C.ice, lineHeight: 1 }}>{val}</div>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: C.steel, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 3 }}>{label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
           {[['Posts', posts.length], ['Points', (profile.points || 0).toLocaleString()], ['Tier', tier.name]].map(([label, value]) => (
@@ -239,7 +317,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
 
         {/* Posts */}
         <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: C.navy, borderRadius: 10, padding: 4, border: `1px solid ${C.border}` }}>
-          {[{ id: 'posts', label: 'Posts' }, { id: 'stats', label: 'Stats' }, { id: 'badges', label: 'Badges' }].map(t => (
+          {[{ id: 'posts', label: 'Posts' }, { id: 'stats', label: 'Stats' }, { id: 'activity', label: 'Activity' }, { id: 'badges', label: 'Badges' }].map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)} style={{ flex: 1, padding: '8px', borderRadius: 7, border: 'none', background: activeTab === t.id ? C.blue : 'transparent', color: activeTab === t.id ? C.ice : C.steel, fontFamily: "'Barlow', sans-serif", fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>{t.label}</button>
           ))}
         </div>
@@ -297,6 +375,28 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
             ))}
           </div>
         )}
+        {activeTab === 'activity' && (
+          activity.length === 0 ? (
+            <div style={{ textAlign: 'center', color: C.steel, padding: '40px', fontSize: 14 }}>No activity yet.</div>
+          ) : (
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+              {activity.map((a, i) => (
+                <div key={`${a.kind}-${a.id}`} style={{ display: 'flex', gap: 10, padding: '12px 14px', borderTop: i ? '1px solid rgba(46,91,140,0.2)' : 'none', alignItems: 'flex-start' }}>
+                  <div style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>{a.kind === 'post' ? '📣' : '💬'}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 11, color: C.steel, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 3 }}>
+                      {a.kind === 'post' ? 'Posted' : 'Commented'} · {timeAgo(a.at)}
+                    </div>
+                    <div style={{ fontSize: 13, color: C.ice, lineHeight: 1.45, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                      {a.kind === 'post' ? (a.post.content || '(media post)') : a.comment.content}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        )}
+
         {activeTab === 'badges' && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
             {[
