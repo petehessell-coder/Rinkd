@@ -70,17 +70,33 @@ export async function uploadMedia(file, userId) {
   return { url: publicUrl, mediaType, error: null };
 }
 
+// Toggle a like on/off. Database AFTER INSERT/DELETE triggers on the `likes`
+// table now maintain `posts.likes` for us — see migration
+// `fix_posts_likes_count_triggers_and_reconcile`. The previous version of
+// this function tried to maintain the count in JS with a broken
+// `supabase.rpc('decrement', { x: 1 })` expression, which silently no-op'd
+// and let counts run away into the hundreds. Triggers are the right home.
 export async function toggleLike(postId, userId) {
-  const { data: existing } = await supabase
-    .from('likes').select('id').eq('post_id', postId).eq('user_id', userId).single();
+  const { data: existing, error: lookupErr } = await supabase
+    .from('likes')
+    .select('id')
+    .eq('post_id', postId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (lookupErr) return { liked: false, error: lookupErr };
+
   if (existing) {
-    await supabase.from('likes').delete().eq('post_id', postId).eq('user_id', userId);
-    await supabase.from('posts').update({ likes: supabase.rpc('decrement', { x: 1 }) }).eq('id', postId).catch(() => {});
-    return { liked: false };
-  } else {
-    await supabase.from('likes').insert({ post_id: postId, user_id: userId });
-    return { liked: true };
+    const { error } = await supabase
+      .from('likes')
+      .delete()
+      .eq('post_id', postId)
+      .eq('user_id', userId);
+    return { liked: false, error: error || null };
   }
+  const { error } = await supabase
+    .from('likes')
+    .insert({ post_id: postId, user_id: userId });
+  return { liked: true, error: error || null };
 }
 
 export async function getLikedPosts(userId) {
