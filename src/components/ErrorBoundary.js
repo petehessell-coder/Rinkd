@@ -20,9 +20,14 @@ export default class ErrorBoundary extends React.Component {
     this.setState({ errorInfo });
     // eslint-disable-next-line no-console
     console.error('[Rinkd] Caught error:', error, errorInfo);
-    // Best-effort analytics — never throw from inside the catch.
+    // Best-effort: fire to both Sentry (if configured) and our self-hosted
+    // analytics. Lazy-imported so a broken module here can't crash the catch.
     try {
-      // Lazy import so we don't crash if analytics itself is broken
+      import('../lib/sentry').then(({ captureException }) => {
+        captureException(error, { componentStack: errorInfo?.componentStack });
+      }).catch(() => {});
+    } catch { /* swallow */ }
+    try {
       import('../lib/analytics').then(({ track }) => {
         track('client_error', {
           message: String(error?.message || error).slice(0, 200),

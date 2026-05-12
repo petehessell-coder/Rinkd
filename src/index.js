@@ -1,6 +1,11 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { initSentry } from './lib/sentry';
+
+// Fire Sentry first so even crashes during root render get reported.
+// No-ops cleanly when REACT_APP_SENTRY_DSN isn't set (localhost or pre-Sentry).
+initSentry();
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<React.StrictMode><App /></React.StrictMode>);

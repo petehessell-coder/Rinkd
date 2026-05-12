@@ -23,6 +23,7 @@ import TournamentManage from './pages/TournamentManage';
 import AdminAnalytics from './pages/AdminAnalytics';
 import AdminFeedback from './pages/AdminFeedback';
 import Settings from './pages/Settings';
+import { setSentryUser } from './lib/sentry';
 import Notifications from './pages/Notifications';
 import OnboardingModal from './components/OnboardingModal';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -132,13 +133,26 @@ export default function App() {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       const u = session?.user || null;
       setUser(u);
-      if (u) { const { data } = await getProfile(u.id); setProfile(data); }
+      if (u) {
+        const { data } = await getProfile(u.id);
+        setProfile(data);
+        setSentryUser(u, data);
+      } else {
+        setSentryUser(null);
+      }
       setLoading(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       const u = session?.user || null;
       setUser(u);
-      if (u) { const { data } = await getProfile(u.id); setProfile(data); } else { setProfile(null); }
+      if (u) {
+        const { data } = await getProfile(u.id);
+        setProfile(data);
+        setSentryUser(u, data);
+      } else {
+        setProfile(null);
+        setSentryUser(null);
+      }
     });
     return () => subscription.unsubscribe();
   }, []);

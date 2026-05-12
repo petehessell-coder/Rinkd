@@ -3,6 +3,7 @@
   "version": "2.0.0",
   "private": true,
   "dependencies": {
+    "@sentry/react": "^8.55.2",
     "@supabase/supabase-js": "^2.39.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",
