@@ -107,9 +107,9 @@ export default function Auth() {
         justifyContent: 'center', padding: '60px 80px',
         borderRight: `1px solid ${C.border}`,
       }} className="auth-hero">
-        <div style={{ marginBottom: 32, display: 'flex', alignItems: 'center', gap: 18 }}>
-          <RinkdLogo size={100} />
-          <Wordmark height={72} />
+        {/* Wordmark — much bigger now that the R has moved to the form side */}
+        <div style={{ marginBottom: 32 }}>
+          <Wordmark height={140} />
         </div>
         <h1 style={{
           fontFamily: "'Barlow Condensed', sans-serif",
@@ -174,14 +174,21 @@ export default function Auth() {
           </div>
         ) : mode === 'login' ? (
           <>
-            <h2 style={{
-              fontFamily: "'Barlow Condensed', sans-serif",
-              fontWeight: 900, fontStyle: 'italic',
-              fontSize: 36, color: C.ice, marginBottom: 8, textTransform: 'uppercase',
-            }}>Welcome Back</h2>
-            <p style={{ color: C.steel, marginBottom: 32, fontSize: 14 }}>
-              Sign in to your Rinkd account
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 8 }}>
+              <RinkdLogo size={72} />
+              <div>
+                <h2 style={{
+                  fontFamily: "'Barlow Condensed', sans-serif",
+                  fontWeight: 900, fontStyle: 'italic',
+                  fontSize: 36, color: C.ice, textTransform: 'uppercase',
+                  margin: 0, lineHeight: 1,
+                }}>Welcome Back</h2>
+                <p style={{ color: C.steel, fontSize: 14, margin: '6px 0 0' }}>
+                  Sign in to your Rinkd account
+                </p>
+              </div>
+            </div>
+            <div style={{ marginBottom: 24 }} />
             <form onSubmit={handleLogin}>
               <Input label="Email" type="email" value={form.email}
                 onChange={e => set('email', e.target.value)} placeholder="you@example.com" required />
