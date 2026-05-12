@@ -1,29 +1,389 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
+import SEO from '../components/SEO';
+import { Avatar, TierBadge } from '../components/Logos';
+import { CardGridSkeleton, ListRowSkeleton, EmptyState } from '../components/Skeletons';
 import { supabase } from '../lib/supabase';
-export default function Discover({ currentUser, profile }) {
-  const [users, setUsers] = useState([]);
-  const [search, setSearch] = useState('');
+import { track } from '../lib/analytics';
+import { followUser, unfollowUser, isFollowing, timeAgo } from '../lib/posts';
+import { getTier } from '../lib/tiers';
+
+const C = {
+  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
+  steel: '#8BA3BE', dark: '#07111F', card: '#0f2847', border: 'rgba(46,91,140,0.4)',
+  amber: '#F59E0B',
+};
+
+const TABS = [
+  { id: 'players',  label: 'Players' },
+  { id: 'teams',    label: 'Teams' },
+  { id: 'leagues',  label: 'Leagues' },
+  { id: 'articles', label: 'Articles' },
+];
+
+function useDebounced(value, ms = 300) {
+  const [v, setV] = useState(value);
   useEffect(() => {
-    supabase.from('profiles').select('*').order('points', { ascending: false }).then(({ data }) => setUsers(data || []));
-  }, []);
-  const filtered = users.filter(u =>
-    u.name?.toLowerCase().includes(search.toLowerCase()) ||
-    u.handle?.toLowerCase().includes(search.toLowerCase())
+    const t = setTimeout(() => setV(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return v;
+}
+
+// =================== PLAYER ROW ===================
+function PlayerRow({ p, currentUser, onOpen }) {
+  const [following, setFollowing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const tier = getTier(p.points || 0);
+
+  useEffect(() => {
+    if (!currentUser || currentUser.id === p.id) return;
+    isFollowing(currentUser.id, p.id).then(setFollowing);
+  }, [currentUser, p.id]);
+
+  const toggle = async (e) => {
+    e.stopPropagation();
+    if (!currentUser) return;
+    setBusy(true);
+    if (following) await unfollowUser(currentUser.id, p.id);
+    else { await followUser(currentUser.id, p.id); track('discover_follow', { target_user_id: p.id }); }
+    setFollowing(!following);
+    setBusy(false);
+  };
+
+  return (
+    <div onClick={onOpen} style={{
+      display: 'flex', alignItems: 'center', gap: 12, padding: 12,
+      cursor: 'pointer', transition: 'background 0.15s',
+    }} onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(46,91,140,0.12)'}
+       onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+      <Avatar profile={p} size={42} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{p.name}</span>
+          <TierBadge tier={tier.name} size="xs" />
+        </div>
+        <div style={{ fontSize: 12, color: C.steel, marginTop: 2 }}>@{p.handle}{p.position ? ` · ${p.position}` : ''}{p.level ? ` · ${p.level}` : ''}</div>
+      </div>
+      {currentUser && currentUser.id !== p.id && (
+        <button onClick={toggle} disabled={busy}
+          style={{
+            background: following ? 'transparent' : C.red,
+            color: following ? C.steel : '#fff',
+            border: following ? `1px solid ${C.border}` : 'none',
+            padding: '6px 14px', borderRadius: 999, cursor: 'pointer',
+            fontSize: 12, fontWeight: 700, fontFamily: 'Barlow, sans-serif',
+          }}>
+          {following ? 'Following' : 'Follow'}
+        </button>
+      )}
+    </div>
   );
+}
+
+// =================== TRENDING POSTS RAIL ===================
+function TrendingRail({ navigate }) {
+  const [trend, setTrend] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 86400_000).toISOString();
+      const { data } = await supabase
+        .from('posts')
+        .select('id, content, media_url, media_type, likes, comment_count, created_at, profiles(id, name, handle, avatar_color, avatar_initials, tier)')
+        .gte('created_at', sevenDaysAgo)
+        .order('likes', { ascending: false })
+        .limit(6);
+      setTrend(data || []);
+      setLoading(false);
+    })();
+  }, []);
+
+  if (loading) return <CardGridSkeleton count={3} />;
+  if (!trend.length) {
+    return (
+      <EmptyState
+        icon="📣"
+        title="Quiet on the feed"
+        body="Be the first to post something this week and you'll land right here."
+        cta={{ label: 'Open Feed', onClick: () => navigate('/feed') }}
+      />
+    );
+  }
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+      {trend.map((p) => (
+        <div key={p.id} onClick={() => navigate(`/profile/${p.profiles?.id}`)} style={{
+          background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
+          padding: 14, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 8,
+        }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Avatar profile={p.profiles} size={32} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, color: C.ice, fontWeight: 600 }}>{p.profiles?.name}</div>
+              <div style={{ fontSize: 11, color: C.steel }}>{timeAgo(p.created_at)}</div>
+            </div>
+          </div>
+          {p.media_url && (
+            p.media_type === 'video'
+              ? <div style={{ background: '#000', borderRadius: 8, height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.steel, fontSize: 12 }}>▶ Video</div>
+              : <img src={p.media_url} alt="" style={{ width: '100%', height: 110, objectFit: 'cover', borderRadius: 8 }} />
+          )}
+          {p.content && <div style={{ fontSize: 13, color: C.ice, lineHeight: 1.45, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>{p.content}</div>}
+          <div style={{ display: 'flex', gap: 12, fontSize: 11, color: C.steel, marginTop: 'auto' }}>
+            <span>❤️ {p.likes || 0}</span>
+            <span>💬 {p.comment_count || 0}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// =================== TOP SCORERS RAIL ===================
+function TopScorersRail() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      // Aggregate goals + assists for all-time across league_games.
+      // game_goals has scorer + assist columns; here we just take top scorers.
+      const { data } = await supabase
+        .from('game_goals')
+        .select('scorer_id, profiles:scorer_id(id, name, handle, avatar_color, avatar_initials, tier)')
+        .not('scorer_id', 'is', null)
+        .limit(500);
+      const tally = {};
+      for (const r of data || []) {
+        const id = r.scorer_id;
+        if (!id) continue;
+        if (!tally[id]) tally[id] = { ...r.profiles, goals: 0 };
+        tally[id].goals += 1;
+      }
+      const list = Object.values(tally).sort((a, b) => b.goals - a.goals).slice(0, 5);
+      setRows(list);
+      setLoading(false);
+    })();
+  }, []);
+
+  if (loading) return <ListRowSkeleton rows={5} />;
+  if (!rows.length) {
+    return (
+      <div style={{ padding: 16, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, fontSize: 13, color: C.steel, textAlign: 'center' }}>
+        Standings light up once league games go final.
+      </div>
+    );
+  }
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+      {rows.map((p, i) => (
+        <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none' }}>
+          <span style={{ width: 22, height: 22, borderRadius: '50%', background: i === 0 ? C.red : i === 1 ? C.blue : 'rgba(244,247,250,0.15)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>
+          <Avatar profile={p} size={32} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>{p.name}</div>
+            <div style={{ fontSize: 11, color: C.steel }}>@{p.handle}</div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 20, color: C.red, lineHeight: 1 }}>{p.goals}</div>
+            <div style={{ fontSize: 9, fontWeight: 700, color: C.steel, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Goals</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// =================== MAIN PAGE ===================
+export default function Discover({ currentUser, profile }) {
+  const navigate = useNavigate();
+  const [tab, setTab] = useState('players');
+  const [search, setSearch] = useState('');
+  const debounced = useDebounced(search, 250);
+
+  const [players, setPlayers] = useState([]);
+  const [teams, setTeams] = useState([]);
+  const [leagues, setLeagues] = useState([]);
+  const [articles, setArticles] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const search$ = debounced.trim();
+  const ilike = useMemo(() => (search$ ? `%${search$}%` : null), [search$]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    if (tab === 'players') {
+      let q = supabase.from('profiles')
+        .select('id, name, handle, position, level, points, tier, avatar_color, avatar_initials')
+        .order('points', { ascending: false, nullsFirst: false })
+        .limit(40);
+      if (ilike) q = q.or(`name.ilike.${ilike},handle.ilike.${ilike}`);
+      const { data } = await q;
+      setPlayers(data || []);
+    } else if (tab === 'teams') {
+      let q = supabase.from('teams')
+        .select('id, name, level, division, location, logo_color, logo_initials')
+        .order('created_at', { ascending: false })
+        .limit(40);
+      if (ilike) q = q.or(`name.ilike.${ilike},level.ilike.${ilike},location.ilike.${ilike}`);
+      const { data } = await q;
+      setTeams(data || []);
+    } else if (tab === 'leagues') {
+      let q = supabase.from('leagues')
+        .select('id, name, division, season, logo_color')
+        .order('created_at', { ascending: false })
+        .limit(40);
+      if (ilike) q = q.or(`name.ilike.${ilike},division.ilike.${ilike}`);
+      const { data } = await q;
+      setLeagues(data || []);
+    } else if (tab === 'articles') {
+      let q = supabase.from('rinkside_articles')
+        .select('id, slug, title, subtitle, hero_image_url, category, author_name, published_at, read_minutes')
+        .eq('is_published', true)
+        .order('published_at', { ascending: false })
+        .limit(40);
+      if (ilike) q = q.or(`title.ilike.${ilike},subtitle.ilike.${ilike},category.ilike.${ilike}`);
+      const { data } = await q;
+      setArticles(data || []);
+    }
+    setLoading(false);
+  }, [tab, ilike]);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (search$) track('discover_search', { tab, q_length: search$.length });
+  }, [search$, tab]);
+
   return (
     <Layout profile={profile} currentPage="discover">
-      <div style={{ padding: '16px' }}>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search players..." style={{ width: '100%', padding: '12px 16px', background: '#112236', border: '1px solid #1E3A5C', borderRadius: 8, color: '#F4F7FA', fontSize: 15, fontFamily: "'Barlow', sans-serif", marginBottom: 16, boxSizing: 'border-box' }} />
-        {filtered.map(u => (
-          <a key={u.id} href={"/profile/" + u.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px', background: '#112236', border: '1px solid #1E3A5C', borderRadius: 10, marginBottom: 8, textDecoration: 'none' }}>
-            <div style={{ width: 40, height: 40, borderRadius: '50%', background: u.avatar_color || '#2E5B8C', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, color: '#fff', fontSize: 16, flexShrink: 0 }}>{u.avatar_initials || (u.name || 'U').slice(0,2).toUpperCase()}</div>
-            <div>
-              <div style={{ color: '#F4F7FA', fontWeight: 600, fontSize: 14 }}>{u.name}</div>
-              <div style={{ color: '#8BA3BE', fontSize: 12 }}>@{u.handle} · {u.points || 0} pts</div>
+      <SEO title="Discover" description="Find players, teams, leagues, and stories across the Rinkd community." />
+      <div style={{ background: C.dark, minHeight: '100vh', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>
+        <div style={{ maxWidth: 920, margin: '0 auto', padding: '20px 16px 80px' }}>
+
+          {/* Hero */}
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 30, lineHeight: 1.1, textTransform: 'uppercase' }}>Discover</div>
+            <div style={{ fontSize: 13, color: C.steel, marginTop: 2 }}>Players, teams, leagues, and stories across the Rinkd community.</div>
+          </div>
+
+          {/* Search */}
+          <div style={{ position: 'relative', marginBottom: 16 }}>
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={`Search ${tab}…`}
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                background: C.navy, border: `1px solid ${C.border}`, color: C.ice,
+                padding: '12px 14px 12px 38px', borderRadius: 999, fontSize: 14,
+                fontFamily: 'Barlow, sans-serif', outline: 'none',
+              }}/>
+            <div style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: C.steel, fontSize: 16, pointerEvents: 'none' }}>🔍</div>
+          </div>
+
+          {/* Tabs */}
+          <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${C.border}`, marginBottom: 16, overflowX: 'auto' }}>
+            {TABS.map((t) => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                style={{
+                  background: 'transparent', color: tab === t.id ? C.ice : C.steel,
+                  border: 'none', padding: '10px 16px', cursor: 'pointer',
+                  fontSize: 13, fontWeight: tab === t.id ? 700 : 500,
+                  borderBottom: tab === t.id ? `3px solid ${C.red}` : '3px solid transparent',
+                  fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap',
+                }}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Results */}
+          <div style={{ marginBottom: 26 }}>
+            {tab === 'players' && (
+              loading ? <ListRowSkeleton rows={6} /> :
+              players.length === 0 ? <EmptyState icon="👥" title={search$ ? `No players match "${search$}"` : 'No players yet'} body={search$ ? 'Try a different name or handle.' : 'Players will show up as the community grows.'} /> :
+              <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+                {players.map((p, i) => (
+                  <div key={p.id} style={{ borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none' }}>
+                    <PlayerRow p={p} currentUser={currentUser} onOpen={() => navigate(`/profile/${p.id}`)} />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {tab === 'teams' && (
+              loading ? <ListRowSkeleton rows={6} /> :
+              teams.length === 0 ? <EmptyState icon="🏒" title={search$ ? `No teams match "${search$}"` : 'No teams yet'} body={search$ ? 'Try a different name or location.' : 'Create or join a team to see it here.'} cta={{ label: 'Create a Team', onClick: () => navigate('/team/create') }} /> :
+              <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+                {teams.map((t, i) => (
+                  <div key={t.id} onClick={() => navigate(`/team/${t.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none', cursor: 'pointer' }}>
+                    <div style={{ width: 42, height: 42, borderRadius: 10, background: t.logo_color || C.blue, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 16, color: '#fff', flexShrink: 0 }}>
+                      {t.logo_initials || t.name?.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{t.name}</div>
+                      <div style={{ fontSize: 12, color: C.steel }}>{[t.level, t.division, t.location].filter(Boolean).join(' · ')}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {tab === 'leagues' && (
+              loading ? <ListRowSkeleton rows={6} /> :
+              leagues.length === 0 ? <EmptyState icon="🏆" title={search$ ? `No leagues match "${search$}"` : 'No leagues yet'} body={search$ ? 'Try a different name.' : 'Start a league with the Create button.'} cta={{ label: 'Create a League', onClick: () => navigate('/league/create') }} /> :
+              <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+                {leagues.map((l, i) => (
+                  <div key={l.id} onClick={() => navigate(`/league/${l.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none', cursor: 'pointer' }}>
+                    <div style={{ width: 42, height: 42, borderRadius: 10, background: l.logo_color || C.amber, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🏆</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{l.name}</div>
+                      <div style={{ fontSize: 12, color: C.steel }}>{[l.division, l.season].filter(Boolean).join(' · ')}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {tab === 'articles' && (
+              loading ? <CardGridSkeleton count={6} /> :
+              articles.length === 0 ? <EmptyState icon="📰" title={search$ ? `No articles match "${search$}"` : 'No articles yet'} body="Rinkside features are dropping soon." cta={{ label: 'Visit Rinkside', onClick: () => navigate('/rinkside') }} /> :
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+                {articles.map((a) => (
+                  <div key={a.id} onClick={() => navigate(`/rinkside/${a.slug}`)} style={{
+                    background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
+                    overflow: 'hidden', cursor: 'pointer',
+                  }}>
+                    <div style={{ height: 130, background: a.hero_image_url ? `url(${a.hero_image_url}) center/cover` : C.navy }} />
+                    <div style={{ padding: 12 }}>
+                      {a.category && <div style={{ fontSize: 10, color: C.red, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 4 }}>{a.category}</div>}
+                      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 16, lineHeight: 1.15, color: C.ice, textTransform: 'uppercase', marginBottom: 4 }}>{a.title}</div>
+                      {a.subtitle && <div style={{ fontSize: 12, color: C.steel, lineHeight: 1.45, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{a.subtitle}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Trending posts */}
+          <div style={{ marginBottom: 26 }}>
+            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 20, textTransform: 'uppercase', marginBottom: 10, letterSpacing: '0.04em' }}>
+              🔥 Trending This Week
             </div>
-          </a>
-        ))}
+            <TrendingRail navigate={navigate} />
+          </div>
+
+          {/* Top scorers */}
+          <div>
+            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 20, textTransform: 'uppercase', marginBottom: 10, letterSpacing: '0.04em' }}>
+              🥅 Top Scorers
+            </div>
+            <TopScorersRail />
+          </div>
+
+        </div>
       </div>
     </Layout>
   );
