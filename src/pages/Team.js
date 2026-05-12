@@ -9,6 +9,7 @@ import LineupModal from '../components/LineupModal';
 import TeamFeed from '../components/TeamFeed';
 import SEO from '../components/SEO';
 import { buildIcsMulti, downloadIcs } from '../lib/ics';
+import SubscribeCalendarSheet from '../components/SubscribeCalendarSheet';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 
@@ -33,6 +34,7 @@ export default function TeamPage({ currentUser, profile }) {
   const [activeTab, setActiveTab] = useState('Roster');
   const [joinRequested, setJoinRequested] = useState(false);
   const [joinLoading, setJoinLoading] = useState(false);
+  const [subscribeOpen, setSubscribeOpen] = useState(false);
   const [lineupGame, setLineupGame] = useState(null); // game object whose lineup modal is open
 
   const load = useCallback(async () => {
@@ -327,28 +329,7 @@ export default function TeamPage({ currentUser, profile }) {
               {games.length > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
                   <button
-                    onClick={() => {
-                      // Live calendar subscription (auto-refreshes when games change).
-                      // webcal:// hands off to the OS default calendar app on iOS/macOS;
-                      // on Android/desktop browsers we fall back to copying the https URL
-                      // so the user can paste it into Google Calendar / Outlook.
-                      const base = 'tbpoopsyhfuqcbugrjbh.supabase.co/functions/v1/schedule-ics';
-                      const webcalUrl = `webcal://${base}?team=${team.id}`;
-                      const httpsUrl = `https://${base}?team=${team.id}`;
-                      const ua = (navigator.userAgent || '').toLowerCase();
-                      const isAppleish = /iphone|ipad|ipod|macintosh/.test(ua);
-                      if (isAppleish) {
-                        window.location.href = webcalUrl;
-                      } else {
-                        try {
-                          navigator.clipboard?.writeText(httpsUrl);
-                          // eslint-disable-next-line no-alert
-                          alert('Live calendar link copied!\n\nPaste it into Google Calendar → Other calendars → From URL, or any app that subscribes to .ics feeds. The schedule will auto-refresh.');
-                        } catch {
-                          window.location.href = webcalUrl;
-                        }
-                      }
-                    }}
+                    onClick={() => setSubscribeOpen(true)}
                     style={{
                       fontSize: 12, fontWeight: 700, letterSpacing: '0.04em',
                       padding: '8px 16px', borderRadius: 999,
@@ -472,6 +453,14 @@ export default function TeamPage({ currentUser, profile }) {
           gameTitle={`${team.name} ${lineupGame.is_home ? 'vs.' : '@'} ${lineupGame.opponent || ''} · ${new Date(lineupGame.start_time).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`}
         />
       )}
+
+      <SubscribeCalendarSheet
+        open={subscribeOpen}
+        onClose={() => setSubscribeOpen(false)}
+        httpsUrl={`https://tbpoopsyhfuqcbugrjbh.supabase.co/functions/v1/schedule-ics?team=${team?.id || ''}`}
+        webcalUrl={`webcal://tbpoopsyhfuqcbugrjbh.supabase.co/functions/v1/schedule-ics?team=${team?.id || ''}`}
+        title={team?.name ? `${team.name}'s schedule` : 'this team\'s schedule'}
+      />
     </Layout>
   );
 }

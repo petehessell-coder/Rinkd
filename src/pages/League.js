@@ -6,6 +6,7 @@ import MapLink from '../components/MapLink';
 import { getLeague, getLeagueTeams, getLeagueGames, getLeagueStandings, getUserLeagueRole } from '../lib/leagues';
 import { LedR } from '../components/Logos';
 import { getLiveBarnUrl } from '../lib/livebarn';
+import SubscribeCalendarSheet from '../components/SubscribeCalendarSheet';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 const TABS = ['Schedule', 'Standings', 'Teams', 'Info'];
@@ -110,6 +111,7 @@ export default function LeaguePage({ profile }) {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('Schedule');
   const [showAll, setShowAll] = useState(false);
+  const [subscribeOpen, setSubscribeOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -218,25 +220,7 @@ export default function LeaguePage({ profile }) {
               {games.length > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
                   <button
-                    onClick={() => {
-                      // Live league calendar — refreshes when commissioners reschedule.
-                      const base = 'tbpoopsyhfuqcbugrjbh.supabase.co/functions/v1/schedule-ics';
-                      const webcalUrl = `webcal://${base}?league=${league.id}`;
-                      const httpsUrl = `https://${base}?league=${league.id}`;
-                      const ua = (navigator.userAgent || '').toLowerCase();
-                      const isAppleish = /iphone|ipad|ipod|macintosh/.test(ua);
-                      if (isAppleish) {
-                        window.location.href = webcalUrl;
-                      } else {
-                        try {
-                          navigator.clipboard?.writeText(httpsUrl);
-                          // eslint-disable-next-line no-alert
-                          alert('Live league calendar link copied!\n\nPaste it into Google Calendar → Other calendars → From URL, or any app that subscribes to .ics feeds. The full league schedule will auto-refresh.');
-                        } catch {
-                          window.location.href = webcalUrl;
-                        }
-                      }
-                    }}
+                    onClick={() => setSubscribeOpen(true)}
                     style={{
                       fontSize: 12, fontWeight: 700, letterSpacing: '0.04em',
                       padding: '8px 16px', borderRadius: 999,
@@ -371,6 +355,14 @@ export default function LeaguePage({ profile }) {
           )}
         </div>
       </div>
+
+      <SubscribeCalendarSheet
+        open={subscribeOpen}
+        onClose={() => setSubscribeOpen(false)}
+        httpsUrl={`https://tbpoopsyhfuqcbugrjbh.supabase.co/functions/v1/schedule-ics?league=${league?.id || ''}`}
+        webcalUrl={`webcal://tbpoopsyhfuqcbugrjbh.supabase.co/functions/v1/schedule-ics?league=${league?.id || ''}`}
+        title={league?.name ? `the full ${league.name} schedule` : 'the league schedule'}
+      />
     </Layout>
   );
 }
