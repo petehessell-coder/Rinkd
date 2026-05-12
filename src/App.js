@@ -21,6 +21,7 @@ import Tournaments from './pages/Tournaments';
 import TournamentCreate from './pages/TournamentCreate';
 import TournamentManage from './pages/TournamentManage';
 import AdminAnalytics from './pages/AdminAnalytics';
+import AdminFeedback from './pages/AdminFeedback';
 import Notifications from './pages/Notifications';
 import OnboardingModal from './components/OnboardingModal';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -101,6 +102,7 @@ function AppRoutes() {
       <Route path="/tournament/create" element={<ProtectedRoute><TournamentCreate profile={profile} /></ProtectedRoute>} />
       <Route path="/tournament/:id/manage" element={<ProtectedRoute><TournamentManage currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/admin/analytics" element={<ProtectedRoute><AdminAnalytics currentUser={user} profile={profile} /></ProtectedRoute>} />
+      <Route path="/admin/feedback" element={<ProtectedRoute><AdminFeedback currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/notifications" element={<ProtectedRoute><Notifications currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/tournament/:id" element={<ProtectedRoute><Tournament currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/scorer/:gameId" element={<ProtectedRoute><ScorerView /></ProtectedRoute>} />

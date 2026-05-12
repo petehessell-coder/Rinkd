@@ -5,6 +5,7 @@ import { signOut } from '../lib/auth';
 import { useUserRole, roleMenuSections } from '../lib/userRole';
 import InstallButton from './InstallButton';
 import NotificationBell from './NotificationBell';
+import HelpButton from './HelpButton';
 
 const ROLE_BADGE_COLOR = {
   commissioner: '#D72638',
@@ -316,6 +317,9 @@ export default function Layout({ children, profile }) {
           .mobile-menu-open { display: flex !important; }
         }
       `}</style>
+
+      {/* Floating help+feedback button, visible on every page */}
+      <HelpButton />
     </div>
   );
 }

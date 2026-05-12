@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { RinkdLogo, Wordmark } from '../components/Logos';
 import { signIn, signUp } from '../lib/auth';
 import { track } from '../lib/analytics';
+import HelpButton from '../components/HelpButton';
 import DownloadCTA from '../components/DownloadCTA';
 
 const C = {
@@ -432,6 +433,10 @@ export default function Auth() {
           .auth-form { width: 100% !important; padding: 40px 28px !important; }
         }
       `}</style>
+
+      {/* Floating help+feedback button — visible on the auth screen too, so users
+          who can't sign in for some reason still have a way to reach us. */}
+      <HelpButton />
     </div>
   );
 }
