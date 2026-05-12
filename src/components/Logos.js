@@ -67,6 +67,70 @@ export function Wordmark({ height = 60, style, src = '/rinkd-wordmark-large.png'
   );
 }
 
+// ============================================================================
+// Brand nav icons — small SVGs that match the visual weight of the Rinkside and
+// Crease logos in the sidebar. Square-aspect, brand-colored, recognizable at
+// 22-26px. Each accepts a size prop so it can scale for desktop sidebar (22)
+// and mobile menu (24) without losing crispness.
+// ============================================================================
+
+// Leagues — trophy on a podium. Red cup, ice base.
+export function LeaguesNavIcon({ size = 22 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
+      {/* Handles */}
+      <path d="M5 6h2v2a2 2 0 002 2v1.5M19 6h-2v2a2 2 0 01-2 2v1.5" stroke="#F4F7FA" strokeWidth="1.2" strokeLinecap="round" fill="none"/>
+      {/* Cup body */}
+      <path d="M7 4h10v5a5 5 0 01-10 0V4z" fill="#D72638"/>
+      {/* Cup highlight */}
+      <path d="M9 4v3.5a3 3 0 001.5 2.6" stroke="#F4F7FA" strokeOpacity="0.35" strokeWidth="1" strokeLinecap="round" fill="none"/>
+      {/* Stem */}
+      <rect x="10.5" y="13.5" width="3" height="3" fill="#F4F7FA"/>
+      {/* Base */}
+      <rect x="7" y="17" width="10" height="3" rx="0.8" fill="#F4F7FA"/>
+    </svg>
+  );
+}
+
+// Profile — head + shoulders silhouette in a navy/blue gradient circle.
+export function ProfileNavIcon({ size = 22 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
+      <defs>
+        <linearGradient id="rinkd-profile-bg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#2E5B8C"/>
+          <stop offset="1" stopColor="#0B1F3A"/>
+        </linearGradient>
+      </defs>
+      <circle cx="12" cy="12" r="11.2" fill="url(#rinkd-profile-bg)" stroke="#D72638" strokeWidth="0.8"/>
+      {/* Head */}
+      <circle cx="12" cy="9.5" r="3.2" fill="#F4F7FA"/>
+      {/* Shoulders */}
+      <path d="M4.5 22c1.4-3.7 4.6-5.5 7.5-5.5s6.1 1.8 7.5 5.5z" fill="#F4F7FA"/>
+    </svg>
+  );
+}
+
+// Tournaments — 4-team bracket, red lines on dark background.
+export function TournamentsNavIcon({ size = 22 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
+      {/* Left side — 2 first-round matches */}
+      <rect x="2" y="4"  width="5" height="3" rx="0.6" fill="#0B1F3A" stroke="#D72638" strokeWidth="1.1"/>
+      <rect x="2" y="11" width="5" height="3" rx="0.6" fill="#0B1F3A" stroke="#D72638" strokeWidth="1.1"/>
+      <rect x="2" y="17" width="5" height="3" rx="0.6" fill="#0B1F3A" stroke="#D72638" strokeWidth="1.1"/>
+      {/* Connectors left → semifinal */}
+      <path d="M7 5.5h2v6.5M7 12.5h2M7 18.5h2v-6" stroke="#F4F7FA" strokeWidth="1.1" strokeLinecap="round" fill="none"/>
+      {/* Semifinal box */}
+      <rect x="9" y="9" width="5" height="6" rx="0.6" fill="#D72638"/>
+      {/* Connector → final */}
+      <path d="M14 12h3" stroke="#F4F7FA" strokeWidth="1.1" strokeLinecap="round" fill="none"/>
+      {/* Trophy/winner */}
+      <circle cx="19" cy="12" r="2.6" fill="#F4F7FA"/>
+    </svg>
+  );
+}
+
 export function TierBadge({ tier, size = 'sm' }) {
   const colors = { Mite:'#8BA3BE',Squirt:'#22C55E',Peewee:'#0EA5E9',Bantam:'#F59E0B',Midget:'#8B5CF6',Junior:'#D72638',Pro:'#F4F7FA' };
   const color = colors[tier]||'#8BA3BE';

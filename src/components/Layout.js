@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { RinkdLogo, Avatar } from './Logos';
+import { RinkdLogo, Avatar, LeaguesNavIcon, ProfileNavIcon, TournamentsNavIcon } from './Logos';
 import { signOut } from '../lib/auth';
 import { useUserRole, roleMenuSections } from '../lib/userRole';
 import InstallButton from './InstallButton';
@@ -17,11 +17,11 @@ const NAV = [
   { path: '/feed',        icon: '🏒', label: 'Feed' },
   { path: '/rinkside',    iconImg: '/rinkside-logo.png', label: 'Rinkside', badge: 'CONTENT' },
   { path: '/crease',      iconImg: '/crease-logo.png',   label: 'Crease',   badge: 'PREMIUM' },
-  { path: '/leagues',     icon: '🏆', label: 'Leagues',     badge: 'COMMUNITY' },
+  { path: '/leagues',     IconNode: LeaguesNavIcon,     label: 'Leagues',     badge: 'COMMUNITY' },
   { path: '/store',       icon: '🛒', label: 'Store',       badge: 'MERCH' },
   { path: '/discover',    icon: '🔍', label: 'Discover' },
-  { path: '/profile',     icon: '👤', label: 'Profile' },
-  { path: '/tournaments', icon: '🥅', label: 'Tournaments' },
+  { path: '/profile',     IconNode: ProfileNavIcon,     label: 'Profile' },
+  { path: '/tournaments', IconNode: TournamentsNavIcon, label: 'Tournaments' },
   { path: '/teams',       icon: '👥', label: 'Teams' },
 ];
 
@@ -33,14 +33,20 @@ const BOTTOM_NAV = [
   { path: '/store',    icon: '🛒', label: 'Store' },
 ];
 
-// Renders either a PNG logo (for brand sub-pages like Rinkside/Crease) or the
-// item's emoji icon. Keeps the rest of the layout code tidy.
+// Renders one of three icon styles depending on what the nav item provides:
+//   1. iconImg → PNG/JPG file (Rinkside, Crease — uses the brand logo squares)
+//   2. IconNode → a React SVG component (Leagues, Profile, Tournaments)
+//   3. icon → emoji string (Feed, Store, Discover, Teams)
 function NavIcon({ item, size }) {
   if (item.iconImg) {
     return (
       <img src={item.iconImg} alt="" width={size} height={size}
         style={{ width: size, height: size, borderRadius: size * 0.22, objectFit: 'cover', display: 'block', flexShrink: 0 }} />
     );
+  }
+  if (item.IconNode) {
+    const Icon = item.IconNode;
+    return <Icon size={size} />;
   }
   return <span style={{ fontSize: size, lineHeight: 1 }}>{item.icon}</span>;
 }
