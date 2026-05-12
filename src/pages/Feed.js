@@ -285,47 +285,61 @@ export default function Feed({ currentUser, profile }) {
     await load(); setPosting(false);
   };
 
-  // 4E-1 · Optimistic UI on likes
+  // 4E-1 · Optimistic UI on likes (v2 — race-safe)
   // ─────────────────────────────────────────────────────────────────────────
-  // Update the heart + count IMMEDIATELY based on the user's intent (toggle
-  // the current liked state). Then fire toggleLike() against Supabase in the
-  // background. If the network call fails OR comes back disagreeing with what
-  // we assumed, snap state back to the truth. The user perceives every tap as
-  // instant (0ms) instead of waiting 200–500ms for a round-trip.
-  const handleLike = async (postId) => {
+  // v1 read `likedPosts.includes(postId)` from the closure, which is stale
+  // during rapid taps — every tap saw the same "not liked" state and bumped
+  // the counter, producing a runaway count. Fix: derive the next state
+  // INSIDE the functional updater (which always sees the freshest array),
+  // and gate concurrent network calls with an in-flight ref so a burst of
+  // taps converges on a single round-trip and doesn't race itself.
+  const likeInFlightRef = useRef(new Set());
+
+  const handleLike = (postId) => {
     if (!currentUser) return;
-    const wasLiked = likedPosts.includes(postId);
-    const willBeLiked = !wasLiked;
 
-    // Optimistic write: flip the heart and bump/decrement the counter now.
-    setLikedPosts(prev => willBeLiked ? [...prev, postId] : prev.filter(id => id !== postId));
-    setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes: willBeLiked ? (p.likes || 0) + 1 : Math.max(0, (p.likes || 0) - 1) } : p));
+    // Toggle the local heart state using a functional updater. We capture
+    // the "after toggle" value in a sentinel so setPosts below can stay
+    // mathematically consistent with what likedPosts ended up as.
+    let nextLiked = null;
+    setLikedPosts(prev => {
+      nextLiked = !prev.includes(postId);
+      return nextLiked ? [...prev, postId] : prev.filter(id => id !== postId);
+    });
+    setPosts(prev => prev.map(p => p.id === postId
+      ? { ...p, likes: nextLiked ? (p.likes || 0) + 1 : Math.max(0, (p.likes || 0) - 1) }
+      : p
+    ));
 
-    try {
-      const { liked, error } = await toggleLike(postId, currentUser.id);
-      if (error) throw error;
-      // If the server disagrees with our optimistic guess (e.g. another tab
-      // already toggled the like), reconcile to the server truth without a
-      // visible flicker — we only patch if the result differs from our guess.
-      if (liked !== willBeLiked) {
-        setLikedPosts(prev => liked ? [...new Set([...prev, postId])] : prev.filter(id => id !== postId));
-        setPosts(prev => prev.map(p => {
-          if (p.id !== postId) return p;
-          // The optimistic +1/-1 may now be off-by-one. Re-derive against
-          // whatever the canonical state says: undo our optimistic delta and
-          // apply the correct one.
-          const undo = willBeLiked ? -1 : +1;
-          const correct = liked ? +1 : -1;
-          return { ...p, likes: Math.max(0, (p.likes || 0) + undo + correct) };
-        }));
+    // Network reconciliation. If a call is already in flight for this post,
+    // skip — when it returns we'll reconcile to truth anyway, and firing
+    // another toggle would race it (and re-toggle the server state).
+    if (likeInFlightRef.current.has(postId)) return;
+    likeInFlightRef.current.add(postId);
+
+    (async () => {
+      try {
+        const { liked, error } = await toggleLike(postId, currentUser.id);
+        if (error) throw error;
+        // Snap to server truth if our final optimistic state diverged.
+        setLikedPosts(prev => {
+          const currentlyLiked = prev.includes(postId);
+          if (currentlyLiked === liked) return prev;
+          return liked ? [...prev, postId] : prev.filter(id => id !== postId);
+        });
+      } catch (_e) {
+        // Rollback: flip the local state back to whatever it was before
+        // this tap-burst. We use a functional updater so we don't double-
+        // toggle if the user kept tapping during the network call.
+        setLikedPosts(prev => nextLiked ? prev.filter(id => id !== postId) : [...prev, postId]);
+        setPosts(prev => prev.map(p => p.id === postId
+          ? { ...p, likes: nextLiked ? Math.max(0, (p.likes || 0) - 1) : (p.likes || 0) + 1 }
+          : p
+        ));
+      } finally {
+        likeInFlightRef.current.delete(postId);
       }
-    } catch (_e) {
-      // Network or RLS failure — roll back to the pre-tap state so the UI
-      // doesn't lie. Toast/snackbar could be added later; for now silent
-      // rollback is better than a stuck-looking heart.
-      setLikedPosts(prev => wasLiked ? [...new Set([...prev, postId])] : prev.filter(id => id !== postId));
-      setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes: wasLiked ? (p.likes || 0) + 1 : Math.max(0, (p.likes || 0) - 1) } : p));
-    }
+    })();
   };
 
   return (
