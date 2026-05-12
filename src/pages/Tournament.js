@@ -14,7 +14,7 @@ function LedV({ size = 16 }) {
 
 const TABS = ['Standings','Schedule','Bracket','Info','Feed'];
 
-export default function TournamentPage() {
+export default function TournamentPage({ currentUser }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('Standings');
@@ -91,9 +91,17 @@ export default function TournamentPage() {
 
       {/* HEADER */}
       <div style={{background:'#0B1F3A',padding:'14px 16px 0',borderBottom:'0.5px solid rgba(46,91,140,0.4)'}}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,gap:8,flexWrap:'wrap'}}>
           <button onClick={() => navigate(-1)} style={{color:'rgba(244,247,250,0.6)',fontSize:13,background:'none',border:'none',cursor:'pointer',fontFamily:'Barlow,sans-serif'}}>← Events</button>
-          {liveGames.length > 0 && <span style={{background:'rgba(215,38,56,0.15)',color:'#D72638',fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:20}}>● Live now</span>}
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            {liveGames.length > 0 && <span style={{background:'rgba(215,38,56,0.15)',color:'#D72638',fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:20}}>● Live now</span>}
+            {tournament && currentUser && tournament.director_id === currentUser.id && (
+              <button onClick={() => navigate(`/tournament/${id}/manage`)}
+                style={{background:'#D72638',color:'#fff',border:'none',borderRadius:999,padding:'5px 12px',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',letterSpacing:'0.05em',textTransform:'uppercase'}}>
+                ⚙ Manage
+              </button>
+            )}
+          </div>
         </div>
         <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:22}}>
           {(tournament?.name || '').toUpperCase()} · {tournament?.division}

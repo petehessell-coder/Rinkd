@@ -19,6 +19,7 @@ import Discover from './pages/Discover';
 import Tournament from './pages/Tournament';
 import Tournaments from './pages/Tournaments';
 import TournamentCreate from './pages/TournamentCreate';
+import TournamentManage from './pages/TournamentManage';
 import Teams from './pages/Teams';
 import League from './pages/League';
 import LeagueManage from './pages/LeagueManage';
@@ -79,7 +80,8 @@ function AppRoutes() {
       <Route path="/team/:id/manage" element={<ProtectedRoute><TeamManage profile={profile} /></ProtectedRoute>} />
       <Route path="/team/:id" element={<ProtectedRoute><Team currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/tournament/create" element={<ProtectedRoute><TournamentCreate profile={profile} /></ProtectedRoute>} />
-      <Route path="/tournament/:id" element={<ProtectedRoute><Tournament /></ProtectedRoute>} />
+      <Route path="/tournament/:id/manage" element={<ProtectedRoute><TournamentManage currentUser={user} profile={profile} /></ProtectedRoute>} />
+      <Route path="/tournament/:id" element={<ProtectedRoute><Tournament currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/scorer/:gameId" element={<ProtectedRoute><ScorerView /></ProtectedRoute>} />
       <Route path="/game/:gameId" element={<ProtectedRoute><GameDetail profile={profile} /></ProtectedRoute>} />
       <Route path="/league-game/:gameId" element={<ProtectedRoute><GameDetail profile={profile} /></ProtectedRoute>} />
