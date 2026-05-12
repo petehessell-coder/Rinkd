@@ -59,6 +59,22 @@ const styles = `
     box-shadow: 0 0 20px rgba(215,38,56,0.35), inset 0 0 12px rgba(0,0,0,0.6);
     flex-shrink: 0;
   }
+  .sv-brand-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    line-height: 1;
+  }
+  .sv-wordmark {
+    height: 44px;
+    width: auto;
+    display: block;
+    /* Match the way the wordmark sits in the rest of the app — slightly lifted
+       so the tape texture's bottom edge doesn't crash into the subhead. */
+    margin-bottom: 2px;
+  }
+  /* Legacy class kept in case any other view still references it. */
   .sv-brand-name {
     font-family: 'Barlow Condensed', sans-serif;
     font-weight: 900;
@@ -582,8 +598,8 @@ export default function Survey() {
               ))}
             </svg>
           </div>
-          <div>
-            <div className="sv-brand-name">RINKD</div>
+          <div className="sv-brand-stack">
+            <img src="/rinkd-wordmark.png" alt="Rinkd" className="sv-wordmark" />
             <div className="sv-brand-sub">The Platform Built for Hockey</div>
           </div>
         </div>
