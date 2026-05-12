@@ -69,7 +69,7 @@ function MediaDisplay({ url, type }) {
   );
 }
 
-function PostCard({ post, currentUser, likedPosts, onLike, onComment }) {
+function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, onLike, onComment }) {
   const navigate = useNavigate();
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState([]);
@@ -83,13 +83,58 @@ function PostCard({ post, currentUser, likedPosts, onLike, onComment }) {
     setShowComments(v => !v);
   };
 
+  // 4E-1 · Optimistic UI on comments
+  // ─────────────────────────────────────────────────────────────────────────
+  // The previous flow was: createComment → getComments → setState. That's two
+  // network round-trips before the user sees their own comment, and during
+  // that time the input is locked and silent. This rewrite shows the comment
+  // instantly with a temp ID, then swaps it for the real row when Supabase
+  // confirms. If the insert fails, we yank the temp comment and restore the
+  // typed text so the user can try again.
   const submitComment = async (e) => {
     e.preventDefault();
-    if (!commentText.trim()) return;
+    const trimmed = commentText.trim();
+    if (!trimmed || submitting) return;
     setSubmitting(true);
-    await createComment(post.id, currentUser.id, commentText);
-    const c = await getComments(post.id);
-    setComments(c); setCommentText(''); setSubmitting(false); onComment();
+
+    const tempId = `temp-${Date.now()}`;
+    const tempComment = {
+      id: tempId,
+      content: trimmed,
+      created_at: new Date().toISOString(),
+      // Use the viewer's full profile (with name/avatar) so the temp comment
+      // renders identically to a real one. PostCard receives `profile` as
+      // `viewerProfile` — the post.profiles join is for the post author.
+      profiles: viewerProfile || null,
+      __pending: true,
+    };
+    setComments(prev => [...prev, tempComment]);
+    setCommentText('');
+
+    const { data, error } = await createComment(post.id, currentUser.id, trimmed);
+    setSubmitting(false);
+
+    if (error) {
+      // Insert failed — roll back so the UI doesn't lie. Restore the text
+      // exactly as typed so the user can edit-and-retry without re-typing.
+      // eslint-disable-next-line no-console
+      console.warn('[submitComment] insert failed, rolling back:', error?.message || error);
+      setComments(prev => prev.filter(c => c.id !== tempId));
+      setCommentText(trimmed);
+      return;
+    }
+
+    // Swap the temp row for the real one. We preserve the profile join we
+    // already had locally so Supabase doesn't need a second round-trip just
+    // to re-fetch what we already know.
+    setComments(prev => prev.map(c =>
+      c.id === tempId ? { ...data, profiles: c.profiles } : c
+    ));
+
+    // Bubble up so the parent Feed can refresh the comment-count chip on the
+    // card. (Today this triggers a full feed reload; a future patch could
+    // teach Feed to bump post.comment_count locally instead.)
+    onComment();
   };
 
   return (
@@ -128,17 +173,20 @@ function PostCard({ post, currentUser, likedPosts, onLike, onComment }) {
         {showComments && (
           <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
             {comments.map(c => (
-              <div key={c.id} style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+              <div key={c.id} style={{ display: 'flex', gap: 8, marginBottom: 10, opacity: c.__pending ? 0.55 : 1, transition: 'opacity 0.18s' }}>
                 <Avatar profile={c.profiles} size={28} />
                 <div style={{ flex: 1, background: C.navy, borderRadius: 8, padding: '8px 10px' }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: C.ice, marginBottom: 2 }}>{c.profiles?.name} <span style={{ fontWeight: 400, color: C.steel }}>· {timeAgo(c.created_at)}</span></div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: C.ice, marginBottom: 2 }}>
+                    {c.profiles?.name || (c.__pending ? 'You' : '')}
+                    <span style={{ fontWeight: 400, color: C.steel }}> · {c.__pending ? 'sending…' : timeAgo(c.created_at)}</span>
+                  </div>
                   <div style={{ fontSize: 13, color: C.ice }}>{c.content}</div>
                 </div>
               </div>
             ))}
             {currentUser && (
               <form onSubmit={submitComment} style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                <Avatar profile={currentUser} size={28} />
+                <Avatar profile={viewerProfile || currentUser} size={28} />
                 <input value={commentText} onChange={e => setCommentText(e.target.value)} placeholder="Add a comment..." maxLength={280}
                   style={{ flex: 1, padding: '8px 12px', borderRadius: 8, background: C.navy, border: `1px solid ${C.border}`, color: C.ice, fontSize: 13, outline: 'none', fontFamily: "'Barlow', sans-serif" }}/>
                 <button type="submit" disabled={!commentText.trim() || submitting}
@@ -237,11 +285,47 @@ export default function Feed({ currentUser, profile }) {
     await load(); setPosting(false);
   };
 
+  // 4E-1 · Optimistic UI on likes
+  // ─────────────────────────────────────────────────────────────────────────
+  // Update the heart + count IMMEDIATELY based on the user's intent (toggle
+  // the current liked state). Then fire toggleLike() against Supabase in the
+  // background. If the network call fails OR comes back disagreeing with what
+  // we assumed, snap state back to the truth. The user perceives every tap as
+  // instant (0ms) instead of waiting 200–500ms for a round-trip.
   const handleLike = async (postId) => {
     if (!currentUser) return;
-    const { liked } = await toggleLike(postId, currentUser.id);
-    setLikedPosts(prev => liked ? [...prev, postId] : prev.filter(id => id !== postId));
-    setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes: liked ? (p.likes || 0) + 1 : Math.max(0, (p.likes || 0) - 1) } : p));
+    const wasLiked = likedPosts.includes(postId);
+    const willBeLiked = !wasLiked;
+
+    // Optimistic write: flip the heart and bump/decrement the counter now.
+    setLikedPosts(prev => willBeLiked ? [...prev, postId] : prev.filter(id => id !== postId));
+    setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes: willBeLiked ? (p.likes || 0) + 1 : Math.max(0, (p.likes || 0) - 1) } : p));
+
+    try {
+      const { liked, error } = await toggleLike(postId, currentUser.id);
+      if (error) throw error;
+      // If the server disagrees with our optimistic guess (e.g. another tab
+      // already toggled the like), reconcile to the server truth without a
+      // visible flicker — we only patch if the result differs from our guess.
+      if (liked !== willBeLiked) {
+        setLikedPosts(prev => liked ? [...new Set([...prev, postId])] : prev.filter(id => id !== postId));
+        setPosts(prev => prev.map(p => {
+          if (p.id !== postId) return p;
+          // The optimistic +1/-1 may now be off-by-one. Re-derive against
+          // whatever the canonical state says: undo our optimistic delta and
+          // apply the correct one.
+          const undo = willBeLiked ? -1 : +1;
+          const correct = liked ? +1 : -1;
+          return { ...p, likes: Math.max(0, (p.likes || 0) + undo + correct) };
+        }));
+      }
+    } catch (_e) {
+      // Network or RLS failure — roll back to the pre-tap state so the UI
+      // doesn't lie. Toast/snackbar could be added later; for now silent
+      // rollback is better than a stuck-looking heart.
+      setLikedPosts(prev => wasLiked ? [...new Set([...prev, postId])] : prev.filter(id => id !== postId));
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes: wasLiked ? (p.likes || 0) + 1 : Math.max(0, (p.likes || 0) - 1) } : p));
+    }
   };
 
   return (
@@ -350,7 +434,7 @@ export default function Feed({ currentUser, profile }) {
             cta={tab === 'following' ? { label: 'Discover Players', onClick: () => navigate('/discover') } : { label: 'Drop a Chirp', onClick: () => setComposerOpen(true) }}
           />
         ) : posts.map(post => (
-          <PostCard key={post.id} post={post} currentUser={currentUser} likedPosts={likedPosts} onLike={handleLike} onComment={load} />
+          <PostCard key={post.id} post={post} currentUser={currentUser} profile={profile} likedPosts={likedPosts} onLike={handleLike} onComment={load} />
         ))}
       </div>
     </Layout>

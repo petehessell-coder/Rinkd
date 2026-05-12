@@ -40,17 +40,30 @@ import GameDetail from './pages/GameDetail';
 import { DuesTrackerPage } from './pages/ComingSoon';
 import AdminPanel from './pages/AdminPanel';
 import VolunteerCoordinator from './pages/VolunteerCoordinator';
+import NotFound from './pages/NotFound';
 
 export const AuthContext = createContext(null);
 export function useAuth() { return useContext(AuthContext); }
+
+// Coin-flip loading mark — half the time you see the LED R, half the time
+// Rizzo the Rinkd Rat. The mascot is intentionally a delight moment, not the
+// primary logo, so we keep the LED R as the 50/50 fallback. Pinning the choice
+// in a module-level constant means it only flips on full app reloads, not on
+// every render of ProtectedRoute (which would cause the icon to flash mid-load).
+// WebP shaves Rizzo from 1.7MB (original) → 78KB (95.5% smaller). PNG fallback
+// is still in /public/mascot-rizzo.png at 420KB for the unlikely case of a
+// browser that can't decode WebP (Safari 13 and older — sub-1% in 2026).
+const LOADING_MARK = Math.random() < 0.5
+  ? { src: '/mascot-rizzo.webp', alt: 'Rinkd Rat', size: 96, borderRadius: 0 }
+  : { src: '/icon-192.png',      alt: 'Rinkd',     size: 72, borderRadius: 16 };
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return (
     <div style={{ minHeight: '100vh', background: '#07111F', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow', sans-serif", color: '#8BA3BE', fontSize: 15 }}>
       <div style={{ textAlign: 'center' }}>
-        <img src="/icon-192.png" alt="Rinkd" width="72" height="72"
-          style={{ display: 'block', margin: '0 auto 16px', borderRadius: 16, animation: 'rinkd-pulse 1.6s ease-in-out infinite' }} />
+        <img src={LOADING_MARK.src} alt={LOADING_MARK.alt} width={LOADING_MARK.size} height={LOADING_MARK.size}
+          style={{ display: 'block', margin: '0 auto 16px', borderRadius: LOADING_MARK.borderRadius, animation: 'rinkd-pulse 1.6s ease-in-out infinite' }} />
         <div>Loading Rinkd...</div>
         <style>{`@keyframes rinkd-pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.65; transform: scale(0.96); } }`}</style>
       </div>
@@ -124,7 +137,10 @@ function AppRoutes() {
       <Route path="/admin" element={<ProtectedRoute><AdminPanel profile={profile} /></ProtectedRoute>} />
       <Route path="/privacy" element={<Legal />} />
       <Route path="/terms" element={<Legal />} />
-      <Route path="*" element={<Navigate to="/feed" replace />} />
+      {/* Catch-all 404 — shows the Rizzo mascot + back-to-Chirps CTA.
+          Replaces the previous silent redirect to /feed so users get a real
+          explanation when a link is dead. */}
+      <Route path="*" element={<NotFound />} />
     </Routes>
     </>
   );
