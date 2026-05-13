@@ -373,8 +373,12 @@ export default function Feed({ currentUser, profile }) {
 
         <PushPrompt userId={currentUser?.id} />
         
+        {/* Tabs: Leagues hidden until Sprint 5B/5C ships team-aware membership.
+            Today it silently falls through to getPosts() in load() which makes
+            it identical to For You — quietly broken. Restore the third tab
+            once posts can be filtered by user's team/league context. */}
         <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: C.navy, borderRadius: 10, padding: 4, border: `1px solid ${C.border}` }}>
-          {[{ id: 'following', label: 'Following' }, { id: 'foryou', label: 'For You' }, { id: 'leagues', label: 'Leagues' }].map(t => (
+          {[{ id: 'following', label: 'Following' }, { id: 'foryou', label: 'For You' }].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, padding: '8px', borderRadius: 7, border: 'none', background: tab === t.id ? C.blue : 'transparent', color: tab === t.id ? C.ice : C.steel, fontFamily: "'Barlow', sans-serif", fontWeight: tab === t.id ? 600 : 400, fontSize: 14, cursor: 'pointer', transition: 'all 0.15s' }}>{t.label}</button>
           ))}
         </div>
