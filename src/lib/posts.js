@@ -14,10 +14,14 @@ export async function getFollowingPosts(userId, limit = 30) {
     .from('follows')
     .select('following_id')
     .eq('follower_id', userId);
-  
-  if (!follows || follows.length === 0) return { data: [], error: null };
-  
-  const ids = follows.map(f => f.following_id);
+
+  // The Following feed must include the user's OWN posts. Without this, when
+  // someone posts a chirp the feed reloads and their post is invisible to
+  // them — looks like the post failed even though it landed cleanly in the
+  // DB. Every social platform does this: your home feed always includes you.
+  const ids = (follows || []).map((f) => f.following_id);
+  if (!ids.includes(userId)) ids.push(userId);
+
   const { data, error } = await supabase
     .from('posts')
     .select(`*, profiles(id, name, handle, avatar_color, avatar_initials, tier, position)`)
