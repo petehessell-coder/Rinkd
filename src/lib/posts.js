@@ -3,7 +3,7 @@ import { supabase } from './supabase';
 export async function getPosts(limit = 30) {
   const { data, error } = await supabase
     .from('posts')
-    .select(`*, profiles(id, name, handle, avatar_color, avatar_initials, tier, position)`)
+    .select(`*, profiles(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position)`)
     .order('created_at', { ascending: false })
     .limit(limit);
   return { data, error };
@@ -24,7 +24,7 @@ export async function getFollowingPosts(userId, limit = 30) {
 
   const { data, error } = await supabase
     .from('posts')
-    .select(`*, profiles(id, name, handle, avatar_color, avatar_initials, tier, position)`)
+    .select(`*, profiles(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position)`)
     .in('author_id', ids)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -55,7 +55,7 @@ export async function createPost(authorId, { content, tag, tagColor, mediaUrl, m
 export async function getTeamPosts(teamId, limit = 50) {
   const { data, error } = await supabase
     .from('posts')
-    .select(`*, profiles(id, name, handle, avatar_color, avatar_initials, tier, position)`)
+    .select(`*, profiles(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position)`)
     .eq('team_id', teamId)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -114,7 +114,7 @@ export async function getComments(postId) {
   // ambiguous if new relationships land later.
   const { data, error } = await supabase
     .from('comments')
-    .select(`*, profiles!comments_author_id_fkey(id, name, handle, avatar_color, avatar_initials, tier)`)
+    .select(`*, profiles!comments_author_id_fkey(id, name, handle, avatar_url, avatar_color, avatar_initials, tier)`)
     .eq('post_id', postId)
     .order('created_at', { ascending: true });
   if (error) {
