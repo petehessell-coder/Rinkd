@@ -35,6 +35,10 @@ export default function TeamPage({ currentUser, profile }) {
   const [joinRequested, setJoinRequested] = useState(false);
   const [joinLoading, setJoinLoading] = useState(false);
   const [subscribeOpen, setSubscribeOpen] = useState(false);
+  // Default schedule view shows recent 5 + upcoming 5; tapping "Show all"
+  // expands to every game past + future. Persists per-team via state, resets
+  // on page change. Keeps the team page light by default but never hides data.
+  const [showAllGames, setShowAllGames] = useState(false);
   const [lineupGame, setLineupGame] = useState(null); // game object whose lineup modal is open
 
   const load = useCallback(async () => {
@@ -73,8 +77,15 @@ export default function TeamPage({ currentUser, profile }) {
   const defense = members.filter(m => m.position?.toLowerCase().includes('defense') || m.position?.toLowerCase().includes('d'));
   const forwards = members.filter(m => !goalies.includes(m) && !defense.includes(m) && m.role !== 'manager');
   const coaches = members.filter(m => m.role === 'coach' || m.role === 'manager');
-  const recentGames = games.filter(g => g.status === 'final').slice(0, 5);
-  const upcomingGames = games.filter(g => g.status === 'scheduled').slice(0, 5);
+  // When collapsed: show the 5 most recent and 5 next upcoming.
+  // When expanded: show every game (capped at 200 as a sanity rail).
+  const allFinal     = games.filter(g => g.status === 'final');
+  const allUpcoming  = games.filter(g => g.status === 'scheduled');
+  const recentGames   = showAllGames ? allFinal.slice(0, 200)    : allFinal.slice(0, 5);
+  const upcomingGames = showAllGames ? allUpcoming.slice(0, 200) : allUpcoming.slice(0, 5);
+  const totalGames    = allFinal.length + allUpcoming.length;
+  const visibleGames  = recentGames.length + upcomingGames.length;
+  const hasMoreGames  = totalGames > visibleGames;
 
   const wins = games.filter(g => {
     if (g.status !== 'final') return false;
@@ -404,6 +415,33 @@ export default function TeamPage({ currentUser, profile }) {
                     {upcomingGames.map(renderGameRow)}
                   </div>
                 </>
+              )}
+              {(hasMoreGames || showAllGames) && totalGames > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
+                  <button
+                    onClick={() => setShowAllGames(v => !v)}
+                    style={{
+                      padding: '10px 18px',
+                      borderRadius: 999,
+                      background: 'transparent',
+                      border: `1px solid ${C.border}`,
+                      color: C.ice,
+                      fontFamily: "'Barlow Condensed', sans-serif",
+                      fontWeight: 700,
+                      fontStyle: 'italic',
+                      fontSize: 13,
+                      letterSpacing: '0.05em',
+                      textTransform: 'uppercase',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = C.blue + '33'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                    {showAllGames
+                      ? `Show recent only`
+                      : `Show all ${totalGames} games →`}
+                  </button>
+                </div>
               )}
               {games.length === 0 && (
                 <div style={{ textAlign: 'center', color: 'rgba(244,247,250,0.3)', fontSize: 13, padding: '30px 0' }}>No games scheduled yet</div>
