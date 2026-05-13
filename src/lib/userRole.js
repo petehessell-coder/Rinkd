@@ -20,6 +20,18 @@ export function useUserRole(userId) {
     let cancelled = false;
 
     async function run() {
+      // First gate: Rinkd staff. profiles.is_admin=true elevates this user
+      // to commissioner-equivalent regardless of league/team affiliation.
+      // Granted via SQL (no UI surface) — kept intentionally lo-fi so it's
+      // hard to accidentally promote someone in production.
+      const { data: profileRow } = await supabase
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', userId)
+        .single();
+      if (cancelled) return;
+      if (profileRow?.is_admin === true) { setRole('commissioner'); return; }
+
       const { count: leagueCount } = await supabase
         .from('leagues')
         .select('id', { count: 'exact', head: true })
