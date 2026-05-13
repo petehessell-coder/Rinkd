@@ -108,6 +108,12 @@ export default function Auth() {
       else setError(err.message);
     } else {
       track('signup_success', { position: form.position, level: form.level });
+      // 4E race-fix: set a sessionStorage flag so App.js can render the
+      // onboarding modal BEFORE the Supabase profile fetch completes. Without
+      // this, ~43% of recent signups were bouncing during the few-hundred-ms
+      // window where `user` is set but `profile` is still null — meaning the
+      // modal never mounted and they never fired `onboarding_started`.
+      try { sessionStorage.setItem('rinkd_pending_onboarding', '1'); } catch (_) { /* private mode */ }
       navigate('/feed');
     }
   };

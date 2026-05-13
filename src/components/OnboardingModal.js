@@ -63,14 +63,23 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
     })();
   }, [step, suggested.length, currentUser]);
 
+  const clearPendingFlag = () => {
+    // Clear the race-fix sessionStorage flag set by Auth.js on signup.
+    // Safe to call from finish() or skip() — idempotent.
+    try { sessionStorage.removeItem('rinkd_pending_onboarding'); } catch (_) {}
+  };
+
   const finish = async () => {
     setClosing(true);
+    clearPendingFlag();
     try {
       await supabase
         .from('profiles')
         .update({ welcome_seen: true, onboarding_completed_at: new Date().toISOString() })
         .eq('id', currentUser.id);
-      onProfileUpdate?.({ ...profile, welcome_seen: true });
+      // profile may still be null if we mounted via the race-fix path before
+      // the profile fetch returned — spread-of-null is fine.
+      onProfileUpdate?.({ ...(profile || {}), welcome_seen: true });
       track('onboarding_completed', { role: chosenRole });
     } catch { /* don't block close */ }
     onClose?.();
@@ -78,6 +87,7 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
 
   const handleSkip = () => {
     track('onboarding_skipped', { at_step: step });
+    clearPendingFlag();
     finish();
   };
 
@@ -89,7 +99,13 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
       const pos = positionMap[chosenRole];
       if (pos) {
         await supabase.from('profiles').update({ position: pos }).eq('id', currentUser.id);
-        onProfileUpdate?.({ ...profile, position: pos });
+        // Only do the optimistic state update if profile is already loaded —
+        // otherwise spreading null overwrites the full profile with just
+        // { position }, losing every other field. The next profile fetch
+        // will pick up the new position regardless.
+        if (profile) {
+          onProfileUpdate?.({ ...profile, position: pos });
+        }
       }
       track('onboarding_role_chosen', { role: chosenRole });
     }

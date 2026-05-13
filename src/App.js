@@ -74,9 +74,21 @@ function ProtectedRoute({ children }) {
 
 function AppRoutes() {
   const { user, profile, setProfile } = useAuth();
+
   // Fire the onboarding modal the first time a fresh signup lands logged in.
   // welcome_seen flips to true once they finish or skip — never re-shows.
-  const showOnboarding = !!user && !!profile && profile.welcome_seen === false;
+  //
+  // Two trigger paths:
+  //   1. `profile.welcome_seen === false` — the canonical signal once profile loads
+  //   2. `sessionStorage.rinkd_pending_onboarding === '1'` — set by Auth.js
+  //      immediately after signup so the modal can mount BEFORE the async
+  //      profile fetch completes. Fixes the race where ~43% of new signups
+  //      bounced during the few-hundred-ms profile-loading window.
+  let pendingFromSession = false;
+  try { pendingFromSession = sessionStorage.getItem('rinkd_pending_onboarding') === '1'; } catch (_) {}
+  const showOnboarding = !!user && (
+    (!!profile && profile.welcome_seen === false) || pendingFromSession
+  );
   return (
     <>
     {showOnboarding && (
