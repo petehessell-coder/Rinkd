@@ -47,10 +47,56 @@ function NavIcon({ item, size }) {
   return <span style={{ fontSize: size, lineHeight: 1 }}>{item.icon}</span>;
 }
 
+// Paths where a global "back" button doesn't make sense — these are
+// top-level destinations from the nav itself. Pressing back from /feed
+// to a previous detail page is confusing, not helpful. Everywhere else
+// gets a back button automatically.
+const TOP_LEVEL_PATHS = new Set([
+  '/', '/feed', '/teams', '/notifications', '/profile',
+  '/login', '/landing',
+]);
+
+function shouldShowBack(pathname) {
+  if (TOP_LEVEL_PATHS.has(pathname)) return false;
+  // /profile (own) is a top-level destination; /profile/:id (someone else)
+  // is a detail view that warrants a back button.
+  if (pathname === '/profile') return false;
+  return true;
+}
+
+function BackButton({ inline = false }) {
+  const navigate = useNavigate();
+  const onBack = () => {
+    // Use browser history if available; otherwise fall back to the feed.
+    if (window.history.length > 1) navigate(-1);
+    else navigate('/feed');
+  };
+  return (
+    <button
+      onClick={onBack}
+      aria-label="Back"
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        background: 'transparent', border: 'none', color: B.ice,
+        cursor: 'pointer', padding: inline ? '6px 10px' : '6px 8px',
+        borderRadius: 8, fontFamily: "'Barlow', sans-serif",
+        fontSize: 14, fontWeight: 600, lineHeight: 1,
+        transition: 'background 0.15s',
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = B.border + '66'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+    >
+      <span style={{ fontSize: 20, lineHeight: 1 }}>←</span>
+      <span>Back</span>
+    </button>
+  );
+}
+
 export default function Layout({ children, profile }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [moreOpen, setMoreOpen] = useState(false);
+  const showBack = shouldShowBack(location.pathname);
 
   // Close drawer on route change
   useEffect(() => { setMoreOpen(false); }, [location.pathname]);
@@ -166,14 +212,26 @@ export default function Layout({ children, profile }) {
 
       {/* ─── MAIN CONTENT ─── */}
       <main style={{ flex: 1, marginLeft: 240, maxWidth: '100%' }} className="main-content">
+        {/* Desktop back row — appears above every detail page. Hidden on
+            top-level nav destinations (Feed, Teams, Notifications, Profile,
+            Landing, Login). */}
+        {showBack && (
+          <div className="desktop-back-row" style={{ padding: '14px 16px 0' }}>
+            <BackButton inline />
+          </div>
+        )}
         {children}
       </main>
 
       {/* ─── MOBILE TOP BAR ─── */}
-      <div style={{ display: 'none', position: 'fixed', top: 0, left: 0, right: 0, height: 52, background: B.navy, borderBottom: `1px solid ${B.border}`, zIndex: 200, alignItems: 'center', justifyContent: 'space-between', padding: '0 16px' }} className="mobile-topbar">
-        <Link to="/feed" style={{ textDecoration: 'none' }}>
-          <RinkdLogo size={32} showText />
-        </Link>
+      <div style={{ display: 'none', position: 'fixed', top: 0, left: 0, right: 0, height: 52, background: B.navy, borderBottom: `1px solid ${B.border}`, zIndex: 200, alignItems: 'center', justifyContent: 'space-between', padding: '0 12px' }} className="mobile-topbar">
+        {showBack ? (
+          <BackButton />
+        ) : (
+          <Link to="/feed" style={{ textDecoration: 'none' }}>
+            <RinkdLogo size={32} showText />
+          </Link>
+        )}
         {profile?.id && <NotificationBell userId={profile.id} size={22} />}
       </div>
 
@@ -198,6 +256,9 @@ export default function Layout({ children, profile }) {
           .main-content { margin-left: 0 !important; padding-top: 52px; padding-bottom: 72px; }
           .mobile-topbar { display: flex !important; }
           .mobile-nav { display: block !important; }
+          /* Mobile shows the back button in the top bar, so hide the
+             desktop "back row" above content to avoid showing it twice. */
+          .desktop-back-row { display: none !important; }
         }
       `}</style>
 
