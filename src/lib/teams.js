@@ -1,9 +1,14 @@
 import { supabase } from './supabase';
 
 export async function getTeam(id) {
+  // Explicit FK hint required: teams now has TWO FKs pointing at profiles
+  // (manager_id from day one, plus claimed_by added with the ghost-team
+  // schema). PostgREST's shorthand embed gets ambiguous and the whole query
+  // throws, which Team.js mistakes for "not found." Naming the constraint
+  // (`teams_manager_id_fkey`) tells PostgREST which join to use.
   const { data, error } = await supabase
     .from('teams')
-    .select('*, manager:profiles(id, name, handle, avatar_color, avatar_initials)')
+    .select('*, manager:profiles!teams_manager_id_fkey(id, name, handle, avatar_color, avatar_initials)')
     .eq('id', id)
     .single();
   if (error) throw error;

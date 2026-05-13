@@ -1,0 +1,4 @@
+data/cache/
+data/schedules.json
+data/teams.json
+.env
