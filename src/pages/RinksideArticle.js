@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { getArticleBySlug, incrementView, renderMarkdown } from '../lib/rinkside';
-import { useUserRole } from '../lib/userRole';
+import { useIsRinkdAdmin } from '../lib/userRole';
 import { track } from '../lib/analytics';
 import SEO from '../components/SEO';
 
@@ -19,7 +19,7 @@ function fmtDate(iso) {
 export default function RinksideArticle({ currentUser, profile }) {
   const { slug } = useParams();
   const navigate = useNavigate();
-  const role = useUserRole(currentUser?.id);
+  const isAdmin = useIsRinkdAdmin(currentUser?.id);
   const [article, setArticle] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -54,7 +54,7 @@ export default function RinksideArticle({ currentUser, profile }) {
     );
   }
 
-  const canEdit = role === 'commissioner' || article.author_id === currentUser?.id;
+  const canEdit = isAdmin || article.author_id === currentUser?.id;
 
   return (
     <Layout profile={profile} currentPage="rinkside">

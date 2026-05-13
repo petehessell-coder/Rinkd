@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { supabase } from '../lib/supabase';
-import { useUserRole } from '../lib/userRole';
+import { useIsRinkdAdmin } from '../lib/userRole';
 import { timeAgo } from '../lib/posts';
 import { Avatar } from '../components/Logos';
 import { ListRowSkeleton, EmptyState } from '../components/Skeletons';
@@ -29,7 +29,9 @@ const TABS = [
 
 export default function AdminModerationPage({ currentUser, profile }) {
   const navigate = useNavigate();
-  const role = useUserRole(currentUser?.id);
+  // Platform-level moderation queue: Rinkd staff only. Per-league
+  // commissioners moderate their own league's stuff via AdminPanel.
+  const isAdmin = useIsRinkdAdmin(currentUser?.id);
   const [tab, setTab] = useState('posts');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -99,12 +101,12 @@ export default function AdminModerationPage({ currentUser, profile }) {
     setBlocklist((prev) => prev.filter((w) => w.id !== id));
   };
 
-  if (role !== 'commissioner') {
+  if (!isAdmin) {
     return (
       <Layout profile={profile}>
         <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.ice, gap: 12, padding: 24, textAlign: 'center' }}>
           <div style={{ fontSize: 40 }}>🔒</div>
-          <div>Moderation queue is commissioner-only.</div>
+          <div>Moderation queue is Rinkd staff only.</div>
           <button onClick={() => navigate('/feed')} style={{ background: C.red, color: '#fff', border: 'none', padding: '10px 18px', borderRadius: 999, cursor: 'pointer' }}>Back to Feed</button>
         </div>
       </Layout>

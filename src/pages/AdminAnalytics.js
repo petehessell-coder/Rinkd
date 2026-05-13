@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { loadDailyRollup, loadDAU, loadRecentEvents } from '../lib/analytics';
-import { useUserRole } from '../lib/userRole';
+import { useIsRinkdAdmin } from '../lib/userRole';
 
 const C = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
@@ -38,7 +38,9 @@ function MiniBars({ data, height = 60 }) {
 
 export default function AdminAnalytics({ currentUser, profile }) {
   const navigate = useNavigate();
-  const role = useUserRole(currentUser?.id);
+  // Platform-level analytics: Rinkd staff only. Per-league commissioners
+  // do NOT see this — they manage their own league via AdminPanel.
+  const isAdmin = useIsRinkdAdmin(currentUser?.id);
   const [daily, setDaily] = useState([]);
   const [dau, setDau] = useState([]);
   const [recent, setRecent] = useState([]);
@@ -51,8 +53,6 @@ export default function AdminAnalytics({ currentUser, profile }) {
       setLoading(false);
     })();
   }, []);
-
-  const isAdmin = role === 'commissioner';
 
   // Roll up totals by event for last 7d vs prior 7d
   const summary = useMemo(() => {

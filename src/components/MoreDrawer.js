@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useUserRole, roleMenuSections } from '../lib/userRole';
+import { useUserRole, useIsRinkdAdmin, roleMenuSections } from '../lib/userRole';
 
 const B = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
@@ -23,6 +23,7 @@ const B = {
  */
 export default function MoreDrawer({ open, onClose, userId, onSignOut }) {
   const role = useUserRole(userId);
+  const isRinkdAdmin = useIsRinkdAdmin(userId);
   const roleSections = roleMenuSections(role);
 
   useEffect(() => {
@@ -89,10 +90,13 @@ export default function MoreDrawer({ open, onClose, userId, onSignOut }) {
           </DrawerSection>
         )}
 
-        {/* COMMISSIONER ADMIN SHORTCUTS */}
-        {role === 'commissioner' && (
-          <DrawerSection title="Admin">
-            <DrawerRow item={{ path: '/admin', icon: '⚙️', label: 'Admin Panel', sub: 'Stats, rinks, requests' }} onClose={onClose} />
+        {/* RINKD STAFF — platform-wide tools. Gate is profiles.is_admin=true,
+            NOT league commissioner. Per-league commissioners see /admin via
+            the role menu section above (it manages their own league only).
+            Analytics, feedback, and moderation cross all leagues and so are
+            staff-only. */}
+        {isRinkdAdmin && (
+          <DrawerSection title="Rinkd Admin">
             <DrawerRow item={{ path: '/admin/analytics', icon: '📈', label: 'Analytics', sub: 'DAU + events firehose' }} onClose={onClose} />
             <DrawerRow item={{ path: '/admin/feedback', icon: '📬', label: 'Bug reports', sub: 'Triage user reports' }} onClose={onClose} />
             <DrawerRow item={{ path: '/admin/moderation', icon: '🛡️', label: 'Moderation', sub: 'Flagged content + blocklist' }} onClose={onClose} />

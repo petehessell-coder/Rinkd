@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import SEO from '../components/SEO';
 import { listArticles, listCategories } from '../lib/rinkside';
-import { useUserRole } from '../lib/userRole';
+import { useIsRinkdAdmin } from '../lib/userRole';
 import { CardGridSkeleton, EmptyState } from '../components/Skeletons';
 
 const C = {
@@ -89,7 +89,8 @@ function ArticleCard({ a, onOpen }) {
 
 export default function Rinkside({ currentUser, profile }) {
   const navigate = useNavigate();
-  const role = useUserRole(currentUser?.id);
+  // Rinkside is platform-level Rinkd-published content. Only staff publish.
+  const isAdmin = useIsRinkdAdmin(currentUser?.id);
   const [articles, setArticles] = useState([]);
   const [categories, setCategories] = useState([]);
   const [activeCategory, setActiveCategory] = useState(null);
@@ -110,7 +111,6 @@ export default function Rinkside({ currentUser, profile }) {
 
   const featured = articles.find((a) => a.is_featured);
   const rest = articles.filter((a) => a.id !== featured?.id);
-  const isAdmin = role === 'commissioner';
 
   return (
     <Layout profile={profile} currentPage="rinkside">

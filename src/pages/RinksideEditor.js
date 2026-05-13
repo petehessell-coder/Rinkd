@@ -4,7 +4,7 @@ import Layout from '../components/Layout';
 import {
   getArticleBySlug, createArticle, updateArticle, deleteArticle, renderMarkdown,
 } from '../lib/rinkside';
-import { useUserRole } from '../lib/userRole';
+import { useIsRinkdAdmin } from '../lib/userRole';
 
 const C = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
@@ -35,7 +35,7 @@ export default function RinksideEditor({ currentUser, profile }) {
   const navigate = useNavigate();
   const { slug } = useParams();
   const isNew = !slug;
-  const role = useUserRole(currentUser?.id);
+  const isAdmin = useIsRinkdAdmin(currentUser?.id);
 
   const [loaded, setLoaded] = useState(isNew);
   const [articleId, setArticleId] = useState(null);
@@ -81,7 +81,7 @@ export default function RinksideEditor({ currentUser, profile }) {
     if (autoSlug) setSlugValue(slugify(title));
   }, [title, autoSlug]);
 
-  const canEdit = useMemo(() => role === 'commissioner' || (!isNew && articleId), [role, isNew, articleId]);
+  const canEdit = useMemo(() => isAdmin || (!isNew && articleId), [isAdmin, isNew, articleId]);
 
   if (loaded && !canEdit) {
     return (

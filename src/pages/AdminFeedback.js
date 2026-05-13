@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { supabase } from '../lib/supabase';
-import { useUserRole } from '../lib/userRole';
+import { useIsRinkdAdmin } from '../lib/userRole';
 import { timeAgo } from '../lib/posts';
 import { ListRowSkeleton, EmptyState } from '../components/Skeletons';
 
@@ -28,7 +28,9 @@ const CATEGORY_META = {
 
 export default function AdminFeedbackPage({ currentUser, profile }) {
   const navigate = useNavigate();
-  const role = useUserRole(currentUser?.id);
+  // Platform-level bug queue: Rinkd staff only. Per-league commissioners
+  // don't need to see other leagues' bug reports.
+  const isAdmin = useIsRinkdAdmin(currentUser?.id);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
@@ -53,12 +55,12 @@ export default function AdminFeedbackPage({ currentUser, profile }) {
     await supabase.from('bug_reports').update({ status }).eq('id', id);
   };
 
-  if (role !== 'commissioner') {
+  if (!isAdmin) {
     return (
       <Layout profile={profile}>
         <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.ice, gap: 12, padding: 24, textAlign: 'center' }}>
           <div style={{ fontSize: 40 }}>🔒</div>
-          <div>Feedback queue is commissioner-only.</div>
+          <div>Feedback queue is Rinkd staff only.</div>
           <button onClick={() => navigate('/feed')} style={{ background: C.red, color: '#fff', border: 'none', padding: '10px 18px', borderRadius: 999, cursor: 'pointer' }}>Back to Feed</button>
         </div>
       </Layout>

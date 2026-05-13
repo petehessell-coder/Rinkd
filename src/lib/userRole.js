@@ -20,18 +20,6 @@ export function useUserRole(userId) {
     let cancelled = false;
 
     async function run() {
-      // First gate: Rinkd staff. profiles.is_admin=true elevates this user
-      // to commissioner-equivalent regardless of league/team affiliation.
-      // Granted via SQL (no UI surface) — kept intentionally lo-fi so it's
-      // hard to accidentally promote someone in production.
-      const { data: profileRow } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', userId)
-        .single();
-      if (cancelled) return;
-      if (profileRow?.is_admin === true) { setRole('commissioner'); return; }
-
       const { count: leagueCount } = await supabase
         .from('leagues')
         .select('id', { count: 'exact', head: true })
@@ -54,6 +42,44 @@ export function useUserRole(userId) {
   }, [userId]);
 
   return role;
+}
+
+/**
+ * Separate from useUserRole: Rinkd staff flag.
+ *
+ * Gates PLATFORM-LEVEL admin surfaces (analytics, feedback queue, content
+ * moderation, Rinkside content publishing) — anything that crosses multiple
+ * leagues or touches the operator's own data.
+ *
+ * Per-league commissioners do NOT get this. A user who runs their own beer
+ * league as commissioner can manage THEIR league (via AdminPanel which
+ * filters by commissioner_id internally), but they cannot see Rinkd's
+ * analytics or other teams' moderation queues.
+ *
+ * Granted only via SQL (no UI surface):
+ *   UPDATE profiles SET is_admin=true WHERE email='someone@rinkd.app';
+ */
+export function useIsRinkdAdmin(userId) {
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    if (!userId) { setIsAdmin(false); return; }
+    let cancelled = false;
+
+    (async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', userId)
+        .single();
+      if (cancelled) return;
+      setIsAdmin(data?.is_admin === true);
+    })();
+
+    return () => { cancelled = true; };
+  }, [userId]);
+
+  return isAdmin;
 }
 
 /**
