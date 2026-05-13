@@ -163,12 +163,29 @@ export default function App() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Retry-on-null helper. Brand-new signups fire SIGNED_IN immediately, but
+  // the profile row in lib/auth.js is inserted via a separate `.upsert()` call
+  // that runs AFTER auth creation. If we hit `getProfile()` before the upsert
+  // commits, we get null. Without retry, the React profile state stays null
+  // forever even though the DB row exists a moment later — locking pages like
+  // /profile in "Loading..." purgatory and silently breaking onboarding for
+  // users who navigate before the modal fires.
+  const fetchProfileWithRetry = async (userId) => {
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const { data } = await getProfile(userId);
+      if (data) return data;
+      // Exponential-ish backoff: 200, 400, 800, 1200, 1800, 2500 ms (~7s total)
+      await new Promise((r) => setTimeout(r, 200 + attempt * 400));
+    }
+    return null;
+  };
+
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       const u = session?.user || null;
       setUser(u);
       if (u) {
-        const { data } = await getProfile(u.id);
+        const data = await fetchProfileWithRetry(u.id);
         setProfile(data);
         setSentryUser(u, data);
       } else {
@@ -180,7 +197,7 @@ export default function App() {
       const u = session?.user || null;
       setUser(u);
       if (u) {
-        const { data } = await getProfile(u.id);
+        const data = await fetchProfileWithRetry(u.id);
         setProfile(data);
         setSentryUser(u, data);
       } else {
