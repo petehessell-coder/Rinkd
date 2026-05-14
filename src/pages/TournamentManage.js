@@ -564,46 +564,170 @@ function SettingsTab({ tournament, reload }) {
   const [startDate, setStartDate] = useState(tournament.start_date || '');
   const [endDate, setEndDate] = useState(tournament.end_date || '');
   const [status, setStatus] = useState(tournament.status || 'upcoming');
+  // Format & rules live in the settings JSONB. Seed from what's stored, falling
+  // back to sensible defaults for any key an older tournament is missing.
+  const s0 = tournament.settings || {};
+  const [fmt, setFmt] = useState({
+    period_length_minutes: s0.period_length_minutes ?? 15,
+    period_type: s0.period_type ?? 'stop',
+    num_periods: s0.num_periods ?? 3,
+    points_win: s0.points_win ?? 2,
+    points_tie: s0.points_tie ?? 1,
+    points_loss: s0.points_loss ?? 0,
+    shootout_win_points: s0.shootout_win_points ?? 2,
+    max_goal_differential: s0.max_goal_differential ?? null,
+    allow_ties: s0.allow_ties ?? true,
+    shootout_pool: s0.shootout_pool ?? false,
+    shootout_bracket: s0.shootout_bracket ?? true,
+    advancement_per_pool: s0.advancement_per_pool ?? 2,
+  });
   const [busy, setBusy] = useState(false);
+  const setF = (k, v) => setFmt((prev) => ({ ...prev, [k]: v }));
 
   const save = async () => {
     setBusy(true);
-    const { error } = await updateTournament(tournament.id, { name, division, startDate, endDate, status });
+    // Coerce numeric fields so a blank input can never write an empty string
+    // into the settings JSONB — the standings view casts these to int.
+    const num = (v, dflt) => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : dflt; };
+    const cleanFmt = {
+      period_length_minutes: num(fmt.period_length_minutes, 15),
+      period_type: fmt.period_type || 'stop',
+      num_periods: num(fmt.num_periods, 3),
+      points_win: num(fmt.points_win, 2),
+      points_tie: num(fmt.points_tie, 1),
+      points_loss: num(fmt.points_loss, 0),
+      shootout_win_points: num(fmt.shootout_win_points, 2),
+      max_goal_differential: fmt.max_goal_differential == null ? null : num(fmt.max_goal_differential, null),
+      allow_ties: !!fmt.allow_ties,
+      shootout_pool: !!fmt.shootout_pool,
+      shootout_bracket: !!fmt.shootout_bracket,
+      advancement_per_pool: num(fmt.advancement_per_pool, 2),
+    };
+    // Merge back into the existing settings JSONB so keys we don't edit here
+    // (venue_name, venue_address, pool_names, tiebreakers) are never clobbered.
+    const mergedSettings = { ...(tournament.settings || {}), ...cleanFmt };
+    const { error } = await updateTournament(tournament.id, {
+      name, division, startDate, endDate, status, settings: mergedSettings,
+    });
     setBusy(false);
     if (error) return alert('Save failed: ' + error.message);
     reload();
   };
 
+  const numInput = (k, opts = {}) => (
+    <input type="number" value={fmt[k] ?? ''} min={opts.min} max={opts.max}
+      onChange={(e) => setF(k, e.target.value === '' ? '' : parseInt(e.target.value, 10))}
+      style={inputStyle} />
+  );
+  const checkbox = (k, label) => (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: C.ice }}>
+      <input type="checkbox" checked={!!fmt[k]} onChange={(e) => setF(k, e.target.checked)} />
+      {label}
+    </label>
+  );
+
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-        <div style={{ gridColumn: '1 / -1' }}>
-          <label style={labelStyle}>Name</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} style={inputStyle}/>
-        </div>
-        <div>
-          <label style={labelStyle}>Division</label>
-          <input value={division} onChange={(e) => setDivision(e.target.value)} style={inputStyle}/>
-        </div>
-        <div>
-          <label style={labelStyle}>Status</label>
-          <select value={status} onChange={(e) => setStatus(e.target.value)} style={inputStyle}>
-            <option value="upcoming">Upcoming</option>
-            <option value="active">Active</option>
-            <option value="complete">Complete</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-        </div>
-        <div>
-          <label style={labelStyle}>Start Date</label>
-          <input type="date" value={startDate || ''} onChange={(e) => setStartDate(e.target.value)} style={inputStyle}/>
-        </div>
-        <div>
-          <label style={labelStyle}>End Date</label>
-          <input type="date" value={endDate || ''} onChange={(e) => setEndDate(e.target.value)} style={inputStyle}/>
+    <div>
+      {/* Tournament Info */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 12 }}>Tournament Info</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={labelStyle}>Name</label>
+            <input value={name} onChange={(e) => setName(e.target.value)} style={inputStyle}/>
+          </div>
+          <div>
+            <label style={labelStyle}>Division</label>
+            <input value={division} onChange={(e) => setDivision(e.target.value)} style={inputStyle}/>
+          </div>
+          <div>
+            <label style={labelStyle}>Status</label>
+            <select value={status} onChange={(e) => setStatus(e.target.value)} style={inputStyle}>
+              <option value="upcoming">Upcoming</option>
+              <option value="active">Active</option>
+              <option value="complete">Complete</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Start Date</label>
+            <input type="date" value={startDate || ''} onChange={(e) => setStartDate(e.target.value)} style={inputStyle}/>
+          </div>
+          <div>
+            <label style={labelStyle}>End Date</label>
+            <input type="date" value={endDate || ''} onChange={(e) => setEndDate(e.target.value)} style={inputStyle}/>
+          </div>
         </div>
       </div>
-      <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end' }}>
+
+      {/* Format & Rules */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 4 }}>Format &amp; Rules</div>
+        <div style={{ fontSize: 12, color: C.steel, marginBottom: 14, lineHeight: 1.5 }}>
+          Editable after creation. The point system feeds the standings table directly.
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
+          <div>
+            <label style={labelStyle}>Period Length (min)</label>
+            {numInput('period_length_minutes', { min: 1, max: 60 })}
+          </div>
+          <div>
+            <label style={labelStyle}>Period Type</label>
+            <select value={fmt.period_type} onChange={(e) => setF('period_type', e.target.value)} style={inputStyle}>
+              <option value="stop">Stop time</option>
+              <option value="running">Running time</option>
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Periods per Game</label>
+            <select value={fmt.num_periods} onChange={(e) => setF('num_periods', parseInt(e.target.value, 10))} style={inputStyle}>
+              <option value={2}>2 periods</option>
+              <option value={3}>3 periods</option>
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Max Goal Diff</label>
+            <select value={fmt.max_goal_differential ?? 'none'}
+              onChange={(e) => setF('max_goal_differential', e.target.value === 'none' ? null : parseInt(e.target.value, 10))}
+              style={inputStyle}>
+              <option value="none">No limit</option>
+              {Array.from({ length: 10 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Points — Win</label>
+            {numInput('points_win', { min: 0, max: 10 })}
+          </div>
+          <div>
+            <label style={labelStyle}>Points — Tie</label>
+            {numInput('points_tie', { min: 0, max: 10 })}
+          </div>
+          <div>
+            <label style={labelStyle}>Points — Loss</label>
+            {numInput('points_loss', { min: 0, max: 10 })}
+          </div>
+          <div>
+            <label style={labelStyle}>Points — OT/SO Win</label>
+            {numInput('shootout_win_points', { min: 0, max: 10 })}
+          </div>
+          <div>
+            <label style={labelStyle}>Advance per Pool</label>
+            <select value={fmt.advancement_per_pool} onChange={(e) => setF('advancement_per_pool', parseInt(e.target.value, 10))} style={inputStyle}>
+              <option value={1}>1 team</option>
+              <option value={2}>2 teams</option>
+              <option value={3}>3 teams</option>
+              <option value={4}>4 teams</option>
+            </select>
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 16 }}>
+          {checkbox('allow_ties', 'Allow ties in pool play')}
+          {checkbox('shootout_pool', 'Shootout in pool play')}
+          {checkbox('shootout_bracket', 'Shootout in bracket')}
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <button onClick={save} disabled={busy} style={btnPrimary}>{busy ? 'Saving…' : 'Save Settings'}</button>
       </div>
     </div>
