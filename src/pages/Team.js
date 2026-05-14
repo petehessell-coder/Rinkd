@@ -79,8 +79,13 @@ export default function TeamPage({ currentUser, profile }) {
   const coaches = members.filter(m => m.role === 'coach' || m.role === 'manager');
   // When collapsed: show the 5 most recent and 5 next upcoming.
   // When expanded: show every game (capped at 200 as a sanity rail).
+  // getTeamGames() returns everything newest-first — correct for finished
+  // games (last game on top), backwards for upcoming. So we re-sort the
+  // upcoming list ascending: next game on top, end of season at the bottom.
   const allFinal     = games.filter(g => g.status === 'final');
-  const allUpcoming  = games.filter(g => g.status === 'scheduled');
+  const allUpcoming  = games
+    .filter(g => g.status === 'scheduled')
+    .sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
   const recentGames   = showAllGames ? allFinal.slice(0, 200)    : allFinal.slice(0, 5);
   const upcomingGames = showAllGames ? allUpcoming.slice(0, 200) : allUpcoming.slice(0, 5);
   const totalGames    = allFinal.length + allUpcoming.length;
