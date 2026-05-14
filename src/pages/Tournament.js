@@ -78,24 +78,30 @@ export default function TournamentPage({ currentUser }) {
   const scheduledGames = games.filter(g => g.status === 'scheduled');
   const bracketGames = games.filter(g => g.round !== 'pool');
   const adv = tournament?.settings?.advancement_per_pool ?? 2;
+  // Organizer branding — falls back to Rinkd red when the tournament isn't branded.
+  const accent = tournament?.accent_color || '#D72638';
 
   return (
     <div style={{background:'#07111F',minHeight:'100vh',fontFamily:'Barlow,sans-serif',color:'#F4F7FA'}}>
 
       {/* HEADER */}
-      <div style={{background:'#0B1F3A',padding:'14px 16px 0',borderBottom:'0.5px solid rgba(46,91,140,0.4)'}}>
+      <div style={{background:'#0B1F3A',padding:'14px 16px 0',borderTop:`3px solid ${accent}`,borderBottom:'0.5px solid rgba(46,91,140,0.4)'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,gap:8,flexWrap:'wrap'}}>
           <button onClick={() => navigate(-1)} style={{color:'rgba(244,247,250,0.6)',fontSize:13,background:'none',border:'none',cursor:'pointer',fontFamily:'Barlow,sans-serif'}}>← Events</button>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
-            {liveGames.length > 0 && <span style={{background:'rgba(215,38,56,0.15)',color:'#D72638',fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:20}}>● Live now</span>}
+            {liveGames.length > 0 && <span style={{background:accent+'26',color:accent,fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:20}}>● Live now</span>}
             {tournament && currentUser && tournament.director_id === currentUser.id && (
               <button onClick={() => navigate(`/tournament/${id}/manage`)}
-                style={{background:'#D72638',color:'#fff',border:'none',borderRadius:999,padding:'5px 12px',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',letterSpacing:'0.05em',textTransform:'uppercase'}}>
+                style={{background:accent,color:'#fff',border:'none',borderRadius:999,padding:'5px 12px',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',letterSpacing:'0.05em',textTransform:'uppercase'}}>
                 ⚙ Manage
               </button>
             )}
           </div>
         </div>
+        {tournament?.logo_url && (
+          <img src={tournament.logo_url} alt="" onError={(e)=>{e.currentTarget.style.display='none';}}
+            style={{height:38,width:'auto',display:'block',marginBottom:8,borderRadius:6}} />
+        )}
         <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:22}}>
           {(tournament?.name || '').toUpperCase()} · {tournament?.division}
         </div>
@@ -106,7 +112,7 @@ export default function TournamentPage({ currentUser }) {
           {TABS.map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)}
               style={{fontSize:13,fontWeight:700,padding:'10px 16px',background:'transparent',border:'none',
-                borderBottom: activeTab===tab ? '3px solid #D72638' : '3px solid transparent',
+                borderBottom: activeTab===tab ? `3px solid ${accent}` : '3px solid transparent',
                 marginBottom:-2,cursor:'pointer',fontFamily:'Barlow,sans-serif',whiteSpace:'nowrap',
                 color:'#FFFFFF', opacity: activeTab===tab ? 1 : 0.5}}
               onMouseEnter={e=>{e.currentTarget.style.background='#FFFFFF';e.currentTarget.style.color='#0B1F3A';e.currentTarget.style.opacity='1';}}

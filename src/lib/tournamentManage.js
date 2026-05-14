@@ -239,6 +239,8 @@ export async function updateTournament(tournamentId, fields) {
   if (fields.endDate !== undefined) payload.end_date = fields.endDate || null;
   if (fields.status !== undefined) payload.status = fields.status;
   if (fields.settings !== undefined) payload.settings = fields.settings;
+  if (fields.logoUrl !== undefined) payload.logo_url = fields.logoUrl || null;
+  if (fields.accentColor !== undefined) payload.accent_color = fields.accentColor || null;
   const { data, error } = await supabase
     .from('tournaments')
     .update(payload)

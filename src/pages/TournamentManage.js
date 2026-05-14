@@ -564,6 +564,8 @@ function SettingsTab({ tournament, reload }) {
   const [startDate, setStartDate] = useState(tournament.start_date || '');
   const [endDate, setEndDate] = useState(tournament.end_date || '');
   const [status, setStatus] = useState(tournament.status || 'upcoming');
+  const [logoUrl, setLogoUrl] = useState(tournament.logo_url || '');
+  const [accentColor, setAccentColor] = useState(tournament.accent_color || '');
   // Format & rules live in the settings JSONB. Seed from what's stored, falling
   // back to sensible defaults for any key an older tournament is missing.
   const s0 = tournament.settings || {};
@@ -606,8 +608,12 @@ function SettingsTab({ tournament, reload }) {
     // Merge back into the existing settings JSONB so keys we don't edit here
     // (venue_name, venue_address, pool_names, tiebreakers) are never clobbered.
     const mergedSettings = { ...(tournament.settings || {}), ...cleanFmt };
+    // Branding: only store a valid 6-digit hex; anything else clears it so the
+    // public page falls back to the default Rinkd look.
+    const cleanAccent = /^#[0-9a-fA-F]{6}$/.test((accentColor || '').trim()) ? accentColor.trim() : '';
     const { error } = await updateTournament(tournament.id, {
       name, division, startDate, endDate, status, settings: mergedSettings,
+      logoUrl: (logoUrl || '').trim(), accentColor: cleanAccent,
     });
     setBusy(false);
     if (error) return alert('Save failed: ' + error.message);
@@ -725,6 +731,34 @@ function SettingsTab({ tournament, reload }) {
           {checkbox('shootout_pool', 'Shootout in pool play')}
           {checkbox('shootout_bracket', 'Shootout in bracket')}
         </div>
+      </div>
+
+      {/* Branding */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 4 }}>Branding</div>
+        <div style={{ fontSize: 12, color: C.steel, marginBottom: 14, lineHeight: 1.5 }}>
+          Shown on the public tournament page. Leave blank for the default Rinkd look.
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={labelStyle}>Logo URL</label>
+            <input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="https://…" style={inputStyle}/>
+          </div>
+          <div>
+            <label style={labelStyle}>Accent Color (hex)</label>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input value={accentColor} onChange={(e) => setAccentColor(e.target.value)} placeholder="#D72638" style={{ ...inputStyle, flex: 1 }}/>
+              <div style={{ width: 36, height: 36, borderRadius: 8, flexShrink: 0, border: `1px solid ${C.border}`, background: /^#[0-9a-fA-F]{6}$/.test((accentColor || '').trim()) ? accentColor.trim() : 'transparent' }} />
+            </div>
+          </div>
+        </div>
+        {logoUrl && /^https?:\/\//.test(logoUrl.trim()) && (
+          <div style={{ marginTop: 12 }}>
+            <label style={labelStyle}>Logo preview</label>
+            <img src={logoUrl.trim()} alt="" style={{ height: 44, width: 'auto', borderRadius: 6, background: C.navy, padding: 4, display: 'block' }}
+              onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
