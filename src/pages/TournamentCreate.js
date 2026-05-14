@@ -308,10 +308,22 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
   const [newRink, setNewRink] = useState({ name: '', sub_rink: '', live_barn_venue_id: '' });
   const [newGame, setNewGame] = useState({ home: '', away: '', rink: '', time: '' });
   const [scorekeeperEmail, setScorekeeperEmail] = useState('');
+  // "One venue" — when the whole tournament runs at a single facility, the per-rink
+  // facility field just repeats the venue from Step 1. "One rink" — when there's
+  // exactly one rink, every game is there, so the per-game rink picker is noise.
+  // Both default ON; each checkbox only shows when its precondition is met.
+  const [oneVenue, setOneVenue] = useState(true);
+  const [oneRink, setOneRink] = useState(true);
+
+  const hasVenue = !!(data.venue_name || '').trim();
+  const soleRink = (data.rinks || []).length === 1 ? (data.rinks[0].sub_rink || data.rinks[0].name) : '';
+  const useOneVenue = oneVenue && hasVenue;
+  const useOneRink = oneRink && (data.rinks || []).length === 1;
 
   const addRink = () => {
-    if (!newRink.sub_rink.trim() && !newRink.name.trim()) return;
-    onChange('rinks', [...(data.rinks||[]), { ...newRink }]);
+    const facility = useOneVenue ? data.venue_name : newRink.name;
+    if (!newRink.sub_rink.trim() && !(facility || '').trim()) return;
+    onChange('rinks', [...(data.rinks||[]), { ...newRink, name: facility }]);
     setNewRink({ name: '', sub_rink: '', live_barn_venue_id: '' });
   };
 
@@ -319,7 +331,8 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
 
   const addGame = () => {
     if (!newGame.home || !newGame.away || !newGame.time) return;
-    onChange('games', [...(data.games||[]), { ...newGame }]);
+    const rink = useOneRink ? soleRink : newGame.rink;
+    onChange('games', [...(data.games||[]), { ...newGame, rink }]);
     setNewGame({ home: '', away: '', rink: data.rinks?.[0]?.sub_rink||'', time: '' });
   };
 
@@ -331,7 +344,17 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
     setScorekeeperEmail('');
   };
 
-  const teams = (data.teams||[]).map(t => t.name);
+  // Team dropdowns grouped by pool so directors pick by pool first.
+  const teamsByPool = (data.teams || []).reduce((acc, t) => {
+    const k = t.pool || '—';
+    (acc[k] = acc[k] || []).push(t.name);
+    return acc;
+  }, {});
+  const renderTeamOptions = () => Object.keys(teamsByPool).sort().map(pool => (
+    <optgroup key={pool} label={pool === '—' ? 'No pool' : `Pool ${pool}`}>
+      {teamsByPool[pool].map(t => <option key={t} value={t}>{t}</option>)}
+    </optgroup>
+  ));
 
   return (
     <>
@@ -352,10 +375,20 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
           </div>
         ))}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-          <Row2>
-            <input value={newRink.name} onChange={e => setNewRink({...newRink, name: e.target.value})} placeholder="Facility name" style={inputStyle} />
+          {hasVenue && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'rgba(244,247,250,0.55)' }}>
+              <input type="checkbox" checked={oneVenue} onChange={e => setOneVenue(e.target.checked)} />
+              All rinks are at one venue — {data.venue_name}
+            </label>
+          )}
+          {useOneVenue ? (
             <input value={newRink.sub_rink} onChange={e => setNewRink({...newRink, sub_rink: e.target.value})} placeholder="Rink name (e.g. Rink 1)" style={inputStyle} />
-          </Row2>
+          ) : (
+            <Row2>
+              <input value={newRink.name} onChange={e => setNewRink({...newRink, name: e.target.value})} placeholder="Facility name" style={inputStyle} />
+              <input value={newRink.sub_rink} onChange={e => setNewRink({...newRink, sub_rink: e.target.value})} placeholder="Rink name (e.g. Rink 1)" style={inputStyle} />
+            </Row2>
+          )}
           <div style={{ display: 'flex', gap: 8 }}>
             <input value={newRink.live_barn_venue_id} onChange={e => setNewRink({...newRink, live_barn_venue_id: e.target.value})} placeholder="LiveBarn venue ID (optional)" style={{ ...inputStyle, flex: 1 }} />
             <button onClick={addRink} style={{ background: COLORS.blue, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Add</button>
@@ -381,20 +414,28 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 8, alignItems: 'center' }}>
             <select value={newGame.home} onChange={e => setNewGame({...newGame, home: e.target.value})} style={{ ...selectStyle }}>
               <option value="">Home team</option>
-              {teams.map(t => <option key={t} value={t}>{t}</option>)}
+              {renderTeamOptions()}
             </select>
             <span style={{ color: 'rgba(244,247,250,0.3)', fontSize: 11, textAlign: 'center' }}>vs</span>
             <select value={newGame.away} onChange={e => setNewGame({...newGame, away: e.target.value})} style={{ ...selectStyle }}>
               <option value="">Away team</option>
-              {teams.map(t => <option key={t} value={t}>{t}</option>)}
+              {renderTeamOptions()}
             </select>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8 }}>
+          {(data.rinks || []).length === 1 && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'rgba(244,247,250,0.55)' }}>
+              <input type="checkbox" checked={oneRink} onChange={e => setOneRink(e.target.checked)} />
+              All games at one rink — {soleRink}
+            </label>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: useOneRink ? '1fr auto' : '1fr 1fr auto', gap: 8 }}>
             <DateTimePicker value={newGame.time} onChange={v => setNewGame({...newGame, time: v})} placeholder="Date & time" />
-            <select value={newGame.rink} onChange={e => setNewGame({...newGame, rink: e.target.value})} style={{ ...selectStyle }}>
-              <option value="">Select rink</option>
-              {(data.rinks||[]).map(r => <option key={r.sub_rink||r.name} value={r.sub_rink||r.name}>{r.sub_rink||r.name}</option>)}
-            </select>
+            {!useOneRink && (
+              <select value={newGame.rink} onChange={e => setNewGame({...newGame, rink: e.target.value})} style={{ ...selectStyle }}>
+                <option value="">Select rink</option>
+                {(data.rinks||[]).map(r => <option key={r.sub_rink||r.name} value={r.sub_rink||r.name}>{r.sub_rink||r.name}</option>)}
+              </select>
+            )}
             <button onClick={addGame} style={{ background: COLORS.blue, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Add</button>
           </div>
         </div>
