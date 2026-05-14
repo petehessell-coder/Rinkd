@@ -9,7 +9,7 @@ serve(async (req) => {
   }
 
   try {
-    const { type, to_email, to_name, team_name, league_name, league_id, division, season, invited_by } = await req.json()
+    const { type, to_email, to_name, team_name, league_name, league_id, division, season, invited_by, tournament_name, tournament_id } = await req.json()
 
     let subject = ''
     let html = ''
@@ -94,6 +94,42 @@ serve(async (req) => {
               `).join('')}
             </div>
             <div style="text-align:center;font-size:12px;color:rgba(244,247,250,0.25);line-height:1.6;">
+              <a href="https://www.rinkd.app" style="color:rgba(244,247,250,0.4);">rinkd.app</a> ·
+              <a href="https://www.rinkd.app/privacy" style="color:rgba(244,247,250,0.4);">Privacy</a>
+            </div>
+          </div>
+        </body>
+        </html>`
+    }
+
+    if (type === 'tournament_scorer_invite') {
+      const tournamentUrl = tournament_id ? `https://www.rinkd.app/tournament/${tournament_id}` : 'https://www.rinkd.app'
+      subject = `You're on the scorer crew for ${tournament_name || 'a tournament'} on Rinkd`
+      html = `
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+        <body style="margin:0;padding:0;background:#07111F;font-family:'Helvetica Neue',Arial,sans-serif;">
+          <div style="max-width:520px;margin:0 auto;padding:32px 20px;">
+            <div style="text-align:center;margin-bottom:32px;">
+              <div style="display:inline-block;background:#0B1F3A;border-radius:12px;padding:16px 24px;">
+                <span style="font-size:28px;font-weight:900;font-style:italic;color:#F4F7FA;letter-spacing:-0.5px;">R<span style="color:#D72638">INKD</span></span>
+              </div>
+            </div>
+            <div style="background:#0B1F3A;border-radius:16px;padding:32px;margin-bottom:24px;border:1px solid rgba(46,91,140,0.4);">
+              <div style="font-size:22px;font-weight:900;font-style:italic;color:#F4F7FA;margin-bottom:8px;">You're keeping score. 🥅</div>
+              <div style="font-size:15px;color:rgba(244,247,250,0.6);line-height:1.6;margin-bottom:24px;">
+                ${invited_by ? `<strong style="color:#F4F7FA">${invited_by}</strong> wants you` : "You've been asked"}
+                on the scorer crew for <strong style="color:#F4F7FA">${tournament_name || 'a tournament'}</strong> on Rinkd.
+                Create your free account with this email address, and you'll be able to run the scoreboard for assigned games.
+              </div>
+              <a href="${tournamentUrl}" style="display:inline-block;background:#D72638;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 28px;border-radius:999px;">
+                Join Rinkd →
+              </a>
+            </div>
+            <div style="text-align:center;font-size:12px;color:rgba(244,247,250,0.25);line-height:1.6;">
+              You received this because ${invited_by || 'a tournament director'} added you as a scorer.<br>
+              Once you've signed up with this email, they'll finish adding you.<br>
               <a href="https://www.rinkd.app" style="color:rgba(244,247,250,0.4);">rinkd.app</a> ·
               <a href="https://www.rinkd.app/privacy" style="color:rgba(244,247,250,0.4);">Privacy</a>
             </div>

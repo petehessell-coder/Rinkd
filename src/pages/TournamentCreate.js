@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import DatePicker from '../components/DatePicker';
 import DateTimePicker from '../components/DateTimePicker';
 import { supabase } from '../lib/supabase';
+import { addScorerByInput } from '../lib/tournamentScorers';
 import Layout from '../components/Layout';
 
 const COLORS = {
@@ -115,6 +116,8 @@ function BtnRow({ onBack, onNext, nextLabel = 'Next →', loading = false }) {
 const periodOptions = Array.from({length:20},(_,i)=>({value:i+1,label:`${i+1} min`}));
 // Points 0–4
 const pointOptions = Array.from({length:5},(_,i)=>({value:i,label:`${i} pt${i!==1?'s':''}`}));
+// Max goal differential — "No limit" + a full 1–10 range (BLPA runs a 6)
+const goalDiffOptions = [{value:'none',label:'No limit'}, ...Array.from({length:10},(_,i)=>({value:i+1,label:String(i+1)}))];
 
 function Step1({ data, onChange, onNext }) {
   return (
@@ -182,7 +185,7 @@ function Step2({ data, onChange, onBack, onNext }) {
           </Field>
           <Field label="Max Goal Diff">
             <Select value={s.max_goal_differential ?? 'none'} onChange={v => set('max_goal_differential', v==='none'?null:parseInt(v))}
-              options={[{value:'none',label:'No limit'},{value:3,label:'3'},{value:5,label:'5'},{value:7,label:'7'}]} />
+              options={goalDiffOptions} />
           </Field>
         </Row2>
       </Card>
@@ -465,6 +468,22 @@ export default function TournamentCreate({ profile }) {
 
       // 3. Director role
       await supabase.from('tournament_roles').insert({ tournament_id: t.id, user_id: user.id, role: 'director' });
+
+      // 3b. Scorer roles — resolve each collected scorekeeper handle/email to a
+      // Rinkd account and grant the 'scorer' role; email a sign-up invite to
+      // anyone without an account yet. Best-effort: a failure here never blocks
+      // tournament creation — the director can review and fix everything from
+      // the Scorers tab on the manage page.
+      for (const sk of (data.scorekeepers || [])) {
+        try {
+          await addScorerByInput({
+            tournamentId: t.id,
+            tournamentName: data.name,
+            input: sk,
+            invitedBy: profile?.name || null,
+          });
+        } catch (_) { /* non-fatal */ }
+      }
 
       // 4. Create teams
       const teamMap = {};

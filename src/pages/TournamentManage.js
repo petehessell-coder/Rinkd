@@ -10,6 +10,7 @@ import {
   updateTournament,
 } from '../lib/tournamentManage';
 import { listRinks } from '../lib/rinks';
+import { listScorers, addScorerByInput, removeScorer } from '../lib/tournamentScorers';
 
 const C = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
@@ -17,7 +18,7 @@ const C = {
   green: '#22C55E', amber: '#F59E0B',
 };
 
-const TABS = ['Teams', 'Schedule', 'Bracket', 'Settings'];
+const TABS = ['Teams', 'Schedule', 'Bracket', 'Scorers', 'Settings'];
 
 const inputStyle = {
   width: '100%', boxSizing: 'border-box',
@@ -122,6 +123,7 @@ export default function TournamentManagePage({ currentUser, profile }) {
           {tab === 'Teams' && <TeamsTab tournamentId={id} teams={teams} reload={load} />}
           {tab === 'Schedule' && <ScheduleTab tournamentId={id} tournament={tournament} teams={teams} games={games} rinks={rinks} reload={load} />}
           {tab === 'Bracket' && <BracketTab tournamentId={id} tournament={tournament} teams={teams} games={games} rinks={rinks} reload={load} />}
+          {tab === 'Scorers' && <ScorersTab tournamentId={id} tournamentName={tournament.name} profile={profile} />}
           {tab === 'Settings' && <SettingsTab tournament={tournament} reload={load} />}
         </div>
       </div>
@@ -604,6 +606,104 @@ function SettingsTab({ tournament, reload }) {
       <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end' }}>
         <button onClick={save} disabled={busy} style={btnPrimary}>{busy ? 'Saving…' : 'Save Settings'}</button>
       </div>
+    </div>
+  );
+}
+
+// ====================== SCORERS TAB ======================
+function ScorersTab({ tournamentId, tournamentName, profile }) {
+  const [scorers, setScorers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [input, setInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const loadScorers = async () => {
+    setLoading(true);
+    const { data } = await listScorers(tournamentId);
+    setScorers(data);
+    setLoading(false);
+  };
+  // loadScorers reads tournamentId from props; safe to depend only on it.
+  useEffect(() => { loadScorers(); }, [tournamentId]);
+
+  const add = async () => {
+    if (!input.trim() || busy) return;
+    setBusy(true); setMsg(null);
+    const res = await addScorerByInput({ tournamentId, tournamentName, input, invitedBy: profile?.name || null });
+    setBusy(false);
+    if (res.status === 'added') {
+      setMsg({ ok: true, text: `Added ${res.profile.name || '@' + res.profile.handle} as a scorer.` });
+      setInput(''); loadScorers();
+    } else if (res.status === 'already') {
+      setMsg({ ok: true, text: `${res.profile.name || '@' + res.profile.handle} already has a ${res.role} role here.` });
+      setInput('');
+    } else if (res.status === 'invited') {
+      setMsg({ ok: true, text: `No account yet — sent a sign-up invite to ${res.email}. Add them here once they've joined.` });
+      setInput('');
+    } else {
+      setMsg({ ok: false, text: res.message || 'Could not add scorer.' });
+    }
+  };
+
+  const remove = async (roleId, name) => {
+    if (!window.confirm(`Remove ${name} as a scorer? They'll lose access to score this tournament's games.`)) return;
+    const { error } = await removeScorer(roleId);
+    if (error) return alert('Remove failed: ' + error.message);
+    loadScorers();
+  };
+
+  return (
+    <div>
+      <div style={{ fontSize: 13, color: C.steel, marginBottom: 14, lineHeight: 1.5 }}>
+        Scorers can run the live scoreboard for this tournament. Add them by Rinkd handle or email —
+        anyone without an account yet gets a sign-up invite, and you add them here once they've joined.
+      </div>
+
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+        <label style={labelStyle}>Add a scorer</label>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && add()}
+            placeholder="@handle or email"
+            style={{ ...inputStyle, flex: 1 }}
+          />
+          <button onClick={add} disabled={busy} style={btnPrimary}>{busy ? 'Adding…' : '+ Add'}</button>
+        </div>
+        {msg && (
+          <div style={{ marginTop: 10, fontSize: 12, color: msg.ok ? C.green : C.red, lineHeight: 1.5 }}>{msg.text}</div>
+        )}
+      </div>
+
+      {loading ? (
+        <div style={{ color: C.steel, fontSize: 13, padding: '20px 0', textAlign: 'center' }}>Loading scorers…</div>
+      ) : scorers.length === 0 ? (
+        <div style={{ textAlign: 'center', color: C.steel, padding: '40px 0' }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>🥅</div>
+          No scorers yet. You can always score as the director — add others above to share the load.
+        </div>
+      ) : (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+          {scorers.map((s, i) => {
+            const p = s.profile || {};
+            const name = p.name || (p.handle ? '@' + p.handle : 'Unknown');
+            return (
+              <div key={s.id} style={{ display: 'flex', alignItems: 'center', padding: 12, borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none', gap: 12 }}>
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: p.avatar_color || C.navy, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 13, color: '#fff' }}>
+                  {p.avatar_initials || (name[0] || '?').toUpperCase()}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{name}</div>
+                  {p.handle && <div style={{ fontSize: 12, color: C.steel }}>@{p.handle}</div>}
+                </div>
+                <button onClick={() => remove(s.id, name)} style={{ ...btnGhost, color: C.red, borderColor: C.red }}>Remove</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
