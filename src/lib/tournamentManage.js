@@ -101,7 +101,7 @@ export async function deleteGame(gameId) {
  * naive home/away balance — first team alternates.
  * Adds a bye-rotation if the team count is odd.
  */
-function roundRobinPairs(teamIds) {
+export function roundRobinPairs(teamIds) {
   if (teamIds.length < 2) return [];
   const t = [...teamIds];
   if (t.length % 2 === 1) t.push(null); // bye marker

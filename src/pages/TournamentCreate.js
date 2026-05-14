@@ -4,6 +4,7 @@ import DatePicker from '../components/DatePicker';
 import DateTimePicker from '../components/DateTimePicker';
 import { supabase } from '../lib/supabase';
 import { addScorerByInput } from '../lib/tournamentScorers';
+import { roundRobinPairs } from '../lib/tournamentManage';
 import Layout from '../components/Layout';
 
 const COLORS = {
@@ -308,6 +309,9 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
   const [newRink, setNewRink] = useState({ name: '', sub_rink: '', live_barn_venue_id: '' });
   const [newGame, setNewGame] = useState({ home: '', away: '', rink: '', time: '' });
   const [scorekeeperEmail, setScorekeeperEmail] = useState('');
+  const [genStart, setGenStart] = useState('');
+  const [genMinutes, setGenMinutes] = useState(60);
+  const [genRink, setGenRink] = useState('');
   // "One venue" — when the whole tournament runs at a single facility, the per-rink
   // facility field just repeats the venue from Step 1. "One rink" — when there's
   // exactly one rink, every game is there, so the per-game rink picker is noise.
@@ -355,6 +359,37 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
       {teamsByPool[pool].map(t => <option key={t} value={t}>{t}</option>)}
     </optgroup>
   ));
+
+  // Round-robin generator — the recommended way to fill the schedule. Reuses the
+  // same circle-method pairing the Manage page uses, run client-side on the
+  // in-memory team list (teams have no DB ids yet at this step).
+  const generateRoundRobin = () => {
+    const teamList = data.teams || [];
+    if (teamList.length < 2) return alert('Add at least 2 teams in Step 3 first.');
+    if (!genStart) return alert('Pick a start date & time for the first game.');
+    if ((data.games || []).length > 0 &&
+        !window.confirm(`This replaces the ${data.games.length} game(s) already listed. Continue?`)) return;
+
+    const byPool = {};
+    for (const t of teamList) {
+      const k = t.pool || '—';
+      (byPool[k] = byPool[k] || []).push(t.name);
+    }
+    const minutes = parseInt(genMinutes, 10) || 60;
+    const rink = useOneRink ? soleRink : genRink;
+    let cursor = new Date(genStart);
+    if (isNaN(cursor.getTime())) return alert("That start time didn't parse — pick it again.");
+
+    const games = [];
+    for (const pool of Object.keys(byPool).sort()) {
+      for (const pair of roundRobinPairs(byPool[pool])) {
+        games.push({ home: pair.homeId, away: pair.awayId, rink, time: cursor.toISOString() });
+        cursor = new Date(cursor.getTime() + minutes * 60 * 1000);
+      }
+    }
+    if (!games.length) return alert('No games generated — each pool needs at least 2 teams.');
+    onChange('games', games);
+  };
 
   return (
     <>
@@ -410,7 +445,29 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
             <button onClick={() => removeGame(i)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.3)', cursor: 'pointer', fontSize: 14 }}>✕</button>
           </div>
         ))}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+        {/* Round-robin generator — the recommended way to fill the schedule */}
+        <div style={{ background: 'rgba(46,91,140,0.12)', border: '0.5px solid rgba(46,91,140,0.4)', borderRadius: 10, padding: 14, marginTop: 12 }}>
+          <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 15, color: '#F4F7FA', marginBottom: 4 }}>⚡ Generate Round-Robin</div>
+          <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.45)', marginBottom: 12, lineHeight: 1.5 }}>
+            Every team plays every other team in its pool once. Games are stacked back-to-back from the start time — edit any of them below afterward.
+          </div>
+          <Row2>
+            <Field label="First Game"><DateTimePicker value={genStart} onChange={setGenStart} placeholder="Date & time" /></Field>
+            <Field label="Minutes / Game"><Input value={genMinutes} onChange={setGenMinutes} type="number" /></Field>
+          </Row2>
+          {!useOneRink && (data.rinks || []).length > 0 && (
+            <Field label="Rink for all games">
+              <select value={genRink} onChange={e => setGenRink(e.target.value)} style={selectStyle}>
+                <option value="">— None —</option>
+                {(data.rinks||[]).map(r => <option key={r.sub_rink||r.name} value={r.sub_rink||r.name}>{r.sub_rink||r.name}</option>)}
+              </select>
+            </Field>
+          )}
+          <button onClick={generateRoundRobin} style={{ background: COLORS.red, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer', width: '100%' }}>⚡ Generate Schedule</button>
+        </div>
+
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.3)', textTransform: 'uppercase', marginTop: 16 }}>Or add a game manually</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 8, alignItems: 'center' }}>
             <select value={newGame.home} onChange={e => setNewGame({...newGame, home: e.target.value})} style={{ ...selectStyle }}>
               <option value="">Home team</option>
