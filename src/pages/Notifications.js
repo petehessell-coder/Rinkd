@@ -29,20 +29,34 @@ export default function NotificationsPage({ currentUser, profile }) {
 
   const openOne = async (n) => {
     if (!n.read_at) {
-      await markRead(n.id);
-      setItems((prev) => prev.map((p) => (p.id === n.id ? { ...p, read_at: new Date().toISOString() } : p)));
+      // Only mark it read in the UI if the write actually landed — otherwise
+      // the badge and this list drift apart on the next load.
+      const { error } = await markRead(n.id);
+      if (!error) {
+        setItems((prev) => prev.map((p) => (p.id === n.id ? { ...p, read_at: new Date().toISOString() } : p)));
+      }
     }
     if (n.url) navigate(n.url);
   };
 
   const handleMarkAll = async () => {
-    await markAllRead();
+    const { error } = await markAllRead();
+    if (error) {
+      // eslint-disable-next-line no-alert
+      alert("Couldn't mark everything read. Check your connection and try again.");
+      return;
+    }
     setItems((prev) => prev.map((p) => ({ ...p, read_at: p.read_at || new Date().toISOString() })));
   };
 
   const handleDelete = async (id, e) => {
     e.stopPropagation();
-    await deleteNotification(id);
+    const { error } = await deleteNotification(id);
+    if (error) {
+      // eslint-disable-next-line no-alert
+      alert("Couldn't dismiss that notification. Try again in a moment.");
+      return;
+    }
     setItems((prev) => prev.filter((p) => p.id !== id));
   };
 

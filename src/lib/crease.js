@@ -54,12 +54,14 @@ export async function getEpisode(showId, episodeNumber) {
  */
 export async function hasCreaseAccess(userId) {
   if (!userId) return false;
-  const { data: profile } = await supabase
+  const { data: profile, error: profileErr } = await supabase
     .from('profiles').select('is_premium, premium_until').eq('id', userId).maybeSingle();
-  if (profile?.is_premium) return true;
-  if (profile?.premium_until && new Date(profile.premium_until) > new Date()) return true;
+  if (!profileErr) {
+    if (profile?.is_premium) return true;
+    if (profile?.premium_until && new Date(profile.premium_until) > new Date()) return true;
+  }
 
-  const { data: sub } = await supabase
+  const { data: sub, error: subErr } = await supabase
     .from('crease_subscriptions')
     .select('status, current_period_end')
     .eq('user_id', userId)
@@ -67,6 +69,14 @@ export async function hasCreaseAccess(userId) {
     .order('current_period_end', { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  // A transient query error must not fail a paying member closed. If either
+  // client-side read errored, defer to the trusted server-side function.
+  if (profileErr || subErr) {
+    const { data: rpc } = await supabase.rpc('has_crease_access', { p_user_id: userId });
+    return rpc === true;
+  }
+
   if (!sub) return false;
   if (!sub.current_period_end) return true;
   return new Date(sub.current_period_end) > new Date();

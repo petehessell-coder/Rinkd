@@ -18,7 +18,7 @@ export default function NotificationBell({ userId, size = 22, color }) {
 
     const refresh = async () => {
       try {
-        const c = await getUnreadCount();
+        const c = await getUnreadCount(userId);
         if (!cancelled) setCount(c);
       } catch { /* swallow — bell silently stays at last known count */ }
     };

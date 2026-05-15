@@ -289,8 +289,13 @@ function BellBadge({ userId }) {
         const { getUnreadCount, subscribe } = await import('../lib/notifications');
         if (cancelled) return;
         const refresh = async () => {
-          const c = await getUnreadCount();
-          if (!cancelled) setCount(c);
+          // getUnreadCount throws on a query error. This runs from setInterval
+          // and the realtime callback too, so it needs its own try/catch —
+          // the outer one only guards the initial import + setup.
+          try {
+            const c = await getUnreadCount(userId);
+            if (!cancelled) setCount(c);
+          } catch { /* swallow — badge holds its last known count */ }
         };
         refresh();
         interval = setInterval(refresh, 45_000);

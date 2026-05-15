@@ -51,8 +51,16 @@ export default function AdminFeedbackPage({ currentUser, profile }) {
   useEffect(() => { load(); }, [load]);
 
   const updateStatus = async (id, status) => {
+    // Optimistic, but remember the old value so we can roll back if the write
+    // fails — otherwise the queue shows a status the database never accepted.
+    const prevStatus = items.find((r) => r.id === id)?.status;
     setItems((prev) => prev.map((r) => r.id === id ? { ...r, status } : r));
-    await supabase.from('bug_reports').update({ status }).eq('id', id);
+    const { error } = await supabase.from('bug_reports').update({ status }).eq('id', id);
+    if (error) {
+      setItems((prev) => prev.map((r) => r.id === id ? { ...r, status: prevStatus } : r));
+      // eslint-disable-next-line no-alert
+      alert("Couldn't update that report's status. Try again.");
+    }
   };
 
   if (!isAdmin) {

@@ -72,14 +72,26 @@ export default function AdminModerationPage({ currentUser, profile }) {
 
   const approve = async (kind, id) => {
     const table = kind === 'posts' ? 'posts' : 'comments';
-    await supabase.from(table).update({ is_flagged: false, is_hidden: false, flag_reason: null }).eq('id', id);
+    const { error } = await supabase.from(table).update({ is_flagged: false, is_hidden: false, flag_reason: null }).eq('id', id);
+    if (error) {
+      // Don't drop it from the queue — it's still flagged in the database.
+      // eslint-disable-next-line no-alert
+      alert("Couldn't approve that item. Try again.");
+      return;
+    }
     setItems((prev) => prev.filter((x) => x.id !== id));
   };
 
   const remove = async (kind, id) => {
     if (!window.confirm('Permanently delete this content?')) return;
     const table = kind === 'posts' ? 'posts' : 'comments';
-    await supabase.from(table).delete().eq('id', id);
+    const { error } = await supabase.from(table).delete().eq('id', id);
+    if (error) {
+      // The row is still there — keep showing it rather than pretending it's gone.
+      // eslint-disable-next-line no-alert
+      alert("Couldn't delete that item. Try again.");
+      return;
+    }
     setItems((prev) => prev.filter((x) => x.id !== id));
   };
 

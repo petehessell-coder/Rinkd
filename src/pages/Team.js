@@ -55,7 +55,19 @@ export default function TeamPage({ currentUser, profile }) {
 
   const handleJoin = async () => {
     setJoinLoading(true);
-    try { await requestToJoin(id); setJoinRequested(true); } catch(e) { console.error(e); }
+    try {
+      await requestToJoin(id);
+      setJoinRequested(true);
+    } catch (e) {
+      console.error(e);
+      // A duplicate just means the request is already in — treat it as done.
+      if (/duplicate/i.test(e?.message || '')) {
+        setJoinRequested(true);
+      } else {
+        // eslint-disable-next-line no-alert
+        alert("Couldn't send your join request. Check your connection and try again.");
+      }
+    }
     setJoinLoading(false);
   };
 

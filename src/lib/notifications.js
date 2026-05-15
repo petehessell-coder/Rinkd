@@ -17,11 +17,16 @@ export async function listNotifications({ limit = 50, unreadOnly = false } = {})
   return { data: data || [], error };
 }
 
-export async function getUnreadCount() {
-  const { count } = await supabase
+export async function getUnreadCount(userId) {
+  let q = supabase
     .from('notifications')
     .select('id', { count: 'exact', head: true })
     .is('read_at', null);
+  // Scope the count to this user. RLS already restricts rows, but being
+  // explicit means a future RLS change can't silently inflate the badge.
+  if (userId) q = q.eq('recipient_id', userId);
+  const { count, error } = await q;
+  if (error) throw error;
   return count || 0;
 }
 
@@ -37,12 +42,13 @@ export async function markAllRead() {
   // Try the RPC first; if it doesn't exist yet (deploy lag), fall back to a
   // client-side update which RLS already restricts to the user's own rows.
   const { error: rpcErr } = await supabase.rpc('mark_all_notifications_read');
-  if (rpcErr) {
-    await supabase
-      .from('notifications')
-      .update({ read_at: new Date().toISOString() })
-      .is('read_at', null);
-  }
+  if (!rpcErr) return { error: null };
+  const { error: fallbackErr } = await supabase
+    .from('notifications')
+    .update({ read_at: new Date().toISOString() })
+    .is('read_at', null);
+  // Surface the fallback's error so the caller can keep the unread UI honest.
+  return { error: fallbackErr };
 }
 
 export async function deleteNotification(id) {

@@ -71,12 +71,24 @@ export default function SettingsPage({ currentUser, profile }) {
         rsvps, notifications, pushSubs, creaseSubs, bugReports, lineups, tournamentRoles,
       ] = tables;
 
+      // If any single table read failed, the export silently shipped partial
+      // data. Record which ones so the file is honest about what's missing.
+      const tableNames = [
+        'profile', 'posts', 'comments', 'likes', 'follows', 'team_memberships',
+        'game_rsvps', 'notifications', 'push_subscriptions', 'crease_subscriptions',
+        'bug_reports_submitted', 'game_lineups', 'tournament_roles',
+      ];
+      const exportWarnings = tables
+        .map((t, i) => (t.error ? { table: tableNames[i], error: t.error.message } : null))
+        .filter(Boolean);
+
       const payload = {
         export_metadata: {
           generated_at: new Date().toISOString(),
           source: 'rinkd.app',
           user_id: uid,
           format: 'json-v1',
+          ...(exportWarnings.length ? { export_warnings: exportWarnings } : {}),
         },
         profile: profileRow.data || null,
         posts: posts.data || [],

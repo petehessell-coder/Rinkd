@@ -304,7 +304,15 @@ export default function Feed({ currentUser, profile }) {
       if (error) { setPosting(false); alert('Upload failed. Please try again.'); return; }
       mediaUrl = url; mediaType = mt; setUploadProgress(80);
     }
-    await createPost(currentUser.id, { content: content.trim(), tag: selectedTag?.label || null, tagColor: selectedTag?.color || null, mediaUrl, mediaType, livebarnVenueId: livebarnId.trim() || null });
+    const { error: postError } = await createPost(currentUser.id, { content: content.trim(), tag: selectedTag?.label || null, tagColor: selectedTag?.color || null, mediaUrl, mediaType, livebarnVenueId: livebarnId.trim() || null });
+    if (postError) {
+      // The insert failed — don't clear the composer or fire analytics, or the
+      // user loses their text and we log a chirp that never landed.
+      setPosting(false); setUploadProgress(0);
+      // eslint-disable-next-line no-alert
+      alert("Couldn't post that chirp. Check your connection and try again.");
+      return;
+    }
     // Fire both events during the rename window. `post_created` keeps historical
     // continuity in dashboards; `chirp_created` is the going-forward name and
     // will become canonical once we backfill old data and retire the legacy event.
