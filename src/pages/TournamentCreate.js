@@ -31,11 +31,42 @@ const DEFAULT_SETTINGS = {
 
 const TIEBREAKER_LABELS = {
   head_to_head: 'Head-to-head result',
+  goal_quotient: 'Goal quotient (GF ÷ GA)',
   goal_diff: 'Goal differential',
   goals_for: 'Goals for',
   goals_against: 'Goals against (fewest)',
+  period_points: 'Period points',
   penalty_minutes: 'Penalty minutes (fewest)',
   coin_toss: 'Coin toss — Tournament Director',
+};
+
+// Reusable tournament-format presets. Picking one in Step 2 drops a full
+// settings object in; every field stays editable afterward. BLPA Bash is
+// fully specced from Nick's May 14 email; DEX and Format 3 are stubbed until
+// the format-details call with Nick (see BLPA_Nick_Cleveland_Reply.md).
+const FORMAT_PRESETS = {
+  blpa_bash: {
+    label: 'BLPA Bash',
+    sub: 'BLPA · 3×12 · 6-goal mercy · 1 advances/pool',
+    settings: {
+      period_length_minutes: 12,
+      period_type: 'stop',
+      num_periods: 3,
+      points_win: 2,
+      points_tie: 1,
+      points_loss: 0,
+      shootout_win_points: 2,
+      max_goal_differential: 6,
+      allow_ties: true,
+      shootout_pool: false,
+      shootout_bracket: true,
+      advancement_per_pool: 1,
+      tiebreakers: ['goal_quotient','period_points','head_to_head','goal_diff','goals_for','goals_against','penalty_minutes','coin_toss'],
+    },
+  },
+  // dex: pending — Nick sent DEX's tiebreakers only (Points → lowest PIM →
+  //   period points); periods, point values, and mercy rule still needed.
+  // format_3: pending — Nick's email left Format 3 blank.
 };
 
 const inputStyle = { width: '100%', background: '#07111F', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 8, padding: '10px 12px', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', fontSize: 14, outline: 'none' };
@@ -155,6 +186,7 @@ function Step1({ data, onChange, onNext }) {
 function Step2({ data, onChange, onBack, onNext }) {
   const s = data.settings;
   const set = (key, val) => onChange('settings', { ...s, [key]: val });
+  const applyPreset = (key) => onChange('settings', { ...FORMAT_PRESETS[key].settings });
 
   const moveTb = (from, to) => {
     const tb = [...s.tiebreakers];
@@ -167,6 +199,22 @@ function Step2({ data, onChange, onBack, onNext }) {
     <>
       <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 22, marginBottom: 4 }}>Format & Rules</div>
       <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.4)', marginBottom: 20 }}>Step 2 of 4 — Shown on the public Info tab</div>
+
+      <SectionLabel>Start from a Preset</SectionLabel>
+      <Card>
+        <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginBottom: 10, lineHeight: 1.5 }}>
+          Drops in a full format — periods, points, mercy rule, tiebreakers. Everything below stays editable.
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {Object.entries(FORMAT_PRESETS).map(([key, preset]) => (
+            <button key={key} onClick={() => applyPreset(key)}
+              style={{ flex: '1 1 200px', textAlign: 'left', background: 'rgba(46,91,140,0.15)', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#F4F7FA' }}>{preset.label}</div>
+              <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.45)', marginTop: 2 }}>{preset.sub}</div>
+            </button>
+          ))}
+        </div>
+      </Card>
 
       <SectionLabel>Game Format</SectionLabel>
       <Card>
