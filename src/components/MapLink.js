@@ -31,6 +31,10 @@ export default function MapLink({ rink, text, icon = '📍', children, style, cl
 
   const handleClick = (e) => {
     e.stopPropagation();
+    // Let modified clicks (cmd/ctrl/shift/middle) fall through to the native
+    // href so "open in new tab" works. Only a plain click gets the
+    // platform-aware openMaps() routing.
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
     e.preventDefault();
     if (onClickExtra) onClickExtra();
     openMaps(target);
@@ -38,7 +42,7 @@ export default function MapLink({ rink, text, icon = '📍', children, style, cl
 
   return (
     <a href={url} onClick={handleClick}
-      rel="noopener noreferrer"
+      target="_blank" rel="noopener noreferrer"
       style={{
         color: 'inherit', textDecoration: 'none', cursor: 'pointer',
         ...style,

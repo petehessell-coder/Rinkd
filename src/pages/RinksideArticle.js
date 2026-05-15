@@ -29,7 +29,13 @@ export default function RinksideArticle({ currentUser, profile }) {
       setArticle(data);
       setLoading(false);
       if (data?.id) {
-        incrementView(data.id);
+        // Count one view per article per browser session — guards against
+        // remounts, StrictMode double-invokes, and refresh-spamming.
+        const seenKey = 'rinkd_viewed_' + data.id;
+        if (!sessionStorage.getItem(seenKey)) {
+          incrementView(data.id);
+          try { sessionStorage.setItem(seenKey, '1'); } catch (_) {}
+        }
         track('article_read', { slug: data.slug, title: data.title, category: data.category });
       }
     })();

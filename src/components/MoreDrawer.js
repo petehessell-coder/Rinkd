@@ -15,7 +15,7 @@ const B = {
  * first-time user can find what they need without being overwhelmed up-front.
  *
  * Sections:
- *   • Explore — Discover, Rinkside, Crease, Store, Tournaments
+ *   • Explore — Discover, Rinkside, Crease, Leagues, Tournaments
  *   • Manage — role-specific items (Admin, Volunteer Coordinator, etc.) for
  *     commissioners + managers. Players see an empty Manage section that's
  *     just hidden.
@@ -43,7 +43,6 @@ export default function MoreDrawer({ open, onClose, userId, onSignOut }) {
     { path: '/crease',      iconImg: '/crease-logo.png',   label: 'Crease',   sub: 'Original premium shows', badge: 'Early Access' },
     { path: '/leagues',     IconNode: 'leagues', label: 'Leagues',     sub: 'Find or create a league' },
     { path: '/tournaments', IconNode: 'tournaments', label: 'Tournaments', sub: 'Browse + manage events' },
-    { path: '/store',       icon: '🛒',  label: 'Store',       sub: 'Coming soon — merch + tier discounts' },
   ];
 
   return (

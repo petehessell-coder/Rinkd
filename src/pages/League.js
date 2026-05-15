@@ -359,8 +359,8 @@ export default function LeaguePage({ profile }) {
       <SubscribeCalendarSheet
         open={subscribeOpen}
         onClose={() => setSubscribeOpen(false)}
-        httpsUrl={`https://tbpoopsyhfuqcbugrjbh.supabase.co/functions/v1/schedule-ics?league=${league?.id || ''}`}
-        webcalUrl={`webcal://tbpoopsyhfuqcbugrjbh.supabase.co/functions/v1/schedule-ics?league=${league?.id || ''}`}
+        httpsUrl={`${process.env.REACT_APP_SUPABASE_URL}/functions/v1/schedule-ics?league=${league?.id || ''}`}
+        webcalUrl={`${(process.env.REACT_APP_SUPABASE_URL || '').replace(/^https/, 'webcal')}/functions/v1/schedule-ics?league=${league?.id || ''}`}
         title={league?.name ? `the full ${league.name} schedule` : 'the league schedule'}
       />
     </Layout>

@@ -35,11 +35,12 @@ export default function ResetPasswordPage() {
         track('password_reset_link_opened');
       }
     });
-    // Give Supabase a moment to detect the token in the URL hash. If we
-    // haven't transitioned to 'ready' within 3 seconds, the link is bad.
+    // Give Supabase time to detect the token in the URL hash. Slow mobile
+    // connections can take several seconds — 10s avoids a false "expired" on
+    // a link that's actually valid.
     const t = setTimeout(() => {
       if (!resolved) setStage('error');
-    }, 3000);
+    }, 10000);
     return () => { clearTimeout(t); subscription.unsubscribe(); };
   }, []);
 

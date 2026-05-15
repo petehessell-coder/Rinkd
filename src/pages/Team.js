@@ -500,8 +500,8 @@ export default function TeamPage({ currentUser, profile }) {
       <SubscribeCalendarSheet
         open={subscribeOpen}
         onClose={() => setSubscribeOpen(false)}
-        httpsUrl={`https://tbpoopsyhfuqcbugrjbh.supabase.co/functions/v1/schedule-ics?team=${team?.id || ''}`}
-        webcalUrl={`webcal://tbpoopsyhfuqcbugrjbh.supabase.co/functions/v1/schedule-ics?team=${team?.id || ''}`}
+        httpsUrl={`${process.env.REACT_APP_SUPABASE_URL}/functions/v1/schedule-ics?team=${team?.id || ''}`}
+        webcalUrl={`${(process.env.REACT_APP_SUPABASE_URL || '').replace(/^https/, 'webcal')}/functions/v1/schedule-ics?team=${team?.id || ''}`}
         title={team?.name ? `${team.name}'s schedule` : 'this team\'s schedule'}
       />
     </Layout>

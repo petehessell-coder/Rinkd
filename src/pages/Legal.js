@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 export default function Legal() {
-  const [tab, setTab] = useState('privacy');
+  const { pathname } = useLocation();
+  const [tab, setTab] = useState(pathname === '/terms' ? 'terms' : 'privacy');
   const C = { navy: '#0B1F3A', dark: '#07111F', card: '#112236', border: '#1E3A5C', ice: '#F4F7FA', steel: '#8BA3BE', red: '#D72638' };
   return (
     <div style={{ minHeight: '100vh', background: C.dark, fontFamily: "'Barlow', sans-serif" }}>

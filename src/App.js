@@ -137,7 +137,6 @@ function AppRoutes() {
       <Route path="/discover" element={<ProtectedRoute><Discover currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/tournaments" element={<ProtectedRoute><Tournaments profile={profile} /></ProtectedRoute>} />
       <Route path="/teams" element={<ProtectedRoute><Teams profile={profile} /></ProtectedRoute>} />
-      <Route path="/leagues" element={<ProtectedRoute><Leagues profile={profile} /></ProtectedRoute>} />
       <Route path="/league/create" element={<ProtectedRoute><LeagueManage profile={profile} /></ProtectedRoute>} />
       <Route path="/league/:id/manage" element={<ProtectedRoute><LeagueManage profile={profile} /></ProtectedRoute>} />
       <Route path="/league/:id" element={<ProtectedRoute><League profile={profile} /></ProtectedRoute>} />

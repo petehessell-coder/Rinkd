@@ -52,6 +52,7 @@ export async function createPost(authorId, { content, tag, tagColor, mediaUrl, m
       tag_color: tagColor || null,
       media_url: mediaUrl || null,
       media_type: mediaType || null,
+      livebarn_venue_id: livebarnVenueId || null,
       team_id: teamId || null,
       likes: 0,
       comment_count: 0,

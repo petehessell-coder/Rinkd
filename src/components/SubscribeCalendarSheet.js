@@ -38,6 +38,23 @@ export default function SubscribeCalendarSheet({ open, onClose, httpsUrl, webcal
 
   if (!open) return null;
 
+  // Defensive: if the feed URLs haven't been built yet (e.g. the team/league
+  // is still loading), don't render dead action buttons — show a brief note.
+  if (!httpsUrl || !webcalUrl) {
+    return (
+      <div onClick={onClose}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(7, 17, 31, 0.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
+        <div onClick={(e) => e.stopPropagation()}
+          style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, maxWidth: 420, width: '100%', padding: '20px 22px', fontFamily: "'Barlow', sans-serif", color: C.steel, fontSize: 14, textAlign: 'center' }}>
+          The calendar feed isn't ready yet — give it a moment and try again.
+          <div style={{ marginTop: 14 }}>
+            <button onClick={onClose} style={{ background: C.navy, border: `1px solid ${C.border}`, color: C.ice, borderRadius: 10, padding: '10px 18px', cursor: 'pointer', fontFamily: 'inherit' }}>Close</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(httpsUrl);

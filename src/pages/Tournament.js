@@ -5,7 +5,7 @@ import { LedR } from '../components/Logos';
 import { getLiveBarnUrl } from '../lib/livebarn';
 
 
-const TABS = ['Standings','Schedule','Bracket','Info','Feed'];
+const TABS = ['Standings','Schedule','Bracket','Info'];
 
 export default function TournamentPage({ currentUser }) {
   const { id } = useParams();
@@ -174,10 +174,6 @@ export default function TournamentPage({ currentUser }) {
         )}
 
         {activeTab === 'Info' && <InfoTab tournament={tournament} />}
-
-        {activeTab === 'Feed' && (
-          <div style={{textAlign:'center',color:'rgba(244,247,250,0.3)',fontSize:13,paddingTop:40}}>Event feed — coming soon</div>
-        )}
 
       </div>
     </div>

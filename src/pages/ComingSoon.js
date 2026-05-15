@@ -38,20 +38,8 @@ export function ComingSoonPage({ profile, icon, title, subtitle }) {
   );
 }
 
-export function VolunteerCoordinatorPage({ profile }) {
-  return <ComingSoonPage profile={profile} icon="🙋"
-    title="Volunteer Coordinator"
-    subtitle="Schedule scorekeepers, on-ice helpers, and rink crew. Track who's signed up and remind no-shows." />;
-}
-
 export function DuesTrackerPage({ profile }) {
   return <ComingSoonPage profile={profile} icon="💸"
     title="Dues Tracker"
     subtitle="See who's paid, who's behind, and send reminders. Integrates with the Stripe checkout once wired." />;
-}
-
-export function AdminPanelPage({ profile }) {
-  return <ComingSoonPage profile={profile} icon="🛠️"
-    title="Admin Panel"
-    subtitle="Manage leagues, teams, and members. Approve registrations, set divisions, configure tournaments." />;
 }
