@@ -149,22 +149,14 @@ function TopScorersRail() {
 
   useEffect(() => {
     (async () => {
-      // Aggregate goals + assists for all-time across league_games.
-      // game_goals has scorer + assist columns; here we just take top scorers.
-      const { data } = await supabase
-        .from('game_goals')
-        .select('scorer_id, profiles:scorer_id(id, name, handle, avatar_color, avatar_initials, tier)')
-        .not('scorer_id', 'is', null)
-        .limit(500);
-      const tally = {};
-      for (const r of data || []) {
-        const id = r.scorer_id;
-        if (!id) continue;
-        if (!tally[id]) tally[id] = { ...r.profiles, goals: 0 };
-        tally[id].goals += 1;
-      }
-      const list = Object.values(tally).sort((a, b) => b.goals - a.goals).slice(0, 5);
-      setRows(list);
+      // Real top scorers, aggregated server-side via the get_top_scorers RPC.
+      // Replaces a query that referenced `scorer_id` — a column that doesn't
+      // exist on game_goals (the column is scorer_number, a jersey #) — so this
+      // rail was silently broken and always empty. The leaderboard fills in
+      // once there are profile-linked scorers in the data.
+      const { data, error } = await supabase.rpc('get_top_scorers', { p_limit: 5 });
+      if (error) console.warn('[discover] top scorers failed:', error.message);
+      setRows(data || []);
       setLoading(false);
     })();
   }, []);
