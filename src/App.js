@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AuthContext, useAuth } from './lib/authContext';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
-import { getProfile } from './lib/auth';
+import { getProfile, ensureProfileForUser } from './lib/auth';
 import Auth from './pages/Auth';
 import Feed from './pages/Feed';
 import Profile from './pages/Profile';
@@ -113,7 +113,13 @@ function AppRoutes() {
         currentUser={user}
         profile={profile}
         onProfileUpdate={setProfile}
-        onClose={() => setProfile({ ...profile, welcome_seen: true })}
+        // Functional updater + null guard. The race-fix path can mount this
+        // modal BEFORE the profile fetch resolves; if the user closes it in
+        // that window, a plain `{ ...profile, welcome_seen: true }` would
+        // spread `null` and reduce the local profile to just
+        // `{ welcome_seen: true }` — dropping name/handle/avatar until the
+        // next fetch. The DB-side update lives in OnboardingModal.finish().
+        onClose={() => setProfile((p) => ({ ...(p || {}), welcome_seen: true }))}
       />
     )}
     <Routes>
@@ -187,10 +193,22 @@ export default function App() {
   // forever even though the DB row exists a moment later — locking pages like
   // /profile in "Loading..." purgatory and silently breaking onboarding for
   // users who navigate before the modal fires.
-  const fetchProfileWithRetry = async (userId) => {
+  //
+  // After the email-confirmation path landed, this helper ALSO triggers
+  // `ensureProfileForUser` on the first attempt if no profile exists — that's
+  // how new users who confirmed via email link end up with a profile row
+  // (since signUp couldn't create it without a session).
+  const fetchProfileWithRetry = async (user) => {
+    let ensureAttempted = false;
     for (let attempt = 0; attempt < 6; attempt++) {
-      const { data } = await getProfile(userId);
+      const { data } = await getProfile(user.id);
       if (data) return data;
+      // First miss: try to build the profile from user_metadata. Idempotent
+      // for users who already have one (the function early-returns).
+      if (!ensureAttempted) {
+        ensureAttempted = true;
+        try { await ensureProfileForUser(user); } catch (_) { /* swallow */ }
+      }
       // Exponential-ish backoff: 200, 400, 800, 1200, 1800, 2500 ms (~7s total)
       await new Promise((r) => setTimeout(r, 200 + attempt * 400));
     }
@@ -202,14 +220,33 @@ export default function App() {
     // when it actually changes — not on every hourly TOKEN_REFRESHED or
     // USER_UPDATED event, and not twice on cold start.
     let currentUserId = null;
+    let mounted = true;
+
+    // Safety net: if supabase.auth.getSession() hangs >10s (e.g. a network
+    // failure mid token-refresh on rink wifi), give up and let the user land
+    // on Landing/Auth instead of staring at "Loading Rinkd…" forever. Reading
+    // from localStorage is normally <100ms, so 10s is well past the worst
+    // real-world cold-start case. If the session call eventually resolves
+    // later, the listener below will pick it up and update state correctly.
+    const sessionTimeout = setTimeout(() => {
+      if (mounted && currentUserId === null) {
+        // eslint-disable-next-line no-console
+        console.warn('[auth] getSession() did not resolve within 10s — dropping to logged-out state. The user can retry from Landing.');
+        setLoading(false);
+      }
+    }, 10000);
+
     supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!mounted) return;
+      clearTimeout(sessionTimeout);
       const u = session?.user || null;
       setUser(u);
       const nextId = u?.id || null;
       if (nextId !== currentUserId) {
         currentUserId = nextId;
         if (u) {
-          const data = await fetchProfileWithRetry(u.id);
+          const data = await fetchProfileWithRetry(u);
+          if (!mounted) return;
           setProfile(data);
           setProfileError(!data); // null after retries = the fetch failed
           setSentryUser(u, data);
@@ -230,10 +267,14 @@ export default function App() {
         currentUserId = nextId;
         setUser(u);
         if (u) {
-          const data = await fetchProfileWithRetry(u.id);
+          const data = await fetchProfileWithRetry(u);
+          if (!mounted) return;
           setProfile(data);
           setProfileError(!data); // null after retries = the fetch failed
           setSentryUser(u, data);
+          // If we'd previously timed out and dropped to logged-out, flip
+          // loading back to false here too in case it wasn't already.
+          setLoading(false);
         } else {
           setProfile(null);
           setProfileError(false);
@@ -243,7 +284,11 @@ export default function App() {
         console.error('[auth] onAuthStateChange handler error:', err);
       }
     });
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      clearTimeout(sessionTimeout);
+      subscription.unsubscribe();
+    };
   }, []);
 
   return (

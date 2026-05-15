@@ -58,13 +58,14 @@ function Input({ label, ...props }) {
 
 export default function Auth() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState('login'); // login | signup | coppa | forgot
+  const [mode, setMode] = useState('login'); // login | signup | coppa | forgot | check-email
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSent, setForgotSent] = useState(false);
   const [forgotBusy, setForgotBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [step, setStep] = useState(1); // signup steps 1,2,3
+  const [confirmEmail, setConfirmEmail] = useState(''); // remembered for the "Check your email" screen
 
   const [form, setForm] = useState({
     email: '', password: '', name: '', handle: '',
@@ -100,22 +101,31 @@ export default function Auth() {
     e.preventDefault();
     if (step < 3) { setStep(s => s + 1); return; }
     setLoading(true); setError('');
-    const { error: err } = await signUp(form);
+    const result = await signUp(form);
     setLoading(false);
-    if (err) {
-      track('signup_failed', { reason: err.message?.slice(0, 80) });
-      if (err.message?.includes('13')) setMode('coppa');
-      else setError(err.message);
-    } else {
-      track('signup_success', { position: form.position, level: form.level });
-      // 4E race-fix: set a sessionStorage flag so App.js can render the
-      // onboarding modal BEFORE the Supabase profile fetch completes. Without
-      // this, ~43% of recent signups were bouncing during the few-hundred-ms
-      // window where `user` is set but `profile` is still null — meaning the
-      // modal never mounted and they never fired `onboarding_started`.
-      try { sessionStorage.setItem('rinkd_pending_onboarding', '1'); } catch (_) { /* private mode */ }
-      navigate('/feed');
+    if (result.error) {
+      track('signup_failed', { reason: result.error.message?.slice(0, 80) });
+      if (result.error.message?.includes('13')) setMode('coppa');
+      else setError(result.error.message);
+      return;
     }
+    if (result.needsConfirmation) {
+      // Supabase has email confirmation turned on — we have a user row but no
+      // session yet. Show the "Check your email" state instead of pushing to
+      // /feed (which would just bounce back through ProtectedRoute).
+      track('signup_needs_confirmation', { position: form.position, level: form.level });
+      setConfirmEmail(form.email);
+      setMode('check-email');
+      return;
+    }
+    track('signup_success', { position: form.position, level: form.level });
+    // 4E race-fix: set a sessionStorage flag so App.js can render the
+    // onboarding modal BEFORE the Supabase profile fetch completes. Without
+    // this, ~43% of recent signups were bouncing during the few-hundred-ms
+    // window where `user` is set but `profile` is still null — meaning the
+    // modal never mounted and they never fired `onboarding_started`.
+    try { sessionStorage.setItem('rinkd_pending_onboarding', '1'); } catch (_) { /* private mode */ }
+    navigate('/feed');
   };
 
   return (
@@ -195,6 +205,32 @@ export default function Auth() {
               fontFamily: "'Barlow Condensed', sans-serif",
               fontWeight: 700, fontSize: 16, cursor: 'pointer',
             }}>Back to Login</button>
+          </div>
+        ) : mode === 'check-email' ? (
+          // Shown when Supabase has email confirmation enabled — signUp returns
+          // a user but no session, so we can't drop the user onto /feed yet.
+          // The profile row will be created on first sign-in via
+          // ensureProfileForUser (App.js wires it into fetchProfileWithRetry).
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>📬</div>
+            <h2 style={{
+              fontFamily: "'Barlow Condensed', sans-serif",
+              fontWeight: 900, fontStyle: 'italic',
+              fontSize: 28, color: C.ice, marginBottom: 12, textTransform: 'uppercase',
+            }}>Check your email</h2>
+            <p style={{ color: C.steel, lineHeight: 1.6, marginBottom: 8 }}>
+              We sent a confirmation link to{' '}
+              <strong style={{ color: C.ice }}>{confirmEmail || 'your inbox'}</strong>.
+            </p>
+            <p style={{ color: C.steel, lineHeight: 1.6, marginBottom: 24, fontSize: 13 }}>
+              Click the link to finish creating your account. If you don't see it within a minute, check your spam folder.
+            </p>
+            <button onClick={() => { setMode('login'); setError(''); }} style={{
+              padding: '12px 32px', borderRadius: 10,
+              background: C.red, color: 'white', border: 'none',
+              fontFamily: "'Barlow Condensed', sans-serif",
+              fontWeight: 700, fontSize: 16, cursor: 'pointer',
+            }}>Back to Sign In</button>
           </div>
         ) : mode === 'forgot' ? (
           <>
@@ -338,7 +374,7 @@ export default function Auth() {
                   <Input label="Email" type="email" value={form.email}
                     onChange={e => set('email', e.target.value)} required placeholder="you@example.com" />
                   <Input label="Password" type="password" value={form.password}
-                    onChange={e => set('password', e.target.value)} required placeholder="Min 6 characters" minLength={6} />
+                    onChange={e => set('password', e.target.value)} required placeholder="Min 8 characters" minLength={8} />
                   <Input label="Date of Birth" type="date" value={form.dob}
                     onChange={e => set('dob', e.target.value)} required />
                   <p style={{ fontSize: 11, color: C.steel, marginTop: -8, marginBottom: 16 }}>

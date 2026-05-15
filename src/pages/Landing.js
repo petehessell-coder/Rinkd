@@ -26,15 +26,25 @@ const C = {
  * forcing the install.
  */
 
+// iPadOS 13+ reports itself as `Macintosh` in navigator.userAgent — the
+// "request desktop site" default Apple ships with. The only reliable signal
+// that you're on an iPad and not a real Mac is touch support
+// (maxTouchPoints > 1 on Macintosh). Without this, iPad pilot users skip the
+// Install-Rinkd CTA and land on the desktop Auth screen.
+function isIPadOS() {
+  if (typeof navigator === 'undefined') return false;
+  return /Macintosh/i.test(navigator.userAgent || '') && (navigator.maxTouchPoints || 0) > 1;
+}
+
 function detectMobile() {
   if (typeof navigator === 'undefined') return false;
   const ua = navigator.userAgent || '';
-  return /iPhone|iPad|iPod|Android|Mobile/i.test(ua);
+  return /iPhone|iPad|iPod|Android|Mobile/i.test(ua) || isIPadOS();
 }
 
 function detectIOS() {
   if (typeof navigator === 'undefined') return false;
-  return /iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent || '') || isIPadOS();
 }
 
 function detectStandalone() {

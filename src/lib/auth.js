@@ -1,14 +1,21 @@
 import { supabase } from './supabase';
 import { linkPendingInvitesForUser } from './roster';
 
+const AVATAR_COLORS = ['#D72638','#2E5B8C','#22C55E','#F59E0B','#8B5CF6','#0EA5E9'];
+
+function pickInitials(name) {
+  return (name || '').split(/\s+/).filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?';
+}
+
 export async function signUp({ email, password, name, handle, position, level, dob }) {
-  // COPPA check
+  // COPPA check — also guards against an invalid `dob` that would produce NaN
+  // and silently bypass the under-13 block.
   const birthDate = new Date(dob);
   const today = new Date();
   let age = today.getFullYear() - birthDate.getFullYear();
   const m = today.getMonth() - birthDate.getMonth();
   if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
-  if (age < 13) {
+  if (!Number.isFinite(age) || age < 13) {
     return { error: { message: 'You must be 13 or older to create a Rinkd account.' } };
   }
 
@@ -22,75 +29,130 @@ export async function signUp({ email, password, name, handle, position, level, d
     return { error: { message: 'That handle is already taken — please pick another.' } };
   }
 
-  const { data, error } = await supabase.auth.signUp({ email, password });
+  const color = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
+  const initials = pickInitials(name);
+
+  // Pass profile fields to Supabase as user_metadata so we can rebuild the
+  // profile row whenever the user first arrives with a real session —
+  // whether that's immediately (auto-confirm on) or later via the email
+  // confirmation link (auto-confirm off, data.session is null on signUp
+  // and the profile INSERT would otherwise run anonymously and fail).
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: {
+        name,
+        handle: cleanHandle,
+        position: position || 'Fan',
+        level: level || 'Beer League',
+        avatar_color: color,
+        avatar_initials: initials,
+      },
+    },
+  });
   if (error) return { error };
 
   const userId = data.user?.id;
   if (!userId) return { error: { message: 'Signup failed. Please try again.' } };
 
-  const avatarColors = ['#D72638','#2E5B8C','#22C55E','#F59E0B','#8B5CF6','#0EA5E9'];
-  const color = avatarColors[Math.floor(Math.random() * avatarColors.length)];
-  const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  // No session → Supabase has email confirmation turned on. We cannot insert
+  // the profile from here (anonymous INSERT will be rejected by RLS). Tell the
+  // caller to show a "Check your email" screen; `ensureProfileForUser` runs
+  // post-confirmation when SIGNED_IN fires with a real session attached.
+  if (!data.session) {
+    return { data, needsConfirmation: true, error: null };
+  }
+
+  // Auto-confirm path — we have a session, create the profile + side effects
+  // synchronously so the user lands on /feed with everything ready.
+  const ensured = await ensureProfileForUser(data.user);
+  if (ensured.error) {
+    return { error: { message: "Your account was created but your profile didn't finish setting up. Please contact hello@rinkd.app." } };
+  }
+
+  return { data, error: null };
+}
+
+/**
+ * Idempotent: ensures a profile row + auto-follow seeds + linked invites
+ * exist for the given auth user. Safe to call from signUp (auto-confirm path)
+ * AND from App.js's onAuthStateChange handler (post-email-confirmation path
+ * for new users, no-op for returning users).
+ *
+ * Reads profile fields from auth.users.user_metadata (set by signUp).
+ */
+export async function ensureProfileForUser(user) {
+  if (!user?.id) return { data: null, error: { message: 'No user' } };
+
+  const { data: existing } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('id', user.id)
+    .maybeSingle();
+  if (existing) return { data: existing, error: null };
+
+  const meta = user.user_metadata || {};
+  const emailLocal = (user.email || '').split('@')[0] || 'player';
+  const name = meta.name || emailLocal;
+  const handle = meta.handle || emailLocal.replace(/[^a-zA-Z0-9_]/g, '') || `user_${user.id.slice(0, 8)}`;
+  const color = meta.avatar_color || AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
+  const initials = meta.avatar_initials || pickInitials(name);
 
   const { error: profileError } = await supabase.from('profiles').upsert({
-    id: userId,
-    email: email.toLowerCase(),
+    id: user.id,
+    email: (user.email || '').toLowerCase(),
     name,
-    handle: cleanHandle,
+    handle,
     avatar_color: color,
     avatar_initials: initials,
-    position: position || 'Fan',
-    level: level || 'Beer League',
+    position: meta.position || 'Fan',
+    level: meta.level || 'Beer League',
     points: 0,
     tier: 'Mite',
     bio: '',
     home_rink: '',
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
   });
 
-  // If the profile row didn't get created, the account is half-built — every
-  // page that assumes a profile will break. Surface it instead of reporting
-  // success. (The durable fix is a DB trigger that creates the profile
-  // transactionally with the auth user — see Rinkd_Canonical_Data_Model.md.)
   if (profileError) {
-    console.error('Profile creation error:', profileError);
-    return { error: { message: "Your account was created but your profile didn't finish setting up. Please contact hello@rinkd.app." } };
+    // eslint-disable-next-line no-console
+    console.error('[ensureProfileForUser] profile upsert failed:', profileError);
+    return { error: profileError };
   }
 
-  // If a team manager invited this user before they signed up, link them up now.
-  // Quiet failure — the signup itself still succeeds.
+  // Side effects — quiet failure for each. The profile creation succeeded,
+  // and these are nice-to-have on first sign-in. They're also idempotent: a
+  // returning user already has the linked invite or the follow row.
   try {
-    const { linked } = await linkPendingInvitesForUser(userId, email);
+    const { linked } = await linkPendingInvitesForUser(user.id, user.email);
     if (linked > 0) {
       // eslint-disable-next-line no-console
-      console.info(`[signUp] auto-linked ${linked} pending team invite${linked === 1 ? '' : 's'}.`);
+      console.info(`[ensureProfileForUser] auto-linked ${linked} pending team invite${linked === 1 ? '' : 's'}.`);
     }
   } catch (e) {
     // eslint-disable-next-line no-console
-    console.warn('[signUp] linkPendingInvitesForUser threw:', e?.message || e);
+    console.warn('[ensureProfileForUser] linkPendingInvitesForUser threw:', e?.message || e);
   }
 
-  // Auto-follow the top 3 active users so the new user's Following feed isn't
-  // empty on landing. Quiet failure — signup succeeds regardless. These follows
-  // can be unfollowed at any time from the followed user's profile.
   try {
     const { data: topUsers } = await supabase
       .from('profiles')
       .select('id')
-      .neq('id', userId)
+      .neq('id', user.id)
       .order('points', { ascending: false, nullsFirst: false })
       .limit(3);
     if (topUsers?.length) {
       await supabase.from('follows').insert(
-        topUsers.map((u) => ({ follower_id: userId, following_id: u.id }))
+        topUsers.map((u) => ({ follower_id: user.id, following_id: u.id }))
       );
     }
   } catch (e) {
     // eslint-disable-next-line no-console
-    console.warn('[signUp] auto-follow seeded users failed:', e?.message || e);
+    console.warn('[ensureProfileForUser] auto-follow seeded users failed:', e?.message || e);
   }
 
-  return { data, error: null };
+  return { data: { id: user.id }, error: null };
 }
 
 export async function signIn({ email, password }) {
