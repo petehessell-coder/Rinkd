@@ -35,13 +35,23 @@ export async function subscribeToPush(userId) {
         : undefined,
     });
 
-    // Save subscription to Supabase
+    // Save subscription to Supabase. If this fails (RLS rejection, network),
+    // the browser thinks it's subscribed but our server has no row to push to,
+    // so notifications silently never arrive. Tear down the browser-side
+    // subscription so the user retains a consistent "not subscribed" state
+    // and can retry from scratch — better than the silent black hole.
     const { supabase } = await import('./supabase');
-    await supabase.from('push_subscriptions').upsert({
+    const { error: upsertErr } = await supabase.from('push_subscriptions').upsert({
       user_id: userId,
       subscription: JSON.stringify(subscription),
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id' });
+    if (upsertErr) {
+      // eslint-disable-next-line no-console
+      console.error('[push] subscription saved in browser but not on server — rolling back:', upsertErr);
+      try { await subscription.unsubscribe(); } catch { /* swallow */ }
+      return null;
+    }
 
     return subscription;
   } catch (err) {

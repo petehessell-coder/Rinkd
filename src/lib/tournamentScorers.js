@@ -37,13 +37,15 @@ export async function resolveProfile(rawInput) {
 }
 
 /**
- * Add a scorer to a tournament by handle/email. Returns one of:
- *   { status: 'added',   profile }        — account found, 'scorer' role granted
- *   { status: 'already', profile, role }  — already has a role on this tournament
- *   { status: 'invited', email }          — no account; sign-up invite emailed
- *   { status: 'error',   message }        — bad input, or no account + no email to invite
+ * Add a scorer to a tournament by handle/email — optionally with a fallback
+ * email when the input is a handle that doesn't resolve. Returns one of:
+ *   { status: 'added',     profile }              — account found, 'scorer' role granted
+ *   { status: 'already',   profile, role }        — already has a role on this tournament
+ *   { status: 'invited',   email }                — no account; sign-up invite emailed
+ *   { status: 'needs_email', handle }             — handle didn't resolve, no fallback email given
+ *   { status: 'error',     message }              — bad input or send failure
  */
-export async function addScorerByInput({ tournamentId, tournamentName, input, invitedBy }) {
+export async function addScorerByInput({ tournamentId, tournamentName, input, invitedBy, fallbackEmail }) {
   const raw = (input || '').trim();
   if (!raw) return { status: 'error', message: 'Enter a handle or email.' };
 
@@ -67,17 +69,23 @@ export async function addScorerByInput({ tournamentId, tournamentName, input, in
     return { status: 'added', profile };
   }
 
-  // No account. We can only nudge them if we have an email address.
-  if (!EMAIL_RE.test(raw)) {
-    return {
-      status: 'error',
-      message: `No Rinkd account found for "${raw}". Enter their email to send a sign-up invite, or have them sign up first.`,
-    };
+  // No account. Send an invite if we have an email — either the raw input
+  // was an email, or the director supplied a fallback email for a handle
+  // that didn't resolve.
+  let toEmail = null;
+  if (EMAIL_RE.test(raw)) {
+    toEmail = raw.toLowerCase();
+  } else if (fallbackEmail && EMAIL_RE.test(fallbackEmail.trim())) {
+    toEmail = fallbackEmail.trim().toLowerCase();
+  } else {
+    // Tell the UI to prompt the director for an email instead of just refusing.
+    return { status: 'needs_email', handle: raw.replace(/^@/, '') };
   }
+
   const { error } = await supabase.functions.invoke('send-invite', {
     body: {
       type: 'tournament_scorer_invite',
-      to_email: raw.toLowerCase(),
+      to_email: toEmail,
       tournament_name: tournamentName || null,
       tournament_id: tournamentId,
       invited_by: invitedBy || null,
@@ -86,7 +94,7 @@ export async function addScorerByInput({ tournamentId, tournamentName, input, in
   if (error) {
     return { status: 'error', message: 'Could not send the invite email — try again, or have them sign up directly.' };
   }
-  return { status: 'invited', email: raw.toLowerCase() };
+  return { status: 'invited', email: toEmail };
 }
 
 /** List the scorers on a tournament, joined to their profile. */

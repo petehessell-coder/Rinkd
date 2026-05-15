@@ -89,8 +89,11 @@ export default function ScorerView() {
   const [searchParams] = useSearchParams();
   const isLeague = searchParams.get('type') === 'league';
 
-  // Keep the screen awake while a scorer is running the game.
-  useWakeLock(true);
+  // Keep the screen awake while a scorer is running the game. `supported`
+  // tells us whether the device actually supports the Wake Lock API — older
+  // iOS Safari (<16.4) and some in-app browsers don't, so we surface a
+  // warning to the scorer instead of silently letting the screen sleep.
+  const { supported: wakeLockSupported } = useWakeLock(true);
   const [game, setGame] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(true);
@@ -203,6 +206,7 @@ export default function ScorerView() {
 
   const changeScore = (team, delta) => {
     setErrorMsg('');
+    const prevHome = homeScore, prevAway = awayScore, prevStatus = status;
     const hs = team === 'home' ? Math.max(0, homeScore + delta) : homeScore;
     const as = team === 'away' ? Math.max(0, awayScore + delta) : awayScore;
     setHomeScore(hs); setAwayScore(as);
@@ -211,11 +215,57 @@ export default function ScorerView() {
     // writes the same value we just committed locally.
     let newStatus = status;
     setStatus(prev => { newStatus = prev === 'scheduled' ? 'live' : prev; return newStatus; });
+    // Roll back the optimistic local state if the DB write fails — otherwise
+    // the scorer's local score keeps drifting from the server with every
+    // failed tap and the next finalize writes the drifted value.
+    updateScore(hs, as, period, newStatus).then(({ error }) => {
+      if (error) {
+        setHomeScore(prevHome);
+        setAwayScore(prevAway);
+        setStatus(prevStatus);
+      }
+    });
+  };
+
+  // Score is the goal-log count per team — derived, not stored separately.
+  // The +/- buttons (changeScore above) still write a manual override for
+  // cases where the scorer wants to bump the score without logging a goal,
+  // but every saveGoal / deleteGoal will sync the score back to the canonical
+  // goal-log count. Finalize then validates these match before locking in.
+  const syncScoreFromGoals = (nextGoals) => {
+    const homeId = game?.home_team?.id;
+    const awayId = game?.away_team?.id;
+    if (!homeId || !awayId) return;
+    const hs = nextGoals.filter(g => g.team_id === homeId && !g.is_shootout).length;
+    const as = nextGoals.filter(g => g.team_id === awayId && !g.is_shootout).length;
+    setHomeScore(hs);
+    setAwayScore(as);
+    let newStatus = status;
+    setStatus(prev => { newStatus = prev === 'scheduled' ? 'live' : prev; return newStatus; });
     updateScore(hs, as, period, newStatus);
   };
 
   const changePeriod = async (p) => {
     setErrorMsg('');
+    // Pre-finalize sanity check — make sure the goal log matches the score.
+    // Score is derived from goals on every saveGoal/deleteGoal, but the
+    // manual +/- buttons can still push them out of sync (e.g., scorer
+    // bumped the score for a missed goal). Catch the mismatch here BEFORE
+    // standings lock in.
+    if (p === 'final' && game?.home_team?.id && game?.away_team?.id) {
+      const homeGoalCount = goals.filter(g => g.team_id === game.home_team.id && !g.is_shootout).length;
+      const awayGoalCount = goals.filter(g => g.team_id === game.away_team.id && !g.is_shootout).length;
+      if (homeGoalCount !== homeScore || awayGoalCount !== awayScore) {
+        const ok = window.confirm(
+          `Heads up — your score and goal log disagree:\n\n` +
+          `  Score: ${homeScore}–${awayScore}\n` +
+          `  Goal log: ${homeGoalCount}–${awayGoalCount}\n\n` +
+          `Standings will use the score (${homeScore}–${awayScore}). The official scoresheet uses the goal log.\n\n` +
+          `Finalize anyway?`
+        );
+        if (!ok) return;
+      }
+    }
     const newStatus = p === 'final' ? 'final' : 'live';
     const newPeriod = p === 'final' ? period : parseInt(p);
     setPeriod(newPeriod); setStatus(newStatus);
@@ -249,9 +299,13 @@ export default function ScorerView() {
     // Keep the modal open and the score untouched if the write failed — the
     // goal was NOT recorded, and the scorer needs to know so they can retry.
     if (error || !data) { setErrorMsg('Could not save the goal — check your connection and try again. The goal was NOT recorded.'); return; }
-    setGoals(prev => [data, ...prev]);
-    if (goalForm.team_id === game.home_team?.id) changeScore('home', 1);
-    else changeScore('away', 1);
+    // Append optimistically, then derive score from the new goal list so the
+    // score on the games table stays in lock-step with the goal log. Eliminates
+    // the drift that could happen when the goal insert succeeded but the
+    // separate score update failed (the pre-refactor pattern).
+    const nextGoals = [data, ...goals];
+    setGoals(nextGoals);
+    syncScoreFromGoals(nextGoals);
     setGoalModal(false);
     setGoalForm(prev => ({ ...prev, scorer_number: '', assist1_number: '', assist2_number: '', time_in_period: '' }));
   };
@@ -289,15 +343,11 @@ export default function ScorerView() {
 
   const deleteGoal = async (id) => {
     setErrorMsg('');
-    const goal = goals.find(g => g.id === id);
     const { error } = await supabase.from('game_goals').delete().eq('id', id);
     if (error) { setErrorMsg('Could not delete the goal — check your connection and try again.'); return; }
-    setGoals(prev => prev.filter(g => g.id !== id));
-    // Keep the score in sync with the goal log — removing a goal must drop the score too.
-    if (goal) {
-      if (goal.team_id === game.home_team?.id) changeScore('home', -1);
-      else changeScore('away', -1);
-    }
+    const nextGoals = goals.filter(g => g.id !== id);
+    setGoals(nextGoals);
+    syncScoreFromGoals(nextGoals);
   };
 
   const deletePenalty = async (id) => {
@@ -356,6 +406,14 @@ export default function ScorerView() {
         <div onClick={() => setErrorMsg('')}
           style={{ background: 'rgba(215,38,56,0.18)', borderBottom: '0.5px solid rgba(215,38,56,0.6)', color: '#F4F7FA', padding: '11px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'center' }}>
           ⚠ {errorMsg} <span style={{ opacity: 0.6, fontWeight: 400 }}>· tap to dismiss</span>
+        </div>
+      )}
+
+      {/* Wake Lock unsupported (older iOS Safari, in-app browsers) — warn
+          scorekeepers so they know their phone screen may sleep mid-game. */}
+      {!wakeLockSupported && (
+        <div style={{ background: 'rgba(245,158,11,0.12)', borderBottom: '0.5px solid rgba(245,158,11,0.4)', color: '#F4F7FA', padding: '10px 16px', fontSize: 12, lineHeight: 1.45, textAlign: 'center' }}>
+          ⚠ Your browser may dim or sleep the screen during play. Tap the screen every few minutes, or open in Safari 16.4+ / Chrome to keep it awake automatically.
         </div>
       )}
 

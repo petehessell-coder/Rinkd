@@ -109,23 +109,48 @@ export default function LeaguePage({ profile }) {
   const [standings, setStandings] = useState([]);
   const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('Schedule');
   const [showAll, setShowAll] = useState(false);
   const [subscribeOpen, setSubscribeOpen] = useState(false);
 
   const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
       const [l, t, g, s, r] = await Promise.all([
         getLeague(id), getLeagueTeams(id), getLeagueGames(id), getLeagueStandings(id), getUserLeagueRole(id)
       ]);
       setLeague(l); setTeams(t); setGames(g); setStandings(s); setUserRole(r);
-    } catch(e) { console.error(e); }
-    finally { setLoading(false); }
+    } catch(e) {
+      // Distinguish a genuine fetch failure from "league not found" — both
+      // used to render the same generic "League not found" screen, which made
+      // a connection drop look like a permanent 404. Surface the error so the
+      // user has something to retry.
+      // eslint-disable-next-line no-console
+      console.error('[League] load failed', e);
+      setError(e?.message || 'Failed to load league');
+    } finally { setLoading(false); }
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
 
   if (loading) return <Layout profile={profile}><div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Loading...</div></Layout>;
+  if (error) return (
+    <Layout profile={profile}>
+      <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif', padding: 20, textAlign: 'center' }}>
+        <div>
+          <div style={{ fontSize: 32, marginBottom: 10 }}>⚠️</div>
+          <div style={{ color: C.red, fontWeight: 600, marginBottom: 4 }}>Couldn't load this league</div>
+          <div style={{ color: 'rgba(244,247,250,0.5)', fontSize: 12, marginBottom: 16 }}>{error}</div>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+            <button onClick={load} style={{ background: C.red, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer', fontFamily: 'Barlow, sans-serif', fontWeight: 700 }}>Retry</button>
+            <button onClick={() => navigate('/leagues')} style={{ background: C.blue, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>Back to Leagues</button>
+          </div>
+        </div>
+      </div>
+    </Layout>
+  );
   if (!league) return <Layout profile={profile}><div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>League not found</div></Layout>;
 
   const isCommissioner = userRole === 'commissioner';

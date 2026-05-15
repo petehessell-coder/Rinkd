@@ -120,8 +120,13 @@ export function expandFixturesToGames({
  * Detect schedule conflicts. Returns an array of { type, message, gameIds[] }.
  *   - 'rink_double_book': two games at the same rink overlapping in time (within 90 min)
  *   - 'team_double_play': one team plays twice within `teamGapHours` hours
+ *
+ * The default `teamGapHours` (4) is tuned for typical weekly leagues — a team
+ * playing twice in the same 4-hour window is unusual enough to flag. Pass a
+ * smaller value for short-turnaround events (multi-game tournament days) so
+ * the conflict list doesn't drown the director in expected back-to-backs.
  */
-export function detectScheduleConflicts(games, { teamGapHours = 12, gameDurationMin = 90 } = {}) {
+export function detectScheduleConflicts(games, { teamGapHours = 4, gameDurationMin = 90 } = {}) {
   const conflicts = [];
   const sorted = games.slice().sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
 

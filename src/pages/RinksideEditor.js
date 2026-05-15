@@ -82,7 +82,22 @@ export default function RinksideEditor({ currentUser, profile }) {
     if (autoSlug) setSlugValue(slugify(title));
   }, [title, autoSlug]);
 
-  const canEdit = useMemo(() => isAdmin || (!isNew && articleId), [isAdmin, isNew, articleId]);
+  // useIsRinkdAdmin returns null while the admin check is in flight (post-A1
+  // refactor). Treat null as "loading" so a real staff member never sees the
+  // access-denied screen flash. Mirror the AdminPanel / AdminFeedback /
+  // AdminModeration pattern from the audit Batch 4 work.
+  const canEdit = useMemo(() => isAdmin === true || (!isNew && articleId), [isAdmin, isNew, articleId]);
+  const adminCheckLoading = isAdmin === null;
+
+  if (adminCheckLoading) {
+    return (
+      <Layout profile={profile} currentPage="rinkside">
+        <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.steel, fontFamily: 'Barlow, sans-serif', fontSize: 14 }}>
+          Loading…
+        </div>
+      </Layout>
+    );
+  }
 
   if (loaded && !canEdit) {
     return (

@@ -62,6 +62,11 @@ export default function RosterUpload({ teamId, teamName, invitedBy, onComplete }
 
   const validCount = parsed ? parsed.rows.filter(r => !r.rowErrors.length).length : 0;
   const errorCount = parsed ? parsed.rows.length - validCount : 0;
+  // Mirror MAX_INVITES_PER_UPLOAD from lib/roster.js — kept here in sync so
+  // the preview can warn before the upload runs. If you bump the lib value,
+  // bump this too.
+  const UPLOAD_CAP = 50;
+  const willCap = validCount > UPLOAD_CAP;
 
   return (
     <>
@@ -153,6 +158,12 @@ export default function RosterUpload({ teamId, teamName, invitedBy, onComplete }
                   </div>
                 )}
 
+                {willCap && (
+                  <div style={{ fontSize: 12, color: B.amber, marginBottom: 8, padding: '8px 10px', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: 6, lineHeight: 1.5 }}>
+                    Heads up — uploads cap at <strong>{UPLOAD_CAP}</strong> invites per batch. The first {UPLOAD_CAP} will go out now; re-upload the rest in a follow-up batch.
+                  </div>
+                )}
+
                 <div style={{ maxHeight: 220, overflowY: 'auto', fontSize: 12 }}>
                   {parsed.rows.map((r, i) => {
                     const bad = r.rowErrors.length > 0;
@@ -190,7 +201,9 @@ export default function RosterUpload({ teamId, teamName, invitedBy, onComplete }
                     cursor: submitting || validCount === 0 ? 'not-allowed' : 'pointer',
                     fontFamily: 'inherit',
                   }}>
-                  {submitting ? 'Sending invites…' : `Send ${validCount} invite${validCount === 1 ? '' : 's'}`}
+                  {submitting
+                    ? 'Sending invites…'
+                    : `Send ${Math.min(validCount, UPLOAD_CAP)} invite${Math.min(validCount, UPLOAD_CAP) === 1 ? '' : 's'}${willCap ? ' (of ' + validCount + ')' : ''}`}
                 </button>
               </div>
             )}

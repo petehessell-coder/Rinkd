@@ -194,9 +194,16 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
     const { data, error } = await updateProfile(currentUser.id, updates);
     setSaving(false);
     if (error) { setSaveError(error.message || 'Failed to save.'); return; }
-    const updated = data || { ...profile, ...updates };
-    setProfile(updated);
-    if (onProfileUpdate) onProfileUpdate(updated);
+    // Functional updater so a quick second edit while the previous setProfile
+    // hasn't flushed sees the freshest local profile, not a stale closure.
+    // The DB row is authoritative when `data` is returned; we fall back to
+    // merging `updates` onto the latest local profile only when the server
+    // returns nothing (defensive — updateProfile usually returns data).
+    setProfile((prev) => {
+      const merged = data || { ...(prev || profile || {}), ...updates };
+      onProfileUpdate?.(merged);
+      return merged;
+    });
     setEditing(false);
   };
 

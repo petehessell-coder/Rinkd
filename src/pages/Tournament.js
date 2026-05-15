@@ -16,6 +16,10 @@ export default function TournamentPage({ currentUser }) {
   const [standings, setStandings] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Whether the current user has a 'scorer' role on this tournament. Assigned
+  // scorers should see the "Open Scorer View" button on each game card — not
+  // just the director. Loaded once after the tournament resolves.
+  const [isAssignedScorer, setIsAssignedScorer] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -68,6 +72,11 @@ export default function TournamentPage({ currentUser }) {
   // games finish. Channel name carries a per-call random suffix so a remount
   // (StrictMode in dev, route revisit) doesn't collide with the prior channel.
   // The notifications module uses the same pattern; mirror it for consistency.
+  //
+  // Note: we subscribe only to the `games` table — `tournament_standings` is
+  // a VIEW, which Postgres logical replication does not stream. Standings
+  // refresh automatically because load() re-fetches both games and standings
+  // whenever a games row changes.
   useEffect(() => {
     if (!id) return;
     let channel = null;
@@ -77,9 +86,6 @@ export default function TournamentPage({ currentUser }) {
         .on('postgres_changes',
           { event: '*', schema: 'public', table: 'games', filter: `tournament_id=eq.${id}` },
           () => { try { load(); } catch { /* swallow */ } })
-        .on('postgres_changes',
-          { event: '*', schema: 'public', table: 'tournament_standings', filter: `tournament_id=eq.${id}` },
-          () => { try { load(); } catch { /* swallow */ } })
         .subscribe();
     } catch (err) {
       // eslint-disable-next-line no-console
@@ -87,6 +93,26 @@ export default function TournamentPage({ currentUser }) {
     }
     return () => { try { if (channel) supabase.removeChannel(channel); } catch { /* swallow */ } };
   }, [id, load]);
+
+  // Resolve whether the signed-in user has a scorer role on THIS tournament.
+  // RLS on tournament_roles allows users to read their own rows, so this is
+  // a single cheap query. Re-runs when the tournament id or current user
+  // changes — not on every standings update.
+  useEffect(() => {
+    let cancelled = false;
+    if (!id || !currentUser?.id) { setIsAssignedScorer(false); return; }
+    (async () => {
+      const { data } = await supabase
+        .from('tournament_roles')
+        .select('role')
+        .eq('tournament_id', id)
+        .eq('user_id', currentUser.id)
+        .eq('role', 'scorer')
+        .maybeSingle();
+      if (!cancelled) setIsAssignedScorer(!!data);
+    })();
+    return () => { cancelled = true; };
+  }, [id, currentUser?.id]);
 
   if (loading) return (
     <div style={{background:'#07111F',minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:'#F4F7FA',fontFamily:'Barlow,sans-serif',fontSize:14}}>
@@ -115,10 +141,12 @@ export default function TournamentPage({ currentUser }) {
   const adv = tournament?.settings?.advancement_per_pool ?? 2;
   // Organizer branding — falls back to Rinkd red when the tournament isn't branded.
   const accent = tournament?.accent_color || '#D72638';
-  // Only the director gets the in-card "Open Scorer View" shortcut. Assigned
-  // scorers reach their game via their invite link; ScorerView enforces access
-  // itself, so this just keeps the button off every spectator's screen.
-  const canScore = !!(currentUser && tournament && tournament.director_id === currentUser.id);
+  // Directors AND assigned scorers see the in-card "Open Scorer View"
+  // shortcut. ScorerView itself enforces the actual access check, so this is
+  // purely about which users see the button — spectators don't.
+  const canScore = !!(currentUser && tournament && (
+    tournament.director_id === currentUser.id || isAssignedScorer
+  ));
 
   return (
     <div style={{background:'#07111F',minHeight:'100vh',fontFamily:'Barlow,sans-serif',color:'#F4F7FA'}}>

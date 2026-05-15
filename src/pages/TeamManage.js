@@ -144,8 +144,16 @@ function ManageTeam({ id, profile, navigate }) {
     try {
       let userId = null;
       if (memberForm.email.trim()) {
-        const { data: p } = await supabase.from('profiles').select('id').eq('email', memberForm.email.trim().toLowerCase()).maybeSingle();
-        if (p) userId = p.id;
+        // `.limit(1)` rather than `.maybeSingle()` so a (newly impossible
+        // after the UNIQUE constraint, but historically possible) duplicate
+        // email doesn't blow up the whole add-member flow. We just take the
+        // first match; the new constraint guarantees there's at most one.
+        const { data: matches } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('email', memberForm.email.trim().toLowerCase())
+          .limit(1);
+        if (matches && matches[0]) userId = matches[0].id;
       }
       await addTeamMember({
         team_id: id,
@@ -175,13 +183,23 @@ function ManageTeam({ id, profile, navigate }) {
   };
 
   const handleApprove = async (req) => {
-    await approveJoinRequest(req.id, { team_id: id, user_id: req.user_id });
-    await load();
+    setError(null);
+    try {
+      await approveJoinRequest(req.id, { team_id: id, user_id: req.user_id });
+      await load();
+    } catch (e) {
+      setError(`Couldn't approve ${req.profile?.name || 'this request'}: ${e?.message || 'try again'}`);
+    }
   };
 
   const handleDeny = async (req) => {
-    await denyJoinRequest(req.id);
-    await load();
+    setError(null);
+    try {
+      await denyJoinRequest(req.id);
+      await load();
+    } catch (e) {
+      setError(`Couldn't deny ${req.profile?.name || 'this request'}: ${e?.message || 'try again'}`);
+    }
   };
 
   const MANAGE_TABS = ['Roster', 'Schedule', 'Requests', 'Settings'];

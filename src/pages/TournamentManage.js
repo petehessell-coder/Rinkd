@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { getTournament } from '../lib/tournaments';
@@ -53,10 +53,24 @@ export default function TournamentManagePage({ currentUser, profile }) {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('Teams');
   const [error, setError] = useState(null);
+  // Page-level flash banner — every save/delete failure across all tabs now
+  // surfaces here instead of a blocking native alert() dialog. Auto-dismisses
+  // success messages after a few seconds; errors stay until tapped.
+  const [flash, setFlash] = useState(null);
+
+  const showFlash = useCallback((kind, text) => {
+    setFlash({ kind, text, at: Date.now() });
+  }, []);
+
+  useEffect(() => {
+    if (flash?.kind !== 'success') return;
+    const t = setTimeout(() => setFlash(f => f && f.kind === 'success' ? null : f), 3500);
+    return () => clearTimeout(t);
+  }, [flash]);
 
   const isDirector = tournament && currentUser && tournament.director_id === currentUser.id;
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const t = await getTournament(id);
       setTournament(t);
@@ -71,10 +85,9 @@ export default function TournamentManagePage({ currentUser, profile }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
-  // load() reads id from useParams; safe to depend only on id.
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => { load(); }, [load]);
 
   if (loading) return (
     <Layout profile={profile}>
@@ -120,11 +133,29 @@ export default function TournamentManagePage({ currentUser, profile }) {
             ))}
           </div>
 
-          {tab === 'Teams' && <TeamsTab tournamentId={id} teams={teams} reload={load} />}
-          {tab === 'Schedule' && <ScheduleTab tournamentId={id} tournament={tournament} teams={teams} games={games} rinks={rinks} reload={load} />}
-          {tab === 'Bracket' && <BracketTab tournamentId={id} tournament={tournament} teams={teams} games={games} rinks={rinks} reload={load} />}
-          {tab === 'Scorers' && <ScorersTab tournamentId={id} tournamentName={tournament.name} profile={profile} />}
-          {tab === 'Settings' && <SettingsTab tournament={tournament} reload={load} />}
+          {/* Flash banner — page-level error/success surface. Replaces every
+              alert() across the tab forms. Auto-dismisses on success; errors
+              stay until tapped. */}
+          {flash && (
+            <div onClick={() => setFlash(null)}
+              style={{
+                background: flash.kind === 'error' ? 'rgba(215,38,56,0.12)' : 'rgba(34,197,94,0.12)',
+                border: `1px solid ${flash.kind === 'error' ? 'rgba(215,38,56,0.4)' : 'rgba(34,197,94,0.4)'}`,
+                color: C.ice, borderRadius: 10, padding: '11px 14px', marginBottom: 14,
+                fontSize: 13, lineHeight: 1.5, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 10,
+              }}>
+              <span style={{ fontSize: 18 }}>{flash.kind === 'error' ? '⚠️' : '✓'}</span>
+              <span style={{ flex: 1 }}>{flash.text}</span>
+              <span style={{ fontSize: 11, color: C.steel }}>tap to dismiss</span>
+            </div>
+          )}
+
+          {tab === 'Teams' && <TeamsTab tournamentId={id} teams={teams} reload={load} flash={showFlash} />}
+          {tab === 'Schedule' && <ScheduleTab tournamentId={id} tournament={tournament} teams={teams} games={games} rinks={rinks} reload={load} flash={showFlash} />}
+          {tab === 'Bracket' && <BracketTab tournamentId={id} tournament={tournament} teams={teams} games={games} rinks={rinks} reload={load} flash={showFlash} />}
+          {tab === 'Scorers' && <ScorersTab tournamentId={id} tournamentName={tournament.name} profile={profile} flash={showFlash} />}
+          {tab === 'Settings' && <SettingsTab tournament={tournament} reload={load} flash={showFlash} />}
         </div>
       </div>
     </Layout>
@@ -132,7 +163,7 @@ export default function TournamentManagePage({ currentUser, profile }) {
 }
 
 // ====================== TEAMS TAB ======================
-function TeamsTab({ tournamentId, teams, reload }) {
+function TeamsTab({ tournamentId, teams, reload, flash }) {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
 
@@ -160,7 +191,7 @@ function TeamsTab({ tournamentId, teams, reload }) {
         <button onClick={() => setAdding(true)} style={btnPrimary}>+ Add Team</button>
       </div>
 
-      {adding && <TeamForm tournamentId={tournamentId} pools={pools} onDone={() => { setAdding(false); reload(); }} onCancel={() => setAdding(false)} />}
+      {adding && <TeamForm tournamentId={tournamentId} pools={pools} flash={flash} onDone={() => { setAdding(false); reload(); }} onCancel={() => setAdding(false)} />}
 
       {teams.length === 0 && !adding && (
         <div style={{ textAlign: 'center', color: C.steel, padding: '40px 0' }}>
@@ -175,7 +206,7 @@ function TeamsTab({ tournamentId, teams, reload }) {
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
             {list.map((t, i) => editingId === t.id ? (
               <div key={t.id} style={{ padding: 12, borderTop: i ? `1px solid rgba(46,91,140,0.25)` : 'none' }}>
-                <TeamForm tournamentId={tournamentId} pools={pools} team={t} onDone={() => { setEditingId(null); reload(); }} onCancel={() => setEditingId(null)} />
+                <TeamForm tournamentId={tournamentId} pools={pools} team={t} flash={flash} onDone={() => { setEditingId(null); reload(); }} onCancel={() => setEditingId(null)} />
               </div>
             ) : (
               <div key={t.id} style={{ display: 'flex', alignItems: 'center', padding: 12, borderTop: i ? `1px solid rgba(46,91,140,0.25)` : 'none', gap: 12 }}>
@@ -196,21 +227,24 @@ function TeamsTab({ tournamentId, teams, reload }) {
   );
 }
 
-function TeamForm({ tournamentId, team, pools, onDone, onCancel }) {
+function TeamForm({ tournamentId, team, pools, flash, onDone, onCancel }) {
   const [teamName, setTeamName] = useState(team?.team_name || '');
   const [pool, setPool] = useState(team?.pool || (pools[0] || ''));
   const [seed, setSeed] = useState(team?.seed || '');
   const [contactEmail, setContactEmail] = useState(team?.contact_email || '');
   const [logoUrl, setLogoUrl] = useState(team?.logo_url || '');
   const [busy, setBusy] = useState(false);
+  const [localError, setLocalError] = useState('');
 
   const save = async () => {
-    if (!teamName.trim()) return alert('Team name is required');
+    if (!teamName.trim()) { setLocalError('Team name is required'); return; }
+    setLocalError('');
     setBusy(true);
     const fields = { teamName, pool, seed, contactEmail, logoUrl };
     const res = team ? await updateTeam(team.id, fields) : await createTeam(tournamentId, fields);
     setBusy(false);
-    if (res.error) return alert('Save failed: ' + res.error.message);
+    if (res.error) { flash?.('error', `Save failed: ${res.error.message}`); return; }
+    flash?.('success', team ? 'Team saved.' : `Added ${teamName}.`);
     onDone();
   };
 
@@ -218,7 +252,8 @@ function TeamForm({ tournamentId, team, pools, onDone, onCancel }) {
     if (!team) return;
     if (!window.confirm(`Delete "${team.team_name}"? This cannot be undone.`)) return;
     const { error } = await deleteTeam(team.id);
-    if (error) return alert('Delete failed: ' + error.message);
+    if (error) { flash?.('error', `Delete failed: ${error.message}`); return; }
+    flash?.('success', `Deleted ${team.team_name}.`);
     onDone();
   };
 
@@ -246,6 +281,11 @@ function TeamForm({ tournamentId, team, pools, onDone, onCancel }) {
           <input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="https://…" style={inputStyle}/>
         </div>
       </div>
+      {localError && (
+        <div style={{ background: 'rgba(215,38,56,0.12)', border: '1px solid rgba(215,38,56,0.4)', color: C.ice, padding: '8px 12px', borderRadius: 8, fontSize: 13, marginBottom: 10 }}>
+          {localError}
+        </div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <div>{team && <button onClick={remove} style={{ ...btnGhost, color: C.red, borderColor: C.red }}>Delete</button>}</div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -258,7 +298,7 @@ function TeamForm({ tournamentId, team, pools, onDone, onCancel }) {
 }
 
 // ====================== SCHEDULE TAB ======================
-function ScheduleTab({ tournamentId, tournament, teams, games, rinks, reload }) {
+function ScheduleTab({ tournamentId, tournament, teams, games, rinks, reload, flash }) {
   const [showGen, setShowGen] = useState(false);
   const [genStart, setGenStart] = useState('');
   const [genMinutes, setGenMinutes] = useState(60);
@@ -270,17 +310,17 @@ function ScheduleTab({ tournamentId, tournament, teams, games, rinks, reload }) 
   const poolGames = games.filter((g) => (g.round || 'pool') === 'pool');
 
   const handleGenerate = async () => {
-    if (!genStart) return alert('Pick a start time');
+    if (!genStart) { flash?.('error', 'Pick a start time before generating.'); return; }
     setBusy(true);
-    const { inserted, error } = await generatePoolSchedule(tournamentId, {
+    const { inserted, error, warning } = await generatePoolSchedule(tournamentId, {
       startDate: genStart,
       gameMinutes: parseInt(genMinutes, 10) || 60,
       rinkId: genRinkId || null,
       replaceExisting: replace,
     });
     setBusy(false);
-    if (error) return alert('Generate failed: ' + error.message);
-    alert(`Generated ${inserted} pool games.`);
+    if (error) { flash?.('error', `Generate failed: ${error.message}`); return; }
+    flash?.('success', warning || `Generated ${inserted} pool games.`);
     setShowGen(false); reload();
   };
 
@@ -335,7 +375,7 @@ function ScheduleTab({ tournamentId, tournament, teams, games, rinks, reload }) 
       ) : (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
           {poolGames.map((g, i) => editingId === g.id ? (
-            <GameEditRow key={g.id} game={g} rinks={rinks} teams={teams}
+            <GameEditRow key={g.id} game={g} rinks={rinks} teams={teams} flash={flash}
               onDone={() => { setEditingId(null); reload(); }} onCancel={() => setEditingId(null)} />
           ) : (
             <div key={g.id} style={{ display: 'flex', alignItems: 'center', padding: 12, borderTop: i ? `1px solid rgba(46,91,140,0.25)` : 'none', gap: 10 }}>
@@ -358,7 +398,7 @@ function ScheduleTab({ tournamentId, tournament, teams, games, rinks, reload }) 
   );
 }
 
-function GameEditRow({ game, rinks, teams, onDone, onCancel }) {
+function GameEditRow({ game, rinks, teams, flash, onDone, onCancel }) {
   const [startTime, setStartTime] = useState(toLocalInput(game.start_time));
   const [rinkId, setRinkId] = useState(game.rink_id || '');
   const [homeId, setHomeId] = useState(game.home_team_id || '');
@@ -372,13 +412,15 @@ function GameEditRow({ game, rinks, teams, onDone, onCancel }) {
       rinkId, homeTeamId: homeId, awayTeamId: awayId,
     });
     setBusy(false);
-    if (error) return alert('Save failed: ' + error.message);
+    if (error) { flash?.('error', `Save failed: ${error.message}`); return; }
+    flash?.('success', 'Game updated.');
     onDone();
   };
   const remove = async () => {
     if (!window.confirm('Delete this game?')) return;
     const { error } = await deleteGame(game.id);
-    if (error) return alert('Delete failed: ' + error.message);
+    if (error) { flash?.('error', `Delete failed: ${error.message}`); return; }
+    flash?.('success', 'Game deleted.');
     onDone();
   };
 
@@ -421,7 +463,7 @@ function GameEditRow({ game, rinks, teams, onDone, onCancel }) {
 }
 
 // ====================== BRACKET TAB ======================
-function BracketTab({ tournamentId, tournament, teams, games, rinks, reload }) {
+function BracketTab({ tournamentId, tournament, teams, games, rinks, reload, flash }) {
   const advPerPool = tournament?.settings?.advancement_per_pool ?? 2;
   const bracketGames = games.filter((g) => (g.round || 'pool') !== 'pool');
   const [qualifiers, setQualifiers] = useState([]);
@@ -434,17 +476,24 @@ function BracketTab({ tournamentId, tournament, teams, games, rinks, reload }) {
   const [rinkId, setRinkId] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // Refresh qualifiers when pool play actually progresses, not just when the
+  // games array length changes. Pool games going final is what locks seeds.
+  const finalPoolCount = useMemo(
+    () => games.filter(g => (g.round || 'pool') === 'pool' && g.status === 'final').length,
+    [games]
+  );
+
   useEffect(() => {
     (async () => {
       const q = await loadPoolQualifiers(tournamentId, advPerPool);
       setQualifiers(q);
       setLoaded(true);
     })();
-  }, [tournamentId, advPerPool, games.length]);
+  }, [tournamentId, advPerPool, finalPoolCount]);
 
   const addBracketGame = async () => {
-    if (!homeId || !awayId || homeId === awayId) return alert('Pick two different teams');
-    if (!startTime) return alert('Pick a start time');
+    if (!homeId || !awayId || homeId === awayId) { flash?.('error', 'Pick two different teams.'); return; }
+    if (!startTime) { flash?.('error', 'Pick a start time.'); return; }
     setBusy(true);
     const { error } = await createBracketGame(tournamentId, {
       homeTeamId: homeId, awayTeamId: awayId, round,
@@ -452,7 +501,8 @@ function BracketTab({ tournamentId, tournament, teams, games, rinks, reload }) {
       rinkId: rinkId || null,
     });
     setBusy(false);
-    if (error) return alert('Failed: ' + error.message);
+    if (error) { flash?.('error', `Failed to add bracket game: ${error.message}`); return; }
+    flash?.('success', `Added ${round} game.`);
     setHomeId(''); setAwayId(''); setStartTime(''); setRinkId('');
     reload();
   };
@@ -546,7 +596,8 @@ function BracketTab({ tournamentId, tournament, teams, games, rinks, reload }) {
               <button onClick={async () => {
                 if (!window.confirm('Delete this bracket game?')) return;
                 const { error } = await deleteGame(g.id);
-                if (error) return alert('Delete failed: ' + error.message);
+                if (error) { flash?.('error', `Delete failed: ${error.message}`); return; }
+                flash?.('success', 'Bracket game deleted.');
                 reload();
               }} style={{ ...btnGhost, color: C.red, borderColor: C.red }}>Delete</button>
             </div>
@@ -558,7 +609,7 @@ function BracketTab({ tournamentId, tournament, teams, games, rinks, reload }) {
 }
 
 // ====================== SETTINGS TAB ======================
-function SettingsTab({ tournament, reload }) {
+function SettingsTab({ tournament, reload, flash }) {
   const [name, setName] = useState(tournament.name || '');
   const [division, setDivision] = useState(tournament.division || '');
   const [startDate, setStartDate] = useState(tournament.start_date || '');
@@ -616,7 +667,8 @@ function SettingsTab({ tournament, reload }) {
       logoUrl: (logoUrl || '').trim(), accentColor: cleanAccent,
     });
     setBusy(false);
-    if (error) return alert('Save failed: ' + error.message);
+    if (error) { flash?.('error', `Save failed: ${error.message}`); return; }
+    flash?.('success', 'Settings saved.');
     reload();
   };
 
@@ -769,12 +821,17 @@ function SettingsTab({ tournament, reload }) {
 }
 
 // ====================== SCORERS TAB ======================
-function ScorersTab({ tournamentId, tournamentName, profile }) {
+function ScorersTab({ tournamentId, tournamentName, profile, flash }) {
   const [scorers, setScorers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
+  // When the director enters a handle that doesn't resolve to a Rinkd account,
+  // we prompt for an email so they can still send an invite. Set when
+  // addScorerByInput returns { status: 'needs_email' }.
+  const [emailPromptHandle, setEmailPromptHandle] = useState(null);
+  const [emailPromptValue, setEmailPromptValue] = useState('');
 
   const loadScorers = async () => {
     setLoading(true);
@@ -785,20 +842,31 @@ function ScorersTab({ tournamentId, tournamentName, profile }) {
   // loadScorers reads tournamentId from props; safe to depend only on it.
   useEffect(() => { loadScorers(); }, [tournamentId]);
 
-  const add = async () => {
+  const add = async (overrideFallbackEmail) => {
     if (!input.trim() || busy) return;
     setBusy(true); setMsg(null);
-    const res = await addScorerByInput({ tournamentId, tournamentName, input, invitedBy: profile?.name || null });
+    const res = await addScorerByInput({
+      tournamentId, tournamentName, input,
+      invitedBy: profile?.name || null,
+      fallbackEmail: overrideFallbackEmail || null,
+    });
     setBusy(false);
     if (res.status === 'added') {
       setMsg({ ok: true, text: `Added ${res.profile.name || '@' + res.profile.handle} as a scorer.` });
-      setInput(''); loadScorers();
+      setInput(''); setEmailPromptHandle(null); setEmailPromptValue('');
+      loadScorers();
     } else if (res.status === 'already') {
       setMsg({ ok: true, text: `${res.profile.name || '@' + res.profile.handle} already has a ${res.role} role here.` });
-      setInput('');
+      setInput(''); setEmailPromptHandle(null); setEmailPromptValue('');
     } else if (res.status === 'invited') {
       setMsg({ ok: true, text: `No account yet — sent a sign-up invite to ${res.email}. Add them here once they've joined.` });
-      setInput('');
+      setInput(''); setEmailPromptHandle(null); setEmailPromptValue('');
+    } else if (res.status === 'needs_email') {
+      // Handle didn't resolve — surface a follow-up email field so the
+      // director can still send an invite without having to sign up the
+      // person themselves first.
+      setEmailPromptHandle(res.handle);
+      setMsg({ ok: false, text: `No Rinkd account for @${res.handle}. Enter their email to send a sign-up invite.` });
     } else {
       setMsg({ ok: false, text: res.message || 'Could not add scorer.' });
     }
@@ -807,7 +875,8 @@ function ScorersTab({ tournamentId, tournamentName, profile }) {
   const remove = async (roleId, name) => {
     if (!window.confirm(`Remove ${name} as a scorer? They'll lose access to score this tournament's games.`)) return;
     const { error } = await removeScorer(roleId);
-    if (error) return alert('Remove failed: ' + error.message);
+    if (error) { flash?.('error', `Remove failed: ${error.message}`); return; }
+    flash?.('success', `${name} removed as a scorer.`);
     loadScorers();
   };
 
@@ -828,10 +897,39 @@ function ScorersTab({ tournamentId, tournamentName, profile }) {
             placeholder="@handle or email"
             style={{ ...inputStyle, flex: 1 }}
           />
-          <button onClick={add} disabled={busy} style={btnPrimary}>{busy ? 'Adding…' : '+ Add'}</button>
+          <button onClick={() => add()} disabled={busy} style={btnPrimary}>{busy ? 'Adding…' : '+ Add'}</button>
         </div>
         {msg && (
           <div style={{ marginTop: 10, fontSize: 12, color: msg.ok ? C.green : C.red, lineHeight: 1.5 }}>{msg.text}</div>
+        )}
+        {/* Email follow-up — appears when the entered handle didn't match any
+            Rinkd account. Lets the director still send a sign-up invite. */}
+        {emailPromptHandle && (
+          <div style={{ marginTop: 10, padding: 10, background: C.navy, border: `1px solid ${C.border}`, borderRadius: 8 }}>
+            <label style={labelStyle}>Email for @{emailPromptHandle}</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="email"
+                value={emailPromptValue}
+                onChange={(e) => setEmailPromptValue(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && add(emailPromptValue.trim())}
+                placeholder="them@example.com"
+                style={{ ...inputStyle, flex: 1 }}
+                autoFocus
+              />
+              <button
+                onClick={() => add(emailPromptValue.trim())}
+                disabled={busy || !emailPromptValue.trim()}
+                style={btnPrimary}>
+                {busy ? 'Sending…' : 'Send invite'}
+              </button>
+              <button
+                onClick={() => { setEmailPromptHandle(null); setEmailPromptValue(''); setMsg(null); }}
+                style={btnGhost}>
+                Cancel
+              </button>
+            </div>
+          </div>
         )}
       </div>
 

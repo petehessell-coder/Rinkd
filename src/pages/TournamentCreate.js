@@ -591,19 +591,19 @@ export default function TournamentCreate({ profile }) {
 
   const handleSubmit = async () => {
     if (loading) return; // guard against a double-click while creation is in flight
-    // A retry after a partial failure must not create a duplicate tournament —
-    // if one was already created, just send the director to it to finish setup.
-    if (createdTournamentId.current) {
-      navigate('/tournament/' + createdTournamentId.current);
-      return;
-    }
     setLoading(true);
     setError(null);
+    // Track the tournament row so a failure mid-setup can cascade-delete it.
+    // The previous retry-without-duplicate pattern left the director on a
+    // half-built tournament with no way to finish setup; cleaning up and
+    // letting them retry from scratch is safer.
+    let tournamentRow = null;
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Your session expired — please sign in again.');
 
-      // 1. Create rinks
+      // 1. Create rinks. Rinks are GLOBAL (not owned by a tournament), so
+      // they're left in place even if later steps fail — they're reusable.
       const rinkMap = {};
       for (const r of data.rinks) {
         const { data: rinkRow, error: re } = await supabase.from('rinks')
@@ -622,16 +622,20 @@ export default function TournamentCreate({ profile }) {
           settings: { ...data.settings, venue_name: data.venue_name, venue_address: data.venue_address, pool_names: data.pool_names },
         }).select().single();
       if (te) throw te;
-      createdTournamentId.current = t.id; // mark created so a retry can't duplicate it
+      tournamentRow = t;
+      createdTournamentId.current = t.id;
 
-      // 3. Director role
-      await supabase.from('tournament_roles').insert({ tournament_id: t.id, user_id: user.id, role: 'director' });
+      // 3. Director role. Required for the games_scorer_update RLS path —
+      // without this row, anyone the director later adds as a scorer can write
+      // games, but the director's own attempts at scoring outside the
+      // director_id path could fail. We check the error explicitly.
+      const { error: roleErr } = await supabase
+        .from('tournament_roles')
+        .insert({ tournament_id: t.id, user_id: user.id, role: 'director' });
+      if (roleErr) throw new Error(`Couldn't grant you the director role: ${roleErr.message}`);
 
-      // 3b. Scorer roles — resolve each collected scorekeeper handle/email to a
-      // Rinkd account and grant the 'scorer' role; email a sign-up invite to
-      // anyone without an account yet. Best-effort: a failure here never blocks
-      // tournament creation — the director can review and fix everything from
-      // the Scorers tab on the manage page.
+      // 3b. Scorer roles — best-effort. The director can review and fix
+      // anything missed from the Scorers tab on the manage page.
       for (const sk of (data.scorekeepers || [])) {
         try {
           await addScorerByInput({
@@ -669,7 +673,22 @@ export default function TournamentCreate({ profile }) {
 
       navigate('/tournament/' + t.id);
     } catch(e) {
-      setError(e.message);
+      // Cleanup on failure — the tournament row is the parent of teams + games
+      // + roles via FK CASCADE, so deleting it wipes every partial child row.
+      // If the cleanup itself fails (rare — RLS prevents directors from
+      // deleting their own tournament? not currently), surface the original
+      // error AND a hint that there may be leftover state.
+      let cleanupNote = '';
+      if (tournamentRow?.id) {
+        const { error: delErr } = await supabase.from('tournaments').delete().eq('id', tournamentRow.id);
+        if (delErr) {
+          // eslint-disable-next-line no-console
+          console.warn('[TournamentCreate] cleanup failed:', delErr);
+          cleanupNote = ' (a partial tournament may still exist — contact hello@rinkd.app to clean it up)';
+        }
+        createdTournamentId.current = null;
+      }
+      setError(`Tournament setup failed: ${e.message}.${cleanupNote} Please try again.`);
       setLoading(false);
     }
   };
