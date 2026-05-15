@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/authContext';
 import { track } from '../lib/analytics';
 
 const C = {
@@ -61,6 +62,12 @@ const FAQ = [
 ];
 
 export default function HelpButton() {
+  // Pull user from the shell-level AuthContext instead of re-querying
+  // supabase.auth.getUser() on every mount — HelpButton is rendered by Layout
+  // on every page, so the redundant network call was firing on every nav.
+  const { user } = useAuth() || {};
+  const userId = user?.id || null;
+  const knownEmail = user?.email || '';
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState('faq'); // faq | report
   const [category, setCategory] = useState('bug');
@@ -68,24 +75,13 @@ export default function HelpButton() {
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [userId, setUserId] = useState(null);
-  const [knownEmail, setKnownEmail] = useState('');
 
+  // Prefill the email field when the auth context settles. The form may open
+  // before user resolves (HelpButton is mounted by Layout on the unauthenticated
+  // /auth route too), so re-run when knownEmail flips from empty → present.
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (cancelled) return;
-        if (user) {
-          setUserId(user.id);
-          setKnownEmail(user.email || '');
-          setEmail(user.email || '');
-        }
-      } catch { /* swallow */ }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+    if (knownEmail && !email) setEmail(knownEmail);
+  }, [knownEmail, email]);
 
   // Lock body scroll while open
   useEffect(() => {

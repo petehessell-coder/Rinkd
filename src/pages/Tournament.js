@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { LedR } from '../components/Logos';
@@ -17,48 +17,52 @@ export default function TournamentPage({ currentUser }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    async function load() {
-      try {
-        // Load tournament
-        const { data: t, error: te } = await supabase
-          .from('tournaments')
-          .select('*')
-          .eq('id', id)
-          .single();
-        if (te) { setError(te.message); setLoading(false); return; }
-        setTournament(t);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Load tournament
+      const { data: t, error: te } = await supabase
+        .from('tournaments')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (te) { setError(te.message); setLoading(false); return; }
+      setTournament(t);
 
-        // Load games
-        const { data: g } = await supabase
-          .from('games')
-          .select('*, home_team:tournament_teams!home_team_id(id,team_name,pool), away_team:tournament_teams!away_team_id(id,team_name,pool), rink:rinks(id,name,sub_rink,live_barn_venue_id)')
-          .eq('tournament_id', id)
-          .order('start_time', { ascending: true });
-        setGames(g || []);
+      // Load games — surface error instead of silently rendering the empty state.
+      const { data: g, error: ge } = await supabase
+        .from('games')
+        .select('*, home_team:tournament_teams!home_team_id(id,team_name,pool), away_team:tournament_teams!away_team_id(id,team_name,pool), rink:rinks(id,name,sub_rink,live_barn_venue_id)')
+        .eq('tournament_id', id)
+        .order('start_time', { ascending: true });
+      if (ge) { setError(ge.message); setLoading(false); return; }
+      setGames(g || []);
 
-        // Load standings
-        const { data: s } = await supabase
-          .from('tournament_standings')
-          .select('*')
-          .eq('tournament_id', id)
-          .order('pool', { ascending: true })
-          .order('pool_rank', { ascending: true });
-        const grouped = (s || []).reduce((acc, row) => {
-          if (!acc[row.pool]) acc[row.pool] = [];
-          acc[row.pool].push(row);
-          return acc;
-        }, {});
-        setStandings(grouped);
+      // Load standings — same treatment so a failed query doesn't masquerade
+      // as "no games played yet."
+      const { data: s, error: se } = await supabase
+        .from('tournament_standings')
+        .select('*')
+        .eq('tournament_id', id)
+        .order('pool', { ascending: true })
+        .order('pool_rank', { ascending: true });
+      if (se) { setError(se.message); setLoading(false); return; }
+      const grouped = (s || []).reduce((acc, row) => {
+        if (!acc[row.pool]) acc[row.pool] = [];
+        acc[row.pool].push(row);
+        return acc;
+      }, {});
+      setStandings(grouped);
 
-      } catch(e) {
-        setError(e.message);
-      } finally {
-        setLoading(false);
-      }
+    } catch(e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
     }
-    load();
   }, [id]);
+
+  useEffect(() => { load(); }, [load]);
 
   if (loading) return (
     <div style={{background:'#07111F',minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:'#F4F7FA',fontFamily:'Barlow,sans-serif',fontSize:14}}>
@@ -67,9 +71,16 @@ export default function TournamentPage({ currentUser }) {
   );
 
   if (error) return (
-    <div style={{background:'#07111F',minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:'#D72638',fontFamily:'Barlow,sans-serif',fontSize:14,padding:20,textAlign:'center'}}>
-      Error: {error}<br/><br/>
-      <button onClick={() => navigate('/feed')} style={{background:'#2E5B8C',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer'}}>Back to Feed</button>
+    <div style={{background:'#07111F',minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:'#F4F7FA',fontFamily:'Barlow,sans-serif',fontSize:14,padding:20,textAlign:'center'}}>
+      <div>
+        <div style={{fontSize:32,marginBottom:10}}>⚠️</div>
+        <div style={{color:'#D72638',marginBottom:4,fontWeight:600}}>Couldn't load this tournament</div>
+        <div style={{color:'rgba(244,247,250,0.5)',fontSize:12,marginBottom:16}}>{error}</div>
+        <div style={{display:'flex',gap:10,justifyContent:'center'}}>
+          <button onClick={load} style={{background:'#D72638',color:'#fff',border:'none',borderRadius:8,padding:'8px 18px',cursor:'pointer',fontFamily:'Barlow,sans-serif',fontWeight:700}}>Retry</button>
+          <button onClick={() => navigate('/feed')} style={{background:'#2E5B8C',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontFamily:'Barlow,sans-serif'}}>Back to Feed</button>
+        </div>
+      </div>
     </div>
   );
 

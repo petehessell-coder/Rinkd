@@ -119,8 +119,14 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
     const { error: uErr } = await updateProfile(currentUser.id, { cover_image_url: url });
     setCoverUploading(false);
     if (uErr) { alert('Save failed: ' + uErr.message); return; }
-    setProfile((p) => ({ ...p, cover_image_url: url }));
-    onProfileUpdate?.({ ...profile, cover_image_url: url });
+    // Merge against the LATEST profile (via functional setter) and bubble the
+    // merged value up. A quick second upload would otherwise read a stale
+    // `profile` closure and clobber the first upload's field in the parent.
+    setProfile((p) => {
+      const next = { ...p, cover_image_url: url };
+      onProfileUpdate?.(next);
+      return next;
+    });
     track('cover_photo_uploaded');
   };
 
@@ -145,8 +151,13 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
     const { error: uErr } = await updateProfile(currentUser.id, { avatar_url: url });
     setAvatarUploading(false);
     if (uErr) { alert('Save failed: ' + uErr.message); return; }
-    setProfile((p) => ({ ...p, avatar_url: url }));
-    onProfileUpdate?.({ ...profile, avatar_url: url });
+    // See handleCoverUpload — merge against the latest profile so concurrent
+    // uploads don't drop each other's field on the parent's myProfile.
+    setProfile((p) => {
+      const next = { ...p, avatar_url: url };
+      onProfileUpdate?.(next);
+      return next;
+    });
     track('avatar_uploaded');
   };
 

@@ -86,22 +86,34 @@ function PlayerRow({ p, currentUser, onOpen }) {
 function TrendingRail({ navigate }) {
   const [trend, setTrend] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    (async () => {
-      const sevenDaysAgo = new Date(Date.now() - 7 * 86400_000).toISOString();
-      const { data } = await supabase
-        .from('posts')
-        .select('id, content, media_url, media_type, likes, comment_count, created_at, profiles(id, name, handle, avatar_color, avatar_initials, tier)')
-        .gte('created_at', sevenDaysAgo)
-        .order('likes', { ascending: false })
-        .limit(6);
-      setTrend(data || []);
-      setLoading(false);
-    })();
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const sevenDaysAgo = new Date(Date.now() - 7 * 86400_000).toISOString();
+    const { data, error: qErr } = await supabase
+      .from('posts')
+      .select('id, content, media_url, media_type, likes, comment_count, created_at, profiles(id, name, handle, avatar_color, avatar_initials, tier)')
+      .gte('created_at', sevenDaysAgo)
+      .order('likes', { ascending: false })
+      .limit(6);
+    if (qErr) { setError(qErr.message); setLoading(false); return; }
+    setTrend(data || []);
+    setLoading(false);
   }, []);
 
+  useEffect(() => { load(); }, [load]);
+
   if (loading) return <CardGridSkeleton count={3} />;
+  if (error) {
+    return (
+      <div style={{ padding: 16, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, fontSize: 13, color: C.steel, textAlign: 'center' }}>
+        Couldn't load trending posts.{' '}
+        <button onClick={load} style={{ background: 'none', border: 'none', color: C.red, textDecoration: 'underline', cursor: 'pointer', fontSize: 13, padding: 0, fontFamily: 'inherit' }}>Retry</button>
+      </div>
+    );
+  }
   if (!trend.length) {
     return (
       <EmptyState
@@ -146,22 +158,33 @@ function TrendingRail({ navigate }) {
 function TopScorersRail() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    (async () => {
-      // Real top scorers, aggregated server-side via the get_top_scorers RPC.
-      // Replaces a query that referenced `scorer_id` — a column that doesn't
-      // exist on game_goals (the column is scorer_number, a jersey #) — so this
-      // rail was silently broken and always empty. The leaderboard fills in
-      // once there are profile-linked scorers in the data.
-      const { data, error } = await supabase.rpc('get_top_scorers', { p_limit: 5 });
-      if (error) console.warn('[discover] top scorers failed:', error.message);
-      setRows(data || []);
-      setLoading(false);
-    })();
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    // Real top scorers, aggregated server-side via the get_top_scorers RPC.
+    // Replaces a query that referenced `scorer_id` — a column that doesn't
+    // exist on game_goals (the column is scorer_number, a jersey #) — so this
+    // rail was silently broken and always empty. The leaderboard fills in
+    // once there are profile-linked scorers in the data.
+    const { data, error: qErr } = await supabase.rpc('get_top_scorers', { p_limit: 5 });
+    if (qErr) { setError(qErr.message); setLoading(false); return; }
+    setRows(data || []);
+    setLoading(false);
   }, []);
 
+  useEffect(() => { load(); }, [load]);
+
   if (loading) return <ListRowSkeleton rows={5} />;
+  if (error) {
+    return (
+      <div style={{ padding: 16, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, fontSize: 13, color: C.steel, textAlign: 'center' }}>
+        Couldn't load top scorers.{' '}
+        <button onClick={load} style={{ background: 'none', border: 'none', color: C.red, textDecoration: 'underline', cursor: 'pointer', fontSize: 13, padding: 0, fontFamily: 'inherit' }}>Retry</button>
+      </div>
+    );
+  }
   if (!rows.length) {
     return (
       <div style={{ padding: 16, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, fontSize: 13, color: C.steel, textAlign: 'center' }}>
@@ -201,19 +224,23 @@ export default function Discover({ currentUser, profile }) {
   const [leagues, setLeagues] = useState([]);
   const [articles, setArticles] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const search$ = debounced.trim();
   const ilike = useMemo(() => (search$ ? `%${search$}%` : null), [search$]);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
+    let qErr = null;
     if (tab === 'players') {
       let q = supabase.from('profiles')
         .select('id, name, handle, position, level, points, tier, avatar_color, avatar_initials')
         .order('points', { ascending: false, nullsFirst: false })
         .limit(40);
       if (ilike) q = q.or(`name.ilike.${ilike},handle.ilike.${ilike}`);
-      const { data } = await q;
+      const { data, error: e } = await q;
+      qErr = e;
       setPlayers(data || []);
     } else if (tab === 'teams') {
       let q = supabase.from('teams')
@@ -221,7 +248,8 @@ export default function Discover({ currentUser, profile }) {
         .order('created_at', { ascending: false })
         .limit(40);
       if (ilike) q = q.or(`name.ilike.${ilike},level.ilike.${ilike},location.ilike.${ilike}`);
-      const { data } = await q;
+      const { data, error: e } = await q;
+      qErr = e;
       setTeams(data || []);
     } else if (tab === 'leagues') {
       let q = supabase.from('leagues')
@@ -229,7 +257,8 @@ export default function Discover({ currentUser, profile }) {
         .order('created_at', { ascending: false })
         .limit(40);
       if (ilike) q = q.or(`name.ilike.${ilike},division.ilike.${ilike}`);
-      const { data } = await q;
+      const { data, error: e } = await q;
+      qErr = e;
       setLeagues(data || []);
     } else if (tab === 'articles') {
       let q = supabase.from('rinkside_articles')
@@ -238,9 +267,11 @@ export default function Discover({ currentUser, profile }) {
         .order('published_at', { ascending: false })
         .limit(40);
       if (ilike) q = q.or(`title.ilike.${ilike},subtitle.ilike.${ilike},category.ilike.${ilike}`);
-      const { data } = await q;
+      const { data, error: e } = await q;
+      qErr = e;
       setArticles(data || []);
     }
+    if (qErr) setError(qErr.message);
     setLoading(false);
   }, [tab, ilike]);
 
@@ -249,6 +280,20 @@ export default function Discover({ currentUser, profile }) {
   useEffect(() => {
     if (search$) track('discover_search', { tab, q_length: search$.length });
   }, [search$, tab]);
+
+  // Distinct error/retry block — shown in place of the tab list when a query
+  // fails, so a failed search doesn't masquerade as "no results found."
+  const errorBlock = error ? (
+    <div style={{ padding: 24, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, textAlign: 'center' }}>
+      <div style={{ fontSize: 28, marginBottom: 8 }}>⚠️</div>
+      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4, color: C.red }}>Couldn't load results</div>
+      <div style={{ fontSize: 12, color: C.steel, marginBottom: 16 }}>{error}</div>
+      <button onClick={load}
+        style={{ background: C.red, color: '#fff', border: 'none', borderRadius: 999, padding: '8px 20px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+        Retry
+      </button>
+    </div>
+  ) : null;
 
   return (
     <Layout profile={profile} currentPage="discover">
@@ -294,6 +339,7 @@ export default function Discover({ currentUser, profile }) {
           <div style={{ marginBottom: 26 }}>
             {tab === 'players' && (
               loading ? <ListRowSkeleton rows={6} /> :
+              error ? errorBlock :
               players.length === 0 ? <EmptyState icon="👥" title={search$ ? `No players match "${search$}"` : 'No players yet'} body={search$ ? 'Try a different name or handle.' : 'Players will show up as the community grows.'} /> :
               <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
                 {players.map((p, i) => (
@@ -306,6 +352,7 @@ export default function Discover({ currentUser, profile }) {
 
             {tab === 'teams' && (
               loading ? <ListRowSkeleton rows={6} /> :
+              error ? errorBlock :
               teams.length === 0 ? <EmptyState icon="🏒" title={search$ ? `No teams match "${search$}"` : 'No teams yet'} body={search$ ? 'Try a different name or location.' : 'Create or join a team to see it here.'} cta={{ label: 'Create a Team', onClick: () => navigate('/team/create') }} /> :
               <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
                 {teams.map((t, i) => (
@@ -324,6 +371,7 @@ export default function Discover({ currentUser, profile }) {
 
             {tab === 'leagues' && (
               loading ? <ListRowSkeleton rows={6} /> :
+              error ? errorBlock :
               leagues.length === 0 ? <EmptyState icon="🏆" title={search$ ? `No leagues match "${search$}"` : 'No leagues yet'} body={search$ ? 'Try a different name.' : 'Start a league with the Create button.'} cta={{ label: 'Create a League', onClick: () => navigate('/league/create') }} /> :
               <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
                 {leagues.map((l, i) => (
@@ -340,6 +388,7 @@ export default function Discover({ currentUser, profile }) {
 
             {tab === 'articles' && (
               loading ? <CardGridSkeleton count={6} /> :
+              error ? errorBlock :
               articles.length === 0 ? <EmptyState icon="📰" title={search$ ? `No articles match "${search$}"` : 'No articles yet'} body="Rinkside features are dropping soon." cta={{ label: 'Visit Rinkside', onClick: () => navigate('/rinkside') }} /> :
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
                 {articles.map((a) => (

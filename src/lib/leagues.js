@@ -1,7 +1,9 @@
 import { supabase } from './supabase';
 
 export async function listLeagues({ search = '' } = {}) {
-  let q = supabase.from('leagues').select('*').eq('is_public', true).order('name');
+  // TODO: paginate — cap to avoid pulling the entire leagues table once the
+  // directory grows. The search box lets users find anything beyond the cap.
+  let q = supabase.from('leagues').select('*').eq('is_public', true).order('name').limit(50);
   if (search) q = q.ilike('name', `%${search}%`);
   const { data, error } = await q;
   if (error) throw error;

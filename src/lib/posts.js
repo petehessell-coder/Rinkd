@@ -115,8 +115,16 @@ export async function toggleLike(postId, userId) {
   return { liked: true, error: error || null };
 }
 
-export async function getLikedPosts(userId) {
-  const { data } = await supabase.from('likes').select('post_id').eq('user_id', userId);
+// Scope to the visible posts. The previous unbounded version pulled the user's
+// entire like history just to mark ~50 cards — fine for new users, painful for
+// power users with thousands of likes, and grows on every feed render.
+export async function getLikedPosts(userId, postIds) {
+  if (!userId || !Array.isArray(postIds) || postIds.length === 0) return [];
+  const { data } = await supabase
+    .from('likes')
+    .select('post_id')
+    .eq('user_id', userId)
+    .in('post_id', postIds);
   return data?.map(l => l.post_id) || [];
 }
 

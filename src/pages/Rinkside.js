@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import SEO from '../components/SEO';
@@ -95,19 +95,22 @@ export default function Rinkside({ currentUser, profile }) {
   const [categories, setCategories] = useState([]);
   const [activeCategory, setActiveCategory] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      const [{ data }, cats] = await Promise.all([
-        listArticles({ category: activeCategory, limit: 30 }),
-        listCategories(),
-      ]);
-      setArticles(data);
-      setCategories(cats);
-      setLoading(false);
-    })();
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const [{ data, error: qErr }, cats] = await Promise.all([
+      listArticles({ category: activeCategory, limit: 30 }),
+      listCategories(),
+    ]);
+    if (qErr) { setError(qErr.message); setLoading(false); return; }
+    setArticles(data);
+    setCategories(cats);
+    setLoading(false);
   }, [activeCategory]);
+
+  useEffect(() => { load(); }, [load]);
 
   const featured = articles.find((a) => a.is_featured);
   const rest = articles.filter((a) => a.id !== featured?.id);
@@ -162,6 +165,16 @@ export default function Rinkside({ currentUser, profile }) {
 
           {loading ? (
             <CardGridSkeleton count={6} />
+          ) : error ? (
+            <div style={{ padding: 24, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, textAlign: 'center' }}>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>⚠️</div>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4, color: C.red }}>Couldn't load Rinkside</div>
+              <div style={{ fontSize: 12, color: C.steel, marginBottom: 16 }}>{error}</div>
+              <button onClick={load}
+                style={{ background: C.red, color: '#fff', border: 'none', borderRadius: 999, padding: '8px 20px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                Retry
+              </button>
+            </div>
           ) : articles.length === 0 ? (
             <EmptyState
               icon="📰"

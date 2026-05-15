@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import Layout from '../components/Layout';
@@ -7,19 +7,26 @@ export default function Tournaments({ profile }) {
   const navigate = useNavigate();
   const [tournaments, setTournaments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    async function load() {
-      const { data } = await supabase
-        .from('tournaments')
-        .select('*')
-        .in('status', ['active', 'complete'])
-        .order('start_date', { ascending: false });
-      setTournaments(data || []);
-      setLoading(false);
-    }
-    load();
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    // TODO: paginate — cap unbounded query for now. 50 is comfortably above
+    // the active/complete tournament count and prevents the page from
+    // dragging when the archive grows.
+    const { data, error: qErr } = await supabase
+      .from('tournaments')
+      .select('*')
+      .in('status', ['active', 'complete'])
+      .order('start_date', { ascending: false })
+      .limit(50);
+    if (qErr) { setError(qErr.message); setLoading(false); return; }
+    setTournaments(data || []);
+    setLoading(false);
   }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   return (
     <Layout profile={profile}>
@@ -35,7 +42,19 @@ export default function Tournaments({ profile }) {
 
         {loading && <div style={{ color: 'rgba(244,247,250,0.3)', fontSize: 13 }}>Loading...</div>}
 
-        {!loading && tournaments.length === 0 && (
+        {!loading && error && (
+          <div style={{ background: '#0f2847', border: '0.5px solid rgba(215,38,56,0.4)', borderRadius: 12, padding: 24, textAlign: 'center' }}>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>⚠️</div>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4, color: '#D72638' }}>Couldn't load tournaments</div>
+            <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.4)', marginBottom: 16 }}>{error}</div>
+            <button onClick={load}
+              style={{ background: '#D72638', color: '#fff', border: 'none', borderRadius: 999, padding: '8px 20px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+              Retry
+            </button>
+          </div>
+        )}
+
+        {!loading && !error && tournaments.length === 0 && (
           <div style={{ background: '#0f2847', border: '0.5px solid rgba(46,91,140,0.4)', borderRadius: 12, padding: 24, textAlign: 'center' }}>
             <div style={{ fontSize: 32, marginBottom: 10 }}>🥅</div>
             <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>No tournaments yet</div>
@@ -46,7 +65,7 @@ export default function Tournaments({ profile }) {
           </div>
         )}
 
-        {tournaments.map(t => (
+        {!error && tournaments.map(t => (
           <div key={t.id} onClick={() => navigate('/tournament/' + t.id)}
             style={{ background: '#0f2847', border: '0.5px solid rgba(46,91,140,0.4)', borderRadius: 12, padding: '16px 18px', marginBottom: 10, cursor: 'pointer' }}
             onMouseEnter={e => e.currentTarget.style.border = '0.5px solid rgba(46,91,140,0.8)'}

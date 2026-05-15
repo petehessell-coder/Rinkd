@@ -16,7 +16,9 @@ export async function getTeam(id) {
 }
 
 export async function listTeams({ search = '' } = {}) {
-  let query = supabase.from('teams').select('*').eq('is_public', true).order('name');
+  // TODO: paginate — cap to avoid pulling the entire teams table once the
+  // directory grows. The search box lets users find anything beyond the cap.
+  let query = supabase.from('teams').select('*').eq('is_public', true).order('name').limit(50);
   if (search) query = query.ilike('name', `%${search}%`);
   const { data, error } = await query;
   if (error) throw error;
@@ -53,12 +55,17 @@ export async function getTeamMembers(teamId) {
 }
 
 export async function getTeamGames(teamId) {
+  // TODO: paginate — cap each sub-query and the merged result. Once a team
+  // accumulates years of games this view needs a real "season" filter UI.
+  const PAGE_CAP = 50;
+
   // Get regular team games
   const { data: teamGames, error } = await supabase
     .from('team_games')
     .select('*')
     .eq('team_id', teamId)
-    .order('start_time', { ascending: false });
+    .order('start_time', { ascending: false })
+    .limit(PAGE_CAP);
   if (error) throw error;
 
   // Get league_teams rows for this team
@@ -77,12 +84,16 @@ export async function getTeamGames(teamId) {
   const { data: homeGames } = await supabase
     .from('league_games')
     .select('*, home_lt:league_teams!home_team_id(id, team_name, logo_color, logo_initials, team:teams(id,name)), away_lt:league_teams!away_team_id(id, team_name, logo_color, logo_initials, team:teams(id,name)), rink:rinks(name,sub_rink,live_barn_venue_id)')
-    .in('home_team_id', ltIds);
+    .in('home_team_id', ltIds)
+    .order('start_time', { ascending: false })
+    .limit(PAGE_CAP);
 
   const { data: awayGames } = await supabase
     .from('league_games')
     .select('*, home_lt:league_teams!home_team_id(id, team_name, logo_color, logo_initials, team:teams(id,name)), away_lt:league_teams!away_team_id(id, team_name, logo_color, logo_initials, team:teams(id,name)), rink:rinks(name,sub_rink,live_barn_venue_id)')
-    .in('away_team_id', ltIds);
+    .in('away_team_id', ltIds)
+    .order('start_time', { ascending: false })
+    .limit(PAGE_CAP);
 
   // Normalize league games to match team_games shape
   const normalizeLeagueGame = (g) => {
@@ -116,11 +127,13 @@ export async function getTeamGames(teamId) {
     return true;
   });
 
-  // Merge and sort by start_time descending
+  // Merge and sort by start_time descending, then cap. Each sub-query is
+  // capped at PAGE_CAP so the merged result is bounded but we still want
+  // the page to feel snappy at scale.
   const all = [
     ...(teamGames || []).map(g => ({ ...g, _source: 'team' })),
     ...deduped,
-  ].sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
+  ].sort((a, b) => new Date(b.start_time) - new Date(a.start_time)).slice(0, PAGE_CAP);
 
   return all;
 }

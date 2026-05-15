@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import SEO from '../components/SEO';
@@ -56,16 +56,20 @@ export default function CreasePage({ currentUser, profile }) {
   const navigate = useNavigate();
   const [shows, setShows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [hasAccess, setHasAccess] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      const { data } = await listShows();
-      setShows(data);
-      if (currentUser) setHasAccess(await hasCreaseAccess(currentUser.id));
-      setLoading(false);
-    })();
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const { data, error: qErr } = await listShows();
+    if (qErr) { setError(qErr.message); setLoading(false); return; }
+    setShows(data);
+    if (currentUser) setHasAccess(await hasCreaseAccess(currentUser.id));
+    setLoading(false);
   }, [currentUser]);
+
+  useEffect(() => { load(); }, [load]);
 
   return (
     <Layout profile={profile} currentPage="crease">
@@ -108,6 +112,16 @@ export default function CreasePage({ currentUser, profile }) {
 
           {loading ? (
             <CardGridSkeleton count={4} />
+          ) : error ? (
+            <div style={{ padding: 24, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, textAlign: 'center' }}>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>⚠️</div>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4, color: C.red }}>Couldn't load Crease</div>
+              <div style={{ fontSize: 12, color: C.steel, marginBottom: 16 }}>{error}</div>
+              <button onClick={load}
+                style={{ background: C.red, color: '#fff', border: 'none', borderRadius: 999, padding: '8px 20px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                Retry
+              </button>
+            </div>
           ) : shows.length === 0 ? (
             <EmptyState
               icon="🎬"

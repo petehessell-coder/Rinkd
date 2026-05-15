@@ -233,7 +233,10 @@ export default function Feed({ currentUser, profile }) {
     const page = data || [];
     setPosts(page);
     setHasMore(page.length === PAGE_SIZE);
-    if (currentUser) { const liked = await getLikedPosts(currentUser.id); setLikedPosts(liked); }
+    if (currentUser) {
+      const liked = await getLikedPosts(currentUser.id, page.map(p => p.id));
+      setLikedPosts(liked);
+    }
     setLoading(false);
   }, [currentUser, tab]);
 
@@ -253,6 +256,12 @@ export default function Feed({ currentUser, profile }) {
     const page = data || [];
     setPosts(prev => [...prev, ...page]);
     setHasMore(page.length === PAGE_SIZE);
+    // Fetch liked state for just this page and merge — getLikedPosts is now
+    // scoped to visible posts, so the initial load doesn't know about these yet.
+    if (currentUser && page.length > 0) {
+      const newLiked = await getLikedPosts(currentUser.id, page.map(p => p.id));
+      if (newLiked.length > 0) setLikedPosts(prev => Array.from(new Set([...prev, ...newLiked])));
+    }
     setLoadingMore(false);
   }, [loadingMore, hasMore, posts, tab, currentUser]);
 

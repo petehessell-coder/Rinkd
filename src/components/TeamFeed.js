@@ -165,8 +165,12 @@ export default function TeamFeed({ teamId, currentUser, isMember }) {
   const load = useCallback(async () => {
     setLoading(true);
     const { data } = await getTeamPosts(teamId, 50);
-    setPosts(data || []);
-    if (currentUser) { const liked = await getLikedPosts(currentUser.id); setLikedPosts(liked); }
+    const page = data || [];
+    setPosts(page);
+    if (currentUser) {
+      const liked = await getLikedPosts(currentUser.id, page.map(p => p.id));
+      setLikedPosts(liked);
+    }
     setLoading(false);
   }, [teamId, currentUser]);
 
@@ -220,13 +224,49 @@ export default function TeamFeed({ teamId, currentUser, isMember }) {
     await load(); setPosting(false);
   };
 
-  const onLike = async (postId) => {
+  // Race-safe like handler — same pattern as Feed.js handleLike v2.
+  // Derive the next liked state INSIDE the functional updater so rapid taps
+  // see the freshest array, and gate concurrent network calls with an
+  // in-flight ref so a burst of taps converges on a single round-trip.
+  const likeInFlightRef = useRef(new Set());
+
+  const onLike = (postId) => {
     if (!currentUser) return;
-    const { liked } = await toggleLike(postId, currentUser.id);
-    setLikedPosts(prev => liked ? [...prev, postId] : prev.filter(id => id !== postId));
+
+    let nextLiked = null;
+    setLikedPosts(prev => {
+      nextLiked = !prev.includes(postId);
+      return nextLiked ? [...prev, postId] : prev.filter(id => id !== postId);
+    });
     setPosts(prev => prev.map(p => p.id === postId
-      ? { ...p, likes: liked ? (p.likes || 0) + 1 : Math.max(0, (p.likes || 0) - 1) }
-      : p));
+      ? { ...p, likes: nextLiked ? (p.likes || 0) + 1 : Math.max(0, (p.likes || 0) - 1) }
+      : p
+    ));
+
+    if (likeInFlightRef.current.has(postId)) return;
+    likeInFlightRef.current.add(postId);
+
+    (async () => {
+      try {
+        const { liked, error } = await toggleLike(postId, currentUser.id);
+        if (error) throw error;
+        // Snap to server truth if our final optimistic state diverged.
+        setLikedPosts(prev => {
+          const currentlyLiked = prev.includes(postId);
+          if (currentlyLiked === liked) return prev;
+          return liked ? [...prev, postId] : prev.filter(id => id !== postId);
+        });
+      } catch (_e) {
+        // Rollback to pre-tap state. Functional updater so we don't double-toggle.
+        setLikedPosts(prev => nextLiked ? prev.filter(id => id !== postId) : [...prev, postId]);
+        setPosts(prev => prev.map(p => p.id === postId
+          ? { ...p, likes: nextLiked ? Math.max(0, (p.likes || 0) - 1) : (p.likes || 0) + 1 }
+          : p
+        ));
+      } finally {
+        likeInFlightRef.current.delete(postId);
+      }
+    })();
   };
 
   return (

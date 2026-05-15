@@ -1,4 +1,5 @@
-import React, { useState, useEffect, createContext, useContext } from 'react';
+import React, { useState, useEffect } from 'react';
+import { AuthContext, useAuth } from './lib/authContext';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import { getProfile } from './lib/auth';
@@ -42,8 +43,11 @@ import AdminPanel from './pages/AdminPanel';
 import VolunteerCoordinator from './pages/VolunteerCoordinator';
 import NotFound from './pages/NotFound';
 
-export const AuthContext = createContext(null);
-export function useAuth() { return useContext(AuthContext); }
+// AuthContext + useAuth live in ./lib/authContext so leaf components can
+// consume them without creating a circular import back to App.js. Re-exported
+// here for backwards compatibility with any future caller that grabs them
+// from the App module.
+export { AuthContext, useAuth };
 
 // Coin-flip loading mark — half the time you see the LED R, half the time
 // Rizzo the Rinkd Rat. The mascot is intentionally a delight moment, not the

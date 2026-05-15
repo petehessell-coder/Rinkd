@@ -175,8 +175,11 @@ export default function ScorerView() {
     const hs = team === 'home' ? Math.max(0, homeScore + delta) : homeScore;
     const as = team === 'away' ? Math.max(0, awayScore + delta) : awayScore;
     setHomeScore(hs); setAwayScore(as);
-    const newStatus = status === 'scheduled' ? 'live' : status;
-    if (status === 'scheduled') setStatus('live');
+    // Functional updater so rapid taps always read the freshest status when
+    // deciding whether to flip scheduled→live. Captured here so updateScore
+    // writes the same value we just committed locally.
+    let newStatus = status;
+    setStatus(prev => { newStatus = prev === 'scheduled' ? 'live' : prev; return newStatus; });
     updateScore(hs, as, period, newStatus);
   };
 

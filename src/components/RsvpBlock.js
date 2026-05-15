@@ -47,8 +47,13 @@ export default function RsvpBlock({ gameId, compact = false }) {
   useEffect(() => { load(); }, [load]);
 
   // Refresh when the tab regains focus so counts stay live as teammates RSVP.
+  // Skip while a save is in flight: a refocus mid-save would race a stale read
+  // against the optimistic update and flicker the button. The post-save
+  // `load()` in handleRsvp picks up any teammate changes anyway.
+  const savingRef = useRef(false);
+  useEffect(() => { savingRef.current = saving; }, [saving]);
   useEffect(() => {
-    const onVis = () => { if (document.visibilityState === 'visible') load(); };
+    const onVis = () => { if (document.visibilityState === 'visible' && !savingRef.current) load(); };
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
   }, [load]);
