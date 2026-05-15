@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import CreasePaywall from '../components/CreasePaywall';
@@ -16,23 +16,46 @@ export default function CreaseEpisodePage({ currentUser, profile }) {
   const [episode, setEpisode] = useState(null);
   const [hasAccess, setHasAccess] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    (async () => {
-      const { data: s } = await getShowBySlug(showSlug);
-      if (!s) { setLoading(false); return; }
-      setShow(s);
-      const { data: ep } = await getEpisode(s.id, parseInt(episodeNumber, 10));
-      setEpisode(ep);
-      if (currentUser) setHasAccess(await hasCreaseAccess(currentUser.id));
-      setLoading(false);
-    })();
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const { data: s, error: showErr } = await getShowBySlug(showSlug);
+    if (showErr) { setError(showErr.message || 'Failed to load show'); setLoading(false); return; }
+    if (!s) { setLoading(false); return; }
+    setShow(s);
+    const { data: ep, error: epErr } = await getEpisode(s.id, parseInt(episodeNumber, 10));
+    if (epErr) { setError(epErr.message || 'Failed to load episode'); setLoading(false); return; }
+    setEpisode(ep);
+    if (currentUser) setHasAccess(await hasCreaseAccess(currentUser.id));
+    setLoading(false);
   }, [showSlug, episodeNumber, currentUser]);
+
+  useEffect(() => { load(); }, [load]);
 
   if (loading) {
     return (
       <Layout profile={profile} currentPage="crease">
         <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice }}>Loading…</div>
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout profile={profile} currentPage="crease">
+        <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, padding: 20, textAlign: 'center' }}>
+          <div>
+            <div style={{ fontSize: 32, marginBottom: 10 }}>⚠️</div>
+            <div style={{ color: C.red, fontWeight: 600, marginBottom: 4 }}>Couldn't load this episode</div>
+            <div style={{ color: C.steel, fontSize: 12, marginBottom: 16 }}>{error}</div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <button onClick={load} style={{ background: C.red, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer', fontFamily: 'Barlow, sans-serif', fontWeight: 700 }}>Retry</button>
+              <button onClick={() => navigate('/crease')} style={{ background: C.blue, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>Back to Crease</button>
+            </div>
+          </div>
+        </div>
       </Layout>
     );
   }

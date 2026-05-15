@@ -2,8 +2,9 @@ import { supabase } from './supabase';
 
 /**
  * Lightweight self-hosted analytics. Events go to public.analytics_events.
- * Reads are restricted to commissioners via RLS; writes are open (we accept
- * some abuse risk in exchange for not losing pre-auth events like signup_view).
+ * Reads are restricted to commissioners via RLS; writes require user_id to
+ * match auth.uid() or be null (RLS enforces — see migration
+ * surfaces_11_17_rls_volunteer_slots_and_analytics_events).
  *
  * Usage:
  *   import { track } from '../lib/analytics';
@@ -26,11 +27,41 @@ function sessionId() {
   } catch { return null; }
 }
 
-async function currentUserId() {
+// Module-level cache of the current user_id, kept in sync with Supabase auth
+// state. `track()` used to call `supabase.auth.getUser()` on every event,
+// which adds locking + JSON-parse overhead even though the session itself is
+// in localStorage. With dozens of events per page (clicks, hovers, scroll
+// markers), that adds up. We resolve once on module load + listen for changes.
+let cachedUserId = null;
+let userIdResolved = false;
+let userIdResolving = null;
+
+function resolveCachedUserId() {
+  if (userIdResolved) return Promise.resolve(cachedUserId);
+  if (userIdResolving) return userIdResolving;
+  userIdResolving = (async () => {
+    try {
+      const { data } = await supabase.auth.getSession();
+      cachedUserId = data?.session?.user?.id ?? null;
+    } catch {
+      cachedUserId = null;
+    }
+    userIdResolved = true;
+    userIdResolving = null;
+    return cachedUserId;
+  })();
+  return userIdResolving;
+}
+
+// Refresh the cached user_id on auth state changes so a sign-in/sign-out is
+// reflected in subsequent events without another getSession() round-trip.
+if (typeof window !== 'undefined' && supabase?.auth) {
   try {
-    const { data } = await supabase.auth.getUser();
-    return data?.user?.id ?? null;
-  } catch { return null; }
+    supabase.auth.onAuthStateChange((_event, session) => {
+      cachedUserId = session?.user?.id ?? null;
+      userIdResolved = true;
+    });
+  } catch { /* swallow — analytics must never crash boot */ }
 }
 
 /**
@@ -43,7 +74,7 @@ export async function track(event, properties = {}) {
   if (window.location?.hostname === 'localhost') return;
 
   try {
-    const user_id = await currentUserId();
+    const user_id = await resolveCachedUserId();
     await supabase.from('analytics_events').insert({
       event,
       user_id,

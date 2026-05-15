@@ -62,9 +62,11 @@ self.addEventListener('fetch', (event) => {
     event.respondWith((async () => {
       try {
         const res = await fetch(request, { cache: 'no-store' });
-        // Only cache a genuinely good shell — caching a 500/maintenance page
-        // here would poison the offline experience until the next good fetch.
-        if (res && res.ok) {
+        // Only cache a genuinely good HTML shell. A Vercel rewrite serving
+        // JSON or an asset with a 200 status would otherwise poison the
+        // offline experience — when network drops, every navigation would
+        // return the wrong content type.
+        if (res && res.ok && (res.headers.get('content-type') || '').includes('text/html')) {
           const cache = await caches.open(CACHE_SHELL);
           cache.put('/index.html', res.clone()).catch(() => null);
         }

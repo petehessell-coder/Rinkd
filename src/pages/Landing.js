@@ -59,6 +59,10 @@ export default function LandingPage() {
   const [showInstall, setShowInstall] = useState(false);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [continueClicked, setContinueClicked] = useState(false);
+  // Settings.handleDelete redirects to /?deleted=1 after a successful account
+  // deletion. We surface a brief confirmation toast and strip the param so a
+  // refresh doesn't show it again.
+  const [showDeletedToast, setShowDeletedToast] = useState(false);
 
   useEffect(() => {
     const isMobile = detectMobile();
@@ -68,6 +72,19 @@ export default function LandingPage() {
       device: isMobile ? 'mobile' : 'desktop',
       standalone: isStandalone,
     });
+
+    // Catch the post-delete-account redirect target. We replace the URL
+    // (no history entry) so reload won't re-show the toast.
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('deleted') === '1') {
+        setShowDeletedToast(true);
+        track('account_deleted_landed');
+        const url = new URL(window.location.href);
+        url.searchParams.delete('deleted');
+        window.history.replaceState({}, '', url.pathname + url.hash);
+      }
+    } catch (_) { /* old browser */ }
 
     // Capture the Android install prompt for later use
     const onBeforeInstall = (e) => {
@@ -97,9 +114,25 @@ export default function LandingPage() {
     setContinueClicked(true);
   };
 
+  // Shared confirmation banner shown after a successful account deletion —
+  // appears in both the Auth render and the marketing-splash render below.
+  const deletedBanner = showDeletedToast ? (
+    <div style={{
+      position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)',
+      background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.45)',
+      color: C.ice, padding: '10px 16px', borderRadius: 10,
+      fontFamily: "'Barlow', sans-serif", fontSize: 13, lineHeight: 1.45,
+      zIndex: 10000, maxWidth: 360, textAlign: 'center',
+      boxShadow: '0 10px 24px rgba(0,0,0,0.45)',
+    }}>
+      <strong style={{ color: '#22C55E' }}>Account deleted.</strong>{' '}
+      Your personal data has been removed from Rinkd.
+    </div>
+  ) : null;
+
   // If user opts to continue in browser, just render Auth inline
   if (!showMarketing || continueClicked) {
-    return <Auth />;
+    return <>{deletedBanner}<Auth /></>;
   }
 
   return (
@@ -208,6 +241,7 @@ export default function LandingPage() {
 
       {/* Install instructions modal (iOS + Android fallback) */}
       {showInstall && <InstallInstructionsModal onClose={() => setShowInstall(false)} />}
+      {deletedBanner}
     </div>
   );
 }

@@ -17,14 +17,25 @@ const C = {
  * beta supporters by flipping profiles.is_premium = true on their row.
  */
 export default function CreasePaywall({ episodeTitle, showTitle, compact = false }) {
-  const paymentsLive = process.env.REACT_APP_CREASE_PAYMENTS_LIVE === '1';
+  // payments_live is only truly "live" when BOTH the flag is on AND a real
+  // checkout URL is configured. The previous version silently fell back to
+  // a mailto: when REACT_APP_CREASE_CHECKOUT_URL was missing — users tapping
+  // "Subscribe to Crease" would get an email composer instead of a checkout
+  // page, with no warning that the deploy was misconfigured.
+  const checkoutUrlEnv = (process.env.REACT_APP_CREASE_CHECKOUT_URL || '').trim();
+  const flagOn = process.env.REACT_APP_CREASE_PAYMENTS_LIVE === '1';
+  const paymentsLive = flagOn && /^https?:\/\//i.test(checkoutUrlEnv);
 
   // Fire once per mount — gives us conversion-funnel data even before payments are live.
   useEffect(() => {
     track('crease_paywall_shown', { show: showTitle, episode: episodeTitle, payments_live: paymentsLive, compact });
-  }, [showTitle, episodeTitle, paymentsLive, compact]);
+    if (flagOn && !paymentsLive) {
+      // eslint-disable-next-line no-console
+      console.warn('[CreasePaywall] REACT_APP_CREASE_PAYMENTS_LIVE is 1 but REACT_APP_CREASE_CHECKOUT_URL is not a valid http(s) URL — falling back to early-access mailto.');
+    }
+  }, [showTitle, episodeTitle, paymentsLive, compact, flagOn]);
   const checkoutUrl = paymentsLive
-    ? (process.env.REACT_APP_CREASE_CHECKOUT_URL || 'mailto:hello@rinkd.app?subject=Crease%20Premium')
+    ? checkoutUrlEnv
     : 'mailto:hello@rinkd.app?subject=Crease%20Early%20Access&body=Count%20me%20in%20when%20Crease%20launches.';
 
   return (

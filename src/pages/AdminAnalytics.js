@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { loadDailyRollup, loadDAU, loadRecentEvents } from '../lib/analytics';
@@ -45,14 +45,25 @@ export default function AdminAnalytics({ currentUser, profile }) {
   const [dau, setDau] = useState([]);
   const [recent, setRecent] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    (async () => {
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
       const [d, u, r] = await Promise.all([loadDailyRollup(30), loadDAU(30), loadRecentEvents(80)]);
       setDaily(d); setDau(u); setRecent(r);
+    } catch (e) {
+      // Without this catch, the entire useEffect's promise rejects unhandled
+      // and `loading` stays true forever — the page hangs on "Loading
+      // analytics…" with no path forward.
+      setError(e?.message || 'Failed to load analytics');
+    } finally {
       setLoading(false);
-    })();
+    }
   }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   // Roll up totals by event for last 7d vs prior 7d
   const summary = useMemo(() => {
@@ -85,7 +96,11 @@ export default function AdminAnalytics({ currentUser, profile }) {
   const articleReads7d = summary.find((s) => s.event === 'article_read')?.v ?? 0;
   const paywallShown7d = summary.find((s) => s.event === 'crease_paywall_shown')?.v ?? 0;
 
-  if (loading) return (
+  // isAdmin === null means useIsRinkdAdmin is still resolving. Gate on this
+  // first so a real staff member doesn't see the "staff only" rejection
+  // screen flash — same pattern as AdminPanel / AdminFeedback / AdminModeration
+  // from Batch 4.
+  if (loading || isAdmin === null) return (
     <Layout profile={profile}>
       <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice }}>Loading analytics…</div>
     </Layout>
@@ -95,8 +110,21 @@ export default function AdminAnalytics({ currentUser, profile }) {
     <Layout profile={profile}>
       <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.ice, gap: 12, padding: 24, textAlign: 'center' }}>
         <div style={{ fontSize: 40 }}>🔒</div>
-        <div>Analytics is commissioner-only.</div>
+        <div>Analytics is Rinkd staff only.</div>
         <button onClick={() => navigate('/feed')} style={{ background: C.red, color: '#fff', border: 'none', padding: '10px 18px', borderRadius: 999, cursor: 'pointer' }}>Back to Feed</button>
+      </div>
+    </Layout>
+  );
+
+  if (error) return (
+    <Layout profile={profile}>
+      <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, padding: 20, textAlign: 'center' }}>
+        <div>
+          <div style={{ fontSize: 32, marginBottom: 10 }}>⚠️</div>
+          <div style={{ color: C.red, fontWeight: 600, marginBottom: 4 }}>Couldn't load analytics</div>
+          <div style={{ color: C.steel, fontSize: 12, marginBottom: 16 }}>{error}</div>
+          <button onClick={load} style={{ background: C.red, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer', fontFamily: 'Barlow, sans-serif', fontWeight: 700 }}>Retry</button>
+        </div>
       </div>
     </Layout>
   );

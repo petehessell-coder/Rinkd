@@ -6,8 +6,16 @@ import { Avatar, TierBadge } from '../components/Logos';
 import { CardGridSkeleton, ListRowSkeleton, EmptyState } from '../components/Skeletons';
 import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
-import { followUser, unfollowUser, isFollowing, timeAgo } from '../lib/posts';
+import { followUser, unfollowUser, timeAgo } from '../lib/posts';
 import { getTier } from '../lib/tiers';
+
+// Escape characters that have special meaning inside a PostgREST .or() clause
+// — a raw `,` or `)` in a user's search query would break the OR-list parser
+// and could either return zero rows or surface a 400 from PostgREST. Stripping
+// rather than escaping is fine: nobody searches for those literally.
+function safeIlikeFragment(s) {
+  return String(s || '').replace(/[,()*]/g, ' ').trim();
+}
 
 const C = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
@@ -32,23 +40,31 @@ function useDebounced(value, ms = 300) {
 }
 
 // =================== PLAYER ROW ===================
-function PlayerRow({ p, currentUser, onOpen }) {
-  const [following, setFollowing] = useState(false);
+function PlayerRow({ p, currentUser, onOpen, isFollowingProp = false }) {
+  // Initial state hydrated from the batched isFollowing fetch the parent did.
+  // The previous version fired its own per-row query — N round-trips per page.
+  const [following, setFollowing] = useState(isFollowingProp);
   const [busy, setBusy] = useState(false);
   const tier = getTier(p.points || 0);
 
-  useEffect(() => {
-    if (!currentUser || currentUser.id === p.id) return;
-    isFollowing(currentUser.id, p.id).then(setFollowing);
-  }, [currentUser, p.id]);
+  // Keep local state in sync if the parent's batched result re-resolves
+  // (e.g., after a new search returns).
+  useEffect(() => { setFollowing(isFollowingProp); }, [isFollowingProp]);
 
   const toggle = async (e) => {
     e.stopPropagation();
     if (!currentUser) return;
     setBusy(true);
-    if (following) await unfollowUser(currentUser.id, p.id);
-    else { await followUser(currentUser.id, p.id); track('discover_follow', { target_user_id: p.id }); }
-    setFollowing(!following);
+    // Only flip local state if the write actually succeeded. The previous
+    // version unconditionally flipped optimistically and ignored errors, so a
+    // failed follow looked like a successful follow until reload.
+    const result = following
+      ? await unfollowUser(currentUser.id, p.id)
+      : await followUser(currentUser.id, p.id);
+    if (!result?.error) {
+      setFollowing(!following);
+      if (!following) track('discover_follow', { target_user_id: p.id });
+    }
     setBusy(false);
   };
 
@@ -225,9 +241,15 @@ export default function Discover({ currentUser, profile }) {
   const [articles, setArticles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Batched isFollowing lookup result — one query for the whole visible page
+  // instead of N per-row queries. Refreshes whenever the players list changes.
+  const [followingSet, setFollowingSet] = useState(() => new Set());
 
   const search$ = debounced.trim();
-  const ilike = useMemo(() => (search$ ? `%${search$}%` : null), [search$]);
+  const ilike = useMemo(() => {
+    const safe = safeIlikeFragment(search$);
+    return safe ? `%${safe}%` : null;
+  }, [search$]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -276,6 +298,29 @@ export default function Discover({ currentUser, profile }) {
   }, [tab, ilike]);
 
   useEffect(() => { load(); }, [load]);
+
+  // One batched isFollowing lookup whenever the visible player list changes —
+  // replaces N per-PlayerRow queries. Quietly fails to an empty set on error
+  // (the UI just shows the Follow button until the next refresh).
+  useEffect(() => {
+    if (tab !== 'players' || !currentUser?.id || players.length === 0) {
+      setFollowingSet(new Set());
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const ids = players.map(p => p.id).filter(id => id !== currentUser.id);
+      if (ids.length === 0) { if (!cancelled) setFollowingSet(new Set()); return; }
+      const { data } = await supabase
+        .from('follows')
+        .select('following_id')
+        .eq('follower_id', currentUser.id)
+        .in('following_id', ids);
+      if (cancelled) return;
+      setFollowingSet(new Set((data || []).map(r => r.following_id)));
+    })();
+    return () => { cancelled = true; };
+  }, [tab, players, currentUser?.id]);
 
   useEffect(() => {
     if (search$) track('discover_search', { tab, q_length: search$.length });
@@ -344,7 +389,7 @@ export default function Discover({ currentUser, profile }) {
               <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
                 {players.map((p, i) => (
                   <div key={p.id} style={{ borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none' }}>
-                    <PlayerRow p={p} currentUser={currentUser} onOpen={() => navigate(`/profile/${p.id}`)} />
+                    <PlayerRow p={p} currentUser={currentUser} onOpen={() => navigate(`/profile/${p.id}`)} isFollowingProp={followingSet.has(p.id)} />
                   </div>
                 ))}
               </div>

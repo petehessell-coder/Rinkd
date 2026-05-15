@@ -82,6 +82,21 @@ export default function SettingsPage({ currentUser, profile }) {
         .map((t, i) => (t.error ? { table: tableNames[i], error: t.error.message } : null))
         .filter(Boolean);
 
+      // If the export couldn't read the user's profile, OR a third+ of the
+      // tables failed, the download would be mostly empty arrays with a
+      // warnings array most users will never check. Hard-fail with a clear
+      // error instead of pretending it succeeded.
+      const profileFailed = !!tables[0].error;
+      const tooManyFailed = exportWarnings.length >= 5;
+      if (profileFailed || tooManyFailed) {
+        setExportError(
+          profileFailed
+            ? "Couldn't reach your profile — your data export would be empty. Check your connection and try again."
+            : `Too many tables failed (${exportWarnings.length} of ${tables.length}). Check your connection and try again.`
+        );
+        return;
+      }
+
       const payload = {
         export_metadata: {
           generated_at: new Date().toISOString(),
