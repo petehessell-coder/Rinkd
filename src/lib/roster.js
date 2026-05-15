@@ -2,6 +2,11 @@ import { supabase } from './supabase';
 
 const TEMPLATE_HEADERS = ['name', 'jersey_number', 'position', 'email'];
 
+// Cap how many invites a single roster upload can fan out. Each row sends a
+// Resend email and the free tier is ~150/day — an unbounded CSV could burn the
+// whole quota at once. Rows past the cap are left for a follow-up upload.
+const MAX_INVITES_PER_UPLOAD = 50;
+
 /** Build a downloadable CSV template managers can fill in. */
 export function buildRosterCsvTemplate() {
   const rows = [
@@ -133,11 +138,15 @@ export async function uploadRoster({ teamId, teamName, invitedBy, rows }) {
     .eq('team_id', teamId)
     .in('invite_email', emails);
   const skipSet = new Set((existing || []).map(r => r.invite_email));
-  const toInsert = valid.filter(r => !skipSet.has(r.email));
+  const allToInsert = valid.filter(r => !skipSet.has(r.email));
 
-  if (toInsert.length === 0) {
-    return { inserted: 0, sent: 0, errors: [], skipped: valid.length };
+  if (allToInsert.length === 0) {
+    return { inserted: 0, sent: 0, errors: [], skipped: valid.length, capped: 0 };
   }
+
+  // Anything past the per-upload cap is left for a follow-up upload.
+  const capped = Math.max(0, allToInsert.length - MAX_INVITES_PER_UPLOAD);
+  const toInsert = allToInsert.slice(0, MAX_INVITES_PER_UPLOAD);
 
   const inserts = toInsert.map(r => ({
     team_id: teamId,
@@ -154,21 +163,32 @@ export async function uploadRoster({ teamId, teamName, invitedBy, rows }) {
     .insert(inserts)
     .select('id, invite_email, invite_name');
 
-  if (insertError) return { inserted: 0, sent: 0, errors: [insertError.message] };
+  if (insertError) return { inserted: 0, sent: 0, errors: [insertError.message], capped };
 
-  const inviteResults = await Promise.allSettled(
-    (insertedRows || []).map(row =>
-      supabase.functions.invoke('send-invite', {
-        body: {
-          type: 'team_invite',
-          to_email: row.invite_email,
-          to_name: row.invite_name,
-          team_name: teamName,
-          invited_by: invitedBy,
-        },
-      })
-    )
-  );
+  // Send invites in small concurrent chunks instead of firing every row at
+  // once — a 20-row upload firing 20 simultaneous Edge Function invocations is
+  // a cold-start storm. Chunked + lightly paced keeps it gentle on the free tier.
+  const CHUNK = 4;
+  const inviteResults = [];
+  const rowsToInvite = insertedRows || [];
+  for (let i = 0; i < rowsToInvite.length; i += CHUNK) {
+    const chunk = rowsToInvite.slice(i, i + CHUNK);
+    const chunkResults = await Promise.allSettled(
+      chunk.map(row =>
+        supabase.functions.invoke('send-invite', {
+          body: {
+            type: 'team_invite',
+            to_email: row.invite_email,
+            to_name: row.invite_name,
+            team_name: teamName,
+            invited_by: invitedBy,
+          },
+        })
+      )
+    );
+    inviteResults.push(...chunkResults);
+    if (i + CHUNK < rowsToInvite.length) await new Promise(r => setTimeout(r, 250));
+  }
 
   let sent = 0;
   const errors = [];
@@ -182,7 +202,8 @@ export async function uploadRoster({ teamId, teamName, invitedBy, rows }) {
     inserted: insertedRows.length,
     sent,
     errors,
-    skipped: valid.length - toInsert.length,
+    skipped: valid.length - allToInsert.length,
+    capped,
   };
 }
 

@@ -154,14 +154,16 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
     if (!currentUser || isOwnProfile) return;
     track(following ? 'unfollow' : 'follow', { target_user_id: profileId });
     setFollowLoading(true);
-    if (following) {
-      await unfollowUser(currentUser.id, profileId);
-      setFollowing(false);
-      setFollowCounts(c => ({ ...c, followers: Math.max(0, c.followers - 1) }));
-    } else {
-      await followUser(currentUser.id, profileId);
-      setFollowing(true);
-      setFollowCounts(c => ({ ...c, followers: c.followers + 1 }));
+    const wasFollowing = following;
+    const result = wasFollowing
+      ? await unfollowUser(currentUser.id, profileId)
+      : await followUser(currentUser.id, profileId);
+    // Only move the UI if the write actually landed — otherwise the button
+    // simply reverts and the user can retry (no false "Following" state or
+    // permanently inflated follower count).
+    if (!result?.error) {
+      setFollowing(!wasFollowing);
+      setFollowCounts(c => ({ ...c, followers: Math.max(0, c.followers + (wasFollowing ? -1 : 1)) }));
     }
     setFollowLoading(false);
   };

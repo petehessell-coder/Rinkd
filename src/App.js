@@ -58,7 +58,7 @@ const LOADING_MARK = Math.random() < 0.5
   : { src: '/icon-192.png',      alt: 'Rinkd',     size: 72, borderRadius: 16 };
 
 function ProtectedRoute({ children }) {
-  const { user, loading } = useAuth();
+  const { user, loading, profileError } = useAuth();
   if (loading) return (
     <div style={{ minHeight: '100vh', background: '#07111F', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow', sans-serif", color: '#8BA3BE', fontSize: 15 }}>
       <div style={{ textAlign: 'center' }}>
@@ -69,7 +69,20 @@ function ProtectedRoute({ children }) {
       </div>
     </div>
   );
-  return user ? children : <Navigate to="/" replace />;
+  if (!user) return <Navigate to="/" replace />;
+  // Logged in, but the profile fetch failed after all retries — show a real
+  // retry screen instead of falling through to pages with profile={null}.
+  if (profileError) return (
+    <div style={{ minHeight: '100vh', background: '#07111F', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow', sans-serif", color: '#8BA3BE', fontSize: 15, padding: 24 }}>
+      <div style={{ textAlign: 'center', maxWidth: 340 }}>
+        <div style={{ fontSize: 30, marginBottom: 12 }}>📡</div>
+        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 20, color: '#F4F7FA', marginBottom: 8 }}>Couldn't load your profile</div>
+        <div style={{ marginBottom: 18, lineHeight: 1.5 }}>Your connection dropped while loading your account. Your data is safe — just reload.</div>
+        <button onClick={() => window.location.reload()} style={{ background: '#2E5B8C', border: 'none', borderRadius: 999, color: '#fff', padding: '10px 24px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: "'Barlow', sans-serif" }}>Reload Rinkd</button>
+      </div>
+    </div>
+  );
+  return children;
 }
 
 function AppRoutes() {
@@ -162,6 +175,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [profileError, setProfileError] = useState(false);
 
   // Retry-on-null helper. Brand-new signups fire SIGNED_IN immediately, but
   // the profile row in lib/auth.js is inserted via a separate `.upsert()` call
@@ -181,28 +195,49 @@ export default function App() {
   };
 
   useEffect(() => {
+    // Track the signed-in identity so the expensive profile fetch only runs
+    // when it actually changes — not on every hourly TOKEN_REFRESHED or
+    // USER_UPDATED event, and not twice on cold start.
+    let currentUserId = null;
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       const u = session?.user || null;
       setUser(u);
-      if (u) {
-        const data = await fetchProfileWithRetry(u.id);
-        setProfile(data);
-        setSentryUser(u, data);
-      } else {
-        setSentryUser(null);
+      const nextId = u?.id || null;
+      if (nextId !== currentUserId) {
+        currentUserId = nextId;
+        if (u) {
+          const data = await fetchProfileWithRetry(u.id);
+          setProfile(data);
+          setProfileError(!data); // null after retries = the fetch failed
+          setSentryUser(u, data);
+        } else {
+          setProfileError(false);
+          setSentryUser(null);
+        }
       }
       setLoading(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      const u = session?.user || null;
-      setUser(u);
-      if (u) {
-        const data = await fetchProfileWithRetry(u.id);
-        setProfile(data);
-        setSentryUser(u, data);
-      } else {
-        setProfile(null);
-        setSentryUser(null);
+      try {
+        const u = session?.user || null;
+        const nextId = u?.id || null;
+        // Fires on INITIAL_SESSION, TOKEN_REFRESHED (hourly), USER_UPDATED, etc.
+        // Only react when the actual signed-in identity changes.
+        if (nextId === currentUserId) return;
+        currentUserId = nextId;
+        setUser(u);
+        if (u) {
+          const data = await fetchProfileWithRetry(u.id);
+          setProfile(data);
+          setProfileError(!data); // null after retries = the fetch failed
+          setSentryUser(u, data);
+        } else {
+          setProfile(null);
+          setProfileError(false);
+          setSentryUser(null);
+        }
+      } catch (err) {
+        console.error('[auth] onAuthStateChange handler error:', err);
       }
     });
     return () => subscription.unsubscribe();
@@ -210,7 +245,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <AuthContext.Provider value={{ user, profile, setProfile, loading }}>
+      <AuthContext.Provider value={{ user, profile, setProfile, loading, profileError }}>
         <BrowserRouter><AppRoutes /></BrowserRouter>
       </AuthContext.Provider>
     </ErrorBoundary>

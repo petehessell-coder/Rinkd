@@ -94,7 +94,6 @@ function BackButton({ inline = false }) {
 
 export default function Layout({ children, profile }) {
   const location = useLocation();
-  const navigate = useNavigate();
   const [moreOpen, setMoreOpen] = useState(false);
   const showBack = shouldShowBack(location.pathname);
 
@@ -102,8 +101,14 @@ export default function Layout({ children, profile }) {
   useEffect(() => { setMoreOpen(false); }, [location.pathname]);
 
   const handleSignOut = async () => {
-    await signOut();
-    navigate('/');
+    try {
+      await signOut();
+    } catch (err) {
+      console.warn('[signOut] errored, forcing reload anyway:', err?.message || err);
+    }
+    // Full reload, not navigate(). A hard reload rebuilds auth state from
+    // scratch — a stale session can't linger and bounce the user back in.
+    window.location.href = '/';
   };
 
   const isActive = (item) =>
@@ -275,22 +280,31 @@ export default function Layout({ children, profile }) {
 function BellBadge({ userId }) {
   const [count, setCount] = useState(0);
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) return undefined;
     let cancelled = false;
+    let interval = null;
+    let unsub = null;
     (async () => {
       try {
         const { getUnreadCount, subscribe } = await import('../lib/notifications');
+        if (cancelled) return;
         const refresh = async () => {
           const c = await getUnreadCount();
           if (!cancelled) setCount(c);
         };
         refresh();
-        const interval = setInterval(refresh, 45_000);
-        const unsub = subscribe(userId, refresh);
-        return () => { clearInterval(interval); unsub(); };
+        interval = setInterval(refresh, 45_000);
+        unsub = subscribe(userId, refresh);
       } catch { /* swallow */ }
     })();
-    return () => { cancelled = true; };
+    // Synchronous cleanup — actually reaches React (the old version returned
+    // its cleanup to the async IIFE's promise, so the timer + realtime channel
+    // leaked on every navigation). Tears down even if the import is still pending.
+    return () => {
+      cancelled = true;
+      if (interval) clearInterval(interval);
+      if (unsub) unsub();
+    };
   }, [userId]);
   if (!count) return null;
   return (

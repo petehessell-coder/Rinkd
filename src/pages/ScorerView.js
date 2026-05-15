@@ -93,6 +93,7 @@ export default function ScorerView() {
   useWakeLock(true);
   const [game, setGame] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [authorized, setAuthorized] = useState(true);
   const [saving, setSaving] = useState(false);
   const [homeScore, setHomeScore] = useState(0);
   const [awayScore, setAwayScore] = useState(0);
@@ -100,8 +101,9 @@ export default function ScorerView() {
   const [status, setStatus] = useState('scheduled');
   const [goals, setGoals] = useState([]);
   const [penalties, setPenalties] = useState([]);
-  const [shots, setShots] = useState({});
+  const [shotRows, setShotRows] = useState([]);
   const [goalieChanges, setGoalieChanges] = useState([]);
+  const [errorMsg, setErrorMsg] = useState('');
   const [goalModal, setGoalModal] = useState(false);
   const [penaltyModal, setPenaltyModal] = useState(false);
   const [goalieModal, setGoalieModal] = useState(null);
@@ -113,12 +115,31 @@ export default function ScorerView() {
   const load = useCallback(async () => {
     const { data: g } = isLeague
       ? await supabase.from('league_games')
-          .select('*, home_team:league_teams!home_team_id(id, team_name, team:teams(id,name)), away_team:league_teams!away_team_id(id, team_name, team:teams(id,name)), rink:rinks(name,sub_rink), league:leagues(name)')
+          .select('*, home_team:league_teams!home_team_id(id, team_name, team:teams(id,name)), away_team:league_teams!away_team_id(id, team_name, team:teams(id,name)), rink:rinks(name,sub_rink), league:leagues(name,commissioner_id)')
           .eq('id', gameId).single()
       : await supabase.from('games')
-          .select('*, home_team:tournament_teams!home_team_id(id,team_name), away_team:tournament_teams!away_team_id(id,team_name), rink:rinks(name,sub_rink), tournament:tournaments(name)')
+          .select('*, home_team:tournament_teams!home_team_id(id,team_name), away_team:tournament_teams!away_team_id(id,team_name), rink:rinks(name,sub_rink), tournament:tournaments(name,director_id)')
           .eq('id', gameId).single();
     if (!g) { navigate(-1); return; }
+
+    // Authorization — only the director / assigned scorer (tournament) or the
+    // commissioner / assigned scorekeeper (league) may open the live scorer.
+    const { data: { user } } = await supabase.auth.getUser();
+    let ok = false;
+    if (user) {
+      if (isLeague) {
+        ok = user.id === g.scorekeeper_id || user.id === g.league?.commissioner_id;
+      } else {
+        ok = user.id === g.scorekeeper_id || user.id === g.tournament?.director_id;
+        if (!ok && g.tournament_id) {
+          const { data: roleRows } = await supabase.from('tournament_roles')
+            .select('role').eq('tournament_id', g.tournament_id).eq('user_id', user.id).limit(1);
+          ok = !!(roleRows && roleRows.length);
+        }
+      }
+    }
+    if (!ok) { setAuthorized(false); setLoading(false); return; }
+
     setGame(g);
     setHomeScore(g.home_score || 0);
     setAwayScore(g.away_score || 0);
@@ -134,9 +155,7 @@ export default function ScorerView() {
     ]);
     setGoals(gl || []);
     setPenalties(pl || []);
-    const shotMap = {};
-    (sl || []).forEach(s => { shotMap[s.team_id] = (shotMap[s.team_id] || 0) + s.count; });
-    setShots(shotMap);
+    setShotRows(sl || []);
     setGoalieChanges(gc || []);
     setLoading(false);
   }, [gameId, navigate]);
@@ -145,11 +164,14 @@ export default function ScorerView() {
 
   const updateScore = async (hs, as, p, st) => {
     setSaving(true);
-    await supabase.from(isLeague ? 'league_games' : 'games').update({ home_score: hs, away_score: as, period: p, status: st }).eq('id', gameId);
+    const { error } = await supabase.from(isLeague ? 'league_games' : 'games').update({ home_score: hs, away_score: as, period: p, status: st }).eq('id', gameId);
     setSaving(false);
+    if (error) setErrorMsg('Could not save the score — check your connection and try again.');
+    return { error };
   };
 
   const changeScore = (team, delta) => {
+    setErrorMsg('');
     const hs = team === 'home' ? Math.max(0, homeScore + delta) : homeScore;
     const as = team === 'away' ? Math.max(0, awayScore + delta) : awayScore;
     setHomeScore(hs); setAwayScore(as);
@@ -159,6 +181,7 @@ export default function ScorerView() {
   };
 
   const changePeriod = async (p) => {
+    setErrorMsg('');
     const newStatus = p === 'final' ? 'final' : 'live';
     const newPeriod = p === 'final' ? period : parseInt(p);
     setPeriod(newPeriod); setStatus(newStatus);
@@ -166,15 +189,22 @@ export default function ScorerView() {
   };
 
   const changeShots = async (teamId, delta) => {
-    const current = shots[teamId] || 0;
-    const newCount = Math.max(0, current + delta);
-    setShots(prev => ({ ...prev, [teamId]: newCount }));
-    await supabase.from('game_shots').upsert({ game_id: gameId, team_id: teamId, period, count: newCount }, { onConflict: 'game_id,team_id,period' });
+    setErrorMsg('');
+    // Shots are tracked per period. Read THIS period's row only — never the
+    // cross-period total — so we don't write an inflated count into one row.
+    const existing = shotRows.find(s => s.team_id === teamId && s.period === period);
+    const newCount = Math.max(0, (existing ? existing.count : 0) + delta);
+    const { data, error } = await supabase.from('game_shots')
+      .upsert({ game_id: gameId, team_id: teamId, period, count: newCount }, { onConflict: 'game_id,team_id,period' })
+      .select().single();
+    if (error || !data) { setErrorMsg('Could not save shots — check your connection and try again.'); return; }
+    setShotRows(prev => [...prev.filter(s => !(s.team_id === teamId && s.period === period)), data]);
   };
 
   const saveGoal = async () => {
     if (!goalForm.team_id) return;
-    const { data } = await supabase.from('game_goals').insert({
+    setErrorMsg('');
+    const { data, error } = await supabase.from('game_goals').insert({
       game_id: gameId, team_id: goalForm.team_id,
       scorer_number: goalForm.scorer_number ? parseInt(goalForm.scorer_number) : null,
       assist1_number: goalForm.assist1_number ? parseInt(goalForm.assist1_number) : null,
@@ -182,17 +212,19 @@ export default function ScorerView() {
       period: goalForm.period, time_in_period: goalForm.time_in_period || null,
       is_shootout: goalForm.is_shootout,
     }).select().single();
-    if (data) {
-      setGoals(prev => [data, ...prev]);
-      if (goalForm.team_id === game.home_team?.id) changeScore('home', 1);
-      else changeScore('away', 1);
-    }
+    // Keep the modal open and the score untouched if the write failed — the
+    // goal was NOT recorded, and the scorer needs to know so they can retry.
+    if (error || !data) { setErrorMsg('Could not save the goal — check your connection and try again. The goal was NOT recorded.'); return; }
+    setGoals(prev => [data, ...prev]);
+    if (goalForm.team_id === game.home_team?.id) changeScore('home', 1);
+    else changeScore('away', 1);
     setGoalModal(false);
     setGoalForm(prev => ({ ...prev, scorer_number: '', assist1_number: '', assist2_number: '', time_in_period: '' }));
   };
 
   const savePenalty = async () => {
     if (!penaltyForm.team_id) return;
+    setErrorMsg('');
     const { data, error } = await supabase.from('game_penalties').insert({
       game_id: gameId, team_id: penaltyForm.team_id,
       player_number: penaltyForm.player_number ? parseInt(penaltyForm.player_number) : null,
@@ -200,35 +232,61 @@ export default function ScorerView() {
       duration_minutes: PENALTY_DURATIONS[penaltyForm.severity] || 2,
       period: penaltyForm.period, time_in_period: penaltyForm.time_in_period || null,
     }).select().single();
-    if (data) setPenalties(prev => [data, ...prev]);
+    if (error || !data) { setErrorMsg('Could not save the penalty — check your connection and try again. It was NOT recorded.'); return; }
+    setPenalties(prev => [data, ...prev]);
     setPenaltyModal(false);
     setPenaltyForm(prev => ({ ...prev, player_number: '', time_in_period: '' }));
   };
 
   const saveGoalie = async () => {
     if (!goalieModal) return;
-    const { data } = await supabase.from('game_goalie_changes').insert({
+    setErrorMsg('');
+    const { data, error } = await supabase.from('game_goalie_changes').insert({
       game_id: gameId, team_id: goalieModal,
       goalie_out_number: goalieForm.goalie_out_number ? parseInt(goalieForm.goalie_out_number) : null,
       goalie_in_number: goalieForm.goalie_in_number ? parseInt(goalieForm.goalie_in_number) : null,
       period: goalieForm.period, time_in_period: goalieForm.time_in_period || null,
     }).select().single();
-    if (data) setGoalieChanges(prev => [data, ...prev]);
+    if (error || !data) { setErrorMsg('Could not save the goalie change — check your connection and try again.'); return; }
+    setGoalieChanges(prev => [data, ...prev]);
     setGoalieModal(null);
     setGoalieForm({ goalie_out_number: '', goalie_in_number: '', period, time_in_period: '' });
   };
 
   const deleteGoal = async (id) => {
-    await supabase.from('game_goals').delete().eq('id', id);
+    setErrorMsg('');
+    const goal = goals.find(g => g.id === id);
+    const { error } = await supabase.from('game_goals').delete().eq('id', id);
+    if (error) { setErrorMsg('Could not delete the goal — check your connection and try again.'); return; }
     setGoals(prev => prev.filter(g => g.id !== id));
+    // Keep the score in sync with the goal log — removing a goal must drop the score too.
+    if (goal) {
+      if (goal.team_id === game.home_team?.id) changeScore('home', -1);
+      else changeScore('away', -1);
+    }
   };
 
   const deletePenalty = async (id) => {
-    await supabase.from('game_penalties').delete().eq('id', id);
+    setErrorMsg('');
+    const { error } = await supabase.from('game_penalties').delete().eq('id', id);
+    if (error) { setErrorMsg('Could not delete the penalty — check your connection and try again.'); return; }
     setPenalties(prev => prev.filter(p => p.id !== id));
   };
 
   if (loading) return <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif' }}>Loading game...</div>;
+
+  if (!authorized) return (
+    <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', padding: 24 }}>
+      <div style={{ textAlign: 'center', maxWidth: 320 }}>
+        <div style={{ fontSize: 32, marginBottom: 12 }}>🔒</div>
+        <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, marginBottom: 8 }}>Scorer access only</div>
+        <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.5)', marginBottom: 18, lineHeight: 1.5 }}>
+          Only the {isLeague ? 'league commissioner or assigned scorekeeper' : 'tournament director or an assigned scorer'} can run live scoring for this game.
+        </div>
+        <button onClick={() => navigate(-1)} style={{ background: C.blue, border: 'none', borderRadius: 999, color: '#fff', padding: '10px 22px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>← Back</button>
+      </div>
+    </div>
+  );
 
   // League games nest team under league_team
   const homeTeam = isLeague
@@ -241,6 +299,9 @@ export default function ScorerView() {
   const periodLabel = (p) => p === 1 ? '1st' : p === 2 ? '2nd' : p === 3 ? '3rd' : p === 4 ? 'OT' : 'SO';
   const severityColor = (s) => s.includes('Major') || s.includes('Match') ? C.red : '#F59E0B';
   const teamName = (id) => id === homeTeam?.id ? homeTeam?.team_name : awayTeam?.team_name;
+  // Total shots per team, summed across periods — derived from the per-period rows.
+  const shotTotals = {};
+  shotRows.forEach(s => { shotTotals[s.team_id] = (shotTotals[s.team_id] || 0) + (s.count || 0); });
 
   return (
     <div style={{ background: C.dark, minHeight: '100vh', fontFamily: 'Barlow, sans-serif', color: '#F4F7FA', maxWidth: 480, margin: '0 auto', paddingBottom: 40 }}>
@@ -256,6 +317,13 @@ export default function ScorerView() {
           {status === 'live' ? '● LIVE' : status === 'final' ? 'FINAL' : 'SCHEDULED'}
         </span>
       </div>
+
+      {errorMsg && (
+        <div onClick={() => setErrorMsg('')}
+          style={{ background: 'rgba(215,38,56,0.18)', borderBottom: '0.5px solid rgba(215,38,56,0.6)', color: '#F4F7FA', padding: '11px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'center' }}>
+          ⚠ {errorMsg} <span style={{ opacity: 0.6, fontWeight: 400 }}>· tap to dismiss</span>
+        </div>
+      )}
 
       <div style={{ padding: 16 }}>
 
@@ -329,7 +397,7 @@ export default function ScorerView() {
               <button onClick={() => changeShots(team?.id, -1)} style={{ width: 36, height: 36, background: 'rgba(244,247,250,0.08)', border: 'none', borderRadius: 8, color: '#F4F7FA', fontSize: 18, cursor: 'pointer', transition: 'all 0.15s' }}
                 onMouseEnter={e => { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; }}
                 onMouseLeave={e => { e.currentTarget.style.background = 'rgba(244,247,250,0.08)'; e.currentTarget.style.color = '#F4F7FA'; }}>−</button>
-              <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 32, color: '#F4F7FA', width: 48, textAlign: 'center' }}>{shots[team?.id] || 0}</span>
+              <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 32, color: '#F4F7FA', width: 48, textAlign: 'center' }}>{shotTotals[team?.id] || 0}</span>
               <button onClick={() => changeShots(team?.id, 1)} style={{ width: 44, height: 44, background: C.blue, border: 'none', borderRadius: 8, color: '#F4F7FA', fontSize: 22, cursor: 'pointer', transition: 'all 0.15s' }}
                 onMouseEnter={e => { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; }}
                 onMouseLeave={e => { e.currentTarget.style.background = C.blue; e.currentTarget.style.color = '#F4F7FA'; }}>+</button>
@@ -403,7 +471,7 @@ export default function ScorerView() {
           game={{ ...game, home_score: homeScore, away_score: awayScore }}
           goals={goals}
           penalties={penalties}
-          shots={shots}
+          shots={shotTotals}
           goalieChanges={goalieChanges}
           isLeague={isLeague}
           onClose={() => setShowScoresheet(false)}

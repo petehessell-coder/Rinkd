@@ -206,6 +206,6 @@ export async function getUserRoleOnTeam(teamId) {
     .select('role, is_captain, is_alternate')
     .eq('team_id', teamId)
     .eq('user_id', user.id)
-    .single();
+    .maybeSingle();
   return data ?? null;
 }

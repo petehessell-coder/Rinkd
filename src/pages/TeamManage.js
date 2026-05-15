@@ -124,7 +124,7 @@ function ManageTeam({ id, profile, navigate }) {
   const [error, setError] = useState(null);
 
   // Add member form
-  const [memberForm, setMemberForm] = useState({ handle: '', jersey_number: '', position: 'Center', role: 'player', shot_hand: 'left' });
+  const [memberForm, setMemberForm] = useState({ name: '', email: '', jersey_number: '', position: 'Center', role: 'player', shot_hand: 'left' });
   // Add game form
   const [gameForm, setGameForm] = useState({ opponent: '', is_home: true, location: '', start_time: '', notes: '' });
 

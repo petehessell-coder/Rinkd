@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DatePicker from '../components/DatePicker';
 import DateTimePicker from '../components/DateTimePicker';
@@ -527,6 +527,9 @@ export default function TournamentCreate({ profile }) {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  // Once the tournament row is created, remember its id — a retry after a
+  // partial failure must not create a second tournament.
+  const createdTournamentId = useRef(null);
 
   const [data, setData] = useState({
     name: '', division: '', start_date: '', end_date: '',
@@ -539,10 +542,18 @@ export default function TournamentCreate({ profile }) {
   const onChange = (key, val) => setData(prev => ({ ...prev, [key]: val }));
 
   const handleSubmit = async () => {
+    if (loading) return; // guard against a double-click while creation is in flight
+    // A retry after a partial failure must not create a duplicate tournament —
+    // if one was already created, just send the director to it to finish setup.
+    if (createdTournamentId.current) {
+      navigate('/tournament/' + createdTournamentId.current);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Your session expired — please sign in again.');
 
       // 1. Create rinks
       const rinkMap = {};
@@ -563,6 +574,7 @@ export default function TournamentCreate({ profile }) {
           settings: { ...data.settings, venue_name: data.venue_name, venue_address: data.venue_address, pool_names: data.pool_names },
         }).select().single();
       if (te) throw te;
+      createdTournamentId.current = t.id; // mark created so a retry can't duplicate it
 
       // 3. Director role
       await supabase.from('tournament_roles').insert({ tournament_id: t.id, user_id: user.id, role: 'director' });
@@ -596,7 +608,7 @@ export default function TournamentCreate({ profile }) {
       // 5. Create games
       for (const g of data.games) {
         if (!teamMap[g.home] || !teamMap[g.away]) continue;
-        await supabase.from('games').insert({
+        const { error: ge } = await supabase.from('games').insert({
           tournament_id: t.id,
           home_team_id: teamMap[g.home],
           away_team_id: teamMap[g.away],
@@ -604,6 +616,7 @@ export default function TournamentCreate({ profile }) {
           start_time: g.time,
           status: 'scheduled', round: 'pool',
         });
+        if (ge) throw ge;
       }
 
       navigate('/tournament/' + t.id);

@@ -11,7 +11,10 @@
 //   * postMessage('SW_UPDATED') is broadcast on activate so the React app can
 //     show a "tap to reload" banner.
 
-const BUILD_ID = '__BUILD_ID__';
+// Substituted at build time by scripts/stamp-sw.js. The fallback keeps the SW
+// self-sufficient if that step is ever skipped (e.g. local `npm start`).
+const RAW_BUILD_ID = '__BUILD_ID__';
+const BUILD_ID = RAW_BUILD_ID.includes('BUILD_ID') ? String(Date.now()) : RAW_BUILD_ID;
 const CACHE_SHELL = `rinkd-shell-${BUILD_ID}`;
 const CACHE_ASSETS = `rinkd-assets-${BUILD_ID}`;
 const SHELL_URLS = ['/', '/index.html', '/manifest.json'];
@@ -59,8 +62,12 @@ self.addEventListener('fetch', (event) => {
     event.respondWith((async () => {
       try {
         const res = await fetch(request, { cache: 'no-store' });
-        const cache = await caches.open(CACHE_SHELL);
-        cache.put('/index.html', res.clone()).catch(() => null);
+        // Only cache a genuinely good shell — caching a 500/maintenance page
+        // here would poison the offline experience until the next good fetch.
+        if (res && res.ok) {
+          const cache = await caches.open(CACHE_SHELL);
+          cache.put('/index.html', res.clone()).catch(() => null);
+        }
         return res;
       } catch {
         const cached = await caches.match('/index.html');

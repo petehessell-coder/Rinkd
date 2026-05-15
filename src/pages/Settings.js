@@ -125,12 +125,15 @@ export default function SettingsPage({ currentUser, profile }) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) throw new Error(data.error || `Failed (${res.status})`);
       track('account_deleted');
-      await signOut();
-      window.location.href = '/?deleted=1';
     } catch (err) {
       setDeleteError(err?.message || 'Delete failed. Email hello@rinkd.app and we\'ll handle it.');
       setDeleting(false);
+      return;
     }
+    // Deletion succeeded — the account is gone. A sign-out or redirect failure
+    // must NOT surface as "Delete failed", so it lives outside the try/catch.
+    try { await signOut(); } catch { /* account already deleted; ignore */ }
+    window.location.href = '/?deleted=1';
   };
 
   const section = {

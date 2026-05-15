@@ -207,6 +207,7 @@ export default function RosterUpload({ teamId, teamName, invitedBy, onComplete }
                 <div style={{ color: B.steel }}>
                   {result.sent > 0 && `📬 Sent ${result.sent} invite ${result.sent === 1 ? 'email' : 'emails'}. `}
                   {result.skipped > 0 && `Skipped ${result.skipped} already on the team. `}
+                  {result.capped > 0 && `${result.capped} more weren't sent — uploads cap at 50 per batch, so re-upload the rest. `}
                 </div>
                 {result.errors && result.errors.length > 0 && (
                   <ul style={{ fontSize: 12, color: B.amber, marginTop: 6, paddingLeft: 18 }}>

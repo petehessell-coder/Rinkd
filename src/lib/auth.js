@@ -12,6 +12,16 @@ export async function signUp({ email, password, name, handle, position, level, d
     return { error: { message: 'You must be 13 or older to create a Rinkd account.' } };
   }
 
+  // Pre-check handle availability BEFORE creating the auth user. A duplicate
+  // handle is the most common cause of the profile insert failing — catching
+  // it here avoids leaving an orphaned auth.users row with no profile.
+  const cleanHandle = handle.replace('@', '');
+  const { data: handleTaken } = await supabase
+    .from('profiles').select('id').eq('handle', cleanHandle).maybeSingle();
+  if (handleTaken) {
+    return { error: { message: 'That handle is already taken — please pick another.' } };
+  }
+
   const { data, error } = await supabase.auth.signUp({ email, password });
   if (error) return { error };
 
@@ -26,7 +36,7 @@ export async function signUp({ email, password, name, handle, position, level, d
     id: userId,
     email: email.toLowerCase(),
     name,
-    handle: handle.replace('@', ''),
+    handle: cleanHandle,
     avatar_color: color,
     avatar_initials: initials,
     position: position || 'Fan',
@@ -38,7 +48,14 @@ export async function signUp({ email, password, name, handle, position, level, d
     created_at: new Date().toISOString()
   });
 
-  if (profileError) console.error('Profile creation error:', profileError);
+  // If the profile row didn't get created, the account is half-built — every
+  // page that assumes a profile will break. Surface it instead of reporting
+  // success. (The durable fix is a DB trigger that creates the profile
+  // transactionally with the auth user — see Rinkd_Canonical_Data_Model.md.)
+  if (profileError) {
+    console.error('Profile creation error:', profileError);
+    return { error: { message: "Your account was created but your profile didn't finish setting up. Please contact hello@rinkd.app." } };
+  }
 
   // If a team manager invited this user before they signed up, link them up now.
   // Quiet failure — the signup itself still succeeds.
@@ -81,7 +98,10 @@ export async function signIn({ email, password }) {
 }
 
 export async function signOut() {
-  return supabase.auth.signOut();
+  // 'local' scope clears this device's session from local storage without a
+  // network round-trip to revoke the token server-side. Far more reliable on
+  // flaky wifi, and it's the right scope for a "sign out of this device" button.
+  return supabase.auth.signOut({ scope: 'local' });
 }
 
 export async function getProfile(userId) {

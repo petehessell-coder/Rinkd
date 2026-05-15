@@ -1,19 +1,27 @@
 import { supabase } from './supabase';
 
-export async function getPosts(limit = 30) {
-  const { data, error } = await supabase
+export async function getPosts(limit = 30, before = null) {
+  let query = supabase
     .from('posts')
     .select(`*, profiles(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position)`)
     .order('created_at', { ascending: false })
     .limit(limit);
+  // Keyset pagination — fetch the page of posts older than the last one we hold.
+  if (before) query = query.lt('created_at', before);
+  const { data, error } = await query;
   return { data, error };
 }
 
-export async function getFollowingPosts(userId, limit = 30) {
+export async function getFollowingPosts(userId, limit = 30, before = null) {
+  // Cap the follow list. A user following thousands would build a massive IN
+  // clause that hits PostgREST URL limits and slows the query. 1000 is far
+  // beyond any real user — the durable fix is a server-side join (tracked in
+  // Rinkd_Canonical_Data_Model.md follow-ups).
   const { data: follows } = await supabase
     .from('follows')
     .select('following_id')
-    .eq('follower_id', userId);
+    .eq('follower_id', userId)
+    .limit(1000);
 
   // The Following feed must include the user's OWN posts. Without this, when
   // someone posts a chirp the feed reloads and their post is invisible to
@@ -22,12 +30,15 @@ export async function getFollowingPosts(userId, limit = 30) {
   const ids = (follows || []).map((f) => f.following_id);
   if (!ids.includes(userId)) ids.push(userId);
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('posts')
     .select(`*, profiles(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position)`)
     .in('author_id', ids)
     .order('created_at', { ascending: false })
     .limit(limit);
+  // Keyset pagination — fetch the page of posts older than the last one we hold.
+  if (before) query = query.lt('created_at', before);
+  const { data, error } = await query;
   return { data, error };
 }
 

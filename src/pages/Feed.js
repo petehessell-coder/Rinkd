@@ -9,6 +9,9 @@ import { FeedSkeleton, EmptyState } from '../components/Skeletons';
 import { classifyImage } from '../lib/imageModeration';
 import RinksideFeaturedCard from '../components/RinksideFeaturedCard';
 
+// Feed page size — keyset pagination pulls this many chirps per request.
+const PAGE_SIZE = 20;
+
 const TAGS = [
   { label: 'Goal Alert', color: '#D72638' },
   { label: 'Game Recap', color: '#2E5B8C' },
@@ -131,10 +134,9 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, onLik
       c.id === tempId ? { ...data, profiles: c.profiles } : c
     ));
 
-    // Bubble up so the parent Feed can refresh the comment-count chip on the
-    // card. (Today this triggers a full feed reload; a future patch could
-    // teach Feed to bump post.comment_count locally instead.)
-    onComment();
+    // Bubble up so the parent Feed bumps the comment-count chip on this card
+    // locally — no full feed reload.
+    onComment(post.id);
   };
 
   return (
@@ -205,6 +207,8 @@ export default function Feed({ currentUser, profile }) {
   const [posts, setPosts] = useState([]);
   const [likedPosts, setLikedPosts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [composerOpen, setComposerOpen] = useState(false);
   const [content, setContent] = useState('');
   const [selectedTag, setSelectedTag] = useState(null);
@@ -222,16 +226,42 @@ export default function Feed({ currentUser, profile }) {
     setLoading(true);
     let data;
     if (tab === 'following' && currentUser) {
-      ({ data } = await getFollowingPosts(currentUser.id, 50));
+      ({ data } = await getFollowingPosts(currentUser.id, PAGE_SIZE));
     } else {
-      ({ data } = await getPosts(50));
+      ({ data } = await getPosts(PAGE_SIZE));
     }
-    setPosts(data || []);
+    const page = data || [];
+    setPosts(page);
+    setHasMore(page.length === PAGE_SIZE);
     if (currentUser) { const liked = await getLikedPosts(currentUser.id); setLikedPosts(liked); }
     setLoading(false);
   }, [currentUser, tab]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Keyset pagination — append the next page of older chirps.
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || posts.length === 0) return;
+    setLoadingMore(true);
+    const before = posts[posts.length - 1].created_at;
+    let data;
+    if (tab === 'following' && currentUser) {
+      ({ data } = await getFollowingPosts(currentUser.id, PAGE_SIZE, before));
+    } else {
+      ({ data } = await getPosts(PAGE_SIZE, before));
+    }
+    const page = data || [];
+    setPosts(prev => [...prev, ...page]);
+    setHasMore(page.length === PAGE_SIZE);
+    setLoadingMore(false);
+  }, [loadingMore, hasMore, posts, tab, currentUser]);
+
+  // A new comment just bumps the count chip on that one card — no full reload.
+  const handleCommentAdded = useCallback((postId) => {
+    setPosts(prev => prev.map(p =>
+      p.id === postId ? { ...p, comment_count: (p.comment_count || 0) + 1 } : p
+    ));
+  }, []);
 
   const handleMediaSelect = async (e) => {
     const file = e.target.files[0];
@@ -451,9 +481,19 @@ export default function Feed({ currentUser, profile }) {
             body={tab === 'following' ? 'Follow some players and teams to see their highlights and updates here.' : 'Be the first to chirp. Photos, video clips, goal alerts, locker-room takes — all welcome.'}
             cta={tab === 'following' ? { label: 'Discover Players', onClick: () => navigate('/discover') } : { label: 'Drop a Chirp', onClick: () => setComposerOpen(true) }}
           />
-        ) : posts.map(post => (
-          <PostCard key={post.id} post={post} currentUser={currentUser} profile={profile} likedPosts={likedPosts} onLike={handleLike} onComment={load} />
-        ))}
+        ) : (
+          <>
+            {posts.map(post => (
+              <PostCard key={post.id} post={post} currentUser={currentUser} profile={profile} likedPosts={likedPosts} onLike={handleLike} onComment={handleCommentAdded} />
+            ))}
+            {hasMore && (
+              <button onClick={loadMore} disabled={loadingMore}
+                style={{ width: '100%', padding: '12px', marginTop: 4, borderRadius: 10, background: C.navy, border: `1px solid ${C.border}`, color: C.steel, fontFamily: "'Barlow', sans-serif", fontSize: 14, fontWeight: 600, cursor: loadingMore ? 'default' : 'pointer' }}>
+                {loadingMore ? 'Loading…' : 'Load more chirps'}
+              </button>
+            )}
+          </>
+        )}
       </div>
     </Layout>
   );
