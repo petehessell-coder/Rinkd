@@ -19,13 +19,24 @@ function SigPad({ label, sigRef, onClear }) {
   );
 }
 
-function StatusRow({ icon, label, status }) {
-  const color = status === 'success' ? '#22C55E' : status === 'error' ? C.red : status === 'loading' ? '#F59E0B' : 'rgba(244,247,250,0.3)';
-  const symbol = status === 'success' ? '✓' : status === 'error' ? '✗' : status === 'loading' ? '...' : '–';
+function StatusRow({ icon, label, status, skippedLabel }) {
+  // 'skipped' = the system correctly did nothing (e.g. no email recipients on
+  // file). Render it distinctly from success/error so the director can tell
+  // "no one was emailed because no one was listed" apart from "send failed."
+  const color = status === 'success' ? '#22C55E'
+    : status === 'error' ? C.red
+    : status === 'loading' ? '#F59E0B'
+    : status === 'skipped' ? 'rgba(244,247,250,0.5)'
+    : 'rgba(244,247,250,0.3)';
+  const symbol = status === 'success' ? '✓'
+    : status === 'error' ? '✗'
+    : status === 'loading' ? '...'
+    : status === 'skipped' ? '—'
+    : '–';
   return (
     <div style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:'0.5px solid rgba(244,247,250,0.06)' }}>
       <span style={{ fontSize:16 }}>{icon}</span>
-      <span style={{ flex:1, fontSize:13, color:'rgba(244,247,250,0.6)' }}>{label}</span>
+      <span style={{ flex:1, fontSize:13, color:'rgba(244,247,250,0.6)' }}>{status === 'skipped' && skippedLabel ? skippedLabel : label}</span>
       <span style={{ fontSize:13, fontWeight:700, color }}>{symbol}</span>
     </div>
   );
@@ -156,15 +167,32 @@ export default function Scoresheet({ game, goals, penalties, shots, goalieChange
               managerEmails = (profiles||[]).map(p => p.email).filter(Boolean);
             }
           }
+        } else {
+          // Tournament games — tournament_teams holds contact_email directly.
+          // Without this branch the lookup was wrapped in `if (isLeague)`, so
+          // tournament scoresheets went to no one while the UI claimed
+          // "managers notified" — invisible to the director.
+          const ids = [game.home_team?.id, game.away_team?.id].filter(Boolean);
+          if (ids.length > 0) {
+            const { data: tteams } = await supabase.from("tournament_teams").select("contact_email").in("id", ids);
+            managerEmails = (tteams||[]).map(t => t.contact_email).filter(Boolean);
+          }
         }
       } catch(e) { console.error("Manager lookup failed:", e); }
 
-      setStatus(s => ({ ...s, storage:"loading", email:"loading" }));
+      setStatus(s => ({ ...s, storage:"loading", email: managerEmails.length === 0 ? "skipped" : "loading" }));
       const { data, error } = await supabase.functions.invoke("submit-scoresheet", {
         body: { pdf_base64: pdfBase64, filename, game_id: game.id, is_league: isLeague, home_team: homeTeam, away_team: awayTeam, context_name: contextName, manager_emails: managerEmails }
       });
       if (error) throw error;
-      setStatus({ pdf:"success", storage: data.results?.storage === "uploaded" ? "success" : "error", email: data.results?.email === "sent" ? "success" : managerEmails.length === 0 ? "pending" : "error" });
+      // Resolve each subsystem's status independently. "skipped" means there
+      // was no recipient list and the edge function correctly didn't try to
+      // send — distinct from "error" (tried, failed) and "success" (sent).
+      const storageOk = data.results?.storage === "uploaded";
+      const emailOutcome = managerEmails.length === 0
+        ? "skipped"
+        : data.results?.email === "sent" ? "success" : "error";
+      setStatus({ pdf:"success", storage: storageOk ? "success" : "error", email: emailOutcome });
     } catch(e) {
       console.error("Submission error:", e);
       setStatus(s => ({ ...s, storage:"error", email:"error" }));
@@ -214,7 +242,8 @@ export default function Scoresheet({ game, goals, penalties, shots, goalieChange
             <div style={{ fontSize:13, fontWeight:700, color:C.ice, marginBottom:12 }}>Submitting scoresheet...</div>
             <StatusRow icon="📄" label="Generating PDF" status={status.pdf} />
             <StatusRow icon="☁️" label="Saving to Rinkd" status={status.storage} />
-            <StatusRow icon="✉️" label="Emailing team managers" status={status.email} />
+            <StatusRow icon="✉️" label="Emailing team managers" status={status.email}
+              skippedLabel={isLeague ? "No manager emails on file — skipped" : "No team contact emails on file — skipped"} />
           </div>
         )}
 
@@ -223,11 +252,18 @@ export default function Scoresheet({ game, goals, penalties, shots, goalieChange
             <div style={{ background:"rgba(34,197,94,0.1)", border:"0.5px solid rgba(34,197,94,0.3)", borderRadius:10, padding:"14px 16px", marginBottom:16, textAlign:"center" }}>
               <div style={{ fontSize:24, marginBottom:6 }}>✅</div>
               <div style={{ fontSize:14, fontWeight:700, color:"#22C55E", marginBottom:4 }}>Scoresheet submitted</div>
-              <div style={{ fontSize:12, color:"rgba(244,247,250,0.4)" }}>PDF downloaded · saved to Rinkd · managers notified</div>
+              <div style={{ fontSize:12, color:"rgba(244,247,250,0.4)" }}>
+                PDF downloaded · saved to Rinkd · {status.email === 'success'
+                  ? 'managers notified'
+                  : status.email === 'skipped'
+                    ? (isLeague ? 'no manager emails on file' : 'no team emails on file')
+                    : "couldn't email managers"}
+              </div>
             </div>
             <StatusRow icon="📄" label="PDF generated & downloaded" status={status.pdf} />
             <StatusRow icon="☁️" label="Saved to Rinkd" status={status.storage} />
-            <StatusRow icon="✉️" label="Emailed to team managers" status={status.email} />
+            <StatusRow icon="✉️" label="Emailed to team managers" status={status.email}
+              skippedLabel={isLeague ? "No manager emails on file — skipped" : "No team contact emails on file — skipped"} />
             <button onClick={onClose}
               style={{ width:"100%", padding:12, background:"rgba(46,91,140,0.2)", border:"0.5px solid rgba(46,91,140,0.4)", borderRadius:999, color:C.ice, fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"Barlow, sans-serif", marginTop:16, transition:"all 0.15s" }}
               onMouseEnter={e => { e.currentTarget.style.background=C.ice; e.currentTarget.style.color=C.navy; }}

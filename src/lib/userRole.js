@@ -13,11 +13,17 @@ import { supabase } from './supabase';
  * The role dropdown in the sidebar uses this to decide which menu items to show.
  */
 export function useUserRole(userId) {
-  const [role, setRole] = useState('player');
+  // null = still resolving. Callers that gate an "access denied" screen on
+  // role should render a neutral spinner while null, otherwise a real admin
+  // sees the rejection screen flash during the async lookup.
+  // `roleMenuSections(null)` falls through to the player-only menu, which is
+  // the safe default for sidebar consumers that don't care about loading.
+  const [role, setRole] = useState(null);
 
   useEffect(() => {
     if (!userId) { setRole('player'); return; }
     let cancelled = false;
+    setRole(null);
 
     async function run() {
       const { count: leagueCount } = await supabase
@@ -60,11 +66,15 @@ export function useUserRole(userId) {
  *   UPDATE profiles SET is_admin=true WHERE email='someone@rinkd.app';
  */
 export function useIsRinkdAdmin(userId) {
-  const [isAdmin, setIsAdmin] = useState(false);
+  // null = still resolving. Callers that gate an "access denied" screen on
+  // this should render a neutral spinner while null and only show rejection
+  // once the value is definitively false.
+  const [isAdmin, setIsAdmin] = useState(null);
 
   useEffect(() => {
     if (!userId) { setIsAdmin(false); return; }
     let cancelled = false;
+    setIsAdmin(null);
 
     (async () => {
       const { data } = await supabase

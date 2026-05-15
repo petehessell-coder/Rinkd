@@ -52,6 +52,7 @@ export default function RinksideEditor({ currentUser, profile }) {
   const [isPublished, setIsPublished] = useState(false);
   const [readMinutes, setReadMinutes] = useState(4);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
@@ -123,10 +124,15 @@ export default function RinksideEditor({ currentUser, profile }) {
   };
 
   const handleDelete = async () => {
-    if (!articleId) return;
+    if (!articleId || deleting) return;
     if (!window.confirm('Delete this article permanently?')) return;
+    setDeleting(true);
     const { error } = await deleteArticle(articleId);
-    if (error) { alert('Delete failed: ' + error.message); return; }
+    if (error) {
+      setDeleting(false);
+      alert('Delete failed: ' + error.message);
+      return;
+    }
     navigate('/rinkside');
   };
 
@@ -143,9 +149,9 @@ export default function RinksideEditor({ currentUser, profile }) {
                 {showPreview ? 'Edit' : 'Preview'}
               </button>
               {!isNew && (
-                <button onClick={handleDelete}
-                  style={{ background: 'transparent', color: C.red, border: `1px solid ${C.red}`, padding: '7px 14px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
-                  Delete
+                <button onClick={handleDelete} disabled={deleting}
+                  style={{ background: 'transparent', color: deleting ? C.steel : C.red, border: `1px solid ${deleting ? C.border : C.red}`, padding: '7px 14px', borderRadius: 999, cursor: deleting ? 'wait' : 'pointer', fontSize: 12, fontWeight: 600 }}>
+                  {deleting ? 'Deleting…' : 'Delete'}
                 </button>
               )}
               <button onClick={() => handleSave(false)} disabled={saving}

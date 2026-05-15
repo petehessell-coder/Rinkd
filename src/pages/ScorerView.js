@@ -162,6 +162,37 @@ export default function ScorerView() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Realtime — if two scorekeepers are entering events on the same game (a
+  // common case at tournaments), reload the events lists whenever either
+  // game_goals or game_penalties for this game changes. Score/period/status
+  // sync between scorers is a follow-up; for now the +1/+/- buttons + Live
+  // toggle are owned by whoever clicks them and converge via the DB write.
+  useEffect(() => {
+    if (!gameId) return;
+    let channel = null;
+    try {
+      const name = `scorer:${gameId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+      const refresh = async () => {
+        const [{ data: gl }, { data: pl }] = await Promise.all([
+          supabase.from('game_goals').select('*').eq('game_id', gameId).order('created_at', { ascending: false }),
+          supabase.from('game_penalties').select('*').eq('game_id', gameId).order('created_at', { ascending: false }),
+        ]);
+        if (gl) setGoals(gl);
+        if (pl) setPenalties(pl);
+      };
+      channel = supabase.channel(name)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'game_goals', filter: `game_id=eq.${gameId}` },
+          () => { refresh().catch(() => {}); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'game_penalties', filter: `game_id=eq.${gameId}` },
+          () => { refresh().catch(() => {}); })
+        .subscribe();
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[scorer] realtime subscribe failed; co-scorers will need to reload to see each other:', err);
+    }
+    return () => { try { if (channel) supabase.removeChannel(channel); } catch { /* swallow */ } };
+  }, [gameId]);
+
   const updateScore = async (hs, as, p, st) => {
     setSaving(true);
     const { error } = await supabase.from(isLeague ? 'league_games' : 'games').update({ home_score: hs, away_score: as, period: p, status: st }).eq('id', gameId);

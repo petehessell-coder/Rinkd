@@ -503,6 +503,7 @@ export default function Survey() {
   const [errors, setErrors] = useState({});
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
   const [progress, setProgress] = useState(0);
 
   const REQUIRED = ['q1','q2','q5','q7','q8','q9','q12','q19','q22'];
@@ -530,19 +531,30 @@ export default function Survey() {
       return;
     }
     setSubmitting(true);
+    setSubmitError(null);
     const data = { ...answers, submitted_at: new Date().toISOString(), source: 'rinkd.app/survey' };
     // Serialize checkbox arrays to strings
     ['q5b','q6','q10','q18'].forEach(k => {
       if (Array.isArray(data[k])) data[k] = data[k].join(', ');
     });
     try {
-      const params = new URLSearchParams(); Object.entries(data).forEach(([k, v]) => params.append(k, v || '')); await fetch(SCRIPT_URL + '?' + params.toString(), {
-        method: 'GET',
-        mode: 'no-cors',
-        // removed
-        // removed
-      });
-    } catch (err) { /* no-cors means we can't read response — that's fine */ }
+      const params = new URLSearchParams();
+      Object.entries(data).forEach(([k, v]) => params.append(k, v || ''));
+      await fetch(SCRIPT_URL + '?' + params.toString(), { method: 'GET', mode: 'no-cors' });
+      // no-cors means we can't read the body — anything other than a network
+      // failure (handled in catch) reaches here. Treat as success.
+    } catch (err) {
+      // Network failure (offline, DNS, CORS-blocked, etc). The previous version
+      // swallowed this AND set submitted=true regardless, so a real failure
+      // showed the success page and Pete lost the lead. Surface to the user
+      // and keep them on the form so they can retry.
+      // TODO: move to a Supabase table or Edge Function that returns a real
+      // status so we can also detect Apps-Script-side failures (no-cors
+      // currently hides those — they look identical to success).
+      setSubmitting(false);
+      setSubmitError(err?.message || 'Network error');
+      return;
+    }
     setSubmitted(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -757,8 +769,23 @@ export default function Survey() {
 
           <div className="sv-submit-section">
             <p className="sv-submit-note">Fields marked <span className="sv-req">*</span> are required. All other questions are optional.</p>
+            {submitError && (
+              <div style={{
+                background: 'rgba(215,38,56,0.12)',
+                border: '1px solid rgba(215,38,56,0.4)',
+                color: '#F4F7FA',
+                padding: '12px 14px',
+                borderRadius: 10,
+                marginBottom: 12,
+                fontSize: 14,
+                lineHeight: 1.5,
+              }}>
+                <strong style={{ color: '#D72638' }}>Couldn't submit.</strong>{' '}
+                We couldn't reach the server ({submitError}). Check your connection and tap Submit again — your answers are still here.
+              </div>
+            )}
             <button type="submit" className="sv-submit-btn" disabled={submitting}>
-              {submitting ? 'Submitting...' : 'Submit Survey 🏒'}
+              {submitting ? 'Submitting...' : submitError ? 'Try Again 🏒' : 'Submit Survey 🏒'}
             </button>
           </div>
 

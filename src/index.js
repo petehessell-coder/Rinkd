@@ -41,9 +41,19 @@ function showReloadBanner(reg) {
     <span style="background:#fff;color:#D72638;padding:4px 12px;border-radius:999px;font-weight:700;font-size:12px;">Reload</span>`;
   bar.addEventListener('click', () => {
     const waiting = reg.waiting;
-    if (waiting) waiting.postMessage({ type: 'SKIP_WAITING' });
-    // controllerchange handler below will reload once the new SW takes over.
-    setTimeout(() => window.location.reload(), 300);
+    if (waiting) {
+      // Tell the new SW to take over. The controllerchange listener below
+      // will reload exactly once when activation completes. The previous
+      // version ALSO had a setTimeout reload, which raced controllerchange
+      // and occasionally double-reloaded — e.g. once before activation
+      // (with the old worker still in control) and again immediately after.
+      waiting.postMessage({ type: 'SKIP_WAITING' });
+    } else {
+      // No waiting worker on click — either the banner caught a stale state
+      // or the SW already activated in another tab. Reload directly so the
+      // user still gets the fresh assets they tapped for.
+      window.location.reload();
+    }
   });
   document.body.appendChild(bar);
 }

@@ -63,6 +63,18 @@ export default function AdminFeedbackPage({ currentUser, profile }) {
     }
   };
 
+  // isAdmin === null means useIsRinkdAdmin is still resolving. Render a
+  // neutral spinner so a real staff member doesn't see "staff only" flash.
+  if (isAdmin === null) {
+    return (
+      <Layout profile={profile}>
+        <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.steel, fontFamily: 'Barlow, sans-serif', fontSize: 14 }}>
+          Loading…
+        </div>
+      </Layout>
+    );
+  }
+
   if (!isAdmin) {
     return (
       <Layout profile={profile}>

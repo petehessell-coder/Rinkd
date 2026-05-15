@@ -82,9 +82,29 @@ export async function updateArticle(id, fields) {
     };
     if (map[k]) payload[map[k]] = v;
   }
-  if (fields.isPublished === true && !fields.published_at) {
-    payload.published_at = new Date().toISOString();
+
+  // published_at should only move when the publish state TRANSITIONS — not on
+  // every save of a live article. The previous version re-stamped to now on
+  // every editor save, which silently reordered live articles to the top of
+  // the index whenever anyone fixed a typo. Read the current state and only
+  // touch published_at when the toggle actually flips.
+  if (fields.isPublished !== undefined) {
+    const { data: existing } = await supabase
+      .from('rinkside_articles')
+      .select('is_published, published_at')
+      .eq('id', id)
+      .maybeSingle();
+    const wasPublished = !!existing?.is_published;
+    if (fields.isPublished === true && !wasPublished) {
+      // draft → published: stamp now.
+      payload.published_at = new Date().toISOString();
+    } else if (fields.isPublished === false && wasPublished) {
+      // published → draft: clear, so a future re-publish stamps fresh.
+      payload.published_at = null;
+    }
+    // else: same state — leave published_at alone.
   }
+
   const { data, error } = await supabase
     .from('rinkside_articles')
     .update(payload)
@@ -112,14 +132,36 @@ function escapeHtml(s) {
   }[c]));
 }
 
+// URL scheme allowlists — the markdown link/image regexes would otherwise
+// happily re-insert the raw captured URL (after escapeHtml), so a payload like
+// `[click me](javascript:alert(1))` would render a working javascript: anchor.
+// Authorship is admin-only today which contains the blast radius, but this
+// is the kind of latent stored-XSS hole that gets exploited the moment we open
+// up authoring or accept user-submitted markdown anywhere else. Strip anything
+// outside the allowlist by replacing with `#` (link) or empty string (image).
+function safeHref(u) {
+  const url = String(u || '').trim();
+  if (/^https?:/i.test(url)) return url;
+  if (/^mailto:/i.test(url)) return url;
+  if (/^tel:/i.test(url)) return url;
+  if (url.startsWith('/') || url.startsWith('#') || url.startsWith('?')) return url; // relative
+  return '#';
+}
+function safeImageSrc(u) {
+  const url = String(u || '').trim();
+  if (/^https?:/i.test(url)) return url;
+  if (url.startsWith('/')) return url;
+  return ''; // unsafe schemes (javascript:, data:, file:, …) → broken image, not JS execution
+}
+
 function renderInline(s) {
   let out = escapeHtml(s);
-  // Images ![alt](url)
+  // Images ![alt](url) — allowlist src
   out = out.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_m, alt, url) =>
-    `<img src="${url}" alt="${alt}" style="max-width:100%;border-radius:10px;display:block;margin:18px 0;" />`);
-  // Links [text](url)
+    `<img src="${safeImageSrc(url)}" alt="${alt}" style="max-width:100%;border-radius:10px;display:block;margin:18px 0;" />`);
+  // Links [text](url) — allowlist href
   out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, txt, url) =>
-    `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color:#2E5B8C;text-decoration:underline;">${txt}</a>`);
+    `<a href="${safeHref(url)}" target="_blank" rel="noopener noreferrer" style="color:#2E5B8C;text-decoration:underline;">${txt}</a>`);
   // Bold
   out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   // Italic

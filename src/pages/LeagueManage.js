@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import DateTimePicker from '../components/DateTimePicker';
 import { getLeague, getLeagueTeams, getLeagueGames, createLeague, updateLeague, addLeagueTeam, removeLeagueTeam, addLeagueGame, linkLeagueTeam } from '../lib/leagues';
+import { listRinks } from '../lib/rinks';
 import { supabase } from '../lib/supabase';
 import { sendLeagueInvite } from '../lib/invites';
 import ScheduleBuilderModal from '../components/ScheduleBuilderModal';
@@ -127,13 +128,14 @@ function ManageLeague({ id, navigate }) {
   const [league, setLeague] = useState(null);
   const [teams, setTeams] = useState([]);
   const [games, setGames] = useState([]);
+  const [rinks, setRinks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('Teams');
   const [error, setError] = useState(null);
   const [showScheduleBuilder, setShowScheduleBuilder] = useState(false);
   const [teamSearch, setTeamSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
-  const [gameForm, setGameForm] = useState({ home_team_id: '', away_team_id: '', location: '', start_time: '', live_barn_venue_id: '' });
+  const [gameForm, setGameForm] = useState({ home_team_id: '', away_team_id: '', rink_id: '', location: '', start_time: '', live_barn_venue_id: '' });
   const [unlinkedEmail, setUnlinkedEmail] = useState('');
   const [linkingTeam, setLinkingTeam] = useState(null);
   const [linkSearch, setLinkSearch] = useState('');
@@ -141,8 +143,11 @@ function ManageLeague({ id, navigate }) {
 
   const load = useCallback(async () => {
     try {
-      const [l, t, g] = await Promise.all([getLeague(id), getLeagueTeams(id), getLeagueGames(id)]);
-      setLeague(l); setTeams(t); setGames(g);
+      // Fetch rinks alongside league/teams/games so the single-game form can
+      // attach a real rink_id (and the rink shows up on the game cards via the
+      // rinks join in getLeagueGames). listRinks() is small and cheap.
+      const [l, t, g, r] = await Promise.all([getLeague(id), getLeagueTeams(id), getLeagueGames(id), listRinks().catch(() => [])]);
+      setLeague(l); setTeams(t); setGames(g); setRinks(r || []);
       if (t.length >= 2) setGameForm(p => ({ ...p, home_team_id: t[0].id, away_team_id: t[1].id }));
     } catch(e) { console.error(e); }
     finally { setLoading(false); }
@@ -202,8 +207,22 @@ function ManageLeague({ id, navigate }) {
   const handleAddGame = async () => {
     if (!gameForm.home_team_id || !gameForm.away_team_id || !gameForm.start_time) { setError('Home team, away team, and time required'); return; }
     try {
-      await addLeagueGame({ league_id: id, ...gameForm });
-      setGameForm(p => ({ ...p, location: '', start_time: '', live_barn_venue_id: '' }));
+      // Pass rink_id when one is picked. If the rink has a LiveBarn venue ID,
+      // inherit it so the schedule cards show the Watch-on-LiveBarn pill
+      // without the director having to type the venue ID twice. Manual
+      // venue_id input still wins if filled in.
+      const rink = rinks.find(r => r.id === gameForm.rink_id);
+      const live_barn_venue_id = (gameForm.live_barn_venue_id || '').trim() || rink?.live_barn_venue_id || null;
+      await addLeagueGame({
+        league_id: id,
+        home_team_id: gameForm.home_team_id,
+        away_team_id: gameForm.away_team_id,
+        rink_id: gameForm.rink_id || null,
+        location: gameForm.location || null,
+        start_time: gameForm.start_time,
+        live_barn_venue_id,
+      });
+      setGameForm(p => ({ ...p, rink_id: '', location: '', start_time: '', live_barn_venue_id: '' }));
       await load();
     } catch(e) { setError(e.message); }
   };
@@ -367,8 +386,23 @@ function ManageLeague({ id, navigate }) {
                   {teams.map(lt => <option key={lt.id} value={lt.id}>{lt.team?.name || lt.team_name}</option>)}
                 </select>
               </Field>
-              <Field label="Location"><input style={inputStyle} value={gameForm.location} onChange={e => setGameForm(p => ({ ...p, location: e.target.value }))} placeholder="Rink / arena name" /></Field>
-              <Field label="LiveBarn Venue ID (optional)"><input style={inputStyle} value={gameForm.live_barn_venue_id} onChange={e => setGameForm(p => ({ ...p, live_barn_venue_id: e.target.value }))} placeholder="e.g. 12345" /></Field>
+              <Field label="Rink">
+                <select style={inputStyle} value={gameForm.rink_id} onChange={e => setGameForm(p => ({ ...p, rink_id: e.target.value }))}>
+                  <option value="">— Pick a rink (recommended) —</option>
+                  {rinks.map(r => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}{r.sub_rink ? ` · ${r.sub_rink}` : ''}
+                    </option>
+                  ))}
+                </select>
+                {rinks.length === 0 && (
+                  <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 4 }}>
+                    No rinks yet — add them in <strong>/admin → Rinks</strong> so games can link to a venue (powers map links and LiveBarn streams).
+                  </div>
+                )}
+              </Field>
+              <Field label="Location (optional)"><input style={inputStyle} value={gameForm.location} onChange={e => setGameForm(p => ({ ...p, location: e.target.value }))} placeholder="Free-text note — only used when the rink isn't in the list" /></Field>
+              <Field label="LiveBarn Venue ID (optional override)"><input style={inputStyle} value={gameForm.live_barn_venue_id} onChange={e => setGameForm(p => ({ ...p, live_barn_venue_id: e.target.value }))} placeholder={(rinks.find(r => r.id === gameForm.rink_id)?.live_barn_venue_id) || 'e.g. 12345'} /></Field>
               <Field label="Date & Time"><DateTimePicker value={gameForm.start_time} onChange={v => setGameForm(p => ({ ...p, start_time: v }))} placeholder="Select date & time" /></Field>
               <Btn onClick={handleAddGame}>+ Add Game</Btn>
             </Card>

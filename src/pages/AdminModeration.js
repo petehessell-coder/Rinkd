@@ -40,6 +40,10 @@ export default function AdminModerationPage({ currentUser, profile }) {
   const [newSeverity, setNewSeverity] = useState('high');
 
   const load = useCallback(async () => {
+    // Don't fire the moderation queries until we know this is actually a Rinkd
+    // staff member — otherwise non-admins trigger 403s on protected tables
+    // every time they land on this URL, and the queue UI flickers in.
+    if (isAdmin !== true) return;
     setLoading(true);
     if (tab === 'posts') {
       const { data } = await supabase
@@ -66,7 +70,7 @@ export default function AdminModerationPage({ currentUser, profile }) {
       setBlocklist(data || []);
     }
     setLoading(false);
-  }, [tab]);
+  }, [tab, isAdmin]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -112,6 +116,18 @@ export default function AdminModerationPage({ currentUser, profile }) {
     await supabase.from('moderation_blocklist').delete().eq('id', id);
     setBlocklist((prev) => prev.filter((w) => w.id !== id));
   };
+
+  // isAdmin === null means useIsRinkdAdmin is still resolving. Render a
+  // neutral spinner so a real staff member doesn't see "staff only" flash.
+  if (isAdmin === null) {
+    return (
+      <Layout profile={profile}>
+        <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.steel, fontFamily: 'Barlow, sans-serif', fontSize: 14 }}>
+          Loading…
+        </div>
+      </Layout>
+    );
+  }
 
   if (!isAdmin) {
     return (

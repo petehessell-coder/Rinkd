@@ -64,6 +64,30 @@ export default function TournamentPage({ currentUser }) {
 
   useEffect(() => { load(); }, [load]);
 
+  // Realtime subscription — spectators see standings and scores update live as
+  // games finish. Channel name carries a per-call random suffix so a remount
+  // (StrictMode in dev, route revisit) doesn't collide with the prior channel.
+  // The notifications module uses the same pattern; mirror it for consistency.
+  useEffect(() => {
+    if (!id) return;
+    let channel = null;
+    try {
+      const name = `tournament:${id}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+      channel = supabase.channel(name)
+        .on('postgres_changes',
+          { event: '*', schema: 'public', table: 'games', filter: `tournament_id=eq.${id}` },
+          () => { try { load(); } catch { /* swallow */ } })
+        .on('postgres_changes',
+          { event: '*', schema: 'public', table: 'tournament_standings', filter: `tournament_id=eq.${id}` },
+          () => { try { load(); } catch { /* swallow */ } })
+        .subscribe();
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[tournament] realtime subscribe failed; spectators will see stale data until they refresh:', err);
+    }
+    return () => { try { if (channel) supabase.removeChannel(channel); } catch { /* swallow */ } };
+  }, [id, load]);
+
   if (loading) return (
     <div style={{background:'#07111F',minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:'#F4F7FA',fontFamily:'Barlow,sans-serif',fontSize:14}}>
       Loading tournament...

@@ -158,13 +158,20 @@ export async function generatePoolSchedule(tournamentId, opts) {
     byPool[key].push(t.id);
   }
 
+  // Capture old pool-game IDs BEFORE inserting, so we can delete only those
+  // specific rows after the new schedule lands. The previous version deleted
+  // first and then inserted; if the insert failed (RLS, validation, network),
+  // the director's whole schedule was gone with no recovery.
+  // TODO: replace this two-step + the delete-after-insert with a single
+  // `generate_pool_schedule(tournament_id, rows)` RPC so the swap is atomic.
+  let oldIds = [];
   if (replaceExisting) {
-    // Wipe any existing pool games (keep bracket round games)
-    await supabase
+    const { data: olds } = await supabase
       .from('games')
-      .delete()
+      .select('id')
       .eq('tournament_id', tournamentId)
       .eq('round', 'pool');
+    oldIds = (olds || []).map(o => o.id);
   }
 
   const rows = [];
@@ -187,8 +194,26 @@ export async function generatePoolSchedule(tournamentId, opts) {
 
   if (!rows.length) return { inserted: 0, error: { message: 'Pool generation produced 0 games (need ≥ 2 teams per pool).' } };
 
-  const { error } = await supabase.from('games').insert(rows);
-  return { inserted: rows.length, error };
+  // Insert the new schedule FIRST. If this fails, the existing one is intact.
+  const { error: insertErr } = await supabase.from('games').insert(rows);
+  if (insertErr) return { inserted: 0, error: insertErr };
+
+  // Now safely delete the old rows. Scope the delete to the captured IDs so
+  // we can't accidentally wipe the new ones (which are also round='pool').
+  if (oldIds.length > 0) {
+    const { error: deleteErr } = await supabase.from('games').delete().in('id', oldIds);
+    if (deleteErr) {
+      // New schedule landed, but the old one didn't get cleaned up — the
+      // director will see duplicates. Surface so they can clean up manually.
+      return {
+        inserted: rows.length,
+        error: deleteErr,
+        warning: 'New schedule generated but old games could not be deleted — you may see duplicates. Refresh and remove them by hand.',
+      };
+    }
+  }
+
+  return { inserted: rows.length, error: null };
 }
 
 // ------------------------------ Bracket builder ------------------------------

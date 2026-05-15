@@ -29,6 +29,19 @@ export default function AdminPanel({ profile }) {
   const role = useUserRole(profile?.id);
   const [tab, setTab] = useState('Overview');
 
+  // role === null means useUserRole is still resolving. Render a neutral
+  // spinner — a real commissioner would otherwise see the "Commissioners only"
+  // rejection screen flash for ~200ms before the lookup completes.
+  if (role === null) {
+    return (
+      <Layout profile={profile}>
+        <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.steel, fontFamily: "'Barlow', sans-serif", fontSize: 14 }}>
+          Loading…
+        </div>
+      </Layout>
+    );
+  }
+
   if (role !== 'commissioner') {
     return (
       <Layout profile={profile}>
