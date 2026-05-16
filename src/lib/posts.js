@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getBlockedIds, excludeBlocked, filterBlockedIds } from './blocks';
 
 export async function getPosts(limit = 30, before = null) {
   let query = supabase
@@ -8,6 +9,7 @@ export async function getPosts(limit = 30, before = null) {
     .limit(limit);
   // Keyset pagination — fetch the page of posts older than the last one we hold.
   if (before) query = query.lt('created_at', before);
+  query = await excludeBlocked(query, 'author_id');
   const { data, error } = await query;
   return { data, error };
 }
@@ -27,8 +29,13 @@ export async function getFollowingPosts(userId, limit = 30, before = null) {
   // someone posts a chirp the feed reloads and their post is invisible to
   // them — looks like the post failed even though it landed cleanly in the
   // DB. Every social platform does this: your home feed always includes you.
-  const ids = (follows || []).map((f) => f.following_id);
+  let ids = (follows || []).map((f) => f.following_id);
   if (!ids.includes(userId)) ids.push(userId);
+  // Strip blocked users (either direction) from the inclusion list. We do this
+  // in the array rather than chaining .not.in() so PostgREST builds one short
+  // IN clause instead of an IN combined with a NOT IN.
+  ids = await filterBlockedIds(ids);
+  if (ids.length === 0) return { data: [], error: null };
 
   let query = supabase
     .from('posts')
@@ -65,12 +72,14 @@ export async function createPost(authorId, { content, tag, tagColor, mediaUrl, m
 }
 
 export async function getTeamPosts(teamId, limit = 50) {
-  const { data, error } = await supabase
+  let query = supabase
     .from('posts')
     .select(`*, profiles(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position)`)
     .eq('team_id', teamId)
     .order('created_at', { ascending: false })
     .limit(limit);
+  query = await excludeBlocked(query, 'author_id');
+  const { data, error } = await query;
   return { data, error };
 }
 
@@ -137,15 +146,19 @@ export async function getComments(postId) {
     .select(`*, profiles!comments_author_id_fkey(id, name, handle, avatar_url, avatar_color, avatar_initials, tier)`)
     .eq('post_id', postId)
     .order('created_at', { ascending: true });
+  // Filter blocked users out of the result. Doing it client-side avoids a
+  // separate IN-list URL fragment per thread fetch; comment threads are small.
+  const blocked = await getBlockedIds();
+  const drop = (rows) => blocked.size ? rows.filter((c) => !blocked.has(c.author_id)) : rows;
   if (error) {
     // eslint-disable-next-line no-console
     console.warn('[comments] load failed:', error);
     // Graceful fallback: fetch without the embed so users at least see the text.
     const { data: fallback } = await supabase
       .from('comments').select('*').eq('post_id', postId).order('created_at', { ascending: true });
-    return fallback || [];
+    return drop(fallback || []);
   }
-  return data || [];
+  return drop(data || []);
 }
 
 export async function createComment(postId, authorId, content) {

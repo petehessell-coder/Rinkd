@@ -7,6 +7,7 @@ import { CardGridSkeleton, ListRowSkeleton, EmptyState } from '../components/Ske
 import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
 import { followUser, unfollowUser, timeAgo } from '../lib/posts';
+import { getBlockedIds } from '../lib/blocks';
 import { getTier } from '../lib/tiers';
 
 // Escape characters that have special meaning inside a PostgREST .or() clause
@@ -263,7 +264,10 @@ export default function Discover({ currentUser, profile }) {
       if (ilike) q = q.or(`name.ilike.${ilike},handle.ilike.${ilike}`);
       const { data, error: e } = await q;
       qErr = e;
-      setPlayers(data || []);
+      // Hide blocked users (either direction) from the people-search results.
+      const blocked = await getBlockedIds();
+      const rows = blocked.size ? (data || []).filter((p) => !blocked.has(p.id)) : (data || []);
+      setPlayers(rows);
     } else if (tab === 'teams') {
       let q = supabase.from('teams')
         .select('id, name, level, division, location, logo_color, logo_initials')

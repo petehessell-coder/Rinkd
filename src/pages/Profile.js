@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase';
 import { getPlayerLeagueStats } from '../lib/stats';
 import { useParams } from 'react-router-dom';
 import { followUser, unfollowUser, isFollowing, getFollowCounts, timeAgo, uploadMedia } from '../lib/posts';
+import { blockUser, unblockUser, isBlockedByMe } from '../lib/blocks';
 import MapLink from '../components/MapLink';
 import { track } from '../lib/analytics';
 import { classifyImage } from '../lib/imageModeration';
@@ -26,6 +27,8 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
   const [following, setFollowing] = useState(false);
   const [followCounts, setFollowCounts] = useState({ followers: 0, following: 0 });
   const [followLoading, setFollowLoading] = useState(false);
+  const [blocked, setBlocked] = useState(false);
+  const [blockLoading, setBlockLoading] = useState(false);
   const [leagueStats, setLeagueStats] = useState([]);
 
   const [editName, setEditName] = useState('');
@@ -80,6 +83,8 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
       if (!isOwnProfile && currentUser) {
         const f = await isFollowing(currentUser.id, profileId);
         setFollowing(f);
+        const b = await isBlockedByMe(profileId);
+        setBlocked(b);
       }
       // Recent activity = posts + comments, last 20, newest first.
       const { data: comments } = await supabase
@@ -177,6 +182,36 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
       setFollowCounts(c => ({ ...c, followers: Math.max(0, c.followers + (wasFollowing ? -1 : 1)) }));
     }
     setFollowLoading(false);
+  };
+
+  const handleBlock = async () => {
+    if (!currentUser || isOwnProfile) return;
+    if (blocked) {
+      // Unblock has no confirmation — symmetric with un-follow.
+      setBlockLoading(true);
+      const { error } = await unblockUser(profileId);
+      if (!error) setBlocked(false);
+      setBlockLoading(false);
+      track('unblock', { target_user_id: profileId });
+      return;
+    }
+    const ok = window.confirm(
+      `Block @${profile?.handle || 'this user'}? You won't see each other's posts, comments, or notifications. You'll be unfollowed if you currently follow them.`
+    );
+    if (!ok) return;
+    setBlockLoading(true);
+    const { error } = await blockUser(profileId);
+    if (!error) {
+      setBlocked(true);
+      // Drop the local follow state so the UI matches the auto-unfollow that
+      // blockUser() just performed against the DB.
+      if (following) {
+        setFollowing(false);
+        setFollowCounts((c) => ({ ...c, followers: Math.max(0, c.followers - 1) }));
+      }
+    }
+    setBlockLoading(false);
+    track('block', { target_user_id: profileId });
   };
 
   const openEdit = () => {
@@ -290,12 +325,24 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                   </div>
                 )}
                 {!isOwnProfile && (
-                  <button onClick={handleFollow} disabled={followLoading} style={{
-                    padding: '8px 20px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                    background: following ? C.border : C.red, color: 'white',
-                    fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 14,
-                    letterSpacing: '0.05em',
-                  }}>{followLoading ? '...' : following ? 'Following' : 'Follow'}</button>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {!blocked && (
+                      <button onClick={handleFollow} disabled={followLoading} style={{
+                        padding: '8px 20px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                        background: following ? C.border : C.red, color: 'white',
+                        fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 14,
+                        letterSpacing: '0.05em',
+                      }}>{followLoading ? '...' : following ? 'Following' : 'Follow'}</button>
+                    )}
+                    <button onClick={handleBlock} disabled={blockLoading} title={blocked ? 'Unblock this user' : 'Block this user'} style={{
+                      padding: '8px 14px', borderRadius: 8, cursor: 'pointer',
+                      background: 'transparent',
+                      border: `1.5px solid ${blocked ? C.red : C.border}`,
+                      color: blocked ? C.red : C.steel,
+                      fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 13,
+                      letterSpacing: '0.05em',
+                    }}>{blockLoading ? '...' : blocked ? 'Blocked' : 'Block'}</button>
+                  </div>
                 )}
               </div>
             </div>

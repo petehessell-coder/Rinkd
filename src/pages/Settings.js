@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import SEO from '../components/SEO';
+import { Avatar } from '../components/Logos';
 import { supabase } from '../lib/supabase';
 import { signOut } from '../lib/auth';
 import { track } from '../lib/analytics';
+import { listMyBlocks, unblockUser } from '../lib/blocks';
 
 const C = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
@@ -32,6 +34,30 @@ export default function SettingsPage({ currentUser, profile }) {
   const [confirmText, setConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  const [blocks, setBlocks] = useState([]);
+  const [blocksLoading, setBlocksLoading] = useState(true);
+  const [unblockingId, setUnblockingId] = useState(null);
+
+  const loadBlocks = useCallback(async () => {
+    setBlocksLoading(true);
+    const rows = await listMyBlocks();
+    setBlocks(rows);
+    setBlocksLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (currentUser) loadBlocks();
+  }, [currentUser, loadBlocks]);
+
+  const handleUnblock = async (userId) => {
+    setUnblockingId(userId);
+    const { error } = await unblockUser(userId);
+    if (!error) {
+      setBlocks((prev) => prev.filter((b) => b.blocked_id !== userId));
+      track('unblock', { target_user_id: userId, source: 'settings' });
+    }
+    setUnblockingId(null);
+  };
 
   if (!currentUser) {
     return (
@@ -216,6 +242,54 @@ export default function SettingsPage({ currentUser, profile }) {
               Push notifications are managed from your profile — the 🔔 toggle next to "Edit".
             </p>
             <button onClick={() => navigate('/profile')} style={btnGhost}>Open Profile</button>
+          </div>
+
+          {/* BLOCKED USERS */}
+          <div style={section}>
+            <h2 style={h2}>🚫 Blocked Users</h2>
+            <p style={p}>
+              You won't see posts, comments, or notifications from anyone you've blocked.
+              They won't see yours either.
+            </p>
+            {blocksLoading ? (
+              <div style={{ fontSize: 13, color: C.steel }}>Loading…</div>
+            ) : blocks.length === 0 ? (
+              <div style={{ fontSize: 13, color: C.steel, fontStyle: 'italic' }}>
+                You haven't blocked anyone.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {blocks.map((b) => {
+                  const prof = b.profiles || {};
+                  const id = b.blocked_id;
+                  return (
+                    <div key={id} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '10px 12px', borderRadius: 10,
+                      background: 'rgba(11,31,58,0.6)', border: `1px solid ${C.border}`,
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                        <Avatar profile={prof} size={36} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ color: C.ice, fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {prof.name || 'Unknown'}
+                          </div>
+                          {prof.handle && (
+                            <div style={{ color: C.steel, fontSize: 12 }}>@{prof.handle}</div>
+                          )}
+                        </div>
+                      </div>
+                      <button onClick={() => handleUnblock(id)} disabled={unblockingId === id} style={{
+                        ...btnGhost,
+                        padding: '7px 14px', fontSize: 12, opacity: unblockingId === id ? 0.6 : 1,
+                      }}>
+                        {unblockingId === id ? '…' : 'Unblock'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* DELETE ACCOUNT */}

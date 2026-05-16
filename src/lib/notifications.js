@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getBlockedIds } from './blocks';
 
 /**
  * Notifications are written by Postgres triggers (likes, comments, follows,
@@ -14,7 +15,12 @@ export async function listNotifications({ limit = 50, unreadOnly = false } = {})
     .limit(limit);
   if (unreadOnly) q = q.is('read_at', null);
   const { data, error } = await q;
-  return { data: data || [], error };
+  // Drop notifications from blocked users. We filter client-side because
+  // actor_id is nullable (system notifications carry null) and a server-side
+  // NOT IN would incorrectly exclude those null rows.
+  const blocked = await getBlockedIds();
+  const rows = (data || []).filter((n) => !n.actor_id || !blocked.has(n.actor_id));
+  return { data: rows, error };
 }
 
 export async function getUnreadCount(userId) {
