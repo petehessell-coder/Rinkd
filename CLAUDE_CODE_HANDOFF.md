@@ -45,20 +45,23 @@ BUILD_PATH=/tmp/rinkd-build npx react-scripts build
 
 ## 4. Current state — verified May 16, 2026 evening
 
-`main` HEAD is **`c3947bbc`** (`docs: handoff update`, May 16 evening — see prior version of this section). A worktree branch
-`claude/elegant-sanderson-80d1d0` is **6 commits ahead of main**, pending
-Pete's merge + push. After merge, HEAD will be **`2b793247`**. Full history:
+`main` HEAD is **`0979969a`** (`docs: handoff update`, May 16 late evening — this commit). Pete merged the first 4 worktree commits into main as `799343b0` (`merge: tournament UI punch-list + BLPA pilot batch ...`). The worktree branch
+`claude/elegant-sanderson-80d1d0` is **2 commits ahead of main** (the public-landing + push-pipeline additions made after the initial merge), pending Pete's second merge + push. After merge, HEAD will be **`2b793247`** (or a merge commit above it). Full history:
 
 ```
-[worktree branch — pending merge to main:]
+[worktree branch — STILL pending merge to main (2 commits):]
 2b793247  feat: push notifications — tournament follow + recap pipeline (pilot)
 80f71e54  feat: public landing for tournament discovery (BLPA pilot)
+
+[on main now:]
+0979969a  docs: handoff update — public landing + push pipeline + status flip
+c3947bbc  docs: handoff update — May 16 evening BLPA pilot batch + §12 pilot-readiness audit
+799343b0  merge: tournament UI punch-list + BLPA pilot batch (scorer lockout, auto-recap, championship bracket gen, format-aware standings, logo upload, status enum fix)
 9c773ff6  fix: layout polish — bottom nav padding + HelpButton overlap
 5c3e42e5  feat: scorer lockout + auto-recap + shootout winner + bracket advancement
 21785087  feat: tournament manage — punch list + logo upload + championship bracket gen
 5ae955bc  feat: tournament public pages — punch list + BLPA standings/SO/champion
-[on main:]
-c3947bbc  docs: handoff update — May 16 evening BLPA pilot batch + §12 pilot-readiness audit
+80294cb7  docs: add Claude Code handoff doc
 4a020d07  feat: report posts/comments + lock down posts.UPDATE security hole
 0468f8e3  feat: block user — user_blocks table + lib/blocks.js + profile/settings UI + read-path filters
 02409e96  fix: pilot-readiness audit Surfaces 11-17 — all 14 items + RLS
@@ -74,9 +77,9 @@ e995f3ef  fix: site-audit pass — 6 Criticals + 10 Highs
 37e50791  Tournament pilot ...
 ```
 
-**Merge command** (Pete runs from `~/Downloads/rinkd_live`):
+**Second merge command for the 2 remaining commits** (Pete runs from `~/Downloads/rinkd_live`):
 ```
-rm -f .git/index.lock && git checkout main && git merge claude/elegant-sanderson-80d1d0 --no-ff -m "merge: BLPA Cleveland pilot batch (punch list + scorer lockout + auto-recap + champ bracket + public landing + push pipeline)" && git push origin main
+rm -f .git/index.lock && git checkout main && git merge claude/elegant-sanderson-80d1d0 --no-ff -m "merge: public tournament landing + push notification pipeline" && git push origin main
 ```
 
 **Working tree state:** clean. Two pre-existing strays remain uncommitted (`scripts/chiller/data/seed-leagues.json`, `supabase/functions/send-onboarding-emails/index.ts`) — leave them alone unless Pete asks otherwise.
@@ -555,8 +558,8 @@ After Pete updates Site URL + Redirect URLs in the Supabase dashboard:
 
 1. Read this doc top to bottom — **especially the May 16 late evening §5 entries** (public landing + push pipeline shipped, still pending merge + Pete's VAPID secrets work).
 2. Run `cd ~/Downloads/rinkd_live && git log --oneline -6 && git status` to confirm state matches Section 4.
-   - If `main` HEAD is `c3947bbc` (docs commit): Pete hasn't merged the worktree branch yet. Use the merge command in §4 once authorized.
-   - If `main` HEAD is `2b793247`: merge happened. Move on.
+   - If `main` HEAD is `0979969a` or later docs commit: first merge happened (`799343b0`) but the 2 latest worktree commits (public landing + push pipeline) are still pending the second merge. Use the §4 second-merge command.
+   - If `main` HEAD includes a merge above `2b793247`: second merge happened. Move on.
    - Confirm BLPA Cleveland is seeded + flipped: `select name, start_date, end_date, status from public.tournaments where id = 'b2789d66-1d77-4a62-862d-00b550da6a98'` should return `BLPA Cleveland · 2026-06-13 · 2026-06-14 · active`. Team count = 8, game count = 12 (Saturday pool play only — championship games auto-generate on Sat night via the Bracket tab button).
    - Confirm the new DB shape: `select column_name from information_schema.columns where table_schema='public' and table_name='games' and column_name in ('pool','shootout_winner')` should return both rows; `select count(*) from public.tournament_subscriptions` runs (table exists).
    - Confirm the new Edge Function exists in source: `ls supabase/functions/send-recap-push/` should show `index.ts`. **Whether it's deployed** is a separate check: try invoking it (manual curl in §5 push entry) or `supabase functions list --project-ref tbpoopsyhfuqcbugrjbh` if you have the CLI.
