@@ -8,9 +8,14 @@ import {
   generatePoolSchedule,
   loadPoolQualifiers, createBracketGame,
   updateTournament,
+  listStandingsSummary,
+  generateChampionshipBracket,
 } from '../lib/tournamentManage';
 import { listRinks } from '../lib/rinks';
 import { listScorers, addScorerByInput, removeScorer } from '../lib/tournamentScorers';
+import { teamInitials } from '../lib/teamInitials';
+import { uploadMedia } from '../lib/posts';
+import { classifyImage } from '../lib/imageModeration';
 
 const C = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
@@ -50,6 +55,7 @@ export default function TournamentManagePage({ currentUser, profile }) {
   const [teams, setTeams] = useState([]);
   const [games, setGames] = useState([]);
   const [rinks, setRinks] = useState([]);
+  const [standingsByTeam, setStandingsByTeam] = useState({});
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('Teams');
   const [error, setError] = useState(null);
@@ -74,12 +80,19 @@ export default function TournamentManagePage({ currentUser, profile }) {
     try {
       const t = await getTournament(id);
       setTournament(t);
-      const [{ data: ts }, { data: gs }, { data: rk }] = await Promise.all([
+      const [{ data: ts }, { data: gs }, { data: rk }, { data: st }] = await Promise.all([
         listTeams(id),
         listGames(id),
         listRinks().catch(() => ({ data: [] })),
+        listStandingsSummary(id).catch(() => ({ data: [] })),
       ]);
       setTeams(ts); setGames(gs); setRinks(rk || []);
+      // Convert standings rows to a team_id → {gp,wins,losses,ties,pts} lookup
+      // so renderers can look up records by id in O(1). Empty tournament =
+      // empty lookup, which the renderers treat as "no record yet."
+      const map = {};
+      (st || []).forEach(r => { map[r.team_id] = r; });
+      setStandingsByTeam(map);
     } catch (e) {
       setError(e.message || 'Failed to load tournament');
     } finally {
@@ -123,14 +136,19 @@ export default function TournamentManagePage({ currentUser, profile }) {
           </div>
           <div style={{ fontSize: 13, color: C.steel, marginBottom: 18 }}>{tournament.name} · {tournament.division}</div>
 
-          {/* Tabs */}
-          <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${C.border}`, marginBottom: 18, overflowX: 'auto' }}>
-            {TABS.map((t) => (
-              <button key={t} onClick={() => setTab(t)}
-                style={{ background: 'transparent', color: tab === t ? C.ice : C.steel, border: 'none', padding: '10px 16px', cursor: 'pointer', fontSize: 13, fontWeight: tab === t ? 700 : 500, borderBottom: tab === t ? `3px solid ${C.red}` : '3px solid transparent', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap' }}>
-                {t}
-              </button>
-            ))}
+          {/* Tabs — wrapped in a relative container so the right-edge gradient
+              mask hints at horizontal scroll on narrow viewports where "Settings"
+              clips off-screen. Without the mask, mobile users miss the last tab. */}
+          <div style={{ position: 'relative', marginBottom: 18 }}>
+            <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${C.border}`, overflowX: 'auto', scrollbarWidth: 'none' }}>
+              {TABS.map((t) => (
+                <button key={t} onClick={() => setTab(t)}
+                  style={{ background: 'transparent', color: tab === t ? C.ice : C.steel, border: 'none', padding: '10px 16px', cursor: 'pointer', fontSize: 13, fontWeight: tab === t ? 700 : 500, borderBottom: tab === t ? `3px solid ${C.red}` : '3px solid transparent', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                  {t}
+                </button>
+              ))}
+            </div>
+            <div aria-hidden="true" style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 28, pointerEvents: 'none', background: `linear-gradient(to right, transparent, ${C.dark})` }} />
           </div>
 
           {/* Flash banner — page-level error/success surface. Replaces every
@@ -151,11 +169,11 @@ export default function TournamentManagePage({ currentUser, profile }) {
             </div>
           )}
 
-          {tab === 'Teams' && <TeamsTab tournamentId={id} teams={teams} reload={load} flash={showFlash} />}
+          {tab === 'Teams' && <TeamsTab tournamentId={id} teams={teams} standingsByTeam={standingsByTeam} reload={load} flash={showFlash} />}
           {tab === 'Schedule' && <ScheduleTab tournamentId={id} tournament={tournament} teams={teams} games={games} rinks={rinks} reload={load} flash={showFlash} />}
           {tab === 'Bracket' && <BracketTab tournamentId={id} tournament={tournament} teams={teams} games={games} rinks={rinks} reload={load} flash={showFlash} />}
           {tab === 'Scorers' && <ScorersTab tournamentId={id} tournamentName={tournament.name} profile={profile} flash={showFlash} />}
-          {tab === 'Settings' && <SettingsTab tournament={tournament} reload={load} flash={showFlash} />}
+          {tab === 'Settings' && <SettingsTab tournament={tournament} currentUser={currentUser} reload={load} flash={showFlash} />}
         </div>
       </div>
     </Layout>
@@ -163,7 +181,7 @@ export default function TournamentManagePage({ currentUser, profile }) {
 }
 
 // ====================== TEAMS TAB ======================
-function TeamsTab({ tournamentId, teams, reload, flash }) {
+function TeamsTab({ tournamentId, teams, standingsByTeam = {}, reload, flash }) {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
 
@@ -211,11 +229,15 @@ function TeamsTab({ tournamentId, teams, reload, flash }) {
             ) : (
               <div key={t.id} style={{ display: 'flex', alignItems: 'center', padding: 12, borderTop: i ? `1px solid rgba(46,91,140,0.25)` : 'none', gap: 12 }}>
                 <div style={{ width: 36, height: 36, borderRadius: 8, background: t.logo_url ? `url(${t.logo_url}) center/cover` : C.navy, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 13, color: '#fff' }}>
-                  {!t.logo_url && (t.team_name || '?').split(' ').map(w => w[0]).slice(0, 2).join('')}
+                  {!t.logo_url && teamInitials(t.team_name, 2)}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{t.team_name}{t.seed ? ` · #${t.seed}` : ''}</div>
-                  <div style={{ fontSize: 12, color: C.steel }}>{t.contact_email || '—'}</div>
+                  <div style={{ fontSize: 12, color: C.steel }}>
+                    {standingsByTeam[t.id]?.gp > 0
+                      ? <span><b style={{ color: C.ice }}>{standingsByTeam[t.id].wins}-{standingsByTeam[t.id].losses}-{standingsByTeam[t.id].ties}</b> · {standingsByTeam[t.id].pts} pts · {t.contact_email || 'no contact'}</span>
+                      : (t.contact_email || '—')}
+                  </div>
                 </div>
                 <button onClick={() => setEditingId(t.id)} style={btnGhost}>Edit</button>
               </div>
@@ -324,11 +346,24 @@ function ScheduleTab({ tournamentId, tournament, teams, games, rinks, reload, fl
     setShowGen(false); reload();
   };
 
+  // If pool games already exist, re-running the generator nukes them. Surface
+  // that fact in the button copy and gate the form behind a confirm so the
+  // director can't accidentally wipe a scheduled day they just hand-edited.
+  const hasPoolGames = poolGames.length > 0;
+  const handleGenerateClick = () => {
+    if (hasPoolGames && !showGen) {
+      const ok = window.confirm(`Regenerating will replace the ${poolGames.length} existing pool game${poolGames.length === 1 ? '' : 's'}. Bracket games stay intact. Continue?`);
+      if (!ok) return;
+    }
+    setShowGen((v) => !v);
+  };
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div style={{ fontSize: 13, color: C.steel }}>{poolGames.length} pool game{poolGames.length === 1 ? '' : 's'}</div>
-        <button onClick={() => setShowGen((v) => !v)} style={btnPrimary}>⚡ Generate Pool Schedule</button>
+        <button onClick={handleGenerateClick} style={btnPrimary}>
+          {hasPoolGames ? `⚡ Regenerate (wipes ${poolGames.length})` : '⚡ Generate Pool Schedule'}
+        </button>
       </div>
 
       {showGen && (
@@ -382,7 +417,7 @@ function ScheduleTab({ tournamentId, tournament, teams, games, rinks, reload, fl
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>
                   {g.home_team?.team_name || '?'} vs. {g.away_team?.team_name || '?'}
-                  {g.home_team?.pool && <span style={{ marginLeft: 6, fontSize: 10, color: C.red, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Pool {g.home_team.pool}</span>}
+                  {g.home_team?.pool && <span style={{ marginLeft: 6, fontSize: 10, color: C.red, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{g.home_team.pool}</span>}
                 </div>
                 <div style={{ fontSize: 12, color: C.steel, marginTop: 2 }}>
                   {fmtDateTime(g.start_time)}
@@ -466,15 +501,35 @@ function GameEditRow({ game, rinks, teams, flash, onDone, onCancel }) {
 function BracketTab({ tournamentId, tournament, teams, games, rinks, reload, flash }) {
   const advPerPool = tournament?.settings?.advancement_per_pool ?? 2;
   const bracketGames = games.filter((g) => (g.round || 'pool') !== 'pool');
+  // Count distinct pools so the "Add Bracket Game" default round can be
+  // derived from how many teams will advance. 2 advancers → Final, 4 → Semi,
+  // 8 → Quarter. Saves directors from manually picking "Final" every time
+  // when the bracket is small (the BLPA Bash 1-per-pool x 2 pools case).
+  const poolCount = useMemo(() => {
+    const set = new Set(teams.map((t) => t.pool).filter(Boolean));
+    return Math.max(set.size, 1);
+  }, [teams]);
+  const defaultRound = useMemo(() => {
+    const totalAdvancers = poolCount * advPerPool;
+    if (totalAdvancers <= 2) return 'final';
+    if (totalAdvancers <= 4) return 'semifinal';
+    return 'quarterfinal';
+  }, [poolCount, advPerPool]);
   const [qualifiers, setQualifiers] = useState([]);
   const [loaded, setLoaded] = useState(false);
 
-  const [round, setRound] = useState('quarterfinal');
+  const [round, setRound] = useState(defaultRound);
   const [homeId, setHomeId] = useState('');
   const [awayId, setAwayId] = useState('');
   const [startTime, setStartTime] = useState('');
   const [rinkId, setRinkId] = useState('');
   const [busy, setBusy] = useState(false);
+
+  // Keep `round` in sync with the derived default whenever the tournament's
+  // pool count or advancement rules change (e.g., director edits settings
+  // and comes back to Bracket). Only updates when the user hasn't picked
+  // a different round yet — we don't want to clobber their selection.
+  useEffect(() => { setRound((r) => (r === 'quarterfinal' && defaultRound !== 'quarterfinal') ? defaultRound : r); }, [defaultRound]);
 
   // Refresh qualifiers when pool play actually progresses, not just when the
   // games array length changes. Pool games going final is what locks seeds.
@@ -524,12 +579,18 @@ function BracketTab({ tournamentId, tournament, teams, games, rinks, reload, fla
               <span style={{ width: 22, height: 22, borderRadius: '50%', background: q.pool_rank === 1 ? C.red : C.blue, color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{q.pool_rank}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>{q.team_name}</div>
-                <div style={{ fontSize: 11, color: C.steel }}>Pool {q.pool} · {q.wins}-{q.losses}-{q.ties} · {q.pts} pts</div>
+                <div style={{ fontSize: 11, color: C.steel }}>{q.pool} · {q.wins}-{q.losses}-{q.ties} · {q.pts} pts</div>
               </div>
             </div>
           ))}
         </div>
       </div>
+
+      {/* Auto-generate championship bracket — the BLPA "4-team-per-pool"
+          pattern. Each pool with 4 teams gets 4 games: 2 semis (2v3, 1v4),
+          a gold game (semi winners), and a bronze game (semi losers).
+          Gold/bronze start with TBD teams and fill in when semis finalize. */}
+      <ChampionshipBracketGenerator tournamentId={tournamentId} teams={teams} bracketGames={bracketGames} reload={reload} flash={flash} rinks={rinks} />
 
       {/* Add bracket game */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 18 }}>
@@ -586,11 +647,24 @@ function BracketTab({ tournamentId, tournament, teams, games, rinks, reload, fla
         <div style={{ textAlign: 'center', color: C.steel, padding: 24, fontSize: 13 }}>No bracket games yet.</div>
       ) : (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
-          {bracketGames.map((g, i) => (
-            <div key={g.id} style={{ display: 'flex', alignItems: 'center', padding: 12, borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none' }}>
+          {bracketGames.map((g, i) => {
+            const isFinal = g.status === 'final';
+            const isLive = g.status === 'live';
+            const isSO = isFinal && (g.shootout_winner === 'home' || g.shootout_winner === 'away');
+            return (
+            <div key={g.id} style={{ display: 'flex', alignItems: 'center', padding: 12, borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none', gap: 10 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 10, color: C.red, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 2 }}>{g.round}</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>{g.home_team?.team_name || '?'} vs. {g.away_team?.team_name || '?'}</div>
+                <div style={{ fontSize: 10, color: C.red, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 2 }}>
+                  {g.round}{g.pool ? ` · ${g.pool}` : ''}
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.ice, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span>{g.home_team?.team_name || 'TBD'} vs. {g.away_team?.team_name || 'TBD'}</span>
+                  {(isFinal || isLive) && (
+                    <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, color: isFinal ? C.ice : C.red }}>
+                      {g.home_score ?? 0}–{g.away_score ?? 0}{isSO ? ' SO' : isLive ? ' · LIVE' : ''}
+                    </span>
+                  )}
+                </div>
                 <div style={{ fontSize: 12, color: C.steel, marginTop: 2 }}>{fmtDateTime(g.start_time)}</div>
               </div>
               <button onClick={async () => {
@@ -601,7 +675,109 @@ function BracketTab({ tournamentId, tournament, teams, games, rinks, reload, fla
                 reload();
               }} style={{ ...btnGhost, color: C.red, borderColor: C.red }}>Delete</button>
             </div>
-          ))}
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ====================== CHAMPIONSHIP BRACKET GENERATOR ======================
+// Self-contained sub-component for the Bracket tab. Reads the current
+// pool-play status and either offers a "Generate Championship Bracket"
+// button (when all pool games are final + no bracket games yet) or shows
+// a status hint ("Waiting on N pool games" / "Bracket already generated").
+function ChampionshipBracketGenerator({ tournamentId, teams, bracketGames, reload, flash, rinks }) {
+  const [open, setOpen] = useState(false);
+  const [start, setStart] = useState('');
+  const [rinkId, setRinkId] = useState('');
+  const [gameMinutes, setGameMinutes] = useState(60);
+  const [busy, setBusy] = useState(false);
+
+  // Count pools that have exactly 4 teams. The 4-team pattern is what this
+  // generator supports; other shapes fall back to manual entry below.
+  const poolSummary = useMemo(() => {
+    const byPool = teams.reduce((acc, t) => {
+      if (!t.pool) return acc;
+      acc[t.pool] = (acc[t.pool] || 0) + 1;
+      return acc;
+    }, {});
+    const fourTeamPools = Object.entries(byPool).filter(([, n]) => n === 4).map(([p]) => p);
+    const otherPools    = Object.entries(byPool).filter(([, n]) => n !== 4);
+    return { fourTeamPools, otherPools, totalPools: Object.keys(byPool).length };
+  }, [teams]);
+
+  const alreadyGenerated = bracketGames.length > 0;
+  const eligible = poolSummary.fourTeamPools.length > 0;
+
+  if (!eligible && !alreadyGenerated) {
+    // Nothing to surface — Tournaments with non-4-team pools use the manual
+    // "Add Bracket Game" form below.
+    return null;
+  }
+
+  const handleGenerate = async () => {
+    if (!start) { flash?.('error', 'Pick a start time for the first semifinal.'); return; }
+    setBusy(true);
+    const { inserted, error, poolsCovered } = await generateChampionshipBracket(tournamentId, {
+      startTime: new Date(start).toISOString(),
+      rinkId: rinkId || null,
+      gameMinutes: parseInt(gameMinutes, 10) || 60,
+    });
+    setBusy(false);
+    if (error) { flash?.('error', `Bracket generation failed: ${error.message}`); return; }
+    flash?.('success', `Generated ${inserted} bracket games across ${poolsCovered.length} pool${poolsCovered.length === 1 ? '' : 's'}.`);
+    setOpen(false);
+    reload();
+  };
+
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 16, textTransform: 'uppercase' }}>
+            Championship bracket
+          </div>
+          <div style={{ fontSize: 12, color: C.steel, marginTop: 4, lineHeight: 1.5 }}>
+            {alreadyGenerated
+              ? `${bracketGames.length} bracket game${bracketGames.length === 1 ? '' : 's'} already created. Delete them below to regenerate.`
+              : `Auto-create 4 games per 4-team pool: 2 semis (seed 2 v 3, seed 1 v 4), final (winners), bronze (losers). Pools matched: ${poolSummary.fourTeamPools.join(' · ') || 'none'}.${poolSummary.otherPools.length ? ` Pools skipped (not 4 teams): ${poolSummary.otherPools.map(([p, n]) => `${p} (${n})`).join(', ')}.` : ''}`}
+          </div>
+        </div>
+        {!alreadyGenerated && (
+          <button onClick={() => setOpen((v) => !v)} style={btnPrimary}>
+            🏆 Generate Bracket
+          </button>
+        )}
+      </div>
+
+      {open && !alreadyGenerated && (
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
+          <div style={{ fontSize: 12, color: C.steel, marginBottom: 12, lineHeight: 1.5 }}>
+            Seeds resolve from current standings. Run this once pool play is complete (or use placeholder seeds and edit each game after). Bronze + final games start with TBD teams and fill in automatically when each semi finalizes.
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 12 }}>
+            <div>
+              <label style={labelStyle}>First semi start</label>
+              <input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} style={inputStyle}/>
+            </div>
+            <div>
+              <label style={labelStyle}>Per-game minutes</label>
+              <input type="number" value={gameMinutes} onChange={(e) => setGameMinutes(e.target.value)} style={inputStyle}/>
+            </div>
+            <div>
+              <label style={labelStyle}>Default rink</label>
+              <select value={rinkId} onChange={(e) => setRinkId(e.target.value)} style={inputStyle}>
+                <option value="">— None —</option>
+                {rinks.map((r) => <option key={r.id} value={r.id}>{[r.sub_rink, r.name].filter(Boolean).join(' · ')}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button onClick={() => setOpen(false)} style={btnGhost}>Cancel</button>
+            <button onClick={handleGenerate} disabled={busy} style={btnPrimary}>{busy ? 'Generating…' : 'Generate'}</button>
+          </div>
         </div>
       )}
     </div>
@@ -609,12 +785,12 @@ function BracketTab({ tournamentId, tournament, teams, games, rinks, reload, fla
 }
 
 // ====================== SETTINGS TAB ======================
-function SettingsTab({ tournament, reload, flash }) {
+function SettingsTab({ tournament, currentUser, reload, flash }) {
   const [name, setName] = useState(tournament.name || '');
   const [division, setDivision] = useState(tournament.division || '');
   const [startDate, setStartDate] = useState(tournament.start_date || '');
   const [endDate, setEndDate] = useState(tournament.end_date || '');
-  const [status, setStatus] = useState(tournament.status || 'upcoming');
+  const [status, setStatus] = useState(tournament.status || 'draft');
   const [logoUrl, setLogoUrl] = useState(tournament.logo_url || '');
   const [accentColor, setAccentColor] = useState(tournament.accent_color || '');
   // Format & rules live in the settings JSONB. Seed from what's stored, falling
@@ -632,10 +808,48 @@ function SettingsTab({ tournament, reload, flash }) {
     allow_ties: s0.allow_ties ?? true,
     shootout_pool: s0.shootout_pool ?? false,
     shootout_bracket: s0.shootout_bracket ?? true,
+    // Overtime defaults ON to preserve historical behavior. Directors of
+    // BLPA-style "regulation → shootout, no OT" formats can flip it off and
+    // the ScorerView's PERIOD selector hides the OT button.
+    overtime_allowed: s0.overtime_allowed ?? true,
     advancement_per_pool: s0.advancement_per_pool ?? 2,
   });
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const setF = (k, v) => setFmt((prev) => ({ ...prev, [k]: v }));
+
+  // Directors can paste a URL OR upload a logo file. Uploads go through the
+  // shared media bucket (same as profile avatars + post images). The returned
+  // public URL drops into the logoUrl field; the row only persists when the
+  // director clicks Save Settings — matches the rest of the form's behavior.
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentUser?.id) { e.target.value = ''; return; }
+    if (!file.type.startsWith('image/')) {
+      flash?.('error', 'Logo must be an image (PNG, JPG, SVG, WebP).');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      flash?.('error', `Logo is ${(file.size / 1024 / 1024).toFixed(1)} MB — max 5 MB.`);
+      e.target.value = '';
+      return;
+    }
+    setUploading(true);
+    const verdict = await classifyImage(file);
+    if (!verdict.ok) {
+      setUploading(false);
+      flash?.('error', 'That image looks like it may violate Rinkd\'s guidelines. Try a different one.');
+      e.target.value = '';
+      return;
+    }
+    const { url, error } = await uploadMedia(file, currentUser.id);
+    setUploading(false);
+    e.target.value = '';
+    if (error || !url) { flash?.('error', `Upload failed: ${error?.message || 'unknown error'}`); return; }
+    setLogoUrl(url);
+    flash?.('success', 'Logo uploaded — click Save Settings to apply.');
+  };
 
   const save = async () => {
     setBusy(true);
@@ -654,6 +868,7 @@ function SettingsTab({ tournament, reload, flash }) {
       allow_ties: !!fmt.allow_ties,
       shootout_pool: !!fmt.shootout_pool,
       shootout_bracket: !!fmt.shootout_bracket,
+      overtime_allowed: !!fmt.overtime_allowed,
       advancement_per_pool: num(fmt.advancement_per_pool, 2),
     };
     // Merge back into the existing settings JSONB so keys we don't edit here
@@ -701,10 +916,13 @@ function SettingsTab({ tournament, reload, flash }) {
           <div>
             <label style={labelStyle}>Status</label>
             <select value={status} onChange={(e) => setStatus(e.target.value)} style={inputStyle}>
-              <option value="upcoming">Upcoming</option>
-              <option value="active">Active</option>
+              {/* Values match the tournaments_status_check DB constraint
+                  exactly. Draft = pre-event, hidden from the public
+                  Tournaments index; Active = live + visible; Complete =
+                  wrapped + archived. */}
+              <option value="draft">Draft (hidden from public)</option>
+              <option value="active">Active (live, public)</option>
               <option value="complete">Complete</option>
-              <option value="cancelled">Cancelled</option>
             </select>
           </div>
           <div>
@@ -780,6 +998,7 @@ function SettingsTab({ tournament, reload, flash }) {
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 16 }}>
           {checkbox('allow_ties', 'Allow ties in pool play')}
+          {checkbox('overtime_allowed', 'Allow overtime')}
           {checkbox('shootout_pool', 'Shootout in pool play')}
           {checkbox('shootout_bracket', 'Shootout in bracket')}
         </div>
@@ -793,8 +1012,29 @@ function SettingsTab({ tournament, reload, flash }) {
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
           <div style={{ gridColumn: '1 / -1' }}>
-            <label style={labelStyle}>Logo URL</label>
-            <input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="https://…" style={inputStyle}/>
+            <label style={labelStyle}>Logo</label>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="https://… or upload below" style={{ ...inputStyle, flex: 1, minWidth: 200 }}/>
+              <input id="tournament-logo-upload" type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} disabled={uploading} />
+              <label htmlFor="tournament-logo-upload"
+                style={{
+                  ...btnGhost,
+                  cursor: uploading ? 'wait' : 'pointer',
+                  opacity: uploading ? 0.6 : 1,
+                  display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
+                }}>
+                {uploading ? 'Uploading…' : '📷 Upload'}
+              </label>
+              {logoUrl && (
+                <button type="button" onClick={() => setLogoUrl('')}
+                  style={{ ...btnGhost, color: C.red, borderColor: C.red, whiteSpace: 'nowrap' }}>
+                  Remove
+                </button>
+              )}
+            </div>
+            <div style={{ fontSize: 11, color: C.steel, marginTop: 6, lineHeight: 1.4 }}>
+              PNG, JPG, SVG, or WebP up to 5 MB. Square or wide logos work best.
+            </div>
           </div>
           <div>
             <label style={labelStyle}>Accent Color (hex)</label>
