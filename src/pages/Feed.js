@@ -166,8 +166,16 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, onLik
             onBlocked={() => onUserBlocked?.(post.author_id)}
           />
         </div>
-        {post.content && <p style={{ fontSize: 15, color: C.ice, lineHeight: 1.55, marginBottom: 10, wordBreak: 'break-word' }}>{post.content}</p>}
+        {post.content && <p style={{ fontSize: 15, color: C.ice, lineHeight: 1.55, marginBottom: 10, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{post.content}</p>}
         <MediaDisplay url={post.media_url} type={post.media_type} />
+        {/* Auto-recap posts link straight to the game page — saves the
+            spectator from copy/pasting the URL out of the content body. */}
+        {post.recap_for_game_id && (
+          <button type="button" onClick={() => navigate(`/game/${post.recap_for_game_id}`)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, marginBottom: 10, background: 'rgba(46,91,140,0.2)', border: '1px solid #2E5B8C', color: '#F4F7FA', fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer' }}>
+            <span style={{ fontSize: 16 }}>🏒</span> View game →
+          </button>
+        )}
         {post.livebarn_venue_id && (
           <a href={"https://watch.livebarn.com/en/videoplayer?venueid=" + post.livebarn_venue_id + "&referrer=rinkd"} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, marginBottom: 10, background: 'rgba(46,91,140,0.2)', border: '1px solid #2E5B8C', color: '#F4F7FA', fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', textDecoration: 'none' }}>
             <span style={{ fontSize: 16 }}>📺</span> Watch Live on LiveBarn
