@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabase';
 import { LedR } from '../components/Logos';
 import { getLiveBarnUrl } from '../lib/livebarn';
 import { teamInitials } from '../lib/teamInitials';
+import { followTournament, unfollowTournament, isFollowingTournament } from '../lib/tournamentSubscriptions';
+import { subscribeToPush, isPushSubscribed } from '../lib/push';
 
 
 const TABS = ['Standings','Schedule','Bracket','Info'];
@@ -76,6 +78,11 @@ export default function TournamentPage({ currentUser }) {
   // scorers should see the "Open Scorer View" button on each game card — not
   // just the director. Loaded once after the tournament resolves.
   const [isAssignedScorer, setIsAssignedScorer] = useState(false);
+  // "🔔 Follow tournament" — controls whether the user gets a push when
+  // any game in this tournament finalizes (per send-recap-push Edge
+  // Function targeting). Loaded once on mount.
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followBusy, setFollowBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -170,6 +177,43 @@ export default function TournamentPage({ currentUser }) {
     return () => { cancelled = true; };
   }, [id, currentUser?.id]);
 
+  // Same cheap-query pattern for the follow state.
+  useEffect(() => {
+    let cancelled = false;
+    if (!id || !currentUser?.id) { setIsFollowing(false); return; }
+    isFollowingTournament(currentUser.id, id).then((v) => { if (!cancelled) setIsFollowing(v); });
+    return () => { cancelled = true; };
+  }, [id, currentUser?.id]);
+
+  const handleFollowToggle = async () => {
+    if (!currentUser?.id || !id || followBusy) return;
+    setFollowBusy(true);
+    if (isFollowing) {
+      const { error } = await unfollowTournament(currentUser.id, id);
+      setFollowBusy(false);
+      if (!error) setIsFollowing(false);
+      return;
+    }
+    // First-time follow: make sure push notifications are actually wired up.
+    // Without an existing browser subscription the DB row is created but no
+    // push ever reaches the device. subscribeToPush() prompts for permission
+    // and stashes the push_subscriptions row. Skip the prompt if already on.
+    const alreadyOn = await isPushSubscribed();
+    if (!alreadyOn) {
+      const sub = await subscribeToPush(currentUser.id);
+      if (!sub) {
+        setFollowBusy(false);
+        // eslint-disable-next-line no-alert
+        window.alert("Push notifications are off for this device, so following won't deliver pushes yet. You can still enable them later from your Profile.");
+        // Continue with the DB follow anyway — once they enable push from
+        // Profile, future recaps will deliver.
+      }
+    }
+    const { error } = await followTournament(currentUser.id, id);
+    setFollowBusy(false);
+    if (!error) setIsFollowing(true);
+  };
+
   if (loading) return (
     <div style={{background:'#07111F',minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:'#F4F7FA',fontFamily:'Barlow,sans-serif',fontSize:14}}>
       Loading tournament...
@@ -259,6 +303,26 @@ export default function TournamentPage({ currentUser }) {
           <button onClick={() => navigate(-1)} style={{color:'rgba(244,247,250,0.6)',fontSize:13,background:'none',border:'none',cursor:'pointer',fontFamily:'Barlow,sans-serif'}}>← Events</button>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             {liveGames.length > 0 && <span style={{background:accent+'26',color:accent,fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:20}}>● Live now</span>}
+            {/* Follow toggle — opt-in for tournament push notifications. Fires
+                a one-time push permission prompt the first time (handled
+                inside handleFollowToggle). Director gets the Manage button
+                instead since they're already getting events from their own
+                writes. */}
+            {tournament && currentUser && tournament.director_id !== currentUser.id && (
+              <button onClick={handleFollowToggle} disabled={followBusy}
+                style={{
+                  background: isFollowing ? 'rgba(46,91,140,0.25)' : accent,
+                  color: isFollowing ? '#F4F7FA' : '#fff',
+                  border: isFollowing ? '1px solid rgba(46,91,140,0.5)' : 'none',
+                  borderRadius: 999, padding: '5px 12px', fontSize: 11, fontWeight: 700,
+                  cursor: followBusy ? 'wait' : 'pointer',
+                  fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic',
+                  letterSpacing: '0.05em', textTransform: 'uppercase',
+                  opacity: followBusy ? 0.6 : 1,
+                }}>
+                {followBusy ? '...' : isFollowing ? '🔕 Following' : '🔔 Follow'}
+              </button>
+            )}
             {tournament && currentUser && tournament.director_id === currentUser.id && (
               <button onClick={() => navigate(`/tournament/${id}/manage`)}
                 style={{background:accent,color:'#fff',border:'none',borderRadius:999,padding:'5px 12px',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',letterSpacing:'0.05em',textTransform:'uppercase'}}>
