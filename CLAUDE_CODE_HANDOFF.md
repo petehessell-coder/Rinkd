@@ -1,8 +1,8 @@
 # Rinkd — Claude Code Handoff
 
 **Created:** May 15, 2026 — supersedes the previous handoff. Self-contained: a fresh Claude Code session should be able to pick up from here without reading the prior doc.
-**Last updated:** May 16, 2026 — Demo BLPA Cleveland Bash 2026 tournament seeded end-to-end (§5) and a full UI walkthrough produced a 21-item punch list (§11, NEW). Block-user feature shipped as `0468f8e3` and Report-feature + critical posts.UPDATE security fix shipped as `4a020d07` — both already on `main` and live on Vercel. DB performance pass (§5 + §6) was DB-only via Supabase MCP, no commits needed.
-**Source:** continuation of the audit-fix work, all changes shipped this session pushed to `main` and live on Vercel.
+**Last updated:** May 16, 2026 evening — full BLPA Cleveland pilot-prep batch shipped to the `claude/elegant-sanderson-80d1d0` worktree branch (4 new commits, pending Pete's merge to `main`). All 21 punch-list items from §11 are done. Scorer lockout-on-finalize, auto-recap posts, tournament logo upload, BLPA-Bash format-aware standings (Goal Quotient, Period Points, PIM in the view), shootout-winner recording, championship bracket auto-generation (4-team-per-pool pattern), and the Cleveland tournament has been repurposed in place (Jun 13-14 at RMU Island Sports Center, 8 placeholder teams, 12 Saturday round-robin games seeded). Status-enum mismatch in SettingsTab fixed (now matches the DB constraint). See §5 for the per-feature breakdown.
+**Source:** continuation of the audit-fix work, plus a full BLPA-spec implementation pass based on `rinkd_v4/CLEVELAND_BUILD_PLAN.md`.
 
 ---
 
@@ -43,11 +43,19 @@ BUILD_PATH=/tmp/rinkd-build npx react-scripts build
 
 ---
 
-## 4. Current state — verified May 15, 2026
+## 4. Current state — verified May 16, 2026 evening
 
-`main` HEAD is **`4a020d07`**, pushed and deployed. Recent history:
+`main` HEAD is **`4a020d07`** (last pushed state). A worktree branch
+`claude/elegant-sanderson-80d1d0` is **4 commits ahead of main**, pending
+Pete's merge + push. After merge, HEAD will be **`9c773ff6`**. Full history:
 
 ```
+[worktree branch — pending merge to main:]
+9c773ff6  fix: layout polish — bottom nav padding + HelpButton overlap
+5c3e42e5  feat: scorer lockout + auto-recap + shootout winner + bracket advancement
+21785087  feat: tournament manage — punch list + logo upload + championship bracket gen
+5ae955bc  feat: tournament public pages — punch list + BLPA standings/SO/champion
+[on main:]
 4a020d07  feat: report posts/comments + lock down posts.UPDATE security hole
 0468f8e3  feat: block user — user_blocks table + lib/blocks.js + profile/settings UI + read-path filters
 02409e96  fix: pilot-readiness audit Surfaces 11-17 — all 14 items + RLS
@@ -63,7 +71,12 @@ e995f3ef  fix: site-audit pass — 6 Criticals + 10 Highs
 37e50791  Tournament pilot ...
 ```
 
-**Working tree state:** clean for audit-related work. Two pre-existing strays remain uncommitted (`scripts/chiller/data/seed-leagues.json`, `supabase/functions/send-onboarding-emails/index.ts`) — leave them alone unless Pete asks otherwise.
+**Merge command** (Pete runs from `~/Downloads/rinkd_live`):
+```
+rm -f .git/index.lock && git checkout main && git merge claude/elegant-sanderson-80d1d0 --no-ff -m "merge: tournament UI punch-list + BLPA pilot batch" && git push origin main
+```
+
+**Working tree state:** clean. Two pre-existing strays remain uncommitted (`scripts/chiller/data/seed-leagues.json`, `supabase/functions/send-onboarding-emails/index.ts`) — leave them alone unless Pete asks otherwise.
 
 ---
 
@@ -143,7 +156,144 @@ The "Block user" Sprint 4F item from the previous roadmap is **shipped** — sch
 
 **Smoke test**: sign in as user B (not the post author), tap `⋯` on someone's post, choose Report → pick reason → optional details → Send. The post should disappear from your feed locally; admin (Pete) then sees it in `/admin/moderation` with the flag_reason badge and "1 report" count.
 
+### Evening of May 16 — Full BLPA Cleveland pilot batch (worktree branch, 4 commits pending merge)
+
+Triggered by Pete's `rinkd_v4/CLEVELAND_BUILD_PLAN.md` review. Shipped on
+worktree branch `claude/elegant-sanderson-80d1d0`. Merge command in §4.
+
+**21-item punch list (§11) — all done.** See §11 for the original list +
+file:line refs. Highlights: Pool-Pool prefix fix; GP/GA/Diff columns +
+GQ/PIM/Period Pts on standings (BLPA-spec); public schedule day-grouping +
+times + championship gold treatment; bracket champion banner; goal log
+resolves jersey # → player name via `game_lineups`; ScorerView OT/SO
+buttons gate on tournament settings; manage tab strip clipping fix;
+generate-pool-schedule guard; bracket default round derived from
+pool_count × advancement; manage bracket shows scores; Teams tab shows
+W/L/T; Tournaments index ● Live badge requires `end_date >= today`;
+recency sort; game header de-dup; team-initials helper strips stopwords
+(`src/lib/teamInitials.js`); layout bottom-nav padding; HelpButton sized
+down + z-indexed below nav.
+
+**Scorer lockout on finalize (`5c3e42e5`).** Once `status='final'`, every
+write path (`changeScore`, `changePeriod`, `changeShots`,
+`saveGoal/Penalty/Goalie`, `deleteGoal/Penalty`) early-returns. UI hides
++/−, period selector, log/add/delete controls. Banner explains the lock;
+director sees "🔓 Reopen Game" button, scorers see "Only the director can
+reopen." Reopen flips status back to `live` preserving goals/penalties/shots.
+**Defense-in-depth:** even an old client or DevTools can't sneak writes
+through — every handler checks `isLocked` itself.
+
+**Auto-recap on finalize (`5c3e42e5`).** On successful tournament-game
+finalize, upserts a Feed post tagged "Game Recap" with headline
+("🏒 FINAL · Beer Necessities 4, Net Profits 3 / 🏆 Championship · BLPA
+Cleveland"). New `posts.recap_for_game_id` column (partial unique index)
+makes it idempotent — Reopen + re-finalize updates the same row,
+preserves original author + `created_at`. Feed PostCard renders a
+"🏒 View game →" affordance when this column is set, navigating to
+`/game/:id`. League games skipped for pilot.
+
+**Logo upload for tournaments (`21785087`).** TournamentManage → Settings
+→ Branding now has an upload button alongside the URL input. Uses
+shared `media` bucket via `uploadMedia(file, currentUser.id)`, 5 MB cap,
+NSFW moderation matches profile avatars. URL fills the existing text
+field on success; director clicks Save Settings to persist.
+
+**Status enum mismatch fixed (`21785087`).** SettingsTab dropdown
+previously offered ('upcoming','active','complete','cancelled') but the
+DB `tournaments_status_check` only allows ('draft','active','complete').
+Selecting Upcoming or Cancelled silently failed on save. Dropdown is now
+aligned to the DB exactly: Draft (hidden from public), Active (live,
+public), Complete. Default for new state is `draft`.
+
+**ChampionshipBracketGenerator (`21785087`).** New component on the
+Bracket tab. For each 4-team pool, generates 4 games: 2 semis (seed 2v3
++ seed 1v4), bronze game (TBD home/away), final game (TBD home/away).
+Lives in `src/lib/tournamentManage.js`:
+- `generateChampionshipBracket(tournamentId, {startTime, rinkId, gameMinutes})`
+   — refuses to re-run if any bracket games exist (delete first to regenerate).
+   Pools without exactly 4 teams are skipped; UI shows which pools matched.
+- `resolveBracketSlotsFromSemis(tournamentId, pool)` — called from
+   ScorerView's finalize path after a semi finalizes. Idempotent. Reads
+   `shootout_winner` for tied semis. Fills final.home with semi1 winner,
+   final.away with semi2 winner, bronze.home with semi1 loser, bronze.away
+   with semi2 loser.
+- `bracketWinnerSide(game)` — resolves winner side accounting for
+   shootout_winner. Returns 'home' | 'away' | null.
+
+**Shootout winner column + UI (`5c3e42e5`).** New `games.shootout_winner`
+column ('home'|'away'|null). When a bracket-round game ends tied with
+`shootout_bracket` on, ScorerView shows a Shootout Winner picker above
+Finalize; Finalize button is disabled until a side is picked. Reopen +
+re-finalize without a tie clears the field cleanly. Public schedule cards
++ manage bracket list show "FINAL / SO" and bold the SO winner. Champion
+banner reads `shootout_winner` so an SO-decided championship resolves
+correctly.
+
+**Format-aware standings UI (`5ae955bc`).** Tournament.js standings now
+read `settings.tiebreakers` and re-sort client-side. Columns swap based
+on format: BLPA Bash shows GQ + Period Pts; DEX shows PIM (ASC); default
+fallback shows DIFF. New `sortByTiebreakers` helper handles `lowest_pim`,
+`goal_quotient`, `period_points`, `head_to_head`, `coin_toss`.
+
+### DB migrations applied this batch (8 total via Supabase MCP)
+
+8. **`punch_20_rename_lakewood_rink_sub_rinks_to_sheet_a_b`** — renamed
+   the demo's Lakewood "Rink 1/Rink 2" sub_rinks to "Sheet A/Sheet B".
+9. **`game_recap_auto_post_link_column`** — `posts.recap_for_game_id` +
+   partial unique index. One recap per game; unlimited normal posts.
+10. **`blpa_standings_view_with_gq_period_pts_pim`** (+ `_fix_period_pts_dedup`)
+    — extended `tournament_standings` view with `goal_quotient` (GF÷GA,
+    GA=0 → GF/0.001), `period_pts` (derived from `game_goals` grouped by
+    period; non-shootout goals only), `pim` (derived from
+    `game_penalties.duration_minutes`). Default sort: `pts desc,
+    goal_quotient desc, period_pts desc, goal_diff desc, gf desc` —
+    matches BLPA Bash exactly. DEX re-sorts client-side on `pim ASC`.
+    The `_fix_period_pts_dedup` follow-up wraps the period_pts CTE in an
+    outer GROUP BY because the original split-by-home/away UNION ALL
+    produced two rows per team and the LEFT JOIN duplicated rows.
+11. **`games_add_shootout_winner_column`** — text check ('home'|'away').
+12. **`games_add_pool_column_for_bracket_scoping`** — text column on
+    `games` with index on `(tournament_id, pool, round)`. Backfilled
+    existing rows from `tournament_teams.pool`. Needed so bracket-pairing
+    logic (semi → final/bronze) can scope by division when both
+    final/bronze start with NULL teams.
+13. **`cleveland_pilot_repurpose_demo_tournament_v2`** — wipes the
+    Lakewood demo data (games + tournament_teams; cascades through
+    game_goals/penalties/shots/lineups), renames tournament to "BLPA
+    Cleveland", moves dates to Jun 13-14, sets venue to RMU Island
+    Sports Center, sets `advancement_per_pool=4` + `overtime_allowed=false`
+    in settings, accent color gold. Adds 2 RMU rinks (Sheet 1/Sheet 2,
+    UUIDs `a000…0010/0011`). Seeds 8 placeholder teams (A1-A4 in Pool
+    A, B1-B4 in Pool B). Seeds 12 Saturday round-robin games spread
+    across both sheets at 75-min slots (08:00 — 14:15 EDT). Tournament
+    status is `draft` so it stays hidden from the public Tournaments
+    index until Pete flips to `active`.
+
+**Cleveland day-of flow:**
+1. **Now → Jun 13:** Pete renames placeholder teams as Nick sends rosters,
+   uploads logos via the new logo upload field, flips status to `active`.
+2. **Sat Jun 13:** Scorers run pool play. Standings populate live with
+   BLPA tiebreaker order (Points → GQ → Period Pts).
+3. **Sat night:** Pete opens TournamentManage → Bracket → "🏆 Generate
+   Bracket". 8 games auto-create across 2 pools (semis with teams; gold
+   + bronze with TBD).
+4. **Sun Jun 14:** Each semi finalizes → ScorerView prompts for SO winner
+   if tied → gold/bronze slots auto-fill with the right teams. Pete (or
+   his scorers) runs the gold + bronze games. Auto-recap posts hit the
+   global feed as each finalizes.
+5. **Sun end:** Champion banner appears on the Bracket tab. Pete flips
+   tournament status to `complete`.
+
 ### Early morning of May 16 — Demo tournament seeded + UI walk-through
+
+> **Status (May 16 evening):** the tournament row at
+> `b2789d66-1d77-4a62-862d-00b550da6a98` was repurposed in place (see the
+> May 16 evening entry above). Its data — teams, games, goals, penalties,
+> shots, lineups — was wiped and replaced with the real BLPA Cleveland
+> pilot seed (Jun 13-14 at RMU, 8 placeholder teams, 12 Saturday
+> round-robin games). The narrative below describes the original *demo*
+> dataset for historical context only. Do NOT expect those scripted
+> goals/penalties/lineups to exist in the DB anymore.
 
 **Tournament built**: `BLPA Cleveland Bash 2026` — `tournament_id = b2789d66-1d77-4a62-862d-00b550da6a98`. Pete (`fc0018c2-0a7d-4eda-9d91-4077f2f138a4`) is the director. 8 teams across 2 pools, 12 pool games + 1 championship (all `status='final'`, championship is `round='final'`), dates May 9–10 (last weekend). Format = BLPA Bash preset verbatim. Full fidelity per Pete's ask: 90 goals (with periods/times/scorer #/assists), 43 penalties (minor + major mix incl. fighting), 78 shot-on-goal rows (per period/per team), 260 lineup rows (10 players × 2 teams × 13 games, names like "Gus 'Cement Hands' Beck" carried in `game_lineups.invite_name` since the `players` table is unused). Final standings ended exactly as scripted: Beer Necessities 3-0 in Pool A, Net Profits 3-0 in Pool B, BN won the championship 4-3 (regulation, scripted goal log).
 
@@ -211,8 +361,8 @@ Audit work is **done**. The post-audit landscape, in priority order:
 - ~~**DB index audit** (~30 min).~~ **Done May 15 evening** — see §5. FK indexes added, RLS initplan refactor shipped, advisor cleaned up.
 - **RLS multiple-permissive cleanup** (~30 min). 80 advisor WARNs remain — most are 2–3 differently-named policies doing the same thing (e.g. `comments_insert_own` + `"Authenticated users can comment"` + `"Users create their own comments"` are all the same INSERT-with-`author_id`-check). Consolidate to one policy per (table, cmd) pair. Behavior-affecting refactor, so do it deliberately and read each cluster before dropping — some pairs are subtly different.
 
-### Tournament UI bugs (NEW — see §11)
-- ~3 P1 items, ~6 P2 items, ~10 P3/P4 items found during the May 16 demo walkthrough. The Pool-Pool duplicate alone touches 4+ surfaces and is the single highest leverage fix. Full list with file:line refs in §11.
+### Tournament UI bugs (§11) — **DONE May 16 evening**
+- All 21 punch-list items shipped on worktree branch (4 commits, pending merge — see §4). §11 retained as a historical reference; do not re-implement.
 
 ### Still gated on populating `players`
 - The canonical `game_events` table backfill.
@@ -261,6 +411,17 @@ After Pete updates Site URL + Redirect URLs in the Supabase dashboard:
 - **Block-user invariants (May 15 late evening):** `lib/blocks.js` keeps a module-scoped `Set<uuid>` of every user ID I need to filter — both `blocker_id = me AND blocked_id = X` *and* `blocked_id = me AND blocker_id = X` rows. Cache is invalidated by `blockUser`/`unblockUser` and by `onAuthStateChange`. **The auto-unfollow on block is one-directional only:** `blockUser` deletes my follow of them, but the *reverse* follow row (theirs of me) survives because the `follows` RLS only lets the follower delete their own row. That dangling follow is inert — once the block exists, my content is filtered from their feed — but it does mean blocked users still count in raw `getFollowCounts(me).followers`. Cosmetic; revisit if it shows up in a UI screenshot. The clean fix is a `SECURITY DEFINER` RPC `block_user(target)` that does both deletes server-side. Out of scope for v1.
 - **Triggers that mutate another table must be `SECURITY DEFINER`** — May 15 late evening lesson, re-learned the hard way. `bump_post_like_count` originally wasn't, which forced the previous author to add a `qual = true` UPDATE policy on posts so the trigger could write. That accidentally opened up `posts` to arbitrary UPDATEs by any authenticated user. When adding any new trigger that updates a different table than it fires on (notification counts, denormalized aggregates, audit rows, etc.), make it `security definer` *and* `set search_path = public` so it doesn't depend on RLS exceptions. Check before you ship: `select prosecdef from pg_proc where proname = '<your_fn>'` must be `true`.
 - **Report-feature invariants (May 15 late evening):** `content_reports` has **no INSERT policy** — that's intentional. The only legitimate write path is `public.report_post()` or `public.report_comment()`, both `SECURITY DEFINER` so they bypass RLS. The unique constraint `(reporter_id, target_type, target_id)` makes the RPC idempotent (`on conflict do nothing`), so a panicking user double-tapping Report doesn't create duplicate audit rows. `flagged_at` uses `coalesce(flagged_at, now())` so the first-flag time is preserved across subsequent reports; `flag_reason` is last-write-wins (most recent reporter's framing — fine for the admin queue). When the admin approves an item the `content_reports` rows are intentionally **not** deleted — they're audit history. A re-flag after approval will re-set `is_flagged = true` and the item returns to the queue; the new report's row joins the historical ones.
+- **ScorerView is fully gated on `isLocked = status === 'final'` (May 16 evening).** Every write path (`changeScore`, `changePeriod`, `changeShots`, `saveGoal/Penalty/Goalie`, `deleteGoal/Penalty`) early-returns when locked, and the UI controls hide. Only the director (tournament) or commissioner (league) sees the Reopen button. When adding any new mutator to ScorerView, **start with `if (isLocked) return;`** — that's the defense-in-depth contract.
+- **Tournament settings JSONB is the single source of format truth.** The `tournament_formats` table from `rinkd_v4/CLEVELAND_BUILD_PLAN.md` was intentionally NOT built — the JSONB approach is simpler and the BLPA Bash preset (in `TournamentCreate.js` → `FORMAT_PRESETS`) already populates the right shape. Keys used downstream: `points_win`/`points_tie`/`points_loss` (standings view), `tiebreakers` (Tournament.js client-side re-sort + standings column swap), `shootout_pool`/`shootout_bracket` (ScorerView SO gating + bracket shootout-winner picker), `overtime_allowed` (ScorerView OT gating), `num_periods` (ScorerView period selector), `advancement_per_pool` (Bracket tab generator + standings "↑ ADVANCES" divider), `max_goal_differential` (Info tab mercy rule display; not enforced at game-time), `venue_name`/`venue_address` (Info tab).
+- **Tiebreaker tokens (May 16 evening).** `settings.tiebreakers` is an array of strings the standings UI re-sorts on. Supported tokens (handled in `sortByTiebreakers`): `points`, `goal_quotient`, `period_points`, `lowest_pim` / `penalty_minutes` (ASC), `goal_diff`, `goals_for`, `goals_against` (ASC), `head_to_head` (no-op stub), `coin_toss` (no-op stub). The DB view's default order matches BLPA Bash exactly so most tournaments don't need client-side re-sort; DEX-format tournaments do.
+- **Goal Quotient definition.** `GF ÷ GA`, with `GA = 0` treated as `GF / 0.001` to avoid divide-by-zero. Rounded to 3 decimals in the view. Per BLPA Nick's May 14 email — not GF − GA (goal_diff), which is the easier "intuitive" tiebreaker every other sport uses. When teams ask why their ranking changed, GQ is the answer.
+- **Period Points definition.** For each pool game, for each period (1–3 for most formats), the team that outscored its opponent in that period gets +1 period point. Ties in a period = 0 to either team. Shootout goals (`is_shootout = true`) are explicitly excluded — they decide the game, not a period. Derived from `game_goals` at view-time so we don't need a separate `game_periods` table.
+- **PIM definition.** Sum of `game_penalties.duration_minutes` per team across pool play. Each penalty row already carries `team_id` so no normalization needed. Used as the DEX-format secondary tiebreaker (lower PIM ranks higher).
+- **`games.shootout_winner` is the source of truth for SO-decided bracket games.** `home_score`/`away_score` reflect regulation only (a 4-3 OT win and a 4-3 SO win store the same scores). When resolving a bracket winner — for the champion banner, the bracket auto-fill, or anything else — use `bracketWinnerSide(game)` from `lib/tournamentManage.js` which checks shootout_winner first, then falls back to score comparison.
+- **`games.pool` is required for bracket pairing.** Pool games derive it from either side's `tournament_teams.pool` (and the migration backfilled existing rows). Semi/final/bronze games carry it explicitly so the bracket can be pool-scoped — needed because the final + bronze games START with NULL home/away, leaving the pool column as the only way to know which division they belong to.
+- **Championship bracket pattern (May 16 evening).** For 4-team-per-pool formats (BLPA Cleveland), `generateChampionshipBracket` creates 4 games per pool ordered by `start_time`: semi1 (seed 2v3) at slot 0, semi2 (seed 1v4) at slot 1, bronze at slot 2, final at slot 3. `resolveBracketSlotsFromSemis` pairs them by start_time order — so DO NOT reorder semi start_times after generation, or the auto-fill will pair the wrong winners with the wrong slots. Idempotent: re-running the generator refuses if any bracket games exist (delete first to regenerate). Director can also manually edit any auto-generated game via the existing manage Bracket UI.
+- **Auto-recap invariants (May 16 evening).** `posts.recap_for_game_id` has a partial unique index — at most one recap per game, unlimited regular posts (they all share NULL). `createGameRecapPost` in `lib/posts.js` upserts: if a row exists, updates content + tag (keeps original author + created_at); else inserts with the finalizing user as author. Only fires for tournament games (`!isLeague && game.tournament_id`); league games + team games are skipped. Failure to post the recap never blocks the finalize itself.
+- **Status enum mismatch (May 16 evening, FIXED).** `tournaments_status_check` allows only `('draft','active','complete')`. Previous SettingsTab dropdown offered Upcoming + Cancelled which silently failed. New code only offers the 3 valid options. If you ever need to add a status, update BOTH the DB constraint AND the dropdown — they're now in sync.
 - **Two pre-existing stray files** in the working tree (`scripts/chiller/data/seed-leagues.json`, `supabase/functions/send-onboarding-emails/index.ts`) — leave them out of audit commits unless Pete asks.
 - **`rinkd_v4` folder** — strategy/spec docs only. Do NOT edit app code there; it doesn't deploy. To bring it into context: `/add-dir ~/Downloads/rinkd_v4` in Claude Code.
 - **`rinkd_v4/RINKD_STATE_OF_PLAY.md`** is the broader orientation doc — read it for the BLPA partnership context, post-pilot specs, and pending tasks.
@@ -269,19 +430,28 @@ After Pete updates Site URL + Redirect URLs in the Supabase dashboard:
 
 ## 10. First thing to do in a new session
 
-1. Read this doc top to bottom — **especially §11 (tournament UI punch list)** which is brand-new.
-2. Run `cd ~/Downloads/rinkd_live && git log --oneline -6 && git status` to confirm state matches Section 4. HEAD should be `4a020d07`. The May 15 evening perf pass was DB-only (no commits). Block-user shipped as `0468f8e3`, Report feature shipped as `4a020d07` — both already on `main` and live on Vercel. Working tree should show only the two pre-existing strays (`scripts/chiller/data/seed-leagues.json`, `supabase/functions/send-onboarding-emails/index.ts`) plus possibly this handoff doc itself.
-   Confirm DB state via Supabase MCP: `select tablename from pg_tables where schemaname='public' and tablename in ('user_blocks','content_reports') order by tablename` should return both rows. **Also confirm the demo tournament still exists**: `select id, name, status from public.tournaments where id = 'b2789d66-1d77-4a62-862d-00b550da6a98'` should return one row (`BLPA Cleveland Bash 2026`, `complete`).
+1. Read this doc top to bottom — **especially the May 16 evening §5 entry** (full BLPA pilot batch shipped, pending merge).
+2. Run `cd ~/Downloads/rinkd_live && git log --oneline -6 && git status` to confirm state matches Section 4.
+   - If `main` HEAD is `4a020d07`: Pete hasn't merged the worktree branch yet. Use the merge command in §4 once authorized.
+   - If `main` HEAD is `9c773ff6`: merge happened. Move on.
+   - Confirm BLPA Cleveland is seeded: `select name, start_date, end_date, status from public.tournaments where id = 'b2789d66-1d77-4a62-862d-00b550da6a98'` should return `BLPA Cleveland · 2026-06-13 · 2026-06-14 · draft`. The team count should be 8 and game count 12 (Saturday pool play).
+   - Confirm the new DB shape: `select column_name from information_schema.columns where table_schema='public' and table_name='games' and column_name in ('pool','shootout_winner')` should return both rows.
 3. Ask Pete:
-   - Did you complete the Supabase dashboard config (Section 6) and verify the password-reset E2E (Section 8)? **As of last save: not yet — `pete@rinkd.app` had no `recovery_sent_at` and `nick@blpa.com`'s May 14 recovery token was still unused.**
-   - Did you smoke-test the now-deployed Block-user and Report features in prod?
-   - Do you still want the demo tournament (`BLPA Cleveland Bash 2026`) in the DB, or wipe it (one-line DELETE in §5)?
-   - What do you want to tackle next — the **tournament UI punch list** (§11; fastest pre-pilot wins per §11's own suggested order are #1, #17, #5, #11, #15), the RLS multiple-permissive cleanup (~30 min, §7), Sentry sanity check + VAPID env-var verification (~15 min, §6), PWA install banner for iOS (~1 hr), or post-pilot work?
+   - Did you complete the Supabase dashboard config (Section 6) and verify the password-reset E2E (Section 8)? **As of last save: not yet — `pete@rinkd.app` had no `recovery_sent_at` and `nick@blpa.com`'s May 14 recovery token was still unused.** This is still a P0 for pilot (BLPA teams will use Forgot Password during onboarding).
+   - Did Nick send the real team names + logos yet? Director swaps them via TournamentManage → Teams → Edit, and uploads logos via the new Settings → Branding upload button.
+   - Has BLPA Cleveland's status been flipped from `draft` → `active`? Required for the public Tournaments index to show it.
+   - Is the **public tournament page** still auth-gated? If yes, that's the biggest remaining pilot gap — see §12 below.
+   - What do you want to tackle next — the public-tournament gate (§12 P0), the RLS multiple-permissive cleanup (~30 min, §7), Sentry sanity check + VAPID env-var verification (~15 min, §6), PWA install banner for iOS (~1 hr), or post-pilot work?
 4. Then proceed from there.
 
 ---
 
-## 11. Tournament UI punch list (May 16 demo walkthrough)
+## 11. Tournament UI punch list (May 16 demo walkthrough) — ✅ ALL DONE
+
+**Status (May 16 evening):** every item below shipped on worktree branch
+`claude/elegant-sanderson-80d1d0` across commits `5ae955bc` (public pages),
+`21785087` (manage), `5c3e42e5` (scorer), and `9c773ff6` (layout). Pending
+Pete's merge to `main` — see §4. Retained below as a historical reference.
 
 Found by walking the seeded BLPA Cleveland Bash 2026 tournament end-to-end on the local dev server: public Standings/Schedule/Bracket/Info tabs, a game scoresheet, ScorerView, Tournaments index, and 5 director-manage tabs. 21 items below, ranked. **For each item: brief, where to fix, suggested approach.** Don't bundle these into one big commit — they're independent enough that each should land as its own small change (or grouped by surface).
 
@@ -365,3 +535,56 @@ update public.rinks set sub_rink = 'Sheet B' where id = 'a0000001-0000-0000-0000
 10. Everything else as polish.
 
 Total: roughly a half-day to land P1+P2+top-of-P3, which would meaningfully change the demo quality before pilot.
+
+---
+
+## 12. Pilot-readiness audit (May 16 evening — what's left for BLPA Cleveland Jun 13)
+
+The BLPA pilot batch shipped a huge amount (see §5 May 16 evening entry). This is the swept-up list of what could still trip up the live event, ranked by blast radius.
+
+### 🔴 P0 — Will affect the pilot if not handled
+
+**A. Public tournament page is auth-gated.** The `/tournament/:id` route in `src/App.js` is wrapped in `ProtectedRoute`, so spectators without a Rinkd account can't view the standings/schedule/bracket without signing up first. `CLEVELAND_BUILD_PLAN.md` Definition of Done line 488 explicitly calls for "Public standings are visible to anyone with the tournament URL (no login required for read)." Same applies to `/game/:gameId` (the scoresheet view). Fix is ~30-60 min: route both publicly OR add `/public/tournament/:id` mirrors. Either way, verify `Tournament.js` and `GameDetail.js` don't blow up when `currentUser` is null (a few `currentUser?.id` guards already exist; should be small surface).
+
+**B. Forgot-password flow.** Still broken per §6. Pete's Supabase dashboard config (Site URL + Redirect URLs). 0 users have ever successfully completed a password reset in prod. When BLPA teams onboard and hit "Forgot password?" — silence. Five-minute fix in the dashboard; E2E test plan in §8. **Verify before opening the tournament URL to teams.**
+
+**C. Tournament status flip on day-of.** BLPA Cleveland is currently `draft`, which hides it from the public Tournaments index (per the `Tournaments.js` query filter `.in('status', ['active', 'complete'])`). Pete needs to flip to `active` before Jun 13 so spectators can discover it from the index. Direct URLs work either way (modulo fix A), but discoverability requires the flip. Could automate with a scheduled job that flips `draft → active` when `start_date <= today`, but a manual flip is fine for one event.
+
+### 🟠 P1 — Quality-of-event, not pilot-blocking
+
+**D. Real team names + logos.** Director (Pete) swaps placeholders via TournamentManage → Teams → Edit; uploads logos via the new Settings → Branding upload. Needs Nick's roster file. Standings + bracket + auto-recap all keyed on UUIDs so renames are safe at any time.
+
+**E. Sunday championship game times.** Saturday's 12 pool games are seeded with hard times. Sunday's 8 championship games are generated on-demand via the Bracket tab button; Pete picks the first start time + per-game minutes when generating. Plan Sat night: "Sunday games start at X" — pick a buffer that fits all 8 games across 2 sheets (each pool plays semis then a final or bronze, so the bronze + final per pool need to be sequential on a single sheet OR split across sheets).
+
+**F. iPad usability of ScorerView.** Spec calls for it. Wake lock works on Safari 16.4+, warning banner shown otherwise. 44px touch targets per spec. **Smoke-test on the actual iPad before pilot.** Open ScorerView for one game, walk through Log Goal / Add Penalty / Period change / Finalize / Reopen. Anything weird → bring it up.
+
+**G. VAPID env var for push notifications.** Per §6. If `REACT_APP_VAPID_PUBLIC_KEY` isn't set in Vercel, push subscriptions silently fail (no error to the user). If Pete wants to send "BLPA Cleveland starts in 1 hour" or "Live now: Pool A Game 1" pushes during the event, this needs to be set. Otherwise skip — pushes aren't critical to the pilot.
+
+### 🟡 P2 — Worth knowing, don't need to fix
+
+**H. Mercy rule is informational only.** Settings stores `max_goal_differential: 6`; the Info tab displays it; nothing in-app enforces it (no game clock = no "clock runs out"). Director/scorer manually ends the game when the mercy threshold hits. Communicate this to scorers at the captains' meeting.
+
+**I. Period clock not in-app.** Scorer enters period number + time manually. The rink scoreboard is the source of truth for the actual clock; scorer just records events with the displayed timestamp. Fine for a tournament with on-site scoreboards. Would matter for unmonitored beer-league use later.
+
+**J. Two simultaneous scorers on the same game.** Realtime sync via `game_goals` / `game_penalties` channels is in place (per `5c3e42e5`'s ScorerView). One scorer adds a goal, the other's screen reloads the goal log within ~1s. Score state itself converges via the DB write — last-write-wins on `home_score`/`away_score`/`period`/`status`. Worth a quick test before pilot: open ScorerView on two devices, add a goal on one, watch the other update.
+
+**K. Mid-game wifi drop.** Optimistic UI rollback on failure already exists (`5c3e42e5`'s changeScore + the goal/penalty error paths). If a scorer fully loses connection, they can't save. Have a backup paper scoresheet at each sheet. The pilot is one weekend at one venue; this is mitigable with prep, not a code fix.
+
+**L. LiveBarn at RMU.** Unknown if RMU Island Sports Center has LiveBarn cameras. If not, leave `rinks.live_barn_venue_id` null on both Sheet 1 + Sheet 2 — the LiveBarn pill auto-hides when the venue ID is missing or placeholder. If yes, set the real venue IDs (one per sheet) once Pete confirms.
+
+**M. Onboarding modal on tournament URLs.** Pre-existing behavior — flagged in original §11 P5 entry. New users following a BLPA Cleveland link land on the auth screen, sign up, then immediately see the onboarding modal before the tournament. Mildly annoying but not pilot-blocking.
+
+### 🟢 Pre-pilot checklist (in order)
+
+1. **Pete** — Fix Forgot Password (§6 dashboard config), verify E2E (§8).
+2. **Code** — Unwrap `/tournament/:id` and `/game/:gameId` from `ProtectedRoute` (P0 A above). ~30-60 min.
+3. **Pete** — Get team names + logos from Nick. Swap placeholders in TournamentManage → Teams.
+4. **Pete** — Flip BLPA Cleveland status `draft` → `active` morning of Jun 13.
+5. **Pete** — Smoke-test ScorerView on iPad (F above).
+6. **Pete** — Send pilot URL to BLPA captains.
+7. **Sat Jun 13** — Run pool play; standings populate live.
+8. **Sat night** — Pete clicks "🏆 Generate Bracket"; picks Sunday start time + rink.
+9. **Sun Jun 14** — Run championship games. SO winner prompt fires on tied bracket games; bracket auto-fills as semis end. Auto-recap posts to Feed as each game finalizes.
+10. **Sun end** — Champion banner appears. Pete flips status `active` → `complete`.
+
+Realistic effort to clear P0: ~1-2 hours of code work (just item A) + ~10 min of Pete's dashboard config (item B) + 1 min manual flip (item C). The rest is pilot-day operations, not code.
