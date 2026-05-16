@@ -3,8 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import Layout from '../components/Layout';
 
-export default function Tournaments({ profile }) {
+export default function Tournaments({ profile, currentUser }) {
   const navigate = useNavigate();
+  // Public access path: an anonymous spectator can browse the index, see
+  // which tournaments are running, and click through to the public landing
+  // for any of them. We hide the "+ Create" CTA (auth-required) and
+  // surface a small sign-in prompt instead.
+  const isAnon = !currentUser;
   const [tournaments, setTournaments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -35,14 +40,24 @@ export default function Tournaments({ profile }) {
   return (
     <Layout profile={profile}>
       <div style={{ background: '#07111F', minHeight: '100vh', padding: 20, fontFamily: 'Barlow, sans-serif', color: '#F4F7FA' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4, gap: 10 }}>
           <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 28 }}>TOURNAMENTS</div>
-          <button onClick={() => navigate('/tournament/create')}
-            style={{ background: '#D72638', color: '#fff', border: 'none', borderRadius: 999, padding: '9px 18px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-            + Create
-          </button>
+          {isAnon
+            ? <button onClick={() => navigate('/login?returnTo=%2Ftournaments')}
+                style={{ background: '#D72638', color: '#fff', border: 'none', borderRadius: 999, padding: '9px 18px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                Sign in
+              </button>
+            : <button onClick={() => navigate('/tournament/create')}
+                style={{ background: '#D72638', color: '#fff', border: 'none', borderRadius: 999, padding: '9px 18px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                + Create
+              </button>}
         </div>
         <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.4)', marginBottom: 20 }}>Live standings · real-time scoring · LiveBarn streams</div>
+        {isAnon && (
+          <div style={{ background: 'linear-gradient(135deg,rgba(215,38,56,0.18) 0%,#0f2847 100%)', border: '1px solid rgba(215,38,56,0.4)', borderRadius: 12, padding: '14px 16px', marginBottom: 18, fontSize: 13, lineHeight: 1.5, color: 'rgba(244,247,250,0.9)' }}>
+            👋 Browsing as a guest. <button onClick={() => navigate('/login?returnTo=%2Ftournaments')} style={{ background: 'none', border: 'none', color: '#D72638', textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, padding: 0, fontWeight: 700 }}>Sign up free</button> to see live scores, standings, and bracket as games unfold.
+          </div>
+        )}
 
         {loading && <div style={{ color: 'rgba(244,247,250,0.3)', fontSize: 13 }}>Loading...</div>}
 
