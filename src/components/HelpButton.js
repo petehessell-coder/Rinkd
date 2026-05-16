@@ -114,19 +114,25 @@ export default function HelpButton() {
 
   return (
     <>
-      {/* Floating trigger — bottom-right, lifted above mobile bottom nav */}
+      {/* Floating trigger — bottom-right, lifted above mobile bottom nav.
+          Smaller (40px) and lower opacity than the prior 48px to reduce
+          collision with right-edge content (live-stream pills, action menus).
+          z-index sits below the bottom nav so the nav always wins. */}
       <button onClick={() => setOpen(true)} aria-label="Help & feedback"
         style={{
           position: 'fixed',
-          right: 'max(16px, env(safe-area-inset-right))',
-          bottom: 'calc(80px + env(safe-area-inset-bottom))',
-          width: 48, height: 48, borderRadius: '50%',
+          right: 'max(14px, env(safe-area-inset-right))',
+          bottom: 'calc(100px + env(safe-area-inset-bottom))',
+          width: 40, height: 40, borderRadius: '50%',
           background: C.red, color: '#fff', border: 'none',
-          fontSize: 22, fontWeight: 700, cursor: 'pointer',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-          zIndex: 950,
+          fontSize: 18, fontWeight: 700, cursor: 'pointer',
+          boxShadow: '0 6px 18px rgba(0,0,0,0.35)',
+          opacity: 0.88,
+          zIndex: 180,
           fontFamily: "'Barlow', sans-serif",
-        }}>
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.88'; }}>
         ?
       </button>
 
