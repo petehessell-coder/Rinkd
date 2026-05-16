@@ -15,10 +15,14 @@ export default function Tournaments({ profile }) {
     // TODO: paginate — cap unbounded query for now. 50 is comfortably above
     // the active/complete tournament count and prevents the page from
     // dragging when the archive grows.
+    // Sort by end_date desc so just-finished events surface before older archives,
+    // and active events (whose end_date is in the future) lead the list. Falls
+    // back to start_date for rows missing an end_date.
     const { data, error: qErr } = await supabase
       .from('tournaments')
       .select('*')
       .in('status', ['active', 'complete'])
+      .order('end_date', { ascending: false, nullsFirst: false })
       .order('start_date', { ascending: false })
       .limit(50);
     if (qErr) { setError(qErr.message); setLoading(false); return; }
@@ -65,7 +69,14 @@ export default function Tournaments({ profile }) {
           </div>
         )}
 
-        {!error && tournaments.map(t => (
+        {!error && tournaments.map(t => {
+          // Show ● Live only when the event hasn't already ended. Without the
+          // end_date guard, archived 'active' tournaments (those never marked
+          // 'complete' after they wrapped) keep claiming to be live forever.
+          const todayISO = new Date().toISOString().slice(0, 10);
+          const isLive = t.status === 'active' && (!t.end_date || t.end_date >= todayISO);
+          const showFinal = t.status === 'complete' || (t.status === 'active' && t.end_date && t.end_date < todayISO);
+          return (
           <div key={t.id} onClick={() => navigate('/tournament/' + t.id)}
             style={{ background: '#0f2847', border: '0.5px solid rgba(46,91,140,0.4)', borderRadius: 12, padding: '16px 18px', marginBottom: 10, cursor: 'pointer' }}
             onMouseEnter={e => e.currentTarget.style.border = '0.5px solid rgba(46,91,140,0.8)'}
@@ -73,12 +84,13 @@ export default function Tournaments({ profile }) {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
               <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 17 }}>{t.name.toUpperCase()}</div>
-              {t.status === 'active' && <span style={{ background: 'rgba(215,38,56,0.15)', color: '#D72638', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>● Live</span>}
-              {t.status === 'complete' && <span style={{ background: 'rgba(244,247,250,0.08)', color: 'rgba(244,247,250,0.4)', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>Final</span>}
+              {isLive && <span style={{ background: 'rgba(215,38,56,0.15)', color: '#D72638', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>● Live</span>}
+              {showFinal && <span style={{ background: 'rgba(244,247,250,0.08)', color: 'rgba(244,247,250,0.4)', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>Final</span>}
             </div>
             <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.5)' }}>{t.division} · {t.start_date} – {t.end_date}</div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </Layout>
   );
