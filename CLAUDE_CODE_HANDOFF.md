@@ -1,7 +1,7 @@
 # Rinkd — Claude Code Handoff
 
 **Created:** May 15, 2026 — supersedes the previous handoff. Self-contained: a fresh Claude Code session should be able to pick up from here without reading the prior doc.
-**Last updated:** May 16, 2026 evening — full BLPA Cleveland pilot-prep batch shipped to the `claude/elegant-sanderson-80d1d0` worktree branch (4 new commits, pending Pete's merge to `main`). All 21 punch-list items from §11 are done. Scorer lockout-on-finalize, auto-recap posts, tournament logo upload, BLPA-Bash format-aware standings (Goal Quotient, Period Points, PIM in the view), shootout-winner recording, championship bracket auto-generation (4-team-per-pool pattern), and the Cleveland tournament has been repurposed in place (Jun 13-14 at RMU Island Sports Center, 8 placeholder teams, 12 Saturday round-robin games seeded). Status-enum mismatch in SettingsTab fixed (now matches the DB constraint). See §5 for the per-feature breakdown.
+**Last updated:** May 16, 2026 late evening — full BLPA Cleveland pilot-prep batch on `claude/elegant-sanderson-80d1d0` worktree branch (now **6 commits**, pending Pete's merge to `main`). Latest two: **public tournament landing for anonymous spectators** (`80f71e54`) and **push notification pipeline** (`2b793247` — tournament follow + recap fire). BLPA Cleveland status flipped `draft → active` so it's now publicly discoverable from the Tournaments index. All 21 punch-list items from §11 are done. Earlier in the batch: scorer lockout-on-finalize, auto-recap posts, tournament logo upload, BLPA-Bash format-aware standings (GQ + Period Pts + PIM in view), shootout-winner recording, championship bracket auto-gen (4-team-per-pool), and the Cleveland tournament was repurposed in place (Jun 13-14 at RMU Island Sports Center, 8 placeholder teams, 12 Saturday pool games). Status-enum mismatch fixed. See §5 for the per-feature breakdown. **Push pipeline is wired but won't fire until Pete sets the matching VAPID private key in Supabase secrets and deploys the Edge Function** — see §12.
 **Source:** continuation of the audit-fix work, plus a full BLPA-spec implementation pass based on `rinkd_v4/CLEVELAND_BUILD_PLAN.md`.
 
 ---
@@ -45,17 +45,20 @@ BUILD_PATH=/tmp/rinkd-build npx react-scripts build
 
 ## 4. Current state — verified May 16, 2026 evening
 
-`main` HEAD is **`4a020d07`** (last pushed state). A worktree branch
-`claude/elegant-sanderson-80d1d0` is **4 commits ahead of main**, pending
-Pete's merge + push. After merge, HEAD will be **`9c773ff6`**. Full history:
+`main` HEAD is **`c3947bbc`** (`docs: handoff update`, May 16 evening — see prior version of this section). A worktree branch
+`claude/elegant-sanderson-80d1d0` is **6 commits ahead of main**, pending
+Pete's merge + push. After merge, HEAD will be **`2b793247`**. Full history:
 
 ```
 [worktree branch — pending merge to main:]
+2b793247  feat: push notifications — tournament follow + recap pipeline (pilot)
+80f71e54  feat: public landing for tournament discovery (BLPA pilot)
 9c773ff6  fix: layout polish — bottom nav padding + HelpButton overlap
 5c3e42e5  feat: scorer lockout + auto-recap + shootout winner + bracket advancement
 21785087  feat: tournament manage — punch list + logo upload + championship bracket gen
 5ae955bc  feat: tournament public pages — punch list + BLPA standings/SO/champion
 [on main:]
+c3947bbc  docs: handoff update — May 16 evening BLPA pilot batch + §12 pilot-readiness audit
 4a020d07  feat: report posts/comments + lock down posts.UPDATE security hole
 0468f8e3  feat: block user — user_blocks table + lib/blocks.js + profile/settings UI + read-path filters
 02409e96  fix: pilot-readiness audit Surfaces 11-17 — all 14 items + RLS
@@ -73,7 +76,7 @@ e995f3ef  fix: site-audit pass — 6 Criticals + 10 Highs
 
 **Merge command** (Pete runs from `~/Downloads/rinkd_live`):
 ```
-rm -f .git/index.lock && git checkout main && git merge claude/elegant-sanderson-80d1d0 --no-ff -m "merge: tournament UI punch-list + BLPA pilot batch" && git push origin main
+rm -f .git/index.lock && git checkout main && git merge claude/elegant-sanderson-80d1d0 --no-ff -m "merge: BLPA Cleveland pilot batch (punch list + scorer lockout + auto-recap + champ bracket + public landing + push pipeline)" && git push origin main
 ```
 
 **Working tree state:** clean. Two pre-existing strays remain uncommitted (`scripts/chiller/data/seed-leagues.json`, `supabase/functions/send-onboarding-emails/index.ts`) — leave them alone unless Pete asks otherwise.
@@ -284,6 +287,113 @@ fallback shows DIFF. New `sortByTiebreakers` helper handles `lowest_pim`,
 5. **Sun end:** Champion banner appears on the Bracket tab. Pete flips
    tournament status to `complete`.
 
+### Late evening of May 16 — Push notification pipeline (`2b793247`)
+
+Triggered by Pete wanting push live for the pilot. End-to-end "follow this
+tournament → get pushed when any of its games finalize." Net: ~half-day
+of work, ~262 LOC, scoped intentionally tight so post-pilot extensions
+(DMs, team follow, league recaps) become 3-line additions on top.
+
+**Schema:** new `tournament_subscriptions(user_id, tournament_id)` PK
+table with cascade FKs to both sides + RLS that lets each user manage
+only their own rows. Migration `push_pilot_tournament_subscriptions_table`
+live in prod.
+
+**Edge Function** `supabase/functions/send-recap-push/index.ts`:
+- Accepts `{post_id}`. Looks up the recap post → game → tournament →
+  subscribers → push_subscriptions, all with service-role credentials,
+  so a malicious authed user can't influence targeting or payload.
+- Sends in parallel via `npm:web-push@3.6.7`. Prunes 410/404 stale
+  subscription rows so dead endpoints don't get hammered forever.
+- Notification tag is `recap:<post_id>` — collapse-key so a Reopen +
+  re-finalize replaces rather than stacks the notification.
+- **Required secrets (Supabase Edge Function env):** `VAPID_PUBLIC_KEY`,
+  `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (mailto:…). Plus `SUPABASE_URL`
+  and `SUPABASE_SERVICE_ROLE_KEY` which are auto-injected by Supabase.
+
+**Client:**
+- `src/lib/tournamentSubscriptions.js` — `followTournament`,
+  `unfollowTournament`, `isFollowingTournament`. Upsert on follow keeps
+  double-tap idempotent.
+- `src/lib/push.js` — new `triggerTournamentRecapPush(postId)` thin
+  wrapper around `supabase.functions.invoke('send-recap-push', …)`.
+  Errors are swallowed; a failed push must never block finalize.
+- `src/pages/Tournament.js` — "🔔 Follow" / "🔕 Following" toggle in
+  the header. Visible to authed non-directors only (the director gets
+  the Manage button instead; they already see everything from their own
+  writes). First-time tap prompts for browser push permission via the
+  existing `subscribeToPush`; if denied, the DB follow row is still
+  created with a friendly heads-up so a later opt-in from Profile
+  starts delivering immediately.
+- `src/pages/ScorerView.js` — after `createGameRecapPost` succeeds in
+  the finalize path, calls `triggerTournamentRecapPush(recapPost.id)`.
+
+**Pilot scope:** 1 push per game finalize per subscriber. For BLPA
+Cleveland that's a 20-push ceiling (12 pool + 8 bracket). If even that
+proves noisy, gate the trigger behind a feature flag in a follow-up.
+League games still skip the recap+push path entirely.
+
+**iOS push caveat:** iOS Safari delivers web push only when the user
+has installed the PWA to home screen (iOS 16.4+). A spectator who opens
+the link in mobile Safari without "Add to Home Screen" will never
+receive pushes. Android delivers in any browser with permission. So on
+iOS, push reach ≈ PWA-install rate. We don't have a strong install
+banner yet (post-pilot backlog).
+
+**Status:** code shipped. **Not yet operational** — Pete needs to set
+VAPID secrets in Supabase and deploy the Edge Function. Full setup
+checklist in §12.
+
+### Late evening of May 16 — Public tournament landing (`80f71e54`)
+
+Spectators can now share + open BLPA Cleveland URLs without a Rinkd
+account. Pattern: **public landing, gated data** — non-participants see
+tournament name, dates, venue, teams; standings / live scores /
+schedule / bracket / scoresheet all stay login-gated to drive sign-up.
+
+**Routes unwrapped from `ProtectedRoute` in App.js:** `/tournament/:id`
+and `/tournaments`. RLS already lets anonymous users SELECT from
+`games`, `rinks`, `tournament_teams`, and from `tournaments` when
+status is `'active'`/`'complete'` (draft tournaments stay invisible to
+anonymous users — useful for pre-event privacy).
+
+**Tournament.js branch on currentUser:**
+- `currentUser == null` + tournament loads → renders
+  `PublicTournamentLanding` component (hero with tournament metadata +
+  logo + accent color; "X teams · Y games" stats; teams list grouped
+  by pool; two prominent "Sign up to view live" CTAs).
+- `currentUser == null` + tournament doesn't load (draft / not found)
+  → friendly "🔒 This tournament is private — sign in to view" state
+  instead of the director-facing retry/back UI.
+- `currentUser` present → full UI (unchanged).
+
+**Tournaments.js:**
+- Works for anonymous users (RLS already filters appropriately).
+- "+ Create" button swaps to "Sign in" when anonymous.
+- A guest banner above the cards prompts sign-up.
+- Click-through to any card lands on the public landing.
+
+**Auth + returnTo (`Auth.js` + `App.js`):**
+- Sign-up CTAs link to `/login?returnTo=/tournament/X`.
+- `Auth.js` reads `?returnTo` via `useSearchParams` and uses it after
+  successful sign-in / sign-up (default `/feed` when missing).
+- Open-redirect protected: only relative paths starting with single `/`
+  are honored (rejects `//evil.com`, `http://...`, protocol-relative).
+- Falls back to `/feed` when missing or unsafe.
+- App.js: `/login` route honors `?returnTo` for already-logged-in
+  users too (new `LoginRedirect` helper applies the same safety
+  check).
+
+### BLPA Cleveland status flipped (May 16 late evening)
+
+Tournament `b2789d66-1d77-4a62-862d-00b550da6a98` status flipped from
+`draft` to `active` via MCP. **Now publicly discoverable** from the
+Tournaments index (`/tournaments` query filter is
+`.in('status', ['active', 'complete'])`). Public landing renders
+immediately. Switch back to `draft` from TournamentManage → Settings if
+Pete needs to hide it again pre-event (e.g., wait for Nick's real team
+names before going public).
+
 ### Early morning of May 16 — Demo tournament seeded + UI walk-through
 
 > **Status (May 16 evening):** the tournament row at
@@ -335,7 +445,15 @@ This explains why **0 users have ever successfully completed a password reset** 
 ### 🟠 Other config items (lower-impact)
 
 - **`REACT_APP_BETA_BANNER` (Vercel env var)** — Feed shows a "🚧 Public beta" banner by default. Decide if that's the right message for BLPA opening day. Set `REACT_APP_BETA_BANNER=0` to hide it.
-- **`REACT_APP_VAPID_PUBLIC_KEY` (Vercel env var)** — push subscriptions silently fail-no-key if this isn't set. Verify it's set in prod. If push hasn't been working reliably, this is likely why.
+- **VAPID setup for push pipeline (May 16 evening — partially done):** `REACT_APP_VAPID_PUBLIC_KEY` is already set in Vercel (from a much earlier setup; verified May 16 — Vercel rejected re-add with "variable already exists"). The matching **private key** needs to be set as a Supabase Edge Function secret, plus the `send-recap-push` function needs to be deployed. **Two paths for Pete** depending on whether the original VAPID private key still exists somewhere (1Password / Notes / etc.):
+  - **Path A — found the private key:** read the existing public key from Vercel (Dashboard → Settings → Env Vars → click `•••` to reveal, OR `vercel env pull .env.vercel && grep VAPID .env.vercel && rm .env.vercel`). Set 3 Supabase secrets:
+    ```
+    supabase secrets set VAPID_PUBLIC_KEY="<existing public>" --project-ref tbpoopsyhfuqcbugrjbh
+    supabase secrets set VAPID_PRIVATE_KEY="<existing private>" --project-ref tbpoopsyhfuqcbugrjbh
+    supabase secrets set VAPID_SUBJECT="mailto:hello@rinkd.app" --project-ref tbpoopsyhfuqcbugrjbh
+    ```
+  - **Path B — private key is lost:** generate a fresh pair (`npx web-push generate-vapid-keys`), overwrite the Vercel public key (Dashboard → Edit), set both Supabase secrets with the new pair. Cost: 2 existing test push_subscriptions get orphaned. Edge Function's 410-Gone handler auto-prunes them on first push attempt; zero user-facing impact.
+  - **After secrets are set, deploy the function:** `supabase functions deploy send-recap-push --project-ref tbpoopsyhfuqcbugrjbh` — OR ask Claude to do it via the Supabase MCP `deploy_edge_function` tool.
 - **`REACT_APP_CREASE_PAYMENTS_LIVE` + `REACT_APP_CREASE_CHECKOUT_URL`** — when Stripe is wired. The paywall now refuses to claim "Subscribe" if the flag is on but the URL is missing (post-Surfaces 11-17 fix).
 - **Supabase → Authentication → Policies → "Leaked password protection"** — flip ON. HaveIBeenPwned integration, blocks compromised passwords on signup/reset. Pure upside, one toggle.
 
@@ -422,6 +540,11 @@ After Pete updates Site URL + Redirect URLs in the Supabase dashboard:
 - **Championship bracket pattern (May 16 evening).** For 4-team-per-pool formats (BLPA Cleveland), `generateChampionshipBracket` creates 4 games per pool ordered by `start_time`: semi1 (seed 2v3) at slot 0, semi2 (seed 1v4) at slot 1, bronze at slot 2, final at slot 3. `resolveBracketSlotsFromSemis` pairs them by start_time order — so DO NOT reorder semi start_times after generation, or the auto-fill will pair the wrong winners with the wrong slots. Idempotent: re-running the generator refuses if any bracket games exist (delete first to regenerate). Director can also manually edit any auto-generated game via the existing manage Bracket UI.
 - **Auto-recap invariants (May 16 evening).** `posts.recap_for_game_id` has a partial unique index — at most one recap per game, unlimited regular posts (they all share NULL). `createGameRecapPost` in `lib/posts.js` upserts: if a row exists, updates content + tag (keeps original author + created_at); else inserts with the finalizing user as author. Only fires for tournament games (`!isLeague && game.tournament_id`); league games + team games are skipped. Failure to post the recap never blocks the finalize itself.
 - **Status enum mismatch (May 16 evening, FIXED).** `tournaments_status_check` allows only `('draft','active','complete')`. Previous SettingsTab dropdown offered Upcoming + Cancelled which silently failed. New code only offers the 3 valid options. If you ever need to add a status, update BOTH the DB constraint AND the dropdown — they're now in sync.
+- **Public tournament landing pattern (May 16 evening).** `/tournament/:id` and `/tournaments` are intentionally *not* wrapped in `ProtectedRoute`. The gate happens INSIDE `Tournament.js`: if `!currentUser`, render `PublicTournamentLanding` (metadata only — name, dates, venue, team list, sign-up CTAs). Live data (standings, scores, schedule, bracket details) stays login-gated. Anonymous-friendly error states use 🔒 framing + "Sign in / Browse tournaments" buttons instead of the director-facing retry. When adding new tournament-detail features, default to gating them inside the `currentUser` branch unless they're explicitly safe to expose anonymously.
+- **`?returnTo=…` redirect (May 16 evening).** `Auth.js` and the `/login` route both honor `?returnTo` from the URL. **Safety check applied at both sites:** must start with single `/`, can't start with `//` (rejects `//evil.com`, `http://…`, protocol-relative). Falls back to `/feed` when missing or unsafe. When adding new "sign in to do X" CTAs anywhere, link to `/login?returnTo=<encoded-path>` — the redirect-back is free.
+- **Push pipeline (May 16 late evening).** Architecture: client never touches push targeting. `triggerTournamentRecapPush(post_id)` from `lib/push.js` invokes the `send-recap-push` Edge Function which does ALL lookups with service role (post → game → tournament → subscribers → push_subscriptions). This means future pushes for new event types (DMs, follows, etc.) follow the same pattern: build a tiny Edge Function (`send-X-push`), pass the originating row id, function handles the rest. Don't push from the client. Don't accept user_ids from the client. Don't accept payload content from the client — assemble it server-side from canonical rows so abuse is bounded to "re-fire an existing legitimate notification." For the recap path that's a `tag: recap:<post_id>` collapse-key so re-fires replace rather than stack.
+- **VAPID keys are forever-ish.** Once subscribers register with a public key, rotating it invalidates every push subscription — the browser pushManager won't match the new key and `pushManager.subscribe()` has to be re-called. For pilot we have 2 existing test subs (May 12 timestamps), so rotation cost is near zero. **Post-pilot if user base grows, never rotate** without an in-app banner asking users to re-enable notifications. Store both keys in a password manager (1Password) the moment they're generated. NEVER re-run `npx web-push generate-vapid-keys` after pilot users have subscribed.
+- **`tournament_subscriptions` invariants (May 16 late evening).** RLS lets each user manage only their own rows (SELECT/INSERT/DELETE all check `(select auth.uid()) = user_id`). The Edge Function bypasses RLS via service role to find subscribers for a tournament. Following a tournament does NOT auto-subscribe to push — the user must also have a `push_subscriptions` row, which requires browser permission + the existing `subscribeToPush(userId)` flow. The Follow button on Tournament.js handles both: if the user hasn't subscribed to push yet, it prompts; if they deny, the DB follow is created anyway so a later Profile-page opt-in immediately starts delivering. Disconnects between the two tables (followed but no push_sub, or push_sub but unfollowed) are both no-op states — they don't break anything, they just don't deliver pushes.
 - **Two pre-existing stray files** in the working tree (`scripts/chiller/data/seed-leagues.json`, `supabase/functions/send-onboarding-emails/index.ts`) — leave them out of audit commits unless Pete asks.
 - **`rinkd_v4` folder** — strategy/spec docs only. Do NOT edit app code there; it doesn't deploy. To bring it into context: `/add-dir ~/Downloads/rinkd_v4` in Claude Code.
 - **`rinkd_v4/RINKD_STATE_OF_PLAY.md`** is the broader orientation doc — read it for the BLPA partnership context, post-pilot specs, and pending tasks.
@@ -430,18 +553,19 @@ After Pete updates Site URL + Redirect URLs in the Supabase dashboard:
 
 ## 10. First thing to do in a new session
 
-1. Read this doc top to bottom — **especially the May 16 evening §5 entry** (full BLPA pilot batch shipped, pending merge).
+1. Read this doc top to bottom — **especially the May 16 late evening §5 entries** (public landing + push pipeline shipped, still pending merge + Pete's VAPID secrets work).
 2. Run `cd ~/Downloads/rinkd_live && git log --oneline -6 && git status` to confirm state matches Section 4.
-   - If `main` HEAD is `4a020d07`: Pete hasn't merged the worktree branch yet. Use the merge command in §4 once authorized.
-   - If `main` HEAD is `9c773ff6`: merge happened. Move on.
-   - Confirm BLPA Cleveland is seeded: `select name, start_date, end_date, status from public.tournaments where id = 'b2789d66-1d77-4a62-862d-00b550da6a98'` should return `BLPA Cleveland · 2026-06-13 · 2026-06-14 · draft`. The team count should be 8 and game count 12 (Saturday pool play).
-   - Confirm the new DB shape: `select column_name from information_schema.columns where table_schema='public' and table_name='games' and column_name in ('pool','shootout_winner')` should return both rows.
+   - If `main` HEAD is `c3947bbc` (docs commit): Pete hasn't merged the worktree branch yet. Use the merge command in §4 once authorized.
+   - If `main` HEAD is `2b793247`: merge happened. Move on.
+   - Confirm BLPA Cleveland is seeded + flipped: `select name, start_date, end_date, status from public.tournaments where id = 'b2789d66-1d77-4a62-862d-00b550da6a98'` should return `BLPA Cleveland · 2026-06-13 · 2026-06-14 · active`. Team count = 8, game count = 12 (Saturday pool play only — championship games auto-generate on Sat night via the Bracket tab button).
+   - Confirm the new DB shape: `select column_name from information_schema.columns where table_schema='public' and table_name='games' and column_name in ('pool','shootout_winner')` should return both rows; `select count(*) from public.tournament_subscriptions` runs (table exists).
+   - Confirm the new Edge Function exists in source: `ls supabase/functions/send-recap-push/` should show `index.ts`. **Whether it's deployed** is a separate check: try invoking it (manual curl in §5 push entry) or `supabase functions list --project-ref tbpoopsyhfuqcbugrjbh` if you have the CLI.
 3. Ask Pete:
-   - Did you complete the Supabase dashboard config (Section 6) and verify the password-reset E2E (Section 8)? **As of last save: not yet — `pete@rinkd.app` had no `recovery_sent_at` and `nick@blpa.com`'s May 14 recovery token was still unused.** This is still a P0 for pilot (BLPA teams will use Forgot Password during onboarding).
-   - Did Nick send the real team names + logos yet? Director swaps them via TournamentManage → Teams → Edit, and uploads logos via the new Settings → Branding upload button.
-   - Has BLPA Cleveland's status been flipped from `draft` → `active`? Required for the public Tournaments index to show it.
-   - Is the **public tournament page** still auth-gated? If yes, that's the biggest remaining pilot gap — see §12 below.
-   - What do you want to tackle next — the public-tournament gate (§12 P0), the RLS multiple-permissive cleanup (~30 min, §7), Sentry sanity check + VAPID env-var verification (~15 min, §6), PWA install banner for iOS (~1 hr), or post-pilot work?
+   - Did you complete the Supabase dashboard config (Section 6) and verify the password-reset E2E (Section 8)? **Still P0 for pilot** — BLPA captains will hit Forgot Password during onboarding.
+   - Did Nick send real team names + logos? Director swaps via TournamentManage → Teams → Edit, uploads logos via Settings → Branding.
+   - VAPID secrets in Supabase + Edge Function deployed? (See §6 + §12 P0.) Push pipeline is dormant code until both are done.
+   - Are there any push subscriptions yet? `select count(*) from public.push_subscriptions` — if zero, the iPad/iPhone hasn't subscribed yet. Walk through Profile → 🔔 Notify on a real device once secrets are live.
+   - What next — the VAPID/Edge Function deploy (P0 #4 in §12), RLS multiple-permissive cleanup (~30 min, §7), PWA install banner for iOS (~1 hr, post-pilot per §7), or something else?
 4. Then proceed from there.
 
 ---
@@ -538,27 +662,37 @@ Total: roughly a half-day to land P1+P2+top-of-P3, which would meaningfully chan
 
 ---
 
-## 12. Pilot-readiness audit (May 16 evening — what's left for BLPA Cleveland Jun 13)
+## 12. Pilot-readiness audit (May 16 late evening — what's left for BLPA Cleveland Jun 13)
 
-The BLPA pilot batch shipped a huge amount (see §5 May 16 evening entry). This is the swept-up list of what could still trip up the live event, ranked by blast radius.
+The BLPA pilot batch shipped a huge amount (see §5 May 16 evening entries). This is the swept-up list of what could still trip up the live event, ranked by blast radius. **Updated May 16 late evening: ~~strikethrough~~ = done.**
 
 ### 🔴 P0 — Will affect the pilot if not handled
 
-**A. Public tournament page is auth-gated.** The `/tournament/:id` route in `src/App.js` is wrapped in `ProtectedRoute`, so spectators without a Rinkd account can't view the standings/schedule/bracket without signing up first. `CLEVELAND_BUILD_PLAN.md` Definition of Done line 488 explicitly calls for "Public standings are visible to anyone with the tournament URL (no login required for read)." Same applies to `/game/:gameId` (the scoresheet view). Fix is ~30-60 min: route both publicly OR add `/public/tournament/:id` mirrors. Either way, verify `Tournament.js` and `GameDetail.js` don't blow up when `currentUser` is null (a few `currentUser?.id` guards already exist; should be small surface).
+**~~A. Public tournament page is auth-gated.~~** ✅ **DONE** in commit `80f71e54`. Public landing for anonymous spectators ships tournament metadata + teams + sign-up CTAs; live data stays login-gated. See §5 "Public tournament landing" entry.
 
 **B. Forgot-password flow.** Still broken per §6. Pete's Supabase dashboard config (Site URL + Redirect URLs). 0 users have ever successfully completed a password reset in prod. When BLPA teams onboard and hit "Forgot password?" — silence. Five-minute fix in the dashboard; E2E test plan in §8. **Verify before opening the tournament URL to teams.**
 
-**C. Tournament status flip on day-of.** BLPA Cleveland is currently `draft`, which hides it from the public Tournaments index (per the `Tournaments.js` query filter `.in('status', ['active', 'complete'])`). Pete needs to flip to `active` before Jun 13 so spectators can discover it from the index. Direct URLs work either way (modulo fix A), but discoverability requires the flip. Could automate with a scheduled job that flips `draft → active` when `start_date <= today`, but a manual flip is fine for one event.
+**~~C. Tournament status flip on day-of.~~** ✅ **DONE** May 16 late evening via MCP. BLPA Cleveland is now `active`. Pete can flip back to `draft` from TournamentManage → Settings if he wants to hide pre-event.
+
+**D. Push pipeline not yet operational (NEW).** Code shipped in commit `2b793247` (Edge Function `send-recap-push`, client lib helpers, follow-tournament button, finalize→push trigger). **Two Pete-side setup tasks blocking activation:**
+1. **Supabase Edge Function secrets** — `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`. Procedure depends on whether the matching private key still exists. Full instructions in §6 "VAPID setup."
+2. **Deploy the Edge Function** — `supabase functions deploy send-recap-push --project-ref tbpoopsyhfuqcbugrjbh` OR ask Claude to do it via MCP `deploy_edge_function`.
+
+After secrets + deploy, smoke-test:
+- On a real iOS device (16.4+, **PWA installed to home screen**) or Android: sign in, navigate to `/tournament/b2789d66-1d77-4a62-862d-00b550da6a98`, tap "🔔 Follow", accept the OS prompt.
+- In a second device/browser, sign in as a director/scorekeeper, finalize any pool game in ScorerView.
+- First device should receive a push within ~2 sec with the recap headline. Tap → opens `/game/<id>`.
+- If nothing arrives: `supabase functions logs send-recap-push --project-ref tbpoopsyhfuqcbugrjbh`. Most likely cause: VAPID public/private mismatch.
 
 ### 🟠 P1 — Quality-of-event, not pilot-blocking
 
-**D. Real team names + logos.** Director (Pete) swaps placeholders via TournamentManage → Teams → Edit; uploads logos via the new Settings → Branding upload. Needs Nick's roster file. Standings + bracket + auto-recap all keyed on UUIDs so renames are safe at any time.
+**E. Real team names + logos.** Director (Pete) swaps placeholders via TournamentManage → Teams → Edit; uploads logos via the new Settings → Branding upload. Needs Nick's roster file. Standings + bracket + auto-recap all keyed on UUIDs so renames are safe at any time.
 
-**E. Sunday championship game times.** Saturday's 12 pool games are seeded with hard times. Sunday's 8 championship games are generated on-demand via the Bracket tab button; Pete picks the first start time + per-game minutes when generating. Plan Sat night: "Sunday games start at X" — pick a buffer that fits all 8 games across 2 sheets (each pool plays semis then a final or bronze, so the bronze + final per pool need to be sequential on a single sheet OR split across sheets).
+**F. Sunday championship game times.** Saturday's 12 pool games are seeded with hard times. Sunday's 8 championship games are generated on-demand via the Bracket tab button; Pete picks the first start time + per-game minutes when generating. Plan Sat night: "Sunday games start at X" — pick a buffer that fits all 8 games across 2 sheets (each pool plays semis then a final or bronze, so the bronze + final per pool need to be sequential on a single sheet OR split across sheets).
 
-**F. iPad usability of ScorerView.** Spec calls for it. Wake lock works on Safari 16.4+, warning banner shown otherwise. 44px touch targets per spec. **Smoke-test on the actual iPad before pilot.** Open ScorerView for one game, walk through Log Goal / Add Penalty / Period change / Finalize / Reopen. Anything weird → bring it up.
+**G. iPad usability of ScorerView.** Spec calls for it. Wake lock works on Safari 16.4+, warning banner shown otherwise. 44px touch targets per spec. **Smoke-test on the actual iPad before pilot.** Open ScorerView for one game, walk through Log Goal / Add Penalty / Period change / Finalize / Reopen. Anything weird → bring it up.
 
-**G. VAPID env var for push notifications.** Per §6. If `REACT_APP_VAPID_PUBLIC_KEY` isn't set in Vercel, push subscriptions silently fail (no error to the user). If Pete wants to send "BLPA Cleveland starts in 1 hour" or "Live now: Pool A Game 1" pushes during the event, this needs to be set. Otherwise skip — pushes aren't critical to the pilot.
+**~~H. VAPID env var for push notifications.~~** ✅ Subsumed by P0 #D above — push pipeline now actually has consuming code, so this is no longer "set this env var if you ever want push" — it's "complete the secrets + deploy to activate the live recap pushes shipped this batch."
 
 ### 🟡 P2 — Worth knowing, don't need to fix
 
@@ -576,15 +710,17 @@ The BLPA pilot batch shipped a huge amount (see §5 May 16 evening entry). This 
 
 ### 🟢 Pre-pilot checklist (in order)
 
-1. **Pete** — Fix Forgot Password (§6 dashboard config), verify E2E (§8).
-2. **Code** — Unwrap `/tournament/:id` and `/game/:gameId` from `ProtectedRoute` (P0 A above). ~30-60 min.
-3. **Pete** — Get team names + logos from Nick. Swap placeholders in TournamentManage → Teams.
-4. **Pete** — Flip BLPA Cleveland status `draft` → `active` morning of Jun 13.
-5. **Pete** — Smoke-test ScorerView on iPad (F above).
-6. **Pete** — Send pilot URL to BLPA captains.
-7. **Sat Jun 13** — Run pool play; standings populate live.
-8. **Sat night** — Pete clicks "🏆 Generate Bracket"; picks Sunday start time + rink.
-9. **Sun Jun 14** — Run championship games. SO winner prompt fires on tied bracket games; bracket auto-fills as semis end. Auto-recap posts to Feed as each game finalizes.
-10. **Sun end** — Champion banner appears. Pete flips status `active` → `complete`.
+1. **Pete** — Merge worktree branch + push to main (§4 merge command). Vercel auto-deploys.
+2. **Pete** — Fix Forgot Password (§6 dashboard config), verify E2E (§8). **P0 B.**
+3. **Pete** — Find existing VAPID private key (or regenerate pair); set 3 Supabase Edge Function secrets (§6 + §12 D); ping Claude to deploy `send-recap-push` via MCP. **P0 D.**
+4. **Pete** — Get team names + logos from Nick. Swap placeholders in TournamentManage → Teams + Settings → Branding logo upload.
+5. **Pete** — Smoke-test push end-to-end on a real device (§12 D smoke-test steps).
+6. **Pete** — Smoke-test ScorerView on iPad (P1 G above).
+7. **Pete** — Send pilot URL `https://rinkd.app/tournament/b2789d66-1d77-4a62-862d-00b550da6a98` to BLPA captains. They'll see the public landing without signing up; sign-up CTA brings them into Rinkd, then they can Follow + receive recap pushes.
+8. **Sat Jun 13 morning** — verify status is still `active` (it is now, but Pete may have flipped to draft for pre-event privacy).
+9. **Sat Jun 13** — Run pool play; standings populate live; auto-recap posts hit Feed + push subscribers as each game finalizes.
+10. **Sat night** — Pete clicks "🏆 Generate Bracket"; picks Sunday start time + rink. 8 championship games created (semis with teams; gold + bronze with TBD).
+11. **Sun Jun 14** — Run championship games. SO winner prompt fires on tied bracket games; bracket auto-fills as each semi ends.
+12. **Sun end** — Champion banner appears. Pete flips status to `complete`.
 
-Realistic effort to clear P0: ~1-2 hours of code work (just item A) + ~10 min of Pete's dashboard config (item B) + 1 min manual flip (item C). The rest is pilot-day operations, not code.
+Realistic effort to clear remaining P0: ~10 min Pete dashboard config (B) + ~10-30 min Pete VAPID setup + Claude function deploy (D). **No code work remains for pilot** — everything else is operations.
