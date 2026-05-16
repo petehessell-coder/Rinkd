@@ -1,0 +1,232 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { reportPost, reportComment, REPORT_REASONS } from '../lib/moderation';
+import { blockUser } from '../lib/blocks';
+
+const C = {
+  navy: '#0B1F3A', ice: '#F4F7FA', steel: '#8BA3BE', card: '#0f2847',
+  border: 'rgba(46,91,140,0.4)', red: '#D72638',
+};
+
+/**
+ * ⋯ menu for an individual post or comment. Renders nothing if the viewer is
+ * the author (you can't report or block yourself). Closes on outside click,
+ * Esc, or after a successful action.
+ *
+ *   <PostActionMenu
+ *     kind="post"             // 'post' | 'comment'
+ *     targetId={post.id}
+ *     authorId={post.author_id}
+ *     authorHandle={post.profiles?.handle}
+ *     currentUserId={currentUser?.id}
+ *     onReported={() => ...}  // parent typically removes the row from local state
+ *     onBlocked={() => ...}   // parent typically filters all rows from this user
+ *   />
+ */
+export default function PostActionMenu({
+  kind, targetId, authorId, authorHandle,
+  currentUserId, onReported, onBlocked,
+}) {
+  const [open, setOpen] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [pickedReason, setPickedReason] = useState('spam');
+  const [details, setDetails] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const rootRef = useRef(null);
+
+  // Close the menu on outside click / Escape. Declared before any conditional
+  // return so hook order stays stable across renders.
+  useEffect(() => {
+    if (!open && !showReportModal) return undefined;
+    const onDocClick = (e) => {
+      if (showReportModal) return; // modal handles its own outside-clicks
+      if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        setOpen(false);
+        setShowReportModal(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open, showReportModal]);
+
+  // Don't render at all for own content. Author has their own delete path.
+  if (!currentUserId || !authorId || currentUserId === authorId) return null;
+
+  const openReport = () => {
+    setOpen(false);
+    setPickedReason('spam');
+    setDetails('');
+    setError('');
+    setShowReportModal(true);
+  };
+
+  const submitReport = async () => {
+    setSubmitting(true);
+    setError('');
+    const fn = kind === 'comment' ? reportComment : reportPost;
+    const { error: e } = await fn(targetId, pickedReason, details);
+    setSubmitting(false);
+    if (e) {
+      setError(e.message || 'Could not send report. Try again.');
+      return;
+    }
+    setShowReportModal(false);
+    onReported?.();
+  };
+
+  const doBlock = async () => {
+    setOpen(false);
+    const ok = window.confirm(
+      `Block @${authorHandle || 'this user'}? You won't see each other's posts, comments, or notifications.`
+    );
+    if (!ok) return;
+    const { error: e } = await blockUser(authorId);
+    if (!e) onBlocked?.();
+  };
+
+  return (
+    <div ref={rootRef} style={{ position: 'relative', display: 'inline-block' }}>
+      <button
+        aria-label="More actions"
+        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+        style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: C.steel, padding: '2px 6px', borderRadius: 4,
+          fontSize: 18, lineHeight: 1, fontWeight: 700,
+        }}>
+        ⋯
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', right: 0, top: '100%', marginTop: 4,
+          minWidth: 180, background: C.card, border: `1px solid ${C.border}`,
+          borderRadius: 8, padding: 4, zIndex: 50,
+          boxShadow: '0 6px 18px rgba(0,0,0,0.35)',
+        }}>
+          <button onClick={openReport} style={menuItemStyle}>🚩 Report</button>
+          <button onClick={doBlock} style={menuItemStyle}>
+            🚫 Block {authorHandle ? `@${authorHandle}` : 'user'}
+          </button>
+        </div>
+      )}
+
+      {showReportModal && (
+        <ReportModal
+          kind={kind}
+          pickedReason={pickedReason}
+          setPickedReason={setPickedReason}
+          details={details}
+          setDetails={setDetails}
+          submitting={submitting}
+          error={error}
+          onCancel={() => setShowReportModal(false)}
+          onSubmit={submitReport}
+        />
+      )}
+    </div>
+  );
+}
+
+const menuItemStyle = {
+  display: 'block', width: '100%', textAlign: 'left',
+  padding: '8px 12px', borderRadius: 6,
+  background: 'transparent', border: 'none', cursor: 'pointer',
+  color: C.ice, fontSize: 13, fontFamily: "'Barlow', sans-serif",
+};
+
+function ReportModal({
+  kind, pickedReason, setPickedReason, details, setDetails,
+  submitting, error, onCancel, onSubmit,
+}) {
+  return (
+    <div
+      onClick={onCancel}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(7,17,31,0.7)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 20, zIndex: 1000,
+      }}>
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: C.card, border: `1px solid ${C.border}`, borderRadius: 14,
+          padding: 20, width: '100%', maxWidth: 380, color: C.ice,
+          fontFamily: "'Barlow', sans-serif",
+        }}>
+        <div style={{
+          fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic',
+          fontWeight: 900, fontSize: 22, textTransform: 'uppercase',
+          letterSpacing: '0.04em', marginBottom: 4,
+        }}>
+          Report this {kind}
+        </div>
+        <div style={{ fontSize: 13, color: C.steel, marginBottom: 14 }}>
+          We'll review it. They won't know it was you.
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+          {REPORT_REASONS.map((r) => (
+            <label key={r.id} style={{
+              display: 'flex', gap: 10, alignItems: 'flex-start',
+              padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
+              background: pickedReason === r.id ? 'rgba(215,38,56,0.12)' : 'rgba(11,31,58,0.6)',
+              border: `1px solid ${pickedReason === r.id ? C.red : C.border}`,
+            }}>
+              <input type="radio" name="report_reason" value={r.id}
+                checked={pickedReason === r.id}
+                onChange={() => setPickedReason(r.id)}
+                style={{ marginTop: 3 }} />
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{r.label}</div>
+                <div style={{ fontSize: 12, color: C.steel }}>{r.description}</div>
+              </div>
+            </label>
+          ))}
+        </div>
+
+        <textarea
+          value={details}
+          onChange={(e) => setDetails(e.target.value.slice(0, 500))}
+          placeholder="Add details (optional)"
+          rows={3}
+          style={{
+            width: '100%', boxSizing: 'border-box',
+            background: C.navy, border: `1px solid ${C.border}`, color: C.ice,
+            borderRadius: 8, padding: '10px 12px', fontSize: 13, outline: 'none',
+            fontFamily: "'Barlow', sans-serif", resize: 'vertical',
+            marginBottom: 8,
+          }} />
+        <div style={{ textAlign: 'right', fontSize: 11, color: C.steel, marginBottom: 12 }}>
+          {details.length}/500
+        </div>
+
+        {error && (
+          <div style={{ color: C.red, fontSize: 13, marginBottom: 10 }}>{error}</div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={onCancel} disabled={submitting} style={{
+            background: 'transparent', color: C.ice, border: `1px solid ${C.border}`,
+            padding: '9px 16px', borderRadius: 999, cursor: 'pointer',
+            fontFamily: "'Barlow', sans-serif", fontSize: 13, fontWeight: 600,
+          }}>Cancel</button>
+          <button onClick={onSubmit} disabled={submitting} style={{
+            background: C.red, color: '#fff', border: 'none',
+            padding: '9px 18px', borderRadius: 999, cursor: 'pointer',
+            fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900,
+            fontStyle: 'italic', fontSize: 14, letterSpacing: '0.05em',
+            textTransform: 'uppercase', opacity: submitting ? 0.6 : 1,
+          }}>{submitting ? 'Sending…' : 'Send report'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}

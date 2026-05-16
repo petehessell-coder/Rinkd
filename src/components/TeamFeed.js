@@ -8,6 +8,7 @@ import {
 import { track } from '../lib/analytics';
 import { FeedSkeleton, EmptyState } from './Skeletons';
 import { classifyImage } from '../lib/imageModeration';
+import PostActionMenu from './PostActionMenu';
 
 const C = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
@@ -67,7 +68,7 @@ function MediaDisplay({ url, type }) {
   );
 }
 
-function PostCard({ post, currentUser, isLiked, onLike, onCommentChange }) {
+function PostCard({ post, currentUser, isLiked, onLike, onCommentChange, onPostHidden, onUserBlocked }) {
   const navigate = useNavigate();
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState([]);
@@ -107,6 +108,15 @@ function PostCard({ post, currentUser, isLiked, onLike, onCommentChange }) {
             </div>
             <div style={{ fontSize: 11, color: C.steel, marginTop: 1 }}>@{profile?.handle} · {profile?.position} · {timeAgo(post.created_at)}</div>
           </div>
+          <PostActionMenu
+            kind="post"
+            targetId={post.id}
+            authorId={post.author_id}
+            authorHandle={profile?.handle}
+            currentUserId={currentUser?.id}
+            onReported={() => onPostHidden?.(post.id)}
+            onBlocked={() => onUserBlocked?.(post.author_id)}
+          />
         </div>
         {post.content && <p style={{ fontSize: 15, color: C.ice, lineHeight: 1.55, marginBottom: 10, wordBreak: 'break-word' }}>{post.content}</p>}
         <MediaDisplay url={post.media_url} type={post.media_type} />
@@ -125,8 +135,24 @@ function PostCard({ post, currentUser, isLiked, onLike, onCommentChange }) {
               <div key={c.id} style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
                 <Avatar profile={c.profiles} size={28} />
                 <div style={{ flex: 1, background: C.navy, borderRadius: 8, padding: '8px 10px' }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: C.ice, marginBottom: 2 }}>{c.profiles?.name} <span style={{ fontWeight: 400, color: C.steel }}>· {timeAgo(c.created_at)}</span></div>
-                  <div style={{ fontSize: 13, color: C.ice }}>{c.content}</div>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: C.ice, marginBottom: 2 }}>{c.profiles?.name} <span style={{ fontWeight: 400, color: C.steel }}>· {timeAgo(c.created_at)}</span></div>
+                      <div style={{ fontSize: 13, color: C.ice }}>{c.content}</div>
+                    </div>
+                    <PostActionMenu
+                      kind="comment"
+                      targetId={c.id}
+                      authorId={c.author_id}
+                      authorHandle={c.profiles?.handle}
+                      currentUserId={currentUser?.id}
+                      onReported={() => setComments(prev => prev.filter(x => x.id !== c.id))}
+                      onBlocked={() => {
+                        setComments(prev => prev.filter(x => x.author_id !== c.author_id));
+                        onUserBlocked?.(c.author_id);
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
             ))}
@@ -333,7 +359,10 @@ export default function TeamFeed({ teamId, currentUser, isMember }) {
       ) : posts.map(post => (
         <PostCard key={post.id} post={post} currentUser={currentUser}
           isLiked={likedPosts.includes(post.id)} onLike={onLike}
-          onCommentChange={load} />
+          onCommentChange={load}
+          onPostHidden={(id) => setPosts(prev => prev.filter(p => p.id !== id))}
+          onUserBlocked={(uid) => setPosts(prev => prev.filter(p => p.author_id !== uid))}
+        />
       ))}
     </div>
   );

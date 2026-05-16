@@ -45,22 +45,35 @@ export default function AdminModerationPage({ currentUser, profile }) {
     // every time they land on this URL, and the queue UI flickers in.
     if (isAdmin !== true) return;
     setLoading(true);
-    if (tab === 'posts') {
+    if (tab === 'posts' || tab === 'comments') {
+      const targetType = tab === 'posts' ? 'post' : 'comment';
+      const sel = tab === 'posts'
+        ? '*, profiles ( id, name, handle, avatar_color, avatar_initials )'
+        : '*, profiles!comments_author_id_fkey ( id, name, handle, avatar_color, avatar_initials )';
       const { data } = await supabase
-        .from('posts')
-        .select('*, profiles ( id, name, handle, avatar_color, avatar_initials )')
+        .from(tab)
+        .select(sel)
         .eq('is_flagged', true)
         .order('flagged_at', { ascending: false })
         .limit(100);
-      setItems(data || []);
-    } else if (tab === 'comments') {
-      const { data } = await supabase
-        .from('comments')
-        .select('*, profiles!comments_author_id_fkey ( id, name, handle, avatar_color, avatar_initials )')
-        .eq('is_flagged', true)
-        .order('flagged_at', { ascending: false })
-        .limit(100);
-      setItems(data || []);
+      const list = data || [];
+      // Annotate each flagged item with how many distinct users reported it.
+      // Useful for triage — three users complaining is a stronger signal than
+      // one. Skipped silently if the read fails; the queue still works.
+      if (list.length) {
+        const ids = list.map((x) => x.id);
+        const { data: reports } = await supabase
+          .from('content_reports')
+          .select('target_id')
+          .eq('target_type', targetType)
+          .in('target_id', ids);
+        const counts = (reports || []).reduce((acc, r) => {
+          acc[r.target_id] = (acc[r.target_id] || 0) + 1;
+          return acc;
+        }, {});
+        list.forEach((x) => { x.__report_count = counts[x.id] || 0; });
+      }
+      setItems(list);
     } else if (tab === 'blocklist') {
       const { data } = await supabase
         .from('moderation_blocklist')
@@ -214,9 +227,16 @@ export default function AdminModerationPage({ currentUser, profile }) {
                       <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>{it.profiles?.name || 'Unknown'}</div>
                       <div style={{ fontSize: 11, color: C.steel }}>@{it.profiles?.handle} · {timeAgo(it.flagged_at || it.created_at)}</div>
                     </div>
-                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.red, background: 'rgba(215,38,56,0.15)', border: '1px solid rgba(215,38,56,0.4)', padding: '3px 8px', borderRadius: 4 }}>
-                      {it.flag_reason || 'flagged'}
-                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.red, background: 'rgba(215,38,56,0.15)', border: '1px solid rgba(215,38,56,0.4)', padding: '3px 8px', borderRadius: 4 }}>
+                        {it.flag_reason || 'flagged'}
+                      </span>
+                      {it.__report_count > 0 && (
+                        <span title={`${it.__report_count} user${it.__report_count === 1 ? '' : 's'} reported this`} style={{ fontSize: 10, fontWeight: 600, color: C.steel }}>
+                          {it.__report_count} report{it.__report_count === 1 ? '' : 's'}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div style={{ fontSize: 14, color: C.ice, lineHeight: 1.55, marginBottom: 10, background: C.navy, padding: 10, borderRadius: 8, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                     {it.content || '(no text)'}

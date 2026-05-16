@@ -8,6 +8,7 @@ import { track } from '../lib/analytics';
 import { FeedSkeleton, EmptyState } from '../components/Skeletons';
 import { classifyImage } from '../lib/imageModeration';
 import RinksideFeaturedCard from '../components/RinksideFeaturedCard';
+import PostActionMenu from '../components/PostActionMenu';
 
 // Feed page size — keyset pagination pulls this many chirps per request.
 const PAGE_SIZE = 20;
@@ -72,7 +73,7 @@ function MediaDisplay({ url, type }) {
   );
 }
 
-function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, onLike, onComment }) {
+function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, onLike, onComment, onPostHidden, onUserBlocked }) {
   const navigate = useNavigate();
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState([]);
@@ -155,6 +156,15 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, onLik
             </div>
             <div style={{ fontSize: 11, color: C.steel, marginTop: 1 }}>@{profile?.handle} · {profile?.position} · {timeAgo(post.created_at)}</div>
           </div>
+          <PostActionMenu
+            kind="post"
+            targetId={post.id}
+            authorId={post.author_id}
+            authorHandle={profile?.handle}
+            currentUserId={currentUser?.id}
+            onReported={() => onPostHidden?.(post.id)}
+            onBlocked={() => onUserBlocked?.(post.author_id)}
+          />
         </div>
         {post.content && <p style={{ fontSize: 15, color: C.ice, lineHeight: 1.55, marginBottom: 10, wordBreak: 'break-word' }}>{post.content}</p>}
         <MediaDisplay url={post.media_url} type={post.media_type} />
@@ -178,11 +188,29 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, onLik
               <div key={c.id} style={{ display: 'flex', gap: 8, marginBottom: 10, opacity: c.__pending ? 0.55 : 1, transition: 'opacity 0.18s' }}>
                 <Avatar profile={c.profiles} size={28} />
                 <div style={{ flex: 1, background: C.navy, borderRadius: 8, padding: '8px 10px' }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: C.ice, marginBottom: 2 }}>
-                    {c.profiles?.name || (c.__pending ? 'You' : '')}
-                    <span style={{ fontWeight: 400, color: C.steel }}> · {c.__pending ? 'sending…' : timeAgo(c.created_at)}</span>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: C.ice, marginBottom: 2 }}>
+                        {c.profiles?.name || (c.__pending ? 'You' : '')}
+                        <span style={{ fontWeight: 400, color: C.steel }}> · {c.__pending ? 'sending…' : timeAgo(c.created_at)}</span>
+                      </div>
+                      <div style={{ fontSize: 13, color: C.ice }}>{c.content}</div>
+                    </div>
+                    {!c.__pending && (
+                      <PostActionMenu
+                        kind="comment"
+                        targetId={c.id}
+                        authorId={c.author_id}
+                        authorHandle={c.profiles?.handle}
+                        currentUserId={currentUser?.id}
+                        onReported={() => setComments(prev => prev.filter(x => x.id !== c.id))}
+                        onBlocked={() => {
+                          setComments(prev => prev.filter(x => x.author_id !== c.author_id));
+                          onUserBlocked?.(c.author_id);
+                        }}
+                      />
+                    )}
                   </div>
-                  <div style={{ fontSize: 13, color: C.ice }}>{c.content}</div>
                 </div>
               </div>
             ))}
@@ -501,7 +529,17 @@ export default function Feed({ currentUser, profile }) {
         ) : (
           <>
             {posts.map(post => (
-              <PostCard key={post.id} post={post} currentUser={currentUser} profile={profile} likedPosts={likedPosts} onLike={handleLike} onComment={handleCommentAdded} />
+              <PostCard
+                key={post.id}
+                post={post}
+                currentUser={currentUser}
+                profile={profile}
+                likedPosts={likedPosts}
+                onLike={handleLike}
+                onComment={handleCommentAdded}
+                onPostHidden={(id) => setPosts(prev => prev.filter(p => p.id !== id))}
+                onUserBlocked={(uid) => setPosts(prev => prev.filter(p => p.author_id !== uid))}
+              />
             ))}
             {hasMore && (
               <button onClick={loadMore} disabled={loadingMore}
