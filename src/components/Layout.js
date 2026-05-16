@@ -258,7 +258,16 @@ export default function Layout({ children, profile }) {
       <style>{`
         @media (max-width: 768px) {
           .sidebar-desktop { display: none !important; }
-          .main-content { margin-left: 0 !important; padding-top: 52px; padding-bottom: 72px; }
+          /* Bottom nav is ~50px tall + safe-area inset on iOS. Reserve enough
+             room below the content so the last row never sits under the nav.
+             88px covers the nav, its 8px top padding, and a small breathing
+             gap; safe-area inset is added on top so the home-indicator area
+             on iOS still clears. */
+          .main-content {
+            margin-left: 0 !important;
+            padding-top: 52px;
+            padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+          }
           .mobile-topbar { display: flex !important; }
           .mobile-nav { display: block !important; }
           /* Mobile shows the back button in the top bar, so hide the

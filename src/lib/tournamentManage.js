@@ -218,6 +218,17 @@ export async function generatePoolSchedule(tournamentId, opts) {
 
 // ------------------------------ Bracket builder ------------------------------
 
+// Manager-side standings lookup — used to render W/L/T per team on the Teams
+// tab so the director can see records at a glance during a live event.
+// Tiny columns set; full standings view is heavier than we need here.
+export async function listStandingsSummary(tournamentId) {
+  const { data, error } = await supabase
+    .from('tournament_standings')
+    .select('team_id, gp, wins, losses, ties, pts')
+    .eq('tournament_id', tournamentId);
+  return { data: data || [], error };
+}
+
 /**
  * Top-N-per-pool seeding. Returns an ordered list of qualifying teams with
  * their pool + pool rank derived from the standings view.
@@ -252,6 +263,166 @@ export async function createBracketGame(tournamentId, { homeTeamId, awayTeamId, 
     .select()
     .single();
   return { data, error };
+}
+
+// ============================================================================
+// Championship bracket — 4-team-per-pool ("all teams advance") pattern.
+//
+// Per the BLPA Cleveland format: each pool's 4 teams play a 4-game bracket:
+//   Semi 1:  Seed 2 vs Seed 3
+//   Semi 2:  Seed 1 vs Seed 4
+//   Final:   Winner(Semi 1) vs Winner(Semi 2)  → winner=gold, loser=silver
+//   Bronze:  Loser(Semi 1)  vs Loser(Semi 2)   → winner=bronze, loser=4th
+//
+// Two helpers below: one to generate the 4 games on demand (button-triggered
+// from TournamentManage), one to fill in gold/bronze slots once each semi
+// finalizes (triggered from ScorerView's finalize path).
+//
+// We tag the bracket position with a `bracket_slot` token written into
+// `games.notes`-less... wait, no notes column. Use a marker pattern in the
+// game's round + start_time ordering instead? Too fragile.
+//
+// Simpler approach: store the bracket position in the game row itself using
+// home_team_id and away_team_id with NULL placeholders for gold/bronze, plus
+// the `round` column ('semifinal' for semis, 'final' for gold, 'consolation'
+// for bronze). To map semis → final/bronze, we also need to remember which
+// semi feeds which slot. We do that by ordering: semi 1 = 2v3 is the lower
+// start_time; semi 2 = 1v4 is the next. When semi 1 finalizes its winner
+// becomes the home of the final; semi 2 winner becomes the away. Losers
+// follow the same pattern for the bronze.
+// ============================================================================
+
+export async function generateChampionshipBracket(tournamentId, opts = {}) {
+  const { startTime = null, rinkId = null, gameMinutes = 60 } = opts;
+  // 1. Pull standings to determine seeds per pool. Caller is expected to
+  //    only run this once all pool games are final.
+  const { data: standings, error: stdErr } = await supabase
+    .from('tournament_standings')
+    .select('team_id, pool, pool_rank')
+    .eq('tournament_id', tournamentId)
+    .order('pool', { ascending: true })
+    .order('pool_rank', { ascending: true });
+  if (stdErr) return { inserted: 0, error: stdErr };
+  if (!standings || standings.length === 0) return { inserted: 0, error: new Error('No standings available — finish at least one pool game first.') };
+
+  // 2. Group by pool. Each pool needs exactly 4 teams for this pattern.
+  const byPool = standings.reduce((acc, row) => {
+    if (!acc[row.pool]) acc[row.pool] = [];
+    acc[row.pool].push(row);
+    return acc;
+  }, {});
+  const pools = Object.entries(byPool).sort(([a], [b]) => a.localeCompare(b));
+  const pool4Teams = pools.filter(([, teams]) => teams.length === 4);
+  if (pool4Teams.length === 0) {
+    return { inserted: 0, error: new Error('This generator expects 4 teams per pool. None of the pools matched.') };
+  }
+
+  // 3. Refuse to re-run when bracket games already exist for this tournament
+  //    — avoids double-creation if the button is double-clicked. Director can
+  //    delete bracket games manually before re-generating.
+  const { data: existing } = await supabase
+    .from('games')
+    .select('id, round')
+    .eq('tournament_id', tournamentId)
+    .neq('round', 'pool');
+  if (existing && existing.length > 0) {
+    return { inserted: 0, error: new Error(`Bracket already has ${existing.length} game${existing.length === 1 ? '' : 's'}. Delete them first if you want to regenerate.`) };
+  }
+
+  // 4. Build the 4 games per pool. Semi 1 (seed 2 v 3) sorts before Semi 2
+  //    (seed 1 v 4) by start_time so resolveBracketSlotsFromSemis can pair
+  //    them by chronological order. Final and bronze games start with NULL
+  //    home/away — they fill in once both semis go final.
+  const baseStart = startTime ? new Date(startTime) : null;
+  const slotMinutes = parseInt(gameMinutes, 10) || 60;
+  const rows = [];
+  pool4Teams.forEach(([pool, teams], poolIdx) => {
+    const seeds = teams; // already sorted by pool_rank ascending
+    const seed = (n) => seeds[n - 1]?.team_id;
+    // 4 games per pool, spaced `slotMinutes` apart starting at baseStart.
+    // Pools start sequentially so two pools don't collide on a single rink
+    // unless caller assigns different rinks (which they should).
+    const slotFor = (idx) => baseStart ? new Date(baseStart.getTime() + (poolIdx * 4 + idx) * slotMinutes * 60_000).toISOString() : null;
+    rows.push(
+      { tournament_id: tournamentId, round: 'semifinal',   pool, home_team_id: seed(2), away_team_id: seed(3), status: 'scheduled', start_time: slotFor(0), rink_id: rinkId },
+      { tournament_id: tournamentId, round: 'semifinal',   pool, home_team_id: seed(1), away_team_id: seed(4), status: 'scheduled', start_time: slotFor(1), rink_id: rinkId },
+      { tournament_id: tournamentId, round: 'consolation', pool, home_team_id: null,    away_team_id: null,    status: 'scheduled', start_time: slotFor(2), rink_id: rinkId },
+      { tournament_id: tournamentId, round: 'final',       pool, home_team_id: null,    away_team_id: null,    status: 'scheduled', start_time: slotFor(3), rink_id: rinkId },
+    );
+  });
+
+  const { data, error } = await supabase.from('games').insert(rows).select('id, round, pool, start_time');
+  if (error) return { inserted: 0, error };
+  return { inserted: data?.length || 0, error: null, poolsCovered: pool4Teams.map(([p]) => p) };
+}
+
+// Resolves the winner of a bracket game, accounting for shootout_winner on
+// tied bracket games (championship can't end in a tie when shootouts are on).
+// Returns 'home' | 'away' | null.
+export function bracketWinnerSide(game) {
+  if (!game || game.status !== 'final') return null;
+  if ((game.home_score ?? 0) > (game.away_score ?? 0)) return 'home';
+  if ((game.away_score ?? 0) > (game.home_score ?? 0)) return 'away';
+  if (game.shootout_winner === 'home' || game.shootout_winner === 'away') return game.shootout_winner;
+  return null;
+}
+
+// Called from ScorerView's finalize path after a semifinal goes final. Looks
+// at all semis in this game's pool; if both are final, fills the gold and
+// bronze games' empty home/away slots with the winners/losers. Idempotent:
+// if the slots are already filled (from a previous run), it skips.
+export async function resolveBracketSlotsFromSemis(tournamentId, pool) {
+  if (!tournamentId || !pool) return { updated: 0, error: null };
+  // Pull all bracket games for the pool ordered by start_time so semi 1 is
+  // the earlier (seed 2 v 3) and semi 2 is the later (seed 1 v 4) per the
+  // ordering generateChampionshipBracket uses.
+  const { data: bracketGames, error: ge } = await supabase
+    .from('games')
+    .select('id, round, pool, home_team_id, away_team_id, home_score, away_score, status, shootout_winner, start_time')
+    .eq('tournament_id', tournamentId)
+    .eq('pool', pool)
+    .neq('round', 'pool')
+    .order('start_time', { ascending: true });
+  if (ge) return { updated: 0, error: ge };
+
+  const semis = (bracketGames || []).filter(g => g.round === 'semifinal');
+  if (semis.length < 2) return { updated: 0, error: null }; // not enough yet
+  const [semi1, semi2] = semis;
+  if (semi1.status !== 'final' || semi2.status !== 'final') return { updated: 0, error: null };
+
+  const w1 = bracketWinnerSide(semi1);
+  const w2 = bracketWinnerSide(semi2);
+  if (!w1 || !w2) return { updated: 0, error: new Error('A semifinal is tied with no shootout winner recorded — resolve it before the bracket can advance.') };
+
+  const winnerTeamId = (g, side) => side === 'home' ? g.home_team_id : g.away_team_id;
+  const loserTeamId  = (g, side) => side === 'home' ? g.away_team_id : g.home_team_id;
+
+  const final  = bracketGames.find(g => g.round === 'final');
+  const bronze = bracketGames.find(g => g.round === 'consolation');
+
+  const updates = [];
+  if (final && (final.home_team_id === null || final.away_team_id === null)) {
+    updates.push(
+      supabase.from('games').update({
+        home_team_id: winnerTeamId(semi1, w1),
+        away_team_id: winnerTeamId(semi2, w2),
+      }).eq('id', final.id)
+    );
+  }
+  if (bronze && (bronze.home_team_id === null || bronze.away_team_id === null)) {
+    updates.push(
+      supabase.from('games').update({
+        home_team_id: loserTeamId(semi1, w1),
+        away_team_id: loserTeamId(semi2, w2),
+      }).eq('id', bronze.id)
+    );
+  }
+  if (updates.length === 0) return { updated: 0, error: null };
+
+  const results = await Promise.all(updates);
+  const failed = results.find(r => r.error);
+  if (failed) return { updated: 0, error: failed.error };
+  return { updated: updates.length, error: null };
 }
 
 // ------------------------------ Misc ------------------------------

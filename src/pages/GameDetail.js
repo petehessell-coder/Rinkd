@@ -7,6 +7,7 @@ import MapLink from '../components/MapLink';
 import CalendarButton from '../components/CalendarButton';
 import { LedR } from '../components/Logos';
 import { getLiveBarnUrl } from '../lib/livebarn';
+import { teamInitials } from '../lib/teamInitials';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 
@@ -46,6 +47,10 @@ export default function GameDetail({ profile }) {
   const [goalieChanges, setGoalieChanges] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isOrganizer, setIsOrganizer] = useState(false);
+  // jersey # → player name lookup, keyed by team_id. Populated from
+  // game_lineups (and only for tournament/league games where lineups exist).
+  // Built once on load and consulted by the goal & penalty renderers.
+  const [lineupByTeam, setLineupByTeam] = useState({});
 
   const load = useCallback(async () => {
     try {
@@ -85,16 +90,27 @@ export default function GameDetail({ profile }) {
 
       // team_games don't have nested scoring tables — skip those lookups
       if (!isTeamGame) {
-        const [{ data: gl }, { data: pl }, { data: sl }, { data: gc }] = await Promise.all([
+        const [{ data: gl }, { data: pl }, { data: sl }, { data: gc }, { data: lu }] = await Promise.all([
           supabase.from('game_goals').select('*').eq('game_id', gameId).order('period').order('time_in_period'),
           supabase.from('game_penalties').select('*').eq('game_id', gameId).order('period').order('time_in_period'),
           supabase.from('game_shots').select('*').eq('game_id', gameId),
           supabase.from('game_goalie_changes').select('*').eq('game_id', gameId).order('period').order('time_in_period'),
+          // Pull lineups so the goal & penalty rows can say "Gus Beck (#11)" instead
+          // of just "#11". invite_name is the source of truth while the players table
+          // is unpopulated (see RINKD_STATE_OF_PLAY).
+          supabase.from('game_lineups').select('team_id, jersey_number, invite_name').eq('game_id', gameId),
         ]);
         setGoals(gl || []);
         setPenalties(pl || []);
         setShots(sl || []);
         setGoalieChanges(gc || []);
+        const lookup = {};
+        (lu || []).forEach(row => {
+          if (row.jersey_number == null) return;
+          if (!lookup[row.team_id]) lookup[row.team_id] = {};
+          lookup[row.team_id][row.jersey_number] = row.invite_name || null;
+        });
+        setLineupByTeam(lookup);
       }
     } catch(e) { console.error('[GameDetail] load failed', e); }
     setLoading(false);
@@ -116,23 +132,23 @@ export default function GameDetail({ profile }) {
 
   // Normalize team data across league, team-only, and tournament shapes.
   const ourTeam = isTeamGame
-    ? { id: game.team?.id, name: game.team?.name, logo_color: game.team?.logo_color || '#1a4a7a', logo_initials: game.team?.logo_initials || (game.team?.name || '?').slice(0,2).toUpperCase() }
+    ? { id: game.team?.id, name: game.team?.name, logo_color: game.team?.logo_color || '#1a4a7a', logo_initials: game.team?.logo_initials || teamInitials(game.team?.name, 2) }
     : null;
   const opponentBubble = isTeamGame
-    ? { id: null, name: game.opponent, logo_color: '#6b1520', logo_initials: (game.opponent || '?').slice(0,2).toUpperCase() }
+    ? { id: null, name: game.opponent, logo_color: '#6b1520', logo_initials: teamInitials(game.opponent, 2) }
     : null;
 
   const homeTeam = isLeague
     ? { id: game.home_lt?.id, name: game.home_lt?.team?.name || game.home_lt?.team_name, logo_color: game.home_lt?.team?.logo_color || game.home_lt?.logo_color, logo_initials: game.home_lt?.team?.logo_initials || game.home_lt?.logo_initials }
     : isTeamGame
       ? (game.is_home ? ourTeam : opponentBubble)
-      : { id: game.home_team?.id, name: game.home_team?.team_name, logo_color: '#1a4a7a', logo_initials: (game.home_team?.team_name || '?').split(' ').map(w=>w[0]).slice(0,3).join('') };
+      : { id: game.home_team?.id, name: game.home_team?.team_name, logo_color: '#1a4a7a', logo_initials: teamInitials(game.home_team?.team_name) };
 
   const awayTeam = isLeague
     ? { id: game.away_lt?.id, name: game.away_lt?.team?.name || game.away_lt?.team_name, logo_color: game.away_lt?.team?.logo_color || game.away_lt?.logo_color, logo_initials: game.away_lt?.team?.logo_initials || game.away_lt?.logo_initials }
     : isTeamGame
       ? (game.is_home ? opponentBubble : ourTeam)
-      : { id: game.away_team?.id, name: game.away_team?.team_name, logo_color: '#6b1520', logo_initials: (game.away_team?.team_name || '?').split(' ').map(w=>w[0]).slice(0,3).join('') };
+      : { id: game.away_team?.id, name: game.away_team?.team_name, logo_color: '#6b1520', logo_initials: teamInitials(game.away_team?.team_name) };
 
   const context = isLeague ? game.league?.name : isTeamGame ? (game.team?.name || 'Team game') : game.tournament?.name;
 
@@ -142,10 +158,11 @@ export default function GameDetail({ profile }) {
     if (!isTournamentGame) return null;
     const r = (game.round || '').toLowerCase();
     if (r === 'pool' || r === '') {
-      // Pool play: show "Pool A" if both teams are in the same pool, else "Pool A vs Pool B"
+      // Pool play: show "Pool A" if both teams are in the same pool, else "Pool A vs Pool B".
+      // The DB column already stores the full "Pool X" string, so don't prepend "Pool " again.
       const hp = game.home_team?.pool, ap = game.away_team?.pool;
-      if (hp && ap && hp === ap) return `Pool ${hp}`;
-      if (hp || ap)               return `Pool ${hp || '?'} vs Pool ${ap || '?'}`;
+      if (hp && ap && hp === ap) return hp;
+      if (hp || ap)               return `${hp || 'Pool ?'} vs ${ap || 'Pool ?'}`;
       return 'Pool play';
     }
     if (r === 'quarterfinal' || r === 'qf') return 'Quarterfinal';
@@ -165,6 +182,13 @@ export default function GameDetail({ profile }) {
   const teamColor = (id) => id === homeTeam.id ? (homeTeam.logo_color || '#1a4a7a') : (awayTeam.logo_color || '#6b1520');
   const severityColor = (s) => s?.includes('Major') || s?.includes('Match') ? C.red : '#F59E0B';
   const severityLabel = (s) => s?.includes('Major') || s?.includes('Match') ? 'MAJOR' : s?.includes('Double') ? 'DBL MIN' : 'MINOR';
+  // "#11" → "Gus Beck (#11)" when we know the player from the game lineup;
+  // falls back to just the number when the lineup row is missing or unnamed.
+  const playerLabel = (teamId, num) => {
+    if (num == null) return 'Unknown';
+    const name = lineupByTeam[teamId]?.[num];
+    return name ? `${name} (#${num})` : `#${num}`;
+  };
 
   // Shots totals per team
   const homeShots = shots.filter(s => s.team_id === homeTeam.id).reduce((a, s) => a + (s.count || 0), 0);
@@ -183,8 +207,10 @@ export default function GameDetail({ profile }) {
           </button>
           <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', textAlign: 'center', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap' }}>
             <span>
-              {context}
-              {game.rink ? ` · ${[game.rink.sub_rink, game.rink.name].filter(Boolean).join(' · ')}` : ''}
+              {/* Tournament name already shows on the left as the back-link, so
+                  skip it in the right-side venue label to avoid printing it twice. */}
+              {!isTournamentGame && context}
+              {game.rink ? `${!isTournamentGame ? ' · ' : ''}${[game.rink.sub_rink, game.rink.name].filter(Boolean).join(' · ')}` : ''}
               {isTeamGame && game.location ? ` · ${game.location}` : ''}
             </span>
             {(game.rink || (isTeamGame && game.location)) && (
@@ -234,7 +260,7 @@ export default function GameDetail({ profile }) {
               <div style={{ fontSize: 13, fontWeight: 700, color: C.ice }}>{homeTeam.name}</div>
               {isTournamentGame && (game.home_team?.pool || game.home_team?.seed) && (
                 <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.45)', marginTop: 4, fontFamily: "'Barlow Condensed', sans-serif", textTransform: 'uppercase' }}>
-                  {game.home_team?.pool ? `Pool ${game.home_team.pool}` : ''}
+                  {game.home_team?.pool || ''}
                   {game.home_team?.pool && game.home_team?.seed ? ' · ' : ''}
                   {game.home_team?.seed ? `Seed ${game.home_team.seed}` : ''}
                 </div>
@@ -264,7 +290,7 @@ export default function GameDetail({ profile }) {
               <div style={{ fontSize: 13, fontWeight: 700, color: C.ice }}>{awayTeam.name}</div>
               {isTournamentGame && (game.away_team?.pool || game.away_team?.seed) && (
                 <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.45)', marginTop: 4, fontFamily: "'Barlow Condensed', sans-serif", textTransform: 'uppercase' }}>
-                  {game.away_team?.pool ? `Pool ${game.away_team.pool}` : ''}
+                  {game.away_team?.pool || ''}
                   {game.away_team?.pool && game.away_team?.seed ? ' · ' : ''}
                   {game.away_team?.seed ? `Seed ${game.away_team.seed}` : ''}
                 </div>
@@ -339,9 +365,9 @@ export default function GameDetail({ profile }) {
                     <div style={{ width: 10, height: 10, borderRadius: '50%', background: teamColor(g.team_id), flexShrink: 0, marginTop: 4 }} />
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>
-                        {g.scorer_number ? `#${g.scorer_number}` : 'Unknown'}
-                        {g.assist1_number ? ` — assist: #${g.assist1_number}` : ' — unassisted'}
-                        {g.assist2_number ? `, #${g.assist2_number}` : ''}
+                        {playerLabel(g.team_id, g.scorer_number)}
+                        {g.assist1_number ? ` — assist: ${playerLabel(g.team_id, g.assist1_number)}` : ' — unassisted'}
+                        {g.assist2_number ? `, ${playerLabel(g.team_id, g.assist2_number)}` : ''}
                         {g.is_shootout ? ' (SO)' : ''}
                       </div>
                       <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>
@@ -366,7 +392,7 @@ export default function GameDetail({ profile }) {
                     </span>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>
-                        {p.player_number ? `#${p.player_number} ` : ''}{teamName(p.team_id)} — {p.penalty_type}
+                        {p.player_number ? `${playerLabel(p.team_id, p.player_number)} · ` : ''}{teamName(p.team_id)} — {p.penalty_type}
                       </div>
                       <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>
                         {periodLabel(p.period)}{p.time_in_period ? ` · ${p.time_in_period}` : ''} · {p.duration_minutes} min

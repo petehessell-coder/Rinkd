@@ -49,6 +49,60 @@ export async function getFollowingPosts(userId, limit = 30, before = null) {
   return { data, error };
 }
 
+// Auto-recap post on game finalize. Idempotent: re-finalize after a Reopen
+// updates the existing recap row (kept unique by posts_recap_for_game_id_unique_idx)
+// rather than spamming the global feed with a second recap. Tournament games
+// only for the pilot; league + team game variants can plug in later by
+// extending the caller's content builder. Always tagged "Game Recap" so it
+// renders with the blue tag stripe in Feed and TeamFeed.
+const GAME_RECAP_TAG = 'Game Recap';
+const GAME_RECAP_TAG_COLOR = '#2E5B8C';
+
+export async function createGameRecapPost({ scorerId, gameId, content }) {
+  if (!scorerId || !gameId || !content) {
+    return { data: null, error: new Error('createGameRecapPost requires scorerId, gameId, and content') };
+  }
+  // Look for an existing recap. Single round-trip is fine — the partial unique
+  // index makes this an indexed lookup, and the volume is tiny (one row per
+  // finalized game).
+  const { data: existing, error: lookupErr } = await supabase
+    .from('posts')
+    .select('id, author_id')
+    .eq('recap_for_game_id', gameId)
+    .maybeSingle();
+  if (lookupErr) return { data: null, error: lookupErr };
+
+  if (existing) {
+    // Re-finalize after a Reopen — keep the original author (the user who
+    // first finalized) so the post's permalink-style attribution doesn't
+    // shift around. Just refresh the content with the new score line.
+    const { data, error } = await supabase
+      .from('posts')
+      .update({ content, tag: GAME_RECAP_TAG, tag_color: GAME_RECAP_TAG_COLOR })
+      .eq('id', existing.id)
+      .select()
+      .single();
+    return { data, error };
+  }
+
+  const { data, error } = await supabase
+    .from('posts')
+    .insert({
+      author_id: scorerId,
+      content,
+      tag: GAME_RECAP_TAG,
+      tag_color: GAME_RECAP_TAG_COLOR,
+      recap_for_game_id: gameId,
+      likes: 0,
+      comment_count: 0,
+      repost_count: 0,
+      created_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+  return { data, error };
+}
+
 export async function createPost(authorId, { content, tag, tagColor, mediaUrl, mediaType, livebarnVenueId, teamId }) {
   const { data, error } = await supabase
     .from('posts')

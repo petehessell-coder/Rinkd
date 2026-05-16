@@ -3,6 +3,8 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import Scoresheet from '../components/Scoresheet';
 import { supabase } from '../lib/supabase';
 import { useWakeLock } from '../lib/useWakeLock';
+import { createGameRecapPost } from '../lib/posts';
+import { resolveBracketSlotsFromSemis } from '../lib/tournamentManage';
 
 const C = {
   dark: '#07111F', navy: '#0B1F3A', blue: '#2E5B8C',
@@ -12,6 +14,30 @@ const C = {
 
 const inputStyle = { width: '100%', background: '#07111F', border: '0.5px solid rgba(46,91,140,0.4)', borderRadius: 8, padding: '10px 12px', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', fontSize: 14, outline: 'none' };
 const selectStyle = { ...inputStyle };
+
+// Headline for auto-recap posts. Bracket games get the round + 🏆 framing;
+// pool play gets the pool letter. Stays under 280 chars so it doesn't get
+// truncated in the Feed card preview.
+function buildRecapContent({ home, away, round, tournamentName }) {
+  const winner = home.score > away.score ? 'home' : away.score > home.score ? 'away' : null;
+  const headline = `🏒 FINAL · ${home.name || 'Home'} ${home.score ?? 0}, ${away.name || 'Away'} ${away.score ?? 0}`;
+  const isBracket = round && round !== 'pool';
+  const roundLabel = (() => {
+    if (!round || round === 'pool') return 'Pool play';
+    const r = String(round).toLowerCase();
+    if (r === 'final' || r === 'championship') return '🏆 Championship';
+    if (r === 'semifinal' || r === 'sf') return 'Semifinal';
+    if (r === 'quarterfinal' || r === 'qf') return 'Quarterfinal';
+    if (r === 'consolation') return 'Consolation';
+    if (r === 'bronze') return 'Bronze Medal';
+    return r.replace(/\b\w/g, c => c.toUpperCase());
+  })();
+  const context = [roundLabel, tournamentName].filter(Boolean).join(' · ');
+  const winnerLine = isBracket && winner && (round === 'final' || round === 'championship')
+    ? `\n${winner === 'home' ? home.name : away.name} are the champions.`
+    : '';
+  return `${headline}\n${context}${winnerLine}`;
+}
 
 const PENALTIES = {
   'Minor (2 min)': ['Boarding','Charging','Cross-Checking','Elbowing','High-Sticking','Holding','Hooking','Interference','Roughing','Slashing','Tripping','Too Many Men','Delay of Game'],
@@ -97,11 +123,19 @@ export default function ScorerView() {
   const [game, setGame] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(true);
+  // Distinguishes a director (tournament) / commissioner (league) from a
+  // plain assigned scorer. Only directors can Reopen a finalized game so
+  // mistakes can be corrected without bouncing back to the manage UI.
+  const [isDirector, setIsDirector] = useState(false);
   const [saving, setSaving] = useState(false);
   const [homeScore, setHomeScore] = useState(0);
   const [awayScore, setAwayScore] = useState(0);
   const [period, setPeriod] = useState(1);
   const [status, setStatus] = useState('scheduled');
+  // For bracket games that end tied with shootout-bracket on, the scorer
+  // must pick the shootout winner before Finalize is enabled. Persisted to
+  // games.shootout_winner. Reset on game load.
+  const [shootoutWinner, setShootoutWinner] = useState(null);
   const [goals, setGoals] = useState([]);
   const [penalties, setPenalties] = useState([]);
   const [shotRows, setShotRows] = useState([]);
@@ -121,19 +155,27 @@ export default function ScorerView() {
           .select('*, home_team:league_teams!home_team_id(id, team_name, team:teams(id,name)), away_team:league_teams!away_team_id(id, team_name, team:teams(id,name)), rink:rinks(name,sub_rink), league:leagues(name,commissioner_id)')
           .eq('id', gameId).single()
       : await supabase.from('games')
-          .select('*, home_team:tournament_teams!home_team_id(id,team_name), away_team:tournament_teams!away_team_id(id,team_name), rink:rinks(name,sub_rink), tournament:tournaments(name,director_id)')
+          // Pull tournament settings so the period selector can hide OT/SO
+          // when the format says they're not allowed (e.g., BLPA Bash is
+          // regulation → shootout, no OT).
+          .select('*, home_team:tournament_teams!home_team_id(id,team_name), away_team:tournament_teams!away_team_id(id,team_name), rink:rinks(name,sub_rink), tournament:tournaments(name,director_id,settings)')
           .eq('id', gameId).single();
     if (!g) { navigate(-1); return; }
 
     // Authorization — only the director / assigned scorer (tournament) or the
     // commissioner / assigned scorekeeper (league) may open the live scorer.
+    // Also resolve `director` so the Reopen control on finalized games can
+    // be limited to directors/commissioners (scorers cannot un-finalize).
     const { data: { user } } = await supabase.auth.getUser();
     let ok = false;
+    let director = false;
     if (user) {
       if (isLeague) {
-        ok = user.id === g.scorekeeper_id || user.id === g.league?.commissioner_id;
+        director = user.id === g.league?.commissioner_id;
+        ok = director || user.id === g.scorekeeper_id;
       } else {
-        ok = user.id === g.scorekeeper_id || user.id === g.tournament?.director_id;
+        director = user.id === g.tournament?.director_id;
+        ok = director || user.id === g.scorekeeper_id;
         if (!ok && g.tournament_id) {
           const { data: roleRows } = await supabase.from('tournament_roles')
             .select('role').eq('tournament_id', g.tournament_id).eq('user_id', user.id).limit(1);
@@ -142,12 +184,14 @@ export default function ScorerView() {
       }
     }
     if (!ok) { setAuthorized(false); setLoading(false); return; }
+    setIsDirector(director);
 
     setGame(g);
     setHomeScore(g.home_score || 0);
     setAwayScore(g.away_score || 0);
     setPeriod(g.period || 1);
     setStatus(g.status || 'scheduled');
+    setShootoutWinner(g.shootout_winner || null);
     setGoalForm(prev => ({ ...prev, team_id: g.home_team?.id || '', period: g.period || 1 }));
     setPenaltyForm(prev => ({ ...prev, team_id: g.home_team?.id || '', period: g.period || 1 }));
     const [{ data: gl }, { data: pl }, { data: sl }, { data: gc }] = await Promise.all([
@@ -196,15 +240,40 @@ export default function ScorerView() {
     return () => { try { if (channel) supabase.removeChannel(channel); } catch { /* swallow */ } };
   }, [gameId]);
 
-  const updateScore = async (hs, as, p, st) => {
+  // Once status='final', the scorer tool is read-only. Every mutator below
+  // early-returns when locked, and the UI controls hide or disable so a
+  // scorer can't change the official record after the director (or they
+  // themselves) finalized. Directors get a Reopen affordance below.
+  const isLocked = status === 'final';
+
+  const updateScore = async (hs, as, p, st, opts = {}) => {
     setSaving(true);
-    const { error } = await supabase.from(isLeague ? 'league_games' : 'games').update({ home_score: hs, away_score: as, period: p, status: st }).eq('id', gameId);
+    // shootout_winner only applies to tournament games (column doesn't exist
+    // on league_games). Pass `undefined` to skip the field rather than
+    // sending a NULL that would clobber an existing value on every save.
+    const patch = { home_score: hs, away_score: as, period: p, status: st };
+    if (!isLeague && Object.prototype.hasOwnProperty.call(opts, 'shootoutWinner')) {
+      patch.shootout_winner = opts.shootoutWinner;
+    }
+    const { error } = await supabase.from(isLeague ? 'league_games' : 'games').update(patch).eq('id', gameId);
     setSaving(false);
     if (error) setErrorMsg('Could not save the score — check your connection and try again.');
     return { error };
   };
 
+  const reopenGame = async () => {
+    if (!isDirector) return;
+    setErrorMsg('');
+    const ok = window.confirm('Reopen this game for editing?\n\nStandings already reflect the current score. Any new edits will overwrite them when you finalize again.');
+    if (!ok) return;
+    const prevStatus = status;
+    setStatus('live');
+    const { error } = await updateScore(homeScore, awayScore, period, 'live');
+    if (error) setStatus(prevStatus);
+  };
+
   const changeScore = (team, delta) => {
+    if (isLocked) return;
     setErrorMsg('');
     const prevHome = homeScore, prevAway = awayScore, prevStatus = status;
     const hs = team === 'home' ? Math.max(0, homeScore + delta) : homeScore;
@@ -246,6 +315,10 @@ export default function ScorerView() {
   };
 
   const changePeriod = async (p) => {
+    // Block all period changes after finalize — even the no-op of clicking
+    // the current period would re-write status='live' via updateScore below
+    // and silently un-lock the game. Directors must use the Reopen button.
+    if (isLocked) return;
     setErrorMsg('');
     // Pre-finalize sanity check — make sure the goal log matches the score.
     // Score is derived from goals on every saveGoal/deleteGoal, but the
@@ -269,10 +342,53 @@ export default function ScorerView() {
     const newStatus = p === 'final' ? 'final' : 'live';
     const newPeriod = p === 'final' ? period : parseInt(p);
     setPeriod(newPeriod); setStatus(newStatus);
-    await updateScore(homeScore, awayScore, newPeriod, newStatus);
+    // On finalize: only persist shootout_winner when this is actually a
+    // tied bracket game with SO allowed. Otherwise clear it (a Reopen → fix
+    // score → re-finalize that ended in regulation must not leave a stale
+    // shootout_winner attached to the row).
+    const opts = (!isLeague && p === 'final')
+      ? { shootoutWinner: requiresShootoutResolution ? (shootoutWinner || null) : null }
+      : {};
+    const { error } = await updateScore(homeScore, awayScore, newPeriod, newStatus, opts);
+
+    // Auto-recap post — fire once the score save succeeds and we just
+    // transitioned to 'final'. Tournament games only; league games will
+    // get their own recap pathway later. Failure to post the recap should
+    // never block the finalize itself — the game is finalized regardless.
+    if (!error && newStatus === 'final' && !isLeague && game?.tournament_id) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        const content = buildRecapContent({
+          home: { name: homeTeam?.team_name, score: homeScore },
+          away: { name: awayTeam?.team_name, score: awayScore },
+          round: game.round,
+          tournamentName: game.tournament?.name,
+        });
+        await createGameRecapPost({ scorerId: user?.id, gameId, content });
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('[scorer] recap post failed; game still finalized:', e?.message || e);
+      }
+
+      // If this was a semifinal, try to advance the bracket — fill the
+      // gold game (winners) and bronze game (losers) with the resolved
+      // teams. Idempotent and pool-scoped so it only touches the bracket
+      // that includes this semi. Failure logs but never blocks the
+      // finalize itself.
+      if (game.round === 'semifinal' && game.pool) {
+        try {
+          const { error: resolveErr } = await resolveBracketSlotsFromSemis(game.tournament_id, game.pool);
+          if (resolveErr) console.warn('[scorer] bracket auto-fill failed:', resolveErr.message);
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.warn('[scorer] bracket auto-fill threw:', e?.message || e);
+        }
+      }
+    }
   };
 
   const changeShots = async (teamId, delta) => {
+    if (isLocked) return;
     setErrorMsg('');
     // Shots are tracked per period. Read THIS period's row only — never the
     // cross-period total — so we don't write an inflated count into one row.
@@ -286,6 +402,7 @@ export default function ScorerView() {
   };
 
   const saveGoal = async () => {
+    if (isLocked) return;
     if (!goalForm.team_id) return;
     setErrorMsg('');
     const { data, error } = await supabase.from('game_goals').insert({
@@ -311,6 +428,7 @@ export default function ScorerView() {
   };
 
   const savePenalty = async () => {
+    if (isLocked) return;
     if (!penaltyForm.team_id) return;
     setErrorMsg('');
     const { data, error } = await supabase.from('game_penalties').insert({
@@ -327,6 +445,7 @@ export default function ScorerView() {
   };
 
   const saveGoalie = async () => {
+    if (isLocked) return;
     if (!goalieModal) return;
     setErrorMsg('');
     const { data, error } = await supabase.from('game_goalie_changes').insert({
@@ -342,6 +461,7 @@ export default function ScorerView() {
   };
 
   const deleteGoal = async (id) => {
+    if (isLocked) return;
     setErrorMsg('');
     const { error } = await supabase.from('game_goals').delete().eq('id', id);
     if (error) { setErrorMsg('Could not delete the goal — check your connection and try again.'); return; }
@@ -351,6 +471,7 @@ export default function ScorerView() {
   };
 
   const deletePenalty = async (id) => {
+    if (isLocked) return;
     setErrorMsg('');
     const { error } = await supabase.from('game_penalties').delete().eq('id', id);
     if (error) { setErrorMsg('Could not delete the penalty — check your connection and try again.'); return; }
@@ -387,6 +508,36 @@ export default function ScorerView() {
   const shotTotals = {};
   shotRows.forEach(s => { shotTotals[s.team_id] = (shotTotals[s.team_id] || 0) + (s.count || 0); });
 
+  // Build the period selector dynamically off the tournament's format settings
+  // and the game's round. League games (no tournament) keep OT+SO on so the
+  // commissioner has the full toolset by default. BLPA-style formats with
+  // overtime_allowed=false skip OT entirely; pool/bracket-specific shootout
+  // flags decide whether SO shows.
+  const settings = isLeague ? {} : (game?.tournament?.settings || {});
+  const isBracketRound = !isLeague && !!game?.round && game.round !== 'pool';
+  const allowOT = isLeague ? true : (settings.overtime_allowed !== false);
+  const allowSO = isLeague ? true : (isBracketRound ? settings.shootout_bracket !== false : !!settings.shootout_pool);
+  // For bracket games where the format says no ties (shootout_bracket), the
+  // scorer must pick a SO winner before Finalize unlocks. Pool games can end
+  // tied so this never gates them.
+  const isTied = homeScore === awayScore;
+  const requiresShootoutResolution = isBracketRound && allowSO && isTied;
+  const needsShootoutPick = requiresShootoutResolution && !shootoutWinner;
+  const finalizeBlocked = needsShootoutPick;
+  const numPeriods = settings.num_periods ?? 3;
+  const periodOptions = [
+    ['1', '1st'],
+    ['2', '2nd'],
+    ...(numPeriods >= 3 ? [['3', '3rd']] : []),
+    ...(allowOT ? [['4', 'OT']] : []),
+    ...(allowSO ? [['5', 'SO']] : []),
+    ['final', 'Final'],
+  ];
+  // Same trim for the in-modal "Period" dropdowns. Keep parallel with the
+  // top-of-page selector so a goal can never be logged in a hidden period.
+  const modalPeriods = [1, 2, ...(numPeriods >= 3 ? [3] : []), ...(allowOT ? [4] : []), ...(allowSO ? [5] : [])];
+  const modalPeriodLabel = (n) => n === 4 ? 'OT' : n === 5 ? 'SO' : n === 1 ? '1st' : n === 2 ? '2nd' : '3rd';
+
   return (
     <div style={{ background: C.dark, minHeight: '100vh', fontFamily: 'Barlow, sans-serif', color: '#F4F7FA', maxWidth: 480, margin: '0 auto', paddingBottom: 40 }}>
 
@@ -406,6 +557,17 @@ export default function ScorerView() {
         <div onClick={() => setErrorMsg('')}
           style={{ background: 'rgba(215,38,56,0.18)', borderBottom: '0.5px solid rgba(215,38,56,0.6)', color: '#F4F7FA', padding: '11px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'center' }}>
           ⚠ {errorMsg} <span style={{ opacity: 0.6, fontWeight: 400 }}>· tap to dismiss</span>
+        </div>
+      )}
+
+      {/* LOCKED banner — visible whenever the game is finalized. Tells the
+          scorer the tool is read-only and points the director at Reopen. */}
+      {isLocked && (
+        <div style={{ background: 'rgba(46,91,140,0.18)', borderBottom: '0.5px solid rgba(46,91,140,0.6)', color: C.ice, padding: '11px 16px', fontSize: 13, lineHeight: 1.45, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+          <span>🔒 Game is finalized — scoring is locked.</span>
+          {isDirector
+            ? <button onClick={reopenGame} style={{ background: C.red, color: '#fff', border: 'none', borderRadius: 999, padding: '6px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>🔓 Reopen Game</button>
+            : <span style={{ color: 'rgba(244,247,250,0.55)', fontSize: 12 }}>Only the {isLeague ? 'commissioner' : 'director'} can reopen.</span>}
         </div>
       )}
 
@@ -429,13 +591,13 @@ export default function ScorerView() {
               <div key={side} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderTop: i > 0 ? '0.5px solid rgba(244,247,250,0.07)' : 'none', marginTop: i > 0 ? 6 : 0, paddingTop: i > 0 ? 12 : 6 }}>
                 <div style={{ fontSize: 16, fontWeight: 700, color: '#F4F7FA', flex: 1 }}>{team?.team_name}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <ScoreBtn onClick={() => changeScore(side, -1)} variant="minus">−</ScoreBtn>
+                  {!isLocked && <ScoreBtn onClick={() => changeScore(side, -1)} variant="minus">−</ScoreBtn>}
                   <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 44, color: '#F4F7FA', width: 56, textAlign: 'center', lineHeight: 1 }}>{score}</div>
-                  <ScoreBtn onClick={() => changeScore(side, 1)} variant="plus">+</ScoreBtn>
+                  {!isLocked && <ScoreBtn onClick={() => changeScore(side, 1)} variant="plus">+</ScoreBtn>}
                 </div>
               </div>
             ))}
-            <div style={{ fontSize: 10, color: 'rgba(244,247,250,0.25)', textAlign: 'center', marginTop: 8 }}>Score updates automatically when goals are logged · use +/− to correct</div>
+            {!isLocked && <div style={{ fontSize: 10, color: 'rgba(244,247,250,0.25)', textAlign: 'center', marginTop: 8 }}>Score updates automatically when goals are logged · use +/− to correct</div>}
           </div>
 
           {/* Goal log section */}
@@ -454,19 +616,24 @@ export default function ScorerView() {
                   </div>
                   <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>{teamName(g.team_id)} · {periodLabel(g.period)}{g.time_in_period ? ` · ${g.time_in_period}` : ''}</div>
                 </div>
-                <button onClick={() => deleteGoal(g.id)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.2)', cursor: 'pointer', fontSize: 14 }}
-                  onMouseEnter={e => e.currentTarget.style.color = C.red}
-                  onMouseLeave={e => e.currentTarget.style.color = 'rgba(244,247,250,0.2)'}>✕</button>
+                {!isLocked && (
+                  <button onClick={() => deleteGoal(g.id)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.2)', cursor: 'pointer', fontSize: 14 }}
+                    onMouseEnter={e => e.currentTarget.style.color = C.red}
+                    onMouseLeave={e => e.currentTarget.style.color = 'rgba(244,247,250,0.2)'}>✕</button>
+                )}
               </div>
             ))}
-            <AddBtn onClick={() => { setGoalForm(prev => ({ ...prev, period })); setGoalModal(true); }}>+ Log Goal</AddBtn>
+            {!isLocked && <AddBtn onClick={() => { setGoalForm(prev => ({ ...prev, period })); setGoalModal(true); }}>+ Log Goal</AddBtn>}
           </div>
         </div>
 
-        {/* PERIOD */}
-        <SecLabel>Period</SecLabel>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 6, marginBottom: 16 }}>
-          {[['1','1st'],['2','2nd'],['3','3rd'],['4','OT'],['5','SO'],['final','Final']].map(([val, label]) => {
+        {/* PERIOD — hidden when locked. The selector's only purpose is to
+            advance period state during a live game, so it's noise after
+            finalize. The current period is still visible in the goal log
+            rows ("3rd · 10:42") for reference. */}
+        {!isLocked && <SecLabel>Period</SecLabel>}
+        {!isLocked && <div style={{ display: 'grid', gridTemplateColumns: `repeat(${periodOptions.length},1fr)`, gap: 6, marginBottom: 16 }}>
+          {periodOptions.map(([val, label]) => {
             const isActive = val === 'final' ? status === 'final' : parseInt(val) === period && status !== 'final';
             const isFinal = val === 'final';
             return (
@@ -478,7 +645,7 @@ export default function ScorerView() {
               </button>
             );
           })}
-        </div>
+        </div>}
 
         {/* SHOTS */}
         <SecLabel>Shots on Goal</SecLabel>
@@ -486,13 +653,13 @@ export default function ScorerView() {
           {[homeTeam, awayTeam].map((team, i) => (
             <div key={team?.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderTop: i > 0 ? '0.5px solid rgba(244,247,250,0.07)' : 'none' }}>
               <span style={{ fontSize: 14, fontWeight: 600, color: '#F4F7FA', flex: 1 }}>{team?.team_name}</span>
-              <button onClick={() => changeShots(team?.id, -1)} style={{ width: 36, height: 36, background: 'rgba(244,247,250,0.08)', border: 'none', borderRadius: 8, color: '#F4F7FA', fontSize: 18, cursor: 'pointer', transition: 'all 0.15s' }}
+              {!isLocked && <button onClick={() => changeShots(team?.id, -1)} style={{ width: 36, height: 36, background: 'rgba(244,247,250,0.08)', border: 'none', borderRadius: 8, color: '#F4F7FA', fontSize: 18, cursor: 'pointer', transition: 'all 0.15s' }}
                 onMouseEnter={e => { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(244,247,250,0.08)'; e.currentTarget.style.color = '#F4F7FA'; }}>−</button>
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(244,247,250,0.08)'; e.currentTarget.style.color = '#F4F7FA'; }}>−</button>}
               <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 32, color: '#F4F7FA', width: 48, textAlign: 'center' }}>{shotTotals[team?.id] || 0}</span>
-              <button onClick={() => changeShots(team?.id, 1)} style={{ width: 44, height: 44, background: C.blue, border: 'none', borderRadius: 8, color: '#F4F7FA', fontSize: 22, cursor: 'pointer', transition: 'all 0.15s' }}
+              {!isLocked && <button onClick={() => changeShots(team?.id, 1)} style={{ width: 44, height: 44, background: C.blue, border: 'none', borderRadius: 8, color: '#F4F7FA', fontSize: 22, cursor: 'pointer', transition: 'all 0.15s' }}
                 onMouseEnter={e => { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = C.blue; e.currentTarget.style.color = '#F4F7FA'; }}>+</button>
+                onMouseLeave={e => { e.currentTarget.style.background = C.blue; e.currentTarget.style.color = '#F4F7FA'; }}>+</button>}
             </div>
           ))}
         </div>
@@ -510,12 +677,14 @@ export default function ScorerView() {
                 <div style={{ fontSize: 13, fontWeight: 600, color: '#F4F7FA' }}>{p.player_number ? `#${p.player_number} ` : ''}{teamName(p.team_id)} — {p.penalty_type}</div>
                 <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>{periodLabel(p.period)}{p.time_in_period ? ` · ${p.time_in_period}` : ''} · {p.duration_minutes} min</div>
               </div>
-              <button onClick={() => deletePenalty(p.id)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.2)', cursor: 'pointer', fontSize: 14 }}
-                onMouseEnter={e => e.currentTarget.style.color = C.red}
-                onMouseLeave={e => e.currentTarget.style.color = 'rgba(244,247,250,0.2)'}>✕</button>
+              {!isLocked && (
+                <button onClick={() => deletePenalty(p.id)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.2)', cursor: 'pointer', fontSize: 14 }}
+                  onMouseEnter={e => e.currentTarget.style.color = C.red}
+                  onMouseLeave={e => e.currentTarget.style.color = 'rgba(244,247,250,0.2)'}>✕</button>
+              )}
             </div>
           ))}
-          <AddBtn onClick={() => { setPenaltyForm(prev => ({ ...prev, period })); setPenaltyModal(true); }}>+ Add Penalty</AddBtn>
+          {!isLocked && <AddBtn onClick={() => { setPenaltyForm(prev => ({ ...prev, period })); setPenaltyModal(true); }}>+ Add Penalty</AddBtn>}
         </div>
 
         {/* GOALIE CHANGES */}
@@ -533,7 +702,7 @@ export default function ScorerView() {
                   </div>
                 </div>
               ))}
-              <AddBtn onClick={() => { setGoalieForm({ goalie_out_number: '', goalie_in_number: '', period, time_in_period: '' }); setGoalieModal(team?.id); }}>+ Log Change — {team?.team_name}</AddBtn>
+              {!isLocked && <AddBtn onClick={() => { setGoalieForm({ goalie_out_number: '', goalie_in_number: '', period, time_in_period: '' }); setGoalieModal(team?.id); }}>+ Log Change — {team?.team_name}</AddBtn>}
             </div>
           ))}
         </div>
@@ -547,9 +716,38 @@ export default function ScorerView() {
             📄 Generate Official Scoresheet
           </button>
         )}
+        {/* Shootout-winner picker — bracket games can't end in a tie when
+            shootout_bracket is on, so we make the scorer explicitly pick
+            who won the SO before Finalize unlocks. Standings + champion
+            resolution read games.shootout_winner from here. */}
+        {needsShootoutPick && !isLocked && (
+          <div style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.5)', borderRadius: 12, padding: 14, marginTop: 10, marginBottom: 4 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#F59E0B', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>Shootout winner</div>
+            <div style={{ fontSize: 13, color: C.ice, marginBottom: 12, lineHeight: 1.45 }}>
+              Tied {homeScore}–{awayScore} after regulation. {isBracketRound ? 'Bracket games' : 'This game'} can't end tied — tap whoever took the shootout.
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {[
+                ['home', homeTeam?.team_name],
+                ['away', awayTeam?.team_name],
+              ].map(([side, name]) => (
+                <button key={side} onClick={() => setShootoutWinner(side)}
+                  style={{
+                    padding: 12,
+                    border: `1px solid ${shootoutWinner === side ? '#F59E0B' : C.border}`,
+                    background: shootoutWinner === side ? 'rgba(245,158,11,0.22)' : 'rgba(46,91,140,0.15)',
+                    color: C.ice, borderRadius: 10,
+                    fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif',
+                  }}>
+                  {shootoutWinner === side ? '✓ ' : ''}{name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {status !== 'final'
-          ? <button onClick={() => changePeriod('final')}
-              style={{ width: '100%', padding: 14, background: C.red, border: 'none', borderRadius: 999, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', marginTop: 4, transition: 'all 0.15s' }}
+          ? <button onClick={() => changePeriod('final')} disabled={finalizeBlocked}
+              style={{ width: '100%', padding: 14, background: finalizeBlocked ? C.border : C.red, border: 'none', borderRadius: 999, color: '#fff', fontSize: 15, fontWeight: 700, cursor: finalizeBlocked ? 'not-allowed' : 'pointer', fontFamily: 'Barlow, sans-serif', marginTop: 4, transition: 'all 0.15s', opacity: finalizeBlocked ? 0.6 : 1 }}
               onMouseEnter={e => { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; }}
               onMouseLeave={e => { e.currentTarget.style.background = C.red; e.currentTarget.style.color = '#fff'; }}>
               🏒 Finalize Game
@@ -590,7 +788,7 @@ export default function ScorerView() {
           <Row2>
             <MField label="Period">
               <select style={selectStyle} value={goalForm.period} onChange={e => setGoalForm(p => ({ ...p, period: parseInt(e.target.value) }))}>
-                {[1,2,3,4,5].map(n => <option key={n} value={n}>{n === 4 ? 'OT' : n === 5 ? 'SO' : n === 1 ? '1st' : n === 2 ? '2nd' : '3rd'}</option>)}
+                {modalPeriods.map(n => <option key={n} value={n}>{modalPeriodLabel(n)}</option>)}
               </select>
             </MField>
             <MField label="Shootout?">
@@ -628,7 +826,7 @@ export default function ScorerView() {
           </MField>
           <MField label="Period">
             <select style={selectStyle} value={penaltyForm.period} onChange={e => setPenaltyForm(p => ({ ...p, period: parseInt(e.target.value) }))}>
-              {[1,2,3,4,5].map(n => <option key={n} value={n}>{n === 4 ? 'OT' : n === 5 ? 'SO' : n === 1 ? '1st' : n === 2 ? '2nd' : '3rd'}</option>)}
+              {modalPeriods.map(n => <option key={n} value={n}>{modalPeriodLabel(n)}</option>)}
             </select>
           </MField>
         </Modal>
@@ -645,7 +843,7 @@ export default function ScorerView() {
             <MField label="Time (mm:ss)"><input style={inputStyle} placeholder="e.g. 10:00" value={goalieForm.time_in_period} onChange={e => setGoalieForm(p => ({ ...p, time_in_period: e.target.value }))} /></MField>
             <MField label="Period">
               <select style={selectStyle} value={goalieForm.period} onChange={e => setGoalieForm(p => ({ ...p, period: parseInt(e.target.value) }))}>
-                {[1,2,3,4,5].map(n => <option key={n} value={n}>{n === 4 ? 'OT' : n === 5 ? 'SO' : n === 1 ? '1st' : n === 2 ? '2nd' : '3rd'}</option>)}
+                {modalPeriods.map(n => <option key={n} value={n}>{modalPeriodLabel(n)}</option>)}
               </select>
             </MField>
           </Row2>
