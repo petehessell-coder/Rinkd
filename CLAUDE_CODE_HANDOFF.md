@@ -1,7 +1,7 @@
 # Rinkd — Claude Code Handoff
 
 **Created:** May 15, 2026 — supersedes the previous handoff. Self-contained: a fresh Claude Code session should be able to pick up from here without reading the prior doc.
-**Last updated:** May 16, 2026 late evening — full BLPA Cleveland pilot-prep batch on `claude/elegant-sanderson-80d1d0` worktree branch (now **6 commits**, pending Pete's merge to `main`). Latest two: **public tournament landing for anonymous spectators** (`80f71e54`) and **push notification pipeline** (`2b793247` — tournament follow + recap fire). BLPA Cleveland status flipped `draft → active` so it's now publicly discoverable from the Tournaments index. All 21 punch-list items from §11 are done. Earlier in the batch: scorer lockout-on-finalize, auto-recap posts, tournament logo upload, BLPA-Bash format-aware standings (GQ + Period Pts + PIM in view), shootout-winner recording, championship bracket auto-gen (4-team-per-pool), and the Cleveland tournament was repurposed in place (Jun 13-14 at RMU Island Sports Center, 8 placeholder teams, 12 Saturday pool games). Status-enum mismatch fixed. See §5 for the per-feature breakdown. **Push pipeline is wired but won't fire until Pete sets the matching VAPID private key in Supabase secrets and deploys the Edge Function** — see §12.
+**Last updated:** May 17, 2026 — §7 roadmap expanded with **GameSheet + LeagueApps parity items** (15 new gaps total) based on the new `rinkd_v4/GAMESHEET_PARITY_GAPS.md` and `rinkd_v4/LEAGUEAPPS_PARITY_GAPS.md` specs. Highlights: offline mode upgraded P2→P0 pre-scale (required before 2nd tournament partner); iOS PWA install banner pulled forward to P1 with full spec (4-6 hrs, unblocks iOS push); suspension management as the safety-critical near-term build; Stripe registration + waivers as the league-revenue gateway post-pilot. See §7 "Tournament engine — GameSheet parity" and "League engine — LeagueApps parity" subsections. **Code state unchanged since May 16 late evening:** full BLPA Cleveland pilot-prep batch on `claude/elegant-sanderson-80d1d0` worktree branch (6 commits, last 2 pending merge to `main`). BLPA Cleveland is `active` and publicly discoverable. **Push pipeline is wired but won't fire until Pete sets the matching VAPID private key in Supabase secrets and deploys the Edge Function** — see §12.
 **Source:** continuation of the audit-fix work, plus a full BLPA-spec implementation pass based on `rinkd_v4/CLEVELAND_BUILD_PLAN.md`.
 
 ---
@@ -485,6 +485,35 @@ Audit work is **done**. The post-audit landscape, in priority order:
 ### Tournament UI bugs (§11) — **DONE May 16 evening**
 - All 21 punch-list items shipped on worktree branch (4 commits, pending merge — see §4). §11 retained as a historical reference; do not re-implement.
 
+### Tournament engine — GameSheet parity (post-pilot)
+
+Spec'd in **`rinkd_v4/GAMESHEET_PARITY_GAPS.md`** (May 17). 7 gaps between Rinkd's current tournament feature set and GameSheet's. Suggested sprint order per the spec doc: iOS PWA banner → suspensions → game clock → offline mode → (refs + embed in parallel) → roster validation. All items below have full file:line/migration specs in the parity doc — pull from there, don't re-spec.
+
+| # | Gap | Priority | Effort | Notes |
+|---|---|---|---|---|
+| GS-1 | **Offline mode** — SW background-sync queue + IndexedDB so a flaky WiFi rink doesn't drop goals/penalties mid-game | **P0 pre-scale** | 8-12 days | Spec includes 5 phases (prefetch, queue, SW drain, banner, conflict resolution). Currently §12 P2 K hand-waves with "paper backup" — fine for one venue, **required before 2nd tournament partner**. New Edge Function `sync-scorekeeper-queue` (service role). No schema changes. |
+| GS-2 | **Suspension management** — game-misconduct/match-penalty flow auto-prompts a `game_suspensions` row; director sees pending suspensions tab; suspended players badged on standings | **P1** | 2-3 days | New `game_suspensions` table. New `SuspensionPrompt` modal in ScorerView. New Suspensions tab in TournamentManage. New `send-suspension-alert` Edge Function (mirrors `send-recap-push` pattern — should be 30 LOC). |
+| GS-3 | **In-app game clock** — counts down period length, auto-pre-fills `time_in_period` on goal/penalty save | **P2** (parity spec) — argue **P1**, fastest QoL win for scorers | 1 day | New `GameClock` component. Pure client-side state; no DB writes. Uses existing `useWakeLock`. Eliminates the #1 data-entry error (manual time entry). |
+| GS-4 | **Referee tracking** — assign refs per game, post-tournament ref analytics (penalties called, misconducts) | **P2** | 2-3 days | New `referees` + `game_referees` tables; optional `game_penalties.referee_id` FK. Pre-game ref assignment UI. Per-ref stats from existing penalty joins. |
+| GS-5 | **Roster / lineup validation** — jersey# → player_id resolver + pre-game eligibility check against active suspensions | **P3** | 3-4 days after ChillerStats import | **Gated on the same `players` table backfill the leaderboard depends on** (see "Still gated on populating `players`" below). Once unblocked, gives "✓ Rosters verified" badge on game pages. |
+| GS-6 | **Embed widgets** — `/embed/tournament/:id/standings` + `/schedule` iframes for league/club websites | **P3** | 1-2 days | Two new no-auth routes outside ProtectedRoute. 30s polling (not realtime — iframes drop WebSockets). LeagueApps gap LA-8 below shares this architecture; build both at once. |
+| GS-7 | **iOS PWA install banner** — push doesn't reach iOS users unless they install the PWA to home screen (16.4+). Banner triggers on 3rd visit or on Follow-tournament tap | **P1** | 4-6 hours | Already noted in passing in the post-pilot backlog; parity doc gives the full spec. **Pull forward** — small build, unblocks push on iOS. Trigger: 3rd visit (visit counter in localStorage) OR Follow-tap moment (highest intent). |
+
+### League engine — LeagueApps parity (post-pilot)
+
+Spec'd in **`rinkd_v4/LEAGUEAPPS_PARITY_GAPS.md`** (May 17). 8 gaps for the league-management surface (vs the tournament surface above). Per the spec doc: BLPA Cleveland is tournaments, **none of these are pilot-blocking**. First milestone after Cleveland per the doc: LA-1 (Stripe registration) + LA-2 (Waivers). Everything else is table stakes after that.
+
+| # | Gap | Priority | Effort | Notes |
+|---|---|---|---|---|
+| LA-1 | **Stripe registration + payments** — teams register + pay season fees self-service; commissioner sees real-time registration + collection | **P0** post-pilot | 5-8 days | New `league_registrations` table; columns on `leagues` for fee + deadline + capacity. New `LeagueRegister` public page. New `stripe-webhook` Edge Function. New Vercel env `REACT_APP_STRIPE_PUBLISHABLE_KEY`; Supabase secrets `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET`. Unlocks revenue. |
+| LA-2 | **Digital waivers** — commissioner attaches a waiver to a league; players sign before joining; signatures exportable | **P1** | 3-4 days | New `league_waivers` + `league_waiver_signatures` tables. New `WaiverModal` + standalone sign route `/league/:id/waiver/:waiverId`. Legal protection — pair with LA-1 before opening leagues to public sign-up. |
+| LA-3 | **USA Hockey membership validation** — players enter USAH member # at registration; sanctioned leagues require valid active membership | **P1** for sanctioned leagues, **N/A** for BLPA-style rec leagues | 3-5 days | USAH has no public API — sanctioned path requires their bulk-export integration; non-sanctioned path is self-attestation. **Skip unless Rinkd pursues youth/sanctioned leagues.** |
+| LA-4 | **Financial reporting** — commissioner dashboard with total collected, outstanding, refunds, Stripe net | **P1** (depends on LA-1) | 2-3 days | No new tables — derives from `league_registrations` + Stripe balance API. New `LeagueManage` → Financials tab. CSV export. |
+| LA-5 | **Division eligibility enforcement** — divisions with age/skill rules; ineligible players blocked from rostering; commissioner can grant overrides with audit log | **P2** | 3-4 days | New `league_divisions` + `league_eligibility_overrides` tables; `league_teams.division_id` FK. New `EligibilityGate` wrapper for join flows. |
+| LA-6 | **Multi-season management** — one league spans Fall 2025 / Spring 2026 / etc.; archive seasons; historical seasons remain browsable | **P2** | 2-3 days | New `league_seasons` table; `season_id` FK on `league_teams` + `league_games`. Partial unique index enforces one active season per league. Standings filter by season. Legacy rows treat NULL season_id as "pre-season-tracking." |
+| LA-7 | **Commissioner analytics** — scoring/penalty leaderboards per league; RSVP fill rate; volunteer fill rate over the season | **P3** | 2-3 days | No schema changes — pure query work. New `getLeagueAnalytics()` helper. New `LeaderboardTable` reusable component. New Analytics tab in `LeagueManage`. |
+| LA-8 | **League embed widgets** — `/embed/league/:id/{standings,schedule,leaders}` iframe routes for club websites | **P3** | 2-3 days | Shares architecture with GS-6 above — **build together**. Optional `?theme=&accent=` query params for white-label. |
+
 ### Still gated on populating `players`
 - The canonical `game_events` table backfill.
 - Audit High #12's real leaderboard (`get_top_scorers` RPC is correct but returns nothing because `game_lineups` is empty and imported league goals belong to ghost-roster players with no accounts).
@@ -568,7 +597,7 @@ After Pete updates Site URL + Redirect URLs in the Supabase dashboard:
    - Did Nick send real team names + logos? Director swaps via TournamentManage → Teams → Edit, uploads logos via Settings → Branding.
    - VAPID secrets in Supabase + Edge Function deployed? (See §6 + §12 P0.) Push pipeline is dormant code until both are done.
    - Are there any push subscriptions yet? `select count(*) from public.push_subscriptions` — if zero, the iPad/iPhone hasn't subscribed yet. Walk through Profile → 🔔 Notify on a real device once secrets are live.
-   - What next — the VAPID/Edge Function deploy (P0 #4 in §12), RLS multiple-permissive cleanup (~30 min, §7), PWA install banner for iOS (~1 hr, post-pilot per §7), or something else?
+   - What next — the VAPID/Edge Function deploy (P0 #4 in §12), RLS multiple-permissive cleanup (~30 min, §7), iOS PWA install banner (~4-6 hrs per the new parity spec, §7 GS-7), or something else from the GameSheet/LeagueApps parity roadmap (§7)?
 4. Then proceed from there.
 
 ---
