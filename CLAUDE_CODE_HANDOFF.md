@@ -1,14 +1,14 @@
 # Rinkd — Claude Code Handoff
 
 **Created:** May 15, 2026 — supersedes the previous handoff. Self-contained: a fresh Claude Code session should be able to pick up from here without reading the prior doc.
-**Last updated:** May 17, 2026 — §7 roadmap expanded with **GameSheet + LeagueApps parity items** (15 new gaps total) based on the new `rinkd_v4/GAMESHEET_PARITY_GAPS.md` and `rinkd_v4/LEAGUEAPPS_PARITY_GAPS.md` specs. Highlights: offline mode upgraded P2→P0 pre-scale (required before 2nd tournament partner); iOS PWA install banner pulled forward to P1 with full spec (4-6 hrs, unblocks iOS push); suspension management as the safety-critical near-term build; Stripe registration + waivers as the league-revenue gateway post-pilot. See §7 "Tournament engine — GameSheet parity" and "League engine — LeagueApps parity" subsections. **Code state unchanged since May 16 late evening:** full BLPA Cleveland pilot-prep batch on `claude/elegant-sanderson-80d1d0` worktree branch (6 commits, last 2 pending merge to `main`). BLPA Cleveland is `active` and publicly discoverable. **Push pipeline is wired but won't fire until Pete sets the matching VAPID private key in Supabase secrets and deploys the Edge Function** — see §12.
+**Last updated:** May 17, 2026 (evening) — **BLPA Cleveland pilot now 3 days (Fri 6/12 + Sat 6/13 + Sun 6/14)**, was 2 days. 12 pool games rescheduled in place: 6 Friday evening (17:00 / 18:15 / 19:30 EDT) + 6 Saturday morning (08:00 / 09:15 / 10:30 EDT). Every team plays 1-2 games per day (balanced), 3 total. Sunday still championship (auto-generated). Migration `cleveland_pilot_3day_reschedule_fri_sat_sun` live in prod. Earlier today: §7 roadmap expanded with **GameSheet + LeagueApps parity items** (15 new gaps total) based on the new `rinkd_v4/GAMESHEET_PARITY_GAPS.md` and `rinkd_v4/LEAGUEAPPS_PARITY_GAPS.md` specs. Highlights: offline mode upgraded P2→P0 pre-scale (required before 2nd tournament partner); iOS PWA install banner pulled forward to P1 with full spec (4-6 hrs, unblocks iOS push); suspension management as the safety-critical near-term build; Stripe registration + waivers as the league-revenue gateway post-pilot. See §7 "Tournament engine — GameSheet parity" and "League engine — LeagueApps parity" subsections. **Code state unchanged since May 16 late evening:** full BLPA Cleveland pilot-prep batch on `claude/elegant-sanderson-80d1d0` worktree branch (6 commits, last 2 pending merge to `main`). BLPA Cleveland is `active` and publicly discoverable. **Push pipeline is wired but won't fire until Pete sets the matching VAPID private key in Supabase secrets and deploys the Edge Function** — see §12.
 **Source:** continuation of the audit-fix work, plus a full BLPA-spec implementation pass based on `rinkd_v4/CLEVELAND_BUILD_PLAN.md`.
 
 ---
 
 ## 1. What you're working on
 
-Rinkd (rinkd.app) is a mobile-first social platform for the hockey community — players, parents, coaches, fans. **React 18 + React Router 6 (Create React App) + Supabase + Vercel**, shipped as a PWA. Core surfaces: feed ("chirps"), teams, leagues, tournaments, and live game scoring. Solo founder (Pete), pre-seed, moving fast toward a **June 13 BLPA tournament pilot in Cleveland**.
+Rinkd (rinkd.app) is a mobile-first social platform for the hockey community — players, parents, coaches, fans. **React 18 + React Router 6 (Create React App) + Supabase + Vercel**, shipped as a PWA. Core surfaces: feed ("chirps"), teams, leagues, tournaments, and live game scoring. Solo founder (Pete), pre-seed, moving fast toward a **Jun 12-14 BLPA tournament pilot in Cleveland** (3 days: Fri pool play + Sat pool play + Sun championship).
 
 **This repo (`rinkd_live`) is the deployed app.** Edit code here. There is an older app copy inside the `rinkd_v4` folder — ignore it, it does not deploy. Strategy docs live in `rinkd_v4` (BLPA, brand voice, canonical data model, etc.).
 
@@ -266,29 +266,26 @@ fallback shows DIFF. New `sortByTiebreakers` helper handles `lowest_pim`,
 13. **`cleveland_pilot_repurpose_demo_tournament_v2`** — wipes the
     Lakewood demo data (games + tournament_teams; cascades through
     game_goals/penalties/shots/lineups), renames tournament to "BLPA
-    Cleveland", moves dates to Jun 13-14, sets venue to RMU Island
+    Cleveland", moves dates to Jun 12-14 (later expanded to 3 days
+    via cleveland_pilot_3day_reschedule_fri_sat_sun), sets venue to RMU Island
     Sports Center, sets `advancement_per_pool=4` + `overtime_allowed=false`
     in settings, accent color gold. Adds 2 RMU rinks (Sheet 1/Sheet 2,
     UUIDs `a000…0010/0011`). Seeds 8 placeholder teams (A1-A4 in Pool
-    A, B1-B4 in Pool B). Seeds 12 Saturday round-robin games spread
-    across both sheets at 75-min slots (08:00 — 14:15 EDT). Tournament
-    status is `draft` so it stays hidden from the public Tournaments
-    index until Pete flips to `active`.
+    A, B1-B4 in Pool B). Seeds 12 round-robin pool games spread
+    across both sheets at 75-min slots — **originally Saturday-only,
+    later rescheduled May 17 to Fri 6/12 evening (6 games, 17:00 / 18:15 /
+    19:30) + Sat 6/13 morning (6 games, 08:00 / 09:15 / 10:30) so every
+    team plays 1-2 games per day balanced**. Tournament status is `draft`
+    initially, flipped to `active` May 16 evening.
 
 **Cleveland day-of flow:**
-1. **Now → Jun 13:** Pete renames placeholder teams as Nick sends rosters,
+1. **Now → Jun 12:** Pete renames placeholder teams as Nick sends rosters,
    uploads logos via the new logo upload field, flips status to `active`.
-2. **Sat Jun 13:** Scorers run pool play. Standings populate live with
-   BLPA tiebreaker order (Points → GQ → Period Pts).
-3. **Sat night:** Pete opens TournamentManage → Bracket → "🏆 Generate
-   Bracket". 8 games auto-create across 2 pools (semis with teams; gold
-   + bronze with TBD).
-4. **Sun Jun 14:** Each semi finalizes → ScorerView prompts for SO winner
-   if tied → gold/bronze slots auto-fill with the right teams. Pete (or
-   his scorers) runs the gold + bronze games. Auto-recap posts hit the
-   global feed as each finalizes.
-5. **Sun end:** Champion banner appears on the Bracket tab. Pete flips
-   tournament status to `complete`.
+2. **Fri Jun 12 evening (5:00-9:00 PM):** Scorers run first 6 pool games (3 slots × 2 sheets). Standings populate live with BLPA tiebreaker order (Points → GQ → Period Pts).
+3. **Sat Jun 13 morning (8:00 AM - noon):** Remaining 6 pool games. Pool play complete.
+4. **Sat afternoon/evening:** Pete opens TournamentManage → Bracket → "🏆 Generate Bracket". 8 games auto-create across 2 pools (semis with teams; gold + bronze with TBD).
+5. **Sun Jun 14:** Each semi finalizes → ScorerView prompts for SO winner if tied → gold/bronze slots auto-fill with the right teams. Pete (or his scorers) runs the gold + bronze games. Auto-recap posts hit the global feed as each finalizes.
+6. **Sun end:** Champion banner appears on the Bracket tab. Pete flips tournament status to `complete`.
 
 ### Late evening of May 16 — Push notification pipeline (`2b793247`)
 
@@ -403,7 +400,7 @@ names before going public).
 > `b2789d66-1d77-4a62-862d-00b550da6a98` was repurposed in place (see the
 > May 16 evening entry above). Its data — teams, games, goals, penalties,
 > shots, lineups — was wiped and replaced with the real BLPA Cleveland
-> pilot seed (Jun 13-14 at RMU, 8 placeholder teams, 12 Saturday
+> pilot seed (Jun 12-14 at RMU, 8 placeholder teams, 12 Fri+Sat
 > round-robin games). The narrative below describes the original *demo*
 > dataset for historical context only. Do NOT expect those scripted
 > goals/penalties/lineups to exist in the DB anymore.
@@ -484,6 +481,33 @@ Audit work is **done**. The post-audit landscape, in priority order:
 
 ### Tournament UI bugs (§11) — **DONE May 16 evening**
 - All 21 punch-list items shipped on worktree branch (4 commits, pending merge — see §4). §11 retained as a historical reference; do not re-implement.
+
+### May 17 evening — BLPA Cleveland rescheduled to 3 days
+
+Pete confirmed the tournament starts Friday Jun 12, not Saturday Jun 13. New shape: **Fri 6/12 + Sat 6/13 + Sun 6/14**. Pool play splits across Fri evening + Sat morning so every team plays 1-2 games per day instead of 3-on-1-day-0-on-the-other. Championship stays Sunday.
+
+Migration **`cleveland_pilot_3day_reschedule_fri_sat_sun`** (live in prod):
+1. `tournaments.start_date` → `2026-06-12` (end_date stays `2026-06-14`)
+2. DELETE all 12 pool games (no nested data lost — cascade-clean since no scoring has happened yet)
+3. Re-INSERT 12 pool games with rebalanced schedule below
+
+**Friday Jun 12 evening (6 games, 17:00 / 18:15 / 19:30 EDT):**
+| Time | Sheet 1 | Sheet 2 |
+|---|---|---|
+| 17:00 | A1 v A2 | A3 v A4 |
+| 18:15 | B1 v B2 | B3 v B4 |
+| 19:30 | A1 v A3 | B1 v B3 |
+
+**Saturday Jun 13 morning (6 games, 08:00 / 09:15 / 10:30 EDT):**
+| Time | Sheet 1 | Sheet 2 |
+|---|---|---|
+| 08:00 | A2 v A4 | B2 v B4 |
+| 09:15 | A1 v A4 | B1 v B4 |
+| 10:30 | A2 v A3 | B2 v B3 |
+
+**Per-team daily counts (verified via SQL):** A1=2+1, A2=1+2, A3=2+1, A4=1+2, B1=2+1, B2=1+2, B3=2+1, B4=1+2 — every team 1-2 per day, 3 total. ✓
+
+Sunday Jun 14: championship games (semis + bronze + gold per pool, 8 total) auto-generate Sat afternoon via the existing Bracket tab button — director picks first-puck time + per-game minutes at generation. No schedule change needed.
 
 ### Tournament engine — GameSheet parity (post-pilot)
 
@@ -602,7 +626,7 @@ After Pete updates Site URL + Redirect URLs in the Supabase dashboard:
 2. Run `cd ~/Downloads/rinkd_live && git log --oneline -6 && git status` to confirm state matches Section 4.
    - If `main` HEAD is `0979969a` or later docs commit: first merge happened (`799343b0`) but the 2 latest worktree commits (public landing + push pipeline) are still pending the second merge. Use the §4 second-merge command.
    - If `main` HEAD includes a merge above `2b793247`: second merge happened. Move on.
-   - Confirm BLPA Cleveland is seeded + flipped: `select name, start_date, end_date, status from public.tournaments where id = 'b2789d66-1d77-4a62-862d-00b550da6a98'` should return `BLPA Cleveland · 2026-06-13 · 2026-06-14 · active`. Team count = 8, game count = 12 (Saturday pool play only — championship games auto-generate on Sat night via the Bracket tab button).
+   - Confirm BLPA Cleveland is seeded + flipped: `select name, start_date, end_date, status from public.tournaments where id = 'b2789d66-1d77-4a62-862d-00b550da6a98'` should return `BLPA Cleveland · 2026-06-12 · 2026-06-14 · active` (3-day pilot). Team count = 8, game count = 12 pool games (6 Friday evening + 6 Saturday morning — championship games auto-generate Sat afternoon via the Bracket tab button).
    - Confirm the new DB shape: `select column_name from information_schema.columns where table_schema='public' and table_name='games' and column_name in ('pool','shootout_winner')` should return both rows; `select count(*) from public.tournament_subscriptions` runs (table exists).
    - Confirm the new Edge Function exists in source: `ls supabase/functions/send-recap-push/` should show `index.ts`. **Whether it's deployed** is a separate check: try invoking it (manual curl in §5 push entry) or `supabase functions list --project-ref tbpoopsyhfuqcbugrjbh` if you have the CLI.
 3. Ask Pete:
@@ -707,7 +731,7 @@ Total: roughly a half-day to land P1+P2+top-of-P3, which would meaningfully chan
 
 ---
 
-## 12. Pilot-readiness audit (May 16 late evening — what's left for BLPA Cleveland Jun 13)
+## 12. Pilot-readiness audit (May 16 late evening — what's left for BLPA Cleveland Jun 12-14)
 
 The BLPA pilot batch shipped a huge amount (see §5 May 16 evening entries). This is the swept-up list of what could still trip up the live event, ranked by blast radius. **Updated May 16 late evening: ~~strikethrough~~ = done.**
 
@@ -733,7 +757,7 @@ After secrets + deploy, smoke-test:
 
 **E. Real team names + logos.** Director (Pete) swaps placeholders via TournamentManage → Teams → Edit; uploads logos via the new Settings → Branding upload. Needs Nick's roster file. Standings + bracket + auto-recap all keyed on UUIDs so renames are safe at any time.
 
-**F. Sunday championship game times.** Saturday's 12 pool games are seeded with hard times. Sunday's 8 championship games are generated on-demand via the Bracket tab button; Pete picks the first start time + per-game minutes when generating. Plan Sat night: "Sunday games start at X" — pick a buffer that fits all 8 games across 2 sheets (each pool plays semis then a final or bronze, so the bronze + final per pool need to be sequential on a single sheet OR split across sheets).
+**F. Sunday championship game times.** Friday + Saturday's 12 pool games are seeded with hard times (Fri 6/12 17:00/18:15/19:30 EDT + Sat 6/13 08:00/09:15/10:30 EDT). Sunday's 8 championship games are generated on-demand via the Bracket tab button Sat afternoon; Pete picks the first start time + per-game minutes when generating. Plan Sat afternoon: "Sunday games start at X" — pick a buffer that fits all 8 games across 2 sheets (each pool plays semis then a final or bronze, so the bronze + final per pool need to be sequential on a single sheet OR split across sheets).
 
 **G. iPad usability of ScorerView.** Spec calls for it. Wake lock works on Safari 16.4+, warning banner shown otherwise. 44px touch targets per spec. **Smoke-test on the actual iPad before pilot.** Open ScorerView for one game, walk through Log Goal / Add Penalty / Period change / Finalize / Reopen. Anything weird → bring it up.
 
@@ -762,10 +786,11 @@ After secrets + deploy, smoke-test:
 5. **Pete** — Smoke-test push end-to-end on a real device (§12 D smoke-test steps).
 6. **Pete** — Smoke-test ScorerView on iPad (P1 G above).
 7. **Pete** — Send pilot URL `https://rinkd.app/tournament/b2789d66-1d77-4a62-862d-00b550da6a98` to BLPA captains. They'll see the public landing without signing up; sign-up CTA brings them into Rinkd, then they can Follow + receive recap pushes.
-8. **Sat Jun 13 morning** — verify status is still `active` (it is now, but Pete may have flipped to draft for pre-event privacy).
-9. **Sat Jun 13** — Run pool play; standings populate live; auto-recap posts hit Feed + push subscribers as each game finalizes.
-10. **Sat night** — Pete clicks "🏆 Generate Bracket"; picks Sunday start time + rink. 8 championship games created (semis with teams; gold + bronze with TBD).
-11. **Sun Jun 14** — Run championship games. SO winner prompt fires on tied bracket games; bracket auto-fills as each semi ends.
-12. **Sun end** — Champion banner appears. Pete flips status to `complete`.
+8. **Fri Jun 12 afternoon** — verify status is still `active` (it is now, but Pete may have flipped to draft for pre-event privacy).
+9. **Fri Jun 12 evening (5:00-9:00 PM EDT)** — Run pool play day 1 (6 games); standings populate live; auto-recap posts hit Feed + push subscribers as each game finalizes.
+10. **Sat Jun 13 morning (8:00 AM - noon EDT)** — Run pool play day 2 (6 games); all pool play complete; standings final.
+11. **Sat afternoon** — Pete clicks "🏆 Generate Bracket"; picks Sunday start time + rink. 8 championship games created (semis with teams; gold + bronze with TBD).
+12. **Sun Jun 14** — Run championship games. SO winner prompt fires on tied bracket games; bracket auto-fills as each semi ends.
+13. **Sun end** — Champion banner appears. Pete flips status to `complete`.
 
 Realistic effort to clear remaining P0: ~10 min Pete dashboard config (B) + ~10-30 min Pete VAPID setup + Claude function deploy (D). **No code work remains for pilot** — everything else is operations.
