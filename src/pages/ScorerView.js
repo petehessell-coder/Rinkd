@@ -365,7 +365,7 @@ export default function ScorerView() {
           round: game.round,
           tournamentName: game.tournament?.name,
         });
-        const { data: recapPost } = await createGameRecapPost({ scorerId: user?.id, gameId, content });
+        const { data: recapPost } = await createGameRecapPost({ scorerId: user?.id, gameId, content, tournamentId: game.tournament_id });
         // Fire push notifications to tournament subscribers. The Edge
         // Function (send-recap-push) handles all targeting and payload
         // building from the post id — client just passes the id. Errors

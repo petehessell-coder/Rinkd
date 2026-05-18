@@ -5,6 +5,9 @@ export async function getPosts(limit = 30, before = null) {
   let query = supabase
     .from('posts')
     .select(`*, profiles(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position)`)
+    // Tournament-scoped posts live only on the tournament's Feed tab. Keep
+    // the global feed clean for users who haven't opted into that context.
+    .is('tournament_id', null)
     .order('created_at', { ascending: false })
     .limit(limit);
   // Keyset pagination — fetch the page of posts older than the last one we hold.
@@ -41,10 +44,29 @@ export async function getFollowingPosts(userId, limit = 30, before = null) {
     .from('posts')
     .select(`*, profiles(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position)`)
     .in('author_id', ids)
+    // Tournament-scoped posts live only on the tournament's Feed tab.
+    .is('tournament_id', null)
     .order('created_at', { ascending: false })
     .limit(limit);
   // Keyset pagination — fetch the page of posts older than the last one we hold.
   if (before) query = query.lt('created_at', before);
+  const { data, error } = await query;
+  return { data, error };
+}
+
+// Posts scoped to a single tournament — surfaces auto-recaps on the
+// Tournament page's Feed tab. Mirrors getTeamPosts but keyed on tournament_id.
+// Blocked-user filtering applied; the tournament feed isn't immune to the
+// block model just because the post landed via auto-recap.
+export async function getTournamentPosts(tournamentId, limit = 50) {
+  if (!tournamentId) return { data: [], error: null };
+  let query = supabase
+    .from('posts')
+    .select(`*, profiles(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position)`)
+    .eq('tournament_id', tournamentId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  query = await excludeBlocked(query, 'author_id');
   const { data, error } = await query;
   return { data, error };
 }
@@ -58,7 +80,7 @@ export async function getFollowingPosts(userId, limit = 30, before = null) {
 const GAME_RECAP_TAG = 'Game Recap';
 const GAME_RECAP_TAG_COLOR = '#2E5B8C';
 
-export async function createGameRecapPost({ scorerId, gameId, content }) {
+export async function createGameRecapPost({ scorerId, gameId, content, tournamentId = null }) {
   if (!scorerId || !gameId || !content) {
     return { data: null, error: new Error('createGameRecapPost requires scorerId, gameId, and content') };
   }
@@ -76,9 +98,11 @@ export async function createGameRecapPost({ scorerId, gameId, content }) {
     // Re-finalize after a Reopen — keep the original author (the user who
     // first finalized) so the post's permalink-style attribution doesn't
     // shift around. Just refresh the content with the new score line.
+    // Also re-stamp tournament_id in case the caller now has one (older recap
+    // rows may pre-date the column; this self-heals on re-finalize).
     const { data, error } = await supabase
       .from('posts')
-      .update({ content, tag: GAME_RECAP_TAG, tag_color: GAME_RECAP_TAG_COLOR })
+      .update({ content, tag: GAME_RECAP_TAG, tag_color: GAME_RECAP_TAG_COLOR, tournament_id: tournamentId })
       .eq('id', existing.id)
       .select()
       .single();
@@ -93,6 +117,7 @@ export async function createGameRecapPost({ scorerId, gameId, content }) {
       tag: GAME_RECAP_TAG,
       tag_color: GAME_RECAP_TAG_COLOR,
       recap_for_game_id: gameId,
+      tournament_id: tournamentId,
       likes: 0,
       comment_count: 0,
       repost_count: 0,

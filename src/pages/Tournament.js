@@ -6,9 +6,10 @@ import { getLiveBarnUrl } from '../lib/livebarn';
 import { teamInitials } from '../lib/teamInitials';
 import { followTournament, unfollowTournament, isFollowingTournament } from '../lib/tournamentSubscriptions';
 import { subscribeToPush, isPushSubscribed } from '../lib/push';
+import { getTournamentPosts, timeAgo } from '../lib/posts';
 
 
-const TABS = ['Standings','Schedule','Bracket','Info'];
+const TABS = ['Standings','Schedule','Bracket','Feed','Info'];
 
 // Bracket rounds get visual weight on the schedule and a championship hero on
 // the bracket tab. Pool play is the catch-all everything else.
@@ -83,6 +84,11 @@ export default function TournamentPage({ currentUser }) {
   // Function targeting). Loaded once on mount.
   const [isFollowing, setIsFollowing] = useState(false);
   const [followBusy, setFollowBusy] = useState(false);
+  // Tournament-scoped Feed tab — auto-recaps land here when a game finalizes
+  // (see createGameRecapPost). Lazy-loaded the first time the Feed tab opens
+  // so the standings/schedule landing stays fast.
+  const [feedPosts, setFeedPosts] = useState(null); // null = not loaded yet
+  const [feedLoading, setFeedLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -184,6 +190,21 @@ export default function TournamentPage({ currentUser }) {
     isFollowingTournament(currentUser.id, id).then((v) => { if (!cancelled) setIsFollowing(v); });
     return () => { cancelled = true; };
   }, [id, currentUser?.id]);
+
+  // Lazy-load the tournament-scoped feed the first time the Feed tab opens.
+  // Avoids paying for the query on every visit when most users land on
+  // Standings/Schedule and never click Feed.
+  useEffect(() => {
+    let cancelled = false;
+    if (activeTab !== 'Feed' || !id || feedPosts !== null) return;
+    setFeedLoading(true);
+    getTournamentPosts(id, 50).then(({ data }) => {
+      if (cancelled) return;
+      setFeedPosts(data || []);
+      setFeedLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [activeTab, id, feedPosts]);
 
   const handleFollowToggle = async () => {
     if (!currentUser?.id || !id || followBusy) return;
@@ -443,9 +464,64 @@ export default function TournamentPage({ currentUser }) {
               </>
         )}
 
+        {activeTab === 'Feed' && (
+          <FeedTab posts={feedPosts} loading={feedLoading} navigate={navigate} />
+        )}
+
         {activeTab === 'Info' && <InfoTab tournament={tournament} />}
 
       </div>
+    </div>
+  );
+}
+
+// Tournament-scoped feed. Currently surfaces auto-recap posts created on
+// game finalize (see createGameRecapPost in lib/posts.js). Render is
+// intentionally minimal — extract a shared PostCard later if user-authored
+// posts get added to this surface.
+function FeedTab({ posts, loading, navigate }) {
+  if (loading || posts === null) {
+    return <div style={{textAlign:'center',color:'#7C8B9F',fontSize:13,padding:'24px 16px'}}>Loading…</div>;
+  }
+  if (posts.length === 0) {
+    return (
+      <div style={{textAlign:'center',color:'#7C8B9F',fontSize:13,padding:'40px 16px',lineHeight:1.6}}>
+        <div style={{fontSize:32,marginBottom:8}}>📰</div>
+        No updates yet.<br />
+        Recaps appear here when games finalize.
+      </div>
+    );
+  }
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:8,padding:'0 12px'}}>
+      {posts.map((p) => {
+        const lines = String(p.content || '').split('\n').filter(Boolean);
+        const headline = lines[0] || 'Update';
+        const body = lines.slice(1).join(' · ');
+        const author = p.profiles?.name || p.profiles?.handle || '';
+        return (
+          <div key={p.id} style={{background:'#11253E',borderRadius:10,padding:'12px 14px',color:'#F4F7FA',fontFamily:'Barlow,sans-serif'}}>
+            {p.tag && (
+              <div style={{display:'inline-block',background:(p.tag_color||'#2E5B8C')+'40',color:p.tag_color||'#9BB5D6',fontSize:10,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',padding:'2px 8px',borderRadius:4,marginBottom:6}}>
+                {p.tag}
+              </div>
+            )}
+            <div style={{fontWeight:700,fontSize:15,lineHeight:1.3,marginBottom:body?4:0}}>{headline}</div>
+            {body && <div style={{fontSize:13,color:'#C5D2E1',lineHeight:1.4,marginBottom:8}}>{body}</div>}
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:11,color:'#7C8B9F',marginTop:6}}>
+              <span>{author ? `${author} · ` : ''}{timeAgo(p.created_at)} ago</span>
+              {p.recap_for_game_id && (
+                <button
+                  onClick={() => navigate(`/game/${p.recap_for_game_id}`)}
+                  style={{background:'transparent',border:'none',color:'#5B9FE2',fontSize:12,fontWeight:600,cursor:'pointer',padding:0}}
+                >
+                  View game →
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
