@@ -42,6 +42,15 @@ export async function subscribeToPush(userId) {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
   try {
     const reg = await navigator.serviceWorker.ready;
+
+    // Drop any prior subscription so a VAPID rotation doesn't make subscribe()
+    // throw InvalidStateError ("different applicationServerKey"). Discovered
+    // May 2026 during BLPA Cleveland push smoke test after a key rotation.
+    try {
+      const existing = await reg.pushManager.getSubscription();
+      if (existing) await existing.unsubscribe();
+    } catch { /* swallow — subscribe() below will surface a real failure */ }
+
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') return null;
 
