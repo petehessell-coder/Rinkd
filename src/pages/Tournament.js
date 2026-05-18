@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabase';
 import { LedR } from '../components/Logos';
 import { getLiveBarnUrl } from '../lib/livebarn';
 import { teamInitials } from '../lib/teamInitials';
+import { followTournament, unfollowTournament, isFollowingTournament } from '../lib/tournamentSubscriptions';
+import { subscribeToPush, isPushSubscribed } from '../lib/push';
 
 
 const TABS = ['Standings','Schedule','Bracket','Info'];
@@ -76,6 +78,11 @@ export default function TournamentPage({ currentUser }) {
   // scorers should see the "Open Scorer View" button on each game card — not
   // just the director. Loaded once after the tournament resolves.
   const [isAssignedScorer, setIsAssignedScorer] = useState(false);
+  // "🔔 Follow tournament" — controls whether the user gets a push when
+  // any game in this tournament finalizes (per send-recap-push Edge
+  // Function targeting). Loaded once on mount.
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followBusy, setFollowBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -170,25 +177,89 @@ export default function TournamentPage({ currentUser }) {
     return () => { cancelled = true; };
   }, [id, currentUser?.id]);
 
+  // Same cheap-query pattern for the follow state.
+  useEffect(() => {
+    let cancelled = false;
+    if (!id || !currentUser?.id) { setIsFollowing(false); return; }
+    isFollowingTournament(currentUser.id, id).then((v) => { if (!cancelled) setIsFollowing(v); });
+    return () => { cancelled = true; };
+  }, [id, currentUser?.id]);
+
+  const handleFollowToggle = async () => {
+    if (!currentUser?.id || !id || followBusy) return;
+    setFollowBusy(true);
+    if (isFollowing) {
+      const { error } = await unfollowTournament(currentUser.id, id);
+      setFollowBusy(false);
+      if (!error) setIsFollowing(false);
+      return;
+    }
+    // First-time follow: make sure push notifications are actually wired up.
+    // Without an existing browser subscription the DB row is created but no
+    // push ever reaches the device. subscribeToPush() prompts for permission
+    // and stashes the push_subscriptions row. Skip the prompt if already on.
+    const alreadyOn = await isPushSubscribed();
+    if (!alreadyOn) {
+      const sub = await subscribeToPush(currentUser.id);
+      if (!sub) {
+        setFollowBusy(false);
+        // eslint-disable-next-line no-alert
+        window.alert("Push notifications are off for this device, so following won't deliver pushes yet. You can still enable them later from your Profile.");
+        // Continue with the DB follow anyway — once they enable push from
+        // Profile, future recaps will deliver.
+      }
+    }
+    const { error } = await followTournament(currentUser.id, id);
+    setFollowBusy(false);
+    if (!error) setIsFollowing(true);
+  };
+
   if (loading) return (
     <div style={{background:'#07111F',minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:'#F4F7FA',fontFamily:'Barlow,sans-serif',fontSize:14}}>
       Loading tournament...
     </div>
   );
 
-  if (error) return (
-    <div style={{background:'#07111F',minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:'#F4F7FA',fontFamily:'Barlow,sans-serif',fontSize:14,padding:20,textAlign:'center'}}>
-      <div>
-        <div style={{fontSize:32,marginBottom:10}}>⚠️</div>
-        <div style={{color:'#D72638',marginBottom:4,fontWeight:600}}>Couldn't load this tournament</div>
-        <div style={{color:'rgba(244,247,250,0.5)',fontSize:12,marginBottom:16}}>{error}</div>
-        <div style={{display:'flex',gap:10,justifyContent:'center'}}>
-          <button onClick={load} style={{background:'#D72638',color:'#fff',border:'none',borderRadius:8,padding:'8px 18px',cursor:'pointer',fontFamily:'Barlow,sans-serif',fontWeight:700}}>Retry</button>
-          <button onClick={() => navigate('/feed')} style={{background:'#2E5B8C',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontFamily:'Barlow,sans-serif'}}>Back to Feed</button>
+  if (error || !tournament) {
+    // Anonymous visitors hitting a draft tournament URL get filtered out by
+    // tournaments_public_read RLS (status must be active/complete) — so the
+    // friendly framing is "sign in to view", not "retry."
+    const isAnon = !currentUser;
+    return (
+      <div style={{background:'#07111F',minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:'#F4F7FA',fontFamily:'Barlow,sans-serif',fontSize:14,padding:20,textAlign:'center'}}>
+        <div style={{maxWidth:380}}>
+          <div style={{fontSize:32,marginBottom:10}}>{isAnon ? '🔒' : '⚠️'}</div>
+          <div style={{color:isAnon ? '#F4F7FA' : '#D72638',marginBottom:4,fontWeight:600}}>
+            {isAnon ? 'This tournament is private' : "Couldn't load this tournament"}
+          </div>
+          <div style={{color:'rgba(244,247,250,0.5)',fontSize:12,marginBottom:16,lineHeight:1.5}}>
+            {isAnon
+              ? 'Sign in to view standings, schedule, and bracket — or it may not be published yet.'
+              : (error || 'Tournament not found.')}
+          </div>
+          <div style={{display:'flex',gap:10,justifyContent:'center',flexWrap:'wrap'}}>
+            {isAnon
+              ? <>
+                  <button onClick={() => navigate('/login')} style={{background:'#D72638',color:'#fff',border:'none',borderRadius:8,padding:'9px 20px',cursor:'pointer',fontFamily:'Barlow,sans-serif',fontWeight:700}}>Sign in / Sign up</button>
+                  <button onClick={() => navigate('/tournaments')} style={{background:'#2E5B8C',color:'#fff',border:'none',borderRadius:8,padding:'9px 16px',cursor:'pointer',fontFamily:'Barlow,sans-serif'}}>Browse tournaments</button>
+                </>
+              : <>
+                  <button onClick={load} style={{background:'#D72638',color:'#fff',border:'none',borderRadius:8,padding:'8px 18px',cursor:'pointer',fontFamily:'Barlow,sans-serif',fontWeight:700}}>Retry</button>
+                  <button onClick={() => navigate('/feed')} style={{background:'#2E5B8C',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontFamily:'Barlow,sans-serif'}}>Back to Feed</button>
+                </>}
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  }
+
+  // Anonymous spectators: render a teaser landing page with tournament
+  // metadata + teams. Standings, schedule, bracket, and scoresheet stay
+  // gated to drive sign-up. After auth they can navigate back here for
+  // the full experience.
+  if (!currentUser) {
+    return <PublicTournamentLanding tournament={tournament} games={games} navigate={navigate} />;
+  }
 
   const liveGames = games.filter(g => g.status === 'live');
   const finalGames = games.filter(g => g.status === 'final');
@@ -232,6 +303,26 @@ export default function TournamentPage({ currentUser }) {
           <button onClick={() => navigate(-1)} style={{color:'rgba(244,247,250,0.6)',fontSize:13,background:'none',border:'none',cursor:'pointer',fontFamily:'Barlow,sans-serif'}}>← Events</button>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             {liveGames.length > 0 && <span style={{background:accent+'26',color:accent,fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:20}}>● Live now</span>}
+            {/* Follow toggle — opt-in for tournament push notifications. Fires
+                a one-time push permission prompt the first time (handled
+                inside handleFollowToggle). Director gets the Manage button
+                instead since they're already getting events from their own
+                writes. */}
+            {tournament && currentUser && tournament.director_id !== currentUser.id && (
+              <button onClick={handleFollowToggle} disabled={followBusy}
+                style={{
+                  background: isFollowing ? 'rgba(46,91,140,0.25)' : accent,
+                  color: isFollowing ? '#F4F7FA' : '#fff',
+                  border: isFollowing ? '1px solid rgba(46,91,140,0.5)' : 'none',
+                  borderRadius: 999, padding: '5px 12px', fontSize: 11, fontWeight: 700,
+                  cursor: followBusy ? 'wait' : 'pointer',
+                  fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic',
+                  letterSpacing: '0.05em', textTransform: 'uppercase',
+                  opacity: followBusy ? 0.6 : 1,
+                }}>
+                {followBusy ? '...' : isFollowing ? '🔕 Following' : '🔔 Follow'}
+              </button>
+            )}
             {tournament && currentUser && tournament.director_id === currentUser.id && (
               <button onClick={() => navigate(`/tournament/${id}/manage`)}
                 style={{background:accent,color:'#fff',border:'none',borderRadius:999,padding:'5px 12px',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',letterSpacing:'0.05em',textTransform:'uppercase'}}>
@@ -354,6 +445,123 @@ export default function TournamentPage({ currentUser }) {
 
         {activeTab === 'Info' && <InfoTab tournament={tournament} />}
 
+      </div>
+    </div>
+  );
+}
+
+// Anonymous-spectator landing. Shows tournament metadata + teams + a clear
+// "sign up to view live" CTA. Live data (standings, scores, bracket details)
+// stays gated — the value prop of the sign-up is "see live scores."
+// Tournament details (name/dates/venue/division/logo) are intentionally
+// public to make the URL shareable + Google-indexable.
+function PublicTournamentLanding({ tournament, games, navigate }) {
+  const accent = tournament?.accent_color || '#D72638';
+  const s = tournament?.settings ?? {};
+  const venueLine = [s.venue_name, s.venue_address].filter(Boolean).join(' · ');
+  // Derive team list from the games join — saves a second query and keeps
+  // ordering by pool consistent with the rest of the app.
+  const teamsByPool = useMemo(() => {
+    const seen = new Map();
+    games.forEach(g => {
+      [g.home_team, g.away_team].forEach(t => {
+        if (t?.id && !seen.has(t.id)) seen.set(t.id, t);
+      });
+    });
+    const all = Array.from(seen.values());
+    const byPool = all.reduce((acc, t) => {
+      const k = t.pool || '—';
+      if (!acc[k]) acc[k] = [];
+      acc[k].push(t);
+      return acc;
+    }, {});
+    return Object.entries(byPool).sort(([a], [b]) => a.localeCompare(b));
+  }, [games]);
+  const totalTeams = teamsByPool.reduce((n, [, list]) => n + list.length, 0);
+  const totalGames = games.length;
+  const returnTo = encodeURIComponent(`/tournament/${tournament.id}`);
+  return (
+    <div style={{background:'#07111F',minHeight:'100vh',fontFamily:'Barlow,sans-serif',color:'#F4F7FA'}}>
+      <div style={{background:'#0B1F3A',padding:'16px 18px 0',borderTop:`3px solid ${accent}`,borderBottom:'0.5px solid rgba(46,91,140,0.4)'}}>
+        <button onClick={() => navigate('/tournaments')} style={{color:'rgba(244,247,250,0.6)',fontSize:13,background:'none',border:'none',cursor:'pointer',fontFamily:'Barlow,sans-serif',marginBottom:8}}>← All tournaments</button>
+        {tournament?.logo_url && (
+          <img src={tournament.logo_url} alt="" onError={(e)=>{e.currentTarget.style.display='none';}}
+            style={{height:48,width:'auto',display:'block',marginBottom:10,borderRadius:6}} />
+        )}
+        <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:28,lineHeight:1.05}}>
+          {(tournament?.name || '').toUpperCase()}
+        </div>
+        {tournament?.division && (
+          <div style={{fontSize:13,color:'rgba(244,247,250,0.6)',marginTop:4}}>{tournament.division}</div>
+        )}
+        <div style={{fontSize:13,color:'rgba(244,247,250,0.5)',margin:'8px 0 16px'}}>
+          {tournament?.start_date} – {tournament?.end_date}
+          {venueLine ? ` · ${venueLine}` : ''}
+        </div>
+      </div>
+
+      <div style={{padding:'20px 18px',maxWidth:560,margin:'0 auto'}}>
+        {/* Sign-up hero — the main conversion surface */}
+        <div style={{background:`linear-gradient(135deg,${accent}33 0%,#0f2847 100%)`,border:`1px solid ${accent}66`,borderRadius:14,padding:'20px 18px',marginBottom:18,textAlign:'center'}}>
+          <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:20,marginBottom:6,textTransform:'uppercase'}}>Follow live</div>
+          <div style={{fontSize:13,color:'rgba(244,247,250,0.75)',marginBottom:16,lineHeight:1.55}}>
+            Sign up free to see live scores, standings, full schedule, bracket, and game recaps as they happen.
+          </div>
+          <div style={{display:'flex',gap:10,justifyContent:'center',flexWrap:'wrap'}}>
+            <button onClick={() => navigate(`/login?returnTo=${returnTo}`)} style={{background:accent,color:'#fff',border:'none',borderRadius:999,padding:'12px 28px',fontFamily:'Barlow,sans-serif',fontSize:14,fontWeight:700,cursor:'pointer'}}>
+              Sign up to view live →
+            </button>
+            <button onClick={() => navigate(`/login?returnTo=${returnTo}`)} style={{background:'transparent',color:'#F4F7FA',border:'1px solid rgba(244,247,250,0.3)',borderRadius:999,padding:'12px 22px',fontFamily:'Barlow,sans-serif',fontSize:13,cursor:'pointer'}}>
+              Sign in
+            </button>
+          </div>
+        </div>
+
+        {/* At-a-glance stats — safe data, builds anticipation */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:18}}>
+          <div style={{background:'#0f2847',border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,padding:'14px 16px',textAlign:'center'}}>
+            <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:30,color:accent,lineHeight:1}}>{totalTeams}</div>
+            <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.08em',color:'rgba(244,247,250,0.5)',textTransform:'uppercase',marginTop:4}}>Teams</div>
+          </div>
+          <div style={{background:'#0f2847',border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,padding:'14px 16px',textAlign:'center'}}>
+            <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:30,color:accent,lineHeight:1}}>{totalGames}</div>
+            <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.08em',color:'rgba(244,247,250,0.5)',textTransform:'uppercase',marginTop:4}}>Games</div>
+          </div>
+        </div>
+
+        {/* Teams list per pool — names + initials only, no records. */}
+        {teamsByPool.length > 0 && (
+          <div style={{marginBottom:18}}>
+            <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:15,marginBottom:10,textTransform:'uppercase'}}>
+              Competing teams
+            </div>
+            {teamsByPool.map(([pool, list]) => (
+              <div key={pool} style={{marginBottom:12}}>
+                <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.1em',color:'rgba(244,247,250,0.4)',textTransform:'uppercase',marginBottom:8}}>{pool}</div>
+                <div style={{background:'#0f2847',border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,overflow:'hidden'}}>
+                  {list.map((t, i) => (
+                    <div key={t.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderTop:i ? '0.5px solid rgba(244,247,250,0.06)' : 'none'}}>
+                      <div style={{width:30,height:30,borderRadius:'50%',background:'#1a4a7a',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:11,color:'#fff',flexShrink:0}}>
+                        {teamInitials(t.team_name)}
+                      </div>
+                      <span style={{fontSize:14,fontWeight:600,color:'#F4F7FA'}}>{t.team_name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Secondary CTA at the bottom for scrollers */}
+        <div style={{background:'#0f2847',border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,padding:'18px 16px',textAlign:'center'}}>
+          <div style={{fontSize:13,color:'rgba(244,247,250,0.65)',marginBottom:12,lineHeight:1.5}}>
+            Live standings · real-time scores · bracket automation · game recaps. Free to join.
+          </div>
+          <button onClick={() => navigate(`/login?returnTo=${returnTo}`)} style={{background:accent,color:'#fff',border:'none',borderRadius:999,padding:'10px 24px',fontFamily:'Barlow,sans-serif',fontSize:13,fontWeight:700,cursor:'pointer'}}>
+            Sign up to follow →
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -1,5 +1,22 @@
 const VAPID_PUBLIC_KEY = process.env.REACT_APP_VAPID_PUBLIC_KEY;
 
+// Fire a tournament-recap push for a freshly-created recap post. Targeting
+// (who gets it, what the payload looks like) lives entirely in the
+// send-recap-push Edge Function — the client just hands over the post_id.
+// Errors are swallowed: a failed push must never block the finalize flow.
+export async function triggerTournamentRecapPush(postId) {
+  if (!postId) return { sent: 0, error: null };
+  try {
+    const { supabase } = await import('./supabase');
+    const { data, error } = await supabase.functions.invoke('send-recap-push', {
+      body: { post_id: postId },
+    });
+    return { ...(data || {}), error: error || null };
+  } catch (err) {
+    return { sent: 0, error: err };
+  }
+}
+
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');

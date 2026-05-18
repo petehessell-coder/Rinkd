@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { RinkdLogo, Wordmark } from '../components/Logos';
 import { signIn, signUp } from '../lib/auth';
 import { track } from '../lib/analytics';
@@ -56,8 +56,21 @@ function Input({ label, ...props }) {
   );
 }
 
+// Pull a safe `returnTo` from the URL: must be a relative path beginning with
+// a single `/` (rejects `//evil.com`, `http://...`, and protocol-relative
+// URLs). Falls back to /feed when missing, malformed, or unsafe — prevents
+// open-redirect to attacker-controlled origins.
+function readReturnTo(searchParams) {
+  const raw = searchParams.get('returnTo');
+  if (!raw) return '/feed';
+  if (!raw.startsWith('/') || raw.startsWith('//')) return '/feed';
+  return raw;
+}
+
 export default function Auth() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnTo = readReturnTo(searchParams);
   const [mode, setMode] = useState('login'); // login | signup | coppa | forgot | check-email
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSent, setForgotSent] = useState(false);
@@ -80,7 +93,7 @@ export default function Auth() {
     const { error: err } = await signIn({ email: form.email, password: form.password });
     setLoading(false);
     if (err) { track('login_failed', { reason: err.message?.slice(0, 80) }); setError(err.message); }
-    else { track('login_success'); navigate('/feed'); }
+    else { track('login_success'); navigate(returnTo); }
   };
 
   const handleForgot = async (e) => {
@@ -125,7 +138,7 @@ export default function Auth() {
     // window where `user` is set but `profile` is still null — meaning the
     // modal never mounted and they never fired `onboarding_started`.
     try { sessionStorage.setItem('rinkd_pending_onboarding', '1'); } catch (_) { /* private mode */ }
-    navigate('/feed');
+    navigate(returnTo);
   };
 
   return (

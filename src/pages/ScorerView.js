@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useWakeLock } from '../lib/useWakeLock';
 import { createGameRecapPost } from '../lib/posts';
 import { resolveBracketSlotsFromSemis } from '../lib/tournamentManage';
+import { triggerTournamentRecapPush } from '../lib/push';
 
 const C = {
   dark: '#07111F', navy: '#0B1F3A', blue: '#2E5B8C',
@@ -364,7 +365,15 @@ export default function ScorerView() {
           round: game.round,
           tournamentName: game.tournament?.name,
         });
-        await createGameRecapPost({ scorerId: user?.id, gameId, content });
+        const { data: recapPost } = await createGameRecapPost({ scorerId: user?.id, gameId, content });
+        // Fire push notifications to tournament subscribers. The Edge
+        // Function (send-recap-push) handles all targeting and payload
+        // building from the post id — client just passes the id. Errors
+        // are swallowed by triggerTournamentRecapPush so a push failure
+        // never blocks the finalize.
+        if (recapPost?.id) {
+          triggerTournamentRecapPush(recapPost.id);
+        }
       } catch (e) {
         // eslint-disable-next-line no-console
         console.warn('[scorer] recap post failed; game still finalized:', e?.message || e);

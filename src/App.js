@@ -61,6 +61,16 @@ const LOADING_MARK = Math.random() < 0.5
   ? { src: '/mascot-rizzo.webp', alt: 'Rinkd Rat', size: 96, borderRadius: 0 }
   : { src: '/icon-192.png',      alt: 'Rinkd',     size: 72, borderRadius: 16 };
 
+// Small wrapper: reads ?returnTo from the URL with the same safety check
+// Auth.js uses (must start with single "/" — no protocol, no //), then
+// redirects there. Falls back to /feed when missing or unsafe.
+function LoginRedirect() {
+  const params = new URLSearchParams(window.location.search);
+  const raw = params.get('returnTo');
+  const safe = raw && raw.startsWith('/') && !raw.startsWith('//') ? raw : '/feed';
+  return <Navigate to={safe} replace />;
+}
+
 function ProtectedRoute({ children }) {
   const { user, loading, profileError } = useAuth();
   if (loading) return (
@@ -127,7 +137,11 @@ function AppRoutes() {
           and falls through to Auth for desktop, installed PWA, or "continue
           in browser" tap. /login always goes straight to Auth (no marketing). */}
       <Route path="/" element={user ? <Navigate to="/feed" replace /> : <Landing />} />
-      <Route path="/login" element={user ? <Navigate to="/feed" replace /> : <Auth />} />
+      {/* If a logged-in user hits /login?returnTo=/tournament/X (e.g., they
+          clicked the public-landing CTA but were already signed in), bounce
+          them straight to returnTo instead of dropping them on /feed. Auth
+          page handles the same query param on successful sign-in. */}
+      <Route path="/login" element={user ? <LoginRedirect /> : <Auth />} />
       {/* Survey is public — accessible from auth screen, marketing pages, and embedded in feeds */}
       <Route path="/survey" element={<Survey />} />
       {/* Password recovery — public, handles the magic-link redirect from Supabase */}
@@ -145,7 +159,14 @@ function AppRoutes() {
       <Route path="/leagues" element={<ProtectedRoute><Leagues profile={profile} /></ProtectedRoute>} />
       <Route path="/store" element={<ProtectedRoute><Store profile={profile} /></ProtectedRoute>} />
       <Route path="/discover" element={<ProtectedRoute><Discover currentUser={user} profile={profile} /></ProtectedRoute>} />
-      <Route path="/tournaments" element={<ProtectedRoute><Tournaments profile={profile} /></ProtectedRoute>} />
+      {/* Tournaments index + tournament detail are publicly viewable so
+          BLPA spectators can discover events without a Rinkd account.
+          Anonymous users see a teaser landing (name / dates / venue /
+          teams); live standings, schedule, bracket, and scoresheet
+          require sign-in. Detail-level data is gated inside Tournament.js
+          based on `currentUser`. RLS allows anonymous SELECT on active +
+          complete tournaments and their teams/games/rinks. */}
+      <Route path="/tournaments" element={<Tournaments profile={profile} currentUser={user} />} />
       <Route path="/teams" element={<ProtectedRoute><Teams profile={profile} /></ProtectedRoute>} />
       <Route path="/league/create" element={<ProtectedRoute><LeagueManage profile={profile} /></ProtectedRoute>} />
       <Route path="/league/:id/manage" element={<ProtectedRoute><LeagueManage profile={profile} /></ProtectedRoute>} />
@@ -160,7 +181,7 @@ function AppRoutes() {
       <Route path="/admin/moderation" element={<ProtectedRoute><AdminModeration currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/notifications" element={<ProtectedRoute><Notifications currentUser={user} profile={profile} /></ProtectedRoute>} />
-      <Route path="/tournament/:id" element={<ProtectedRoute><Tournament currentUser={user} profile={profile} /></ProtectedRoute>} />
+      <Route path="/tournament/:id" element={<Tournament currentUser={user} profile={profile} />} />
       <Route path="/scorer/:gameId" element={<ProtectedRoute><ScorerView /></ProtectedRoute>} />
       <Route path="/game/:gameId" element={<ProtectedRoute><GameDetail profile={profile} /></ProtectedRoute>} />
       <Route path="/league-game/:gameId" element={<ProtectedRoute><GameDetail profile={profile} /></ProtectedRoute>} />
