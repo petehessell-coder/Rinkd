@@ -5,6 +5,7 @@ import { signIn, signUp } from '../lib/auth';
 import { track } from '../lib/analytics';
 import HelpButton from '../components/HelpButton';
 import DownloadCTA from '../components/DownloadCTA';
+import TurnstileWidget, { isTurnstileEnabled } from '../components/TurnstileWidget';
 
 const C = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
@@ -79,6 +80,11 @@ export default function Auth() {
   const [error, setError] = useState('');
   const [step, setStep] = useState(1); // signup steps 1,2,3
   const [confirmEmail, setConfirmEmail] = useState(''); // remembered for the "Check your email" screen
+  // Cloudflare Turnstile token — captured by the widget on step 3 and forwarded
+  // to supabase.auth.signUp. Stays null until Turnstile validates. When the
+  // env var isn't set (dev / preview), the widget renders nothing and the
+  // signup flow proceeds unblocked (isTurnstileEnabled === false).
+  const [captchaToken, setCaptchaToken] = useState(null);
 
   const [form, setForm] = useState({
     email: '', password: '', name: '', handle: '',
@@ -113,8 +119,15 @@ export default function Auth() {
   const handleSignup = async (e) => {
     e.preventDefault();
     if (step < 3) { setStep(s => s + 1); return; }
+    // Turnstile gate — only enforced when the site key is configured. Without
+    // a token, Supabase's CAPTCHA Protection (when enabled in dashboard) would
+    // reject the signup anyway; failing early gives a clearer error.
+    if (isTurnstileEnabled && !captchaToken) {
+      setError('Please complete the verification challenge below.');
+      return;
+    }
     setLoading(true); setError('');
-    const result = await signUp(form);
+    const result = await signUp({ ...form, captchaToken });
     setLoading(false);
     if (result.error) {
       track('signup_failed', { reason: result.error.message?.slice(0, 80) });
@@ -438,6 +451,9 @@ export default function Auth() {
                       {LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
                     </select>
                   </div>
+                  {/* Turnstile bot check — renders nothing unless
+                      REACT_APP_TURNSTILE_SITE_KEY is set. */}
+                  <TurnstileWidget onToken={setCaptchaToken} />
                 </>
               )}
 

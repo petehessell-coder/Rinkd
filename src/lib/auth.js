@@ -7,7 +7,7 @@ function pickInitials(name) {
   return (name || '').split(/\s+/).filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?';
 }
 
-export async function signUp({ email, password, name, handle, position, level, dob }) {
+export async function signUp({ email, password, name, handle, position, level, dob, captchaToken }) {
   // COPPA check — also guards against an invalid `dob` that would produce NaN
   // and silently bypass the under-13 block.
   const birthDate = new Date(dob);
@@ -41,6 +41,11 @@ export async function signUp({ email, password, name, handle, position, level, d
     email,
     password,
     options: {
+      // Forward the Cloudflare Turnstile token so Supabase's CAPTCHA
+      // Protection (when enabled in dashboard → Auth → Settings) can
+      // validate it server-side. Undefined when Turnstile isn't configured
+      // for the build — Supabase accepts undefined as "no challenge."
+      captchaToken: captchaToken || undefined,
       data: {
         name,
         handle: cleanHandle,
