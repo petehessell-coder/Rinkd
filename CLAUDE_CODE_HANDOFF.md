@@ -1,7 +1,7 @@
 # Rinkd — Claude Code Handoff
 
 **Created:** May 15, 2026 — supersedes the previous handoff. Self-contained: a fresh Claude Code session should be able to pick up from here without reading the prior doc.
-**Last updated:** May 17, 2026 (late evening) — **§7 Revenue + monetization subsection added + refined** with 9 new items (BIZ-INFRA-1, TOURN-REG-1, BIZ-1..5, BIZ-TIER-1, BIZ-BLPA-1) spanning Stripe Connect, registration fees, hotel affiliate, sponsorships, marketplaces (refs + photos), insurance partnership. **BenchBoss reframed from 3-tier pricing to 4 billing arrangements**: Community ($0) / Organizer-pays ($25/team) / **Pass-through ($15/team Technology fee billed to participating teams, BLPA-founding-partner model)** / Pro (custom annual). Key pricing decisions captured: organizer eats Stripe fees, "Technology fee" label, sliding-scale refund policy, Crease stays separate consumer track. New BIZ-BLPA-1 spec'd as the post-pilot proof-point — first BLPA event under Pass-through = **~$1,840 / event** for Rinkd while BLPA pays nothing. **Supersedes prior consumer-pricing MONEY-2.** Total post-pilot revenue work ~30-40 days. Earlier today: **BLPA Cleveland pilot now 3 days (Fri 6/12 + Sat 6/13 + Sun 6/14)**, was 2 days. 12 pool games rescheduled in place: 6 Friday evening (17:00 / 18:15 / 19:30 EDT) + 6 Saturday morning (08:00 / 09:15 / 10:30 EDT). Every team plays 1-2 games per day (balanced), 3 total. Sunday still championship (auto-generated). Migration `cleveland_pilot_3day_reschedule_fri_sat_sun` live in prod. Earlier today: §7 roadmap expanded with **GameSheet + LeagueApps parity items** (15 new gaps total) based on the new `rinkd_v4/GAMESHEET_PARITY_GAPS.md` and `rinkd_v4/LEAGUEAPPS_PARITY_GAPS.md` specs. Highlights: offline mode upgraded P2→P0 pre-scale (required before 2nd tournament partner); iOS PWA install banner pulled forward to P1 with full spec (4-6 hrs, unblocks iOS push); suspension management as the safety-critical near-term build; Stripe registration + waivers as the league-revenue gateway post-pilot. See §7 "Tournament engine — GameSheet parity" and "League engine — LeagueApps parity" subsections. **Code state unchanged since May 16 late evening:** full BLPA Cleveland pilot-prep batch on `claude/elegant-sanderson-80d1d0` worktree branch (6 commits, last 2 pending merge to `main`). BLPA Cleveland is `active` and publicly discoverable. **Push pipeline is wired but won't fire until Pete sets the matching VAPID private key in Supabase secrets and deploys the Edge Function** — see §12.
+**Last updated:** May 17, 2026 (late evening, final pass) — **New §13 "Operational artifacts"** documents everything a fresh Claude Code session needs to know exists outside this doc: the `rinkd_v4/` strategy docs, the 4-tab roadmap spreadsheet at `~/Downloads/rinkd-sprints.xlsx`, live operational state (Supabase project, Vercel project, BLPA tournament URL), and a recommended new-session reading order. Spreadsheet **Roadmap tab** now has a Sprint column color-coded by sprint (🟥 S0 / 🟦 S1.1-S1.5 / 🟧 S2 / 🟩 S3 / ⬜ S4 / S5+); new **Sprint plan tab** sequences S0 + S1 with target weeks. Earlier today: **§7 Revenue + monetization subsection added + refined** with 9 new items (BIZ-INFRA-1, TOURN-REG-1, BIZ-1..5, BIZ-TIER-1, BIZ-BLPA-1) spanning Stripe Connect, registration fees, hotel affiliate, sponsorships, marketplaces (refs + photos), insurance partnership. **BenchBoss reframed from 3-tier pricing to 4 billing arrangements**: Community ($0) / Organizer-pays ($25/team) / **Pass-through ($15/team Technology fee billed to participating teams, BLPA-founding-partner model)** / Pro (custom annual). Key pricing decisions captured: organizer eats Stripe fees, "Technology fee" label, sliding-scale refund policy, Crease stays separate consumer track. BIZ-BLPA-1 = post-pilot proof-point worth **~$1,840 / event** while BLPA pays nothing. Earlier today: **BLPA Cleveland pilot now 3 days (Fri 6/12 + Sat 6/13 + Sun 6/14)**, was 2 days. 12 pool games rescheduled in place: 6 Friday evening (17:00 / 18:15 / 19:30 EDT) + 6 Saturday morning (08:00 / 09:15 / 10:30 EDT). Every team plays 1-2 games per day (balanced), 3 total. Sunday still championship (auto-generated). Migration `cleveland_pilot_3day_reschedule_fri_sat_sun` live in prod. Earlier today: §7 roadmap expanded with **GameSheet + LeagueApps parity items** (15 new gaps total) based on the new `rinkd_v4/GAMESHEET_PARITY_GAPS.md` and `rinkd_v4/LEAGUEAPPS_PARITY_GAPS.md` specs. Highlights: offline mode upgraded P2→P0 pre-scale (required before 2nd tournament partner); iOS PWA install banner pulled forward to P1 with full spec (4-6 hrs, unblocks iOS push); suspension management as the safety-critical near-term build; Stripe registration + waivers as the league-revenue gateway post-pilot. See §7 "Tournament engine — GameSheet parity" and "League engine — LeagueApps parity" subsections. **Code state unchanged since May 16 late evening:** full BLPA Cleveland pilot-prep batch on `claude/elegant-sanderson-80d1d0` worktree branch (6 commits, last 2 pending merge to `main`). BLPA Cleveland is `active` and publicly discoverable. **Push pipeline is wired but won't fire until Pete sets the matching VAPID private key in Supabase secrets and deploys the Edge Function** — see §12.
 **Source:** continuation of the audit-fix work, plus a full BLPA-spec implementation pass based on `rinkd_v4/CLEVELAND_BUILD_PLAN.md`.
 
 ---
@@ -43,19 +43,26 @@ BUILD_PATH=/tmp/rinkd-build npx react-scripts build
 
 ---
 
-## 4. Current state — verified May 16, 2026 evening
+## 4. Current state — verified May 17, 2026 late evening
 
-`main` HEAD is **`0979969a`** (`docs: handoff update`, May 16 late evening — this commit). Pete merged the first 4 worktree commits into main as `799343b0` (`merge: tournament UI punch-list + BLPA pilot batch ...`). The worktree branch
-`claude/elegant-sanderson-80d1d0` is **2 commits ahead of main** (the public-landing + push-pipeline additions made after the initial merge), pending Pete's second merge + push. After merge, HEAD will be **`2b793247`** (or a merge commit above it). Full history:
+`main` HEAD is **`28b97793`** (`docs: monetization model — 4 billing arrangements + BLPA Pass-through proof-point`). Pete merged the first 4 worktree commits into main as `799343b0` (`merge: tournament UI punch-list + BLPA pilot batch ...`). The worktree branch
+`claude/elegant-sanderson-80d1d0` is **still 2 commits ahead of main** (the public-landing + push-pipeline additions made after the initial merge), pending Pete's second merge + push. After merge, HEAD will be **`2b793247`** (or a merge commit above it). Full history:
 
 ```
 [worktree branch — STILL pending merge to main (2 commits):]
 2b793247  feat: push notifications — tournament follow + recap pipeline (pilot)
 80f71e54  feat: public landing for tournament discovery (BLPA pilot)
 
-[on main now:]
+[on main now — recent docs commits (May 17 evening, in order):]
+28b97793  docs: monetization model — 4 billing arrangements + BLPA Pass-through proof-point
+45a16c0c  docs: BLPA Cleveland now 3-day pilot (Fri 6/12 + Sat 6/13 + Sun 6/14)
+ee529e2d  docs: handoff §7 — add Team engine (coaching tools) roadmap subsection
+c37c3cb0  docs: handoff §7 — add GameSheet + LeagueApps parity roadmap items
+da2b2915  docs: handoff — correct §4 merge state (first 4 commits already merged)
 0979969a  docs: handoff update — public landing + push pipeline + status flip
 c3947bbc  docs: handoff update — May 16 evening BLPA pilot batch + §12 pilot-readiness audit
+
+[on main — code:]
 799343b0  merge: tournament UI punch-list + BLPA pilot batch (scorer lockout, auto-recap, championship bracket gen, format-aware standings, logo upload, status enum fix)
 9c773ff6  fix: layout polish — bottom nav padding + HelpButton overlap
 5c3e42e5  feat: scorer lockout + auto-recap + shootout winner + bracket advancement
@@ -661,9 +668,9 @@ After Pete updates Site URL + Redirect URLs in the Supabase dashboard:
 
 ## 10. First thing to do in a new session
 
-1. Read this doc top to bottom — **especially the May 16 late evening §5 entries** (public landing + push pipeline shipped, still pending merge + Pete's VAPID secrets work).
-2. Run `cd ~/Downloads/rinkd_live && git log --oneline -6 && git status` to confirm state matches Section 4.
-   - If `main` HEAD is `0979969a` or later docs commit: first merge happened (`799343b0`) but the 2 latest worktree commits (public landing + push pipeline) are still pending the second merge. Use the §4 second-merge command.
+1. Read this doc top to bottom — **especially §13 (operational artifacts) which tells you what files/tools exist outside this doc**, then §5 (recent shipped work), §7 (forward roadmap), §10 (this section), §12 (pilot-readiness audit).
+2. Run `cd ~/Downloads/rinkd_live && git log --oneline -10 && git status` to confirm state matches Section 4.
+   - If `main` HEAD is `28b97793` or a later docs commit: first merge happened (`799343b0`) but the 2 latest worktree commits (public landing + push pipeline) are still pending the second merge. Use the §4 second-merge command.
    - If `main` HEAD includes a merge above `2b793247`: second merge happened. Move on.
    - Confirm BLPA Cleveland is seeded + flipped: `select name, start_date, end_date, status from public.tournaments where id = 'b2789d66-1d77-4a62-862d-00b550da6a98'` should return `BLPA Cleveland · 2026-06-12 · 2026-06-14 · active` (3-day pilot). Team count = 8, game count = 12 pool games (6 Friday evening + 6 Saturday morning — championship games auto-generate Sat afternoon via the Bracket tab button).
    - Confirm the new DB shape: `select column_name from information_schema.columns where table_schema='public' and table_name='games' and column_name in ('pool','shootout_winner')` should return both rows; `select count(*) from public.tournament_subscriptions` runs (table exists).
@@ -674,7 +681,8 @@ After Pete updates Site URL + Redirect URLs in the Supabase dashboard:
    - VAPID secrets in Supabase + Edge Function deployed? (See §6 + §12 P0.) Push pipeline is dormant code until both are done.
    - Are there any push subscriptions yet? `select count(*) from public.push_subscriptions` — if zero, the iPad/iPhone hasn't subscribed yet. Walk through Profile → 🔔 Notify on a real device once secrets are live.
    - What next — the VAPID/Edge Function deploy (P0 #4 in §12), RLS multiple-permissive cleanup (~30 min, §7), iOS PWA install banner (~4-6 hrs per the new parity spec, §7 GS-7), or something else from the GameSheet/LeagueApps parity roadmap (§7)?
-4. Then proceed from there.
+4. **Pull up the operational spreadsheet** at `~/Downloads/rinkd-sprints.xlsx` (or Pete's Google Sheet version if uploaded). The **Sprint plan** tab shows the next ~12 weeks of work in sequence (S0 pre-pilot + S1 post-pilot revenue cluster); the **Per-day checklist** tab tracks Pete's pre-pilot operations status; the **Cleveland day-of** tab is the live run sheet for Jun 12-14. See §13.2 for tab-by-tab notes.
+5. Then proceed from there.
 
 ---
 
@@ -833,3 +841,57 @@ After secrets + deploy, smoke-test:
 13. **Sun end** — Champion banner appears. Pete flips status to `complete`.
 
 Realistic effort to clear remaining P0: ~10 min Pete dashboard config (B) + ~10-30 min Pete VAPID setup + Claude function deploy (D). **No code work remains for pilot** — everything else is operations.
+
+---
+
+## 13. Operational artifacts — what a new session needs to know exists
+
+Three categories of artifacts live OUTSIDE this handoff doc that a new Claude Code session should be aware of. None of them are in the `rinkd_live` repo; they're either in `~/Downloads/rinkd_v4/` (strategy docs) or `~/Downloads/` (live operational tools).
+
+### 13.1 Strategy / spec docs (`~/Downloads/rinkd_v4/`)
+
+The `rinkd_v4` folder is **strategy only** — its app code does not deploy, so do not edit code there. The docs are the source of truth for product direction. To bring into context: `/add-dir ~/Downloads/rinkd_v4` in Claude Code.
+
+| File | Why it matters | When to read |
+|---|---|---|
+| `CLEVELAND_BUILD_PLAN.md` | Original BLPA Cleveland tournament build spec — May 2026. Section 5 has the championship bracket structure (4-team-per-division: semi 2v3 + semi 1v4 → gold + bronze). | Reference when working on tournament features or BLPA-specific code. |
+| `GAMESHEET_PARITY_GAPS.md` | 7 gaps between Rinkd tournament feature set and GameSheet's. Full spec for each (offline mode, suspensions, game clock, refs, roster validation, embed widgets, iOS PWA banner). | When working on any GS-* item from §7 of this handoff. |
+| `LEAGUEAPPS_PARITY_GAPS.md` | 8 gaps for league management surface (Stripe registration, waivers, USAH, financials, divisions, multi-season, analytics, embeds). | When working on any LA-* item from §7. |
+| `RINKD_STATE_OF_PLAY.md` | Broader orientation doc — BLPA partnership context, post-pilot specs, pending tasks. Older than this handoff. | First-time new sessions; for partnership/business context. |
+| `Rinkd_BenchBoss_Captain_Tier_Spec.md` | **SUPERSEDED** by BIZ-TIER-1 (the 4-arrangement B2B BenchBoss billing model — see §7 Revenue). Retained as historical reference only. | Don't act on it. |
+| `Rinkd_Brand_Voice_Guidelines.md`, `Rinkd_Marketing_Kit.md`, etc. | Brand + marketing source material. | When writing user-facing copy, sales pitches, etc. |
+
+### 13.2 Roadmap spreadsheet (`~/Downloads/rinkd-sprints.xlsx`)
+
+A four-tab xlsx that's the operational view of the roadmap. Pete uploads to Google Drive → Google Sheets for live editing. Built by Claude via the anthropic-skills:xlsx skill; if a new session needs to regenerate it, the build scripts live at `/tmp/build_rinkd_sprints.py` + `/tmp/add_pilot_sheets.py` + `/tmp/add_sprint_column.py` (will be lost on machine reboot — re-derive from this doc's §7 if needed).
+
+| Tab | Rows | What it shows |
+|---|---|---|
+| **Rinkd Roadmap — May 17 2026** | 72 | All 71 roadmap items from §7 in a single grid. Columns: ID · Category · Item · Priority · Effort · Status · **Sprint** · Brief explanation · Dependency · Spec ref. **Sprint column** is colored: 🟥 S0 (pre-pilot Pete tasks), 🟦 S1.1-S1.5 (Sprint 1 revenue cluster in build order), 🟧 S2, 🟩 S3, ⬜ S4, S5+ / ongoing / consumer / superseded / gated. Bottom has live COUNTIF summary by Status. |
+| **Sprint plan** | 17 | Sequenced execution view of S0 (pre-pilot) + S1 (post-pilot revenue cluster). Each row has Target week + Depends on + What it unlocks. Includes a 3-line summary footer (S1 effort total, first-dollar moment, expected first-month revenue from BLPA Pass-through). |
+| **Per-day checklist** | 26 | Milestone-based pre-pilot checklist (T-26 → T+4). Pete checks off as you go; footer COUNTIFs show "X of Y complete". Sat May 17 (T-26) = today; Fri Jun 12 (T+0) = pilot start. |
+| **Cleveland day-of** | 38 | Hour-by-hour run sheet across 3 days. Friday (orange) = pool play day 1 with hard times (3:30 PM arrival → 9:00 PM close). Saturday (blue) = pool play day 2 + bracket generation. Sunday (red) = championship with placeholder times (`{{ FIRST PUCK }}` / `{{ +90min }}` markers) Pete fills in once RMU ice times confirm. |
+
+**When to update the spreadsheet:** any time §7 changes (new roadmap item, item completion, sprint re-ordering). Re-run the build scripts in `/tmp/` or re-derive. **Critical:** the spreadsheet is downstream of this handoff doc — handoff doc is source of truth, spreadsheet is its operational projection.
+
+### 13.3 Live operational state (databases + dashboards)
+
+| Resource | URL / location | Notes |
+|---|---|---|
+| Supabase project | `tbpoopsyhfuqcbugrjbh` (use MCP) | Auth, DB, Edge Functions, Storage. RLS state documented in §9. |
+| Vercel project | `prj_fIYsPTQJ0vaYvj1w3kZkodpdqZUH` (team `team_kIYhrLu5tSRKt67rW3BTdYHB`) | Production deploys, env vars (incl. `REACT_APP_VAPID_PUBLIC_KEY` per §6). |
+| Production app | https://rinkd.app | Apex; `www.rinkd.app` 308-redirects to apex. |
+| GitHub repo | `petehessell-coder/Rinkd` | `main` branch auto-deploys to Vercel. |
+| BLPA Cleveland tournament URL | https://rinkd.app/tournament/b2789d66-1d77-4a62-862d-00b550da6a98 | Public landing (no auth needed). `tournament_id = b2789d66-1d77-4a62-862d-00b550da6a98`, status=`active`, Jun 12-14 at RMU. |
+
+### 13.4 New-session reading order (recommended)
+
+If you're a fresh Claude Code session and need to get oriented in 15 minutes:
+
+1. **This file (CLAUDE_CODE_HANDOFF.md)** — top to bottom. §1-§4 = orientation; §5 = what's recently shipped; §7 = forward roadmap; §10 = first thing to do; §12 = pilot-readiness audit.
+2. **`git log --oneline -10`** — verify state matches §4. If `main` HEAD doesn't match, either Pete merged + pushed since this doc was updated (likely fine) or something's drifted.
+3. **`select name, status, start_date, end_date from public.tournaments where id = 'b2789d66-1d77-4a62-862d-00b550da6a98'`** via Supabase MCP — verify BLPA Cleveland is still `active` + dates `2026-06-12 / 2026-06-14`.
+4. **`open ~/Downloads/rinkd-sprints.xlsx`** (or the corresponding Google Sheet if Pete's uploaded it) — confirm the Sprint plan + Per-day checklist tabs reflect current state.
+5. **Skim `rinkd_v4/RINKD_STATE_OF_PLAY.md`** — broader business context if you need it.
+
+Steps 1-4 are required orientation. Step 5 only if the task involves business strategy / partnerships / unfamiliar product areas.
