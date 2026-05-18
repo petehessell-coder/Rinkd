@@ -1,7 +1,7 @@
 # Rinkd — Claude Code Handoff
 
 **Created:** May 15, 2026 — supersedes the previous handoff. Self-contained: a fresh Claude Code session should be able to pick up from here without reading the prior doc.
-**Last updated:** May 17, 2026 (late evening, final pass) — **New §13 "Operational artifacts"** documents everything a fresh Claude Code session needs to know exists outside this doc: the `rinkd_v4/` strategy docs, the 4-tab roadmap spreadsheet at `~/Downloads/rinkd-sprints.xlsx`, live operational state (Supabase project, Vercel project, BLPA tournament URL), and a recommended new-session reading order. Spreadsheet **Roadmap tab** now has a Sprint column color-coded by sprint (🟥 S0 / 🟦 S1.1-S1.5 / 🟧 S2 / 🟩 S3 / ⬜ S4 / S5+); new **Sprint plan tab** sequences S0 + S1 with target weeks. Earlier today: **§7 Revenue + monetization subsection added + refined** with 9 new items (BIZ-INFRA-1, TOURN-REG-1, BIZ-1..5, BIZ-TIER-1, BIZ-BLPA-1) spanning Stripe Connect, registration fees, hotel affiliate, sponsorships, marketplaces (refs + photos), insurance partnership. **BenchBoss reframed from 3-tier pricing to 4 billing arrangements**: Community ($0) / Organizer-pays ($25/team) / **Pass-through ($15/team Technology fee billed to participating teams, BLPA-founding-partner model)** / Pro (custom annual). Key pricing decisions captured: organizer eats Stripe fees, "Technology fee" label, sliding-scale refund policy, Crease stays separate consumer track. BIZ-BLPA-1 = post-pilot proof-point worth **~$1,840 / event** while BLPA pays nothing. Earlier today: **BLPA Cleveland pilot now 3 days (Fri 6/12 + Sat 6/13 + Sun 6/14)**, was 2 days. 12 pool games rescheduled in place: 6 Friday evening (17:00 / 18:15 / 19:30 EDT) + 6 Saturday morning (08:00 / 09:15 / 10:30 EDT). Every team plays 1-2 games per day (balanced), 3 total. Sunday still championship (auto-generated). Migration `cleveland_pilot_3day_reschedule_fri_sat_sun` live in prod. Earlier today: §7 roadmap expanded with **GameSheet + LeagueApps parity items** (15 new gaps total) based on the new `rinkd_v4/GAMESHEET_PARITY_GAPS.md` and `rinkd_v4/LEAGUEAPPS_PARITY_GAPS.md` specs. Highlights: offline mode upgraded P2→P0 pre-scale (required before 2nd tournament partner); iOS PWA install banner pulled forward to P1 with full spec (4-6 hrs, unblocks iOS push); suspension management as the safety-critical near-term build; Stripe registration + waivers as the league-revenue gateway post-pilot. See §7 "Tournament engine — GameSheet parity" and "League engine — LeagueApps parity" subsections. **Code state unchanged since May 16 late evening:** full BLPA Cleveland pilot-prep batch on `claude/elegant-sanderson-80d1d0` worktree branch (6 commits, last 2 pending merge to `main`). BLPA Cleveland is `active` and publicly discoverable. **Push pipeline is wired but won't fire until Pete sets the matching VAPID private key in Supabase secrets and deploys the Edge Function** — see §12.
+**Last updated:** May 18, 2026 (morning) — **Both P0 pre-pilot blockers cleared.** (1) Forgot Password flow fixed via Supabase URL Configuration (Site URL `www.rinkd.app` → apex; Redirect URLs allowlist now includes `https://rinkd.app/reset-password`, `https://rinkd.app/*`, `https://www.rinkd.app/*`, `http://localhost:3000/*`); E2E verified end-to-end as `pete@rinkd.app` (the first successful prod password reset in Rinkd history — Nick's May 14 attempt had silently failed against the old config). (2) Push pipeline activated via Path B: fresh VAPID pair generated, 3 Supabase secrets set, `send-recap-push` Edge Function deployed (v1, ACTIVE, JWT-verified), Vercel `REACT_APP_VAPID_PUBLIC_KEY` updated + redeployed; 2 stale May-09/May-12 test subscriptions purged. Private key stored in Pete's 1Password under "Rinkd VAPID keys (May 2026)" — **never rotate** post-pilot. Pete also completed the long-pending `claude/elegant-sanderson-80d1d0` merge (commit `ee0ca9ef`) — public landing + push pipeline code are now in production. **Pre-pilot P0 backlog is empty.** Remaining work is operations + content (team names from Nick) + real-device push smoke test. **Last updated:** May 17, 2026 (late evening) — New §13 "Operational artifacts" added (rinkd_v4 docs, roadmap xlsx, live state, new-session reading order). §7 Revenue + monetization subsection: 9 new items spanning Stripe Connect, registration fees, hotel affiliate, sponsorships, marketplaces, insurance partnership. **BenchBoss reframed from 3-tier pricing to 4 billing arrangements**: Community ($0) / Organizer-pays ($25/team) / **Pass-through ($15/team Technology fee billed to participating teams, BLPA-founding-partner model)** / Pro (custom annual). BIZ-BLPA-1 = post-pilot proof-point worth **~$1,840 / event** while BLPA pays nothing. **BLPA Cleveland pilot now 3 days (Fri 6/12 + Sat 6/13 + Sun 6/14)**, was 2 days. 12 pool games rescheduled in place: 6 Friday evening + 6 Saturday morning. Migration `cleveland_pilot_3day_reschedule_fri_sat_sun` live in prod. §7 roadmap expanded with **GameSheet + LeagueApps parity items** (15 new gaps total) — see `rinkd_v4/GAMESHEET_PARITY_GAPS.md` and `rinkd_v4/LEAGUEAPPS_PARITY_GAPS.md`.
 **Source:** continuation of the audit-fix work, plus a full BLPA-spec implementation pass based on `rinkd_v4/CLEVELAND_BUILD_PLAN.md`.
 
 ---
@@ -45,20 +45,14 @@ BUILD_PATH=/tmp/rinkd-build npx react-scripts build
 
 ## 4. Current state — verified May 18, 2026 morning
 
-**Local `main` and `origin/main` are out of sync** — distinguish them carefully:
+`origin/main` HEAD is **`ee0ca9ef`** (`merge: public tournament landing + push notification pipeline`). This merge brought the 8 May-17 docs commits + the 2 feature commits (public landing + push pipeline) onto `origin/main` in one shot — Vercel auto-deployed at 09:53 UTC. Everything Pete + Claude shipped through May 17 evening is now in production.
 
-- **`origin/main` HEAD: `799343b0`** (`merge: tournament UI punch-list + BLPA pilot batch ...`) — the first merge from May 16 evening. **This is what's deployed on Vercel.**
-- **Local `main` HEAD: `d46f3d22`** (`docs: new §13 Operational artifacts — fresh-session onboarding guide`) — **8 commits ahead of `origin/main`**, all `docs:` updates to this handoff doc. No code, no Vercel impact, but the doc on GitHub is stale until Pete pushes.
-- **`claude/elegant-sanderson-80d1d0`** still has **2 unmerged code commits** (the public-landing + push-pipeline additions made after the first merge). Not in local `main`, not in `origin/main` → **NOT deployed on Vercel.** Pending Pete's second merge + push.
-
-After both pushes, `origin/main` HEAD will be a merge commit above **`2b793247`**. Full history:
+Recent history on `origin/main`:
 
 ```
-[worktree branch claude/elegant-sanderson-80d1d0 — STILL pending merge to main (2 commits):]
+ee0ca9ef  merge: public tournament landing + push notification pipeline ← HEAD, deployed
 2b793247  feat: push notifications — tournament follow + recap pipeline (pilot)
 80f71e54  feat: public landing for tournament discovery (BLPA pilot)
-
-[on LOCAL main only, unpushed to origin/main (8 docs commits, May 17 → May 18 evening):]
 d46f3d22  docs: new §13 Operational artifacts — fresh-session onboarding guide
 28b97793  docs: monetization model — 4 billing arrangements + BLPA Pass-through proof-point
 45a16c0c  docs: BLPA Cleveland now 3-day pilot (Fri 6/12 + Sat 6/13 + Sun 6/14)
@@ -67,8 +61,6 @@ c37c3cb0  docs: handoff §7 — add GameSheet + LeagueApps parity roadmap items
 da2b2915  docs: handoff — correct §4 merge state (first 4 commits already merged)
 0979969a  docs: handoff update — public landing + push pipeline + status flip
 c3947bbc  docs: handoff update — May 16 evening BLPA pilot batch + §12 pilot-readiness audit
-
-[on origin/main — code (this is what's actually deployed):]
 799343b0  merge: tournament UI punch-list + BLPA pilot batch (scorer lockout, auto-recap, championship bracket gen, format-aware standings, logo upload, status enum fix)
 9c773ff6  fix: layout polish — bottom nav padding + HelpButton overlap
 5c3e42e5  feat: scorer lockout + auto-recap + shootout winner + bracket advancement
@@ -90,21 +82,21 @@ e995f3ef  fix: site-audit pass — 6 Criticals + 10 Highs
 37e50791  Tournament pilot ...
 ```
 
-**Two pending operations (Pete runs from `~/Downloads/rinkd_live`, NOT from a worktree subdir):**
+**Working tree state:** clean on `main`. This handoff's May 18 morning updates (§4 + §6 + §12 + §10 pre-pilot checklist) are queued on worktree branch `claude/flamboyant-chaum-f3d5d3`, pending a small merge to land them on `main`. Pete from `~/Downloads/rinkd_live`:
 
-**(1)** Push the 8 local-only docs commits to `origin/main`. Zero risk — docs only, no Vercel deploy:
 ```
-git checkout main && git push origin main
-```
-
-**(2)** Merge the 2 feature commits from `claude/elegant-sanderson-80d1d0` into `main` and push (THIS triggers a Vercel deploy — public landing + push pipeline go live in production):
-```
-rm -f .git/index.lock && git checkout main && git merge claude/elegant-sanderson-80d1d0 --no-ff -m "merge: public tournament landing + push notification pipeline" && git push origin main
+git checkout main && git merge claude/flamboyant-chaum-f3d5d3 --ff-only && git push origin main
 ```
 
-Either order works (the merge in #2 will carry the docs commits with it if #1 hasn't run yet). After #2, public landing + push code is in production — but push still needs VAPID secrets + Edge Function deploy to actually fire (§6 / §12 D).
+Docs-only change → no code, no Vercel impact.
 
-**Working tree state:** clean. Two pre-existing strays remain uncommitted (`scripts/chiller/data/seed-leagues.json`, `supabase/functions/send-onboarding-emails/index.ts`) — leave them alone unless Pete asks otherwise.
+Two pre-existing strays remain uncommitted (`scripts/chiller/data/seed-leagues.json`, `supabase/functions/send-onboarding-emails/index.ts`) — leave them alone unless Pete asks otherwise.
+
+**Operational state (verified May 18):**
+- BLPA Cleveland tournament `b2789d66-1d77-4a62-862d-00b550da6a98` is `active`, dates Jun 12-14, 8 placeholder teams, 12 pool games seeded.
+- Forgot Password flow: ✅ working (§6 + §8 verified end-to-end).
+- Push pipeline: ✅ live — `send-recap-push` Edge Function deployed (v1, ACTIVE, JWT verification on); 3 VAPID secrets set; Vercel client bundle has the matching public key (`BMiwvt78h-…Eitc`). `push_subscriptions` table empty pending first real-device subscribe (smoke test).
+- 4 unused Edge Functions on the project (`send-invite`, `submit-scoresheet`, `send-push`, `schedule-ics`, `send-game-reminders`, `send-onboarding-emails`, `delete-account`) — pre-existing infra, not pilot-related.
 
 ---
 
@@ -447,35 +439,22 @@ Cascades through `tournament_teams` → `games` → `game_goals`/`penalties`/`sh
 
 These are the only known outstanding items from the audit. **None require code changes.**
 
-### 🔴 Forgot-password flow is broken in production — config-only fix
+### ~~🔴 Forgot-password flow~~ — ✅ FIXED May 18, 2026 morning
 
-**Confirmed via E2E test this session.** Decoded the Supabase reset email and found the `redirect_to` in the link was `https://www.rinkd.app` (Site URL fallback), NOT `https://rinkd.app/reset-password` that the app sends. The allowlist rejected our redirect because the apex domain isn't permitted.
+**Root cause (now resolved):** The Supabase reset email's `redirect_to` was `https://www.rinkd.app` (Site URL fallback), NOT `https://rinkd.app/reset-password` that the app sends. The allowlist rejected the apex redirect because the apex domain wasn't permitted. **0 users had ever successfully completed a password reset** in production prior to this fix (including BLPA Nick on May 14 — his recovery token was never consumed).
 
-This explains why **0 users have ever successfully completed a password reset** in production, including BLPA Nick (May 14 attempt — never consumed his recovery token).
+**Fix applied (Supabase Dashboard → Authentication → URL Configuration):**
+- Site URL changed `https://www.rinkd.app` → `https://rinkd.app`
+- Redirect URLs added: `https://rinkd.app/reset-password`, `https://rinkd.app/*`, `https://www.rinkd.app/*`, `http://localhost:3000/*`
 
-**Fix — Supabase Dashboard → Authentication → URL Configuration:**
-1. **Site URL:** change `https://www.rinkd.app` → `https://rinkd.app` (apex matches what Vercel serves as canonical; `www` is a 308 redirect).
-2. **Redirect URLs:** add
-   - `https://rinkd.app/reset-password`
-   - `https://rinkd.app/*`
-   - `http://localhost:3000/*`
-   - any active Vercel preview origin patterns
-3. Save.
+**E2E verified May 18, 13:39 UTC:** Pete completed full Forgot Password → email → click → set new password → land on `/feed` flow. DB confirmed: `last_sign_in_at` = 2026-05-18 13:39:51, `still_unused` = false, `updated_at` = 2026-05-18 13:40:06. `ResetPassword.js` listener race did NOT manifest — no defensive patch needed.
 
-**After Pete does this**, the test plan is in Section 8 below. If the listener race in `ResetPassword.js` also turns out to be real after this fix, ship the ~10-line defensive patch that handles `INITIAL_SESSION` with a recovered hash in addition to `PASSWORD_RECOVERY`.
+**BLPA captains can now reset their passwords** if they hit the flow during pilot onboarding.
 
 ### 🟠 Other config items (lower-impact)
 
 - **`REACT_APP_BETA_BANNER` (Vercel env var)** — Feed shows a "🚧 Public beta" banner by default. Decide if that's the right message for BLPA opening day. Set `REACT_APP_BETA_BANNER=0` to hide it.
-- **VAPID setup for push pipeline (May 16 evening — partially done):** `REACT_APP_VAPID_PUBLIC_KEY` is already set in Vercel (from a much earlier setup; verified May 16 — Vercel rejected re-add with "variable already exists"). The matching **private key** needs to be set as a Supabase Edge Function secret, plus the `send-recap-push` function needs to be deployed. **Two paths for Pete** depending on whether the original VAPID private key still exists somewhere (1Password / Notes / etc.):
-  - **Path A — found the private key:** read the existing public key from Vercel (Dashboard → Settings → Env Vars → click `•••` to reveal, OR `vercel env pull .env.vercel && grep VAPID .env.vercel && rm .env.vercel`). Set 3 Supabase secrets:
-    ```
-    supabase secrets set VAPID_PUBLIC_KEY="<existing public>" --project-ref tbpoopsyhfuqcbugrjbh
-    supabase secrets set VAPID_PRIVATE_KEY="<existing private>" --project-ref tbpoopsyhfuqcbugrjbh
-    supabase secrets set VAPID_SUBJECT="mailto:hello@rinkd.app" --project-ref tbpoopsyhfuqcbugrjbh
-    ```
-  - **Path B — private key is lost:** generate a fresh pair (`npx web-push generate-vapid-keys`), overwrite the Vercel public key (Dashboard → Edit), set both Supabase secrets with the new pair. Cost: 2 existing test push_subscriptions get orphaned. Edge Function's 410-Gone handler auto-prunes them on first push attempt; zero user-facing impact.
-  - **After secrets are set, deploy the function:** `supabase functions deploy send-recap-push --project-ref tbpoopsyhfuqcbugrjbh` — OR ask Claude to do it via the Supabase MCP `deploy_edge_function` tool.
+- **~~VAPID setup for push pipeline~~** ✅ **DONE** May 18, 2026 morning (Path B — fresh pair generated because old private key wasn't recoverable). New public key in Vercel env (`REACT_APP_VAPID_PUBLIC_KEY`) + as Supabase secret; new private key as Supabase secret + saved to Pete's 1Password entry "Rinkd VAPID keys (May 2026)". `send-recap-push` Edge Function deployed (v1, ACTIVE, `verify_jwt=true`). 2 stale test subscriptions purged. **DO NOT regenerate this pair** — rotation invalidates every real-user subscription. Procedure preserved in `~/.bash_history` and the May 18 Claude Code transcript for reference if ever needed again.
 - **`REACT_APP_CREASE_PAYMENTS_LIVE` + `REACT_APP_CREASE_CHECKOUT_URL`** — when Stripe is wired. The paywall now refuses to claim "Subscribe" if the flag is on but the URL is missing (post-Surfaces 11-17 fix).
 - **Supabase → Authentication → Policies → "Leaked password protection"** — flip ON. HaveIBeenPwned integration, blocks compromised passwords on signup/reset. Pure upside, one toggle.
 
@@ -801,13 +780,15 @@ The BLPA pilot batch shipped a huge amount (see §5 May 16 evening entries). Thi
 
 **~~A. Public tournament page is auth-gated.~~** ✅ **DONE** in commit `80f71e54`. Public landing for anonymous spectators ships tournament metadata + teams + sign-up CTAs; live data stays login-gated. See §5 "Public tournament landing" entry.
 
-**B. Forgot-password flow.** Still broken per §6. Pete's Supabase dashboard config (Site URL + Redirect URLs). 0 users have ever successfully completed a password reset in prod. When BLPA teams onboard and hit "Forgot password?" — silence. Five-minute fix in the dashboard; E2E test plan in §8. **Verify before opening the tournament URL to teams.**
+**~~B. Forgot-password flow.~~** ✅ **DONE** May 18, 2026 morning. Supabase dashboard URL Configuration updated (Site URL → apex, 4 redirect URLs added); E2E verified end-to-end with `pete@rinkd.app`. See §6 "Forgot-password flow" entry above.
 
 **~~C. Tournament status flip on day-of.~~** ✅ **DONE** May 16 late evening via MCP. BLPA Cleveland is now `active`. Pete can flip back to `draft` from TournamentManage → Settings if he wants to hide pre-event.
 
-**D. Push pipeline not yet operational (NEW).** Code shipped in commit `2b793247` (Edge Function `send-recap-push`, client lib helpers, follow-tournament button, finalize→push trigger). **Two Pete-side setup tasks blocking activation:**
-1. **Supabase Edge Function secrets** — `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`. Procedure depends on whether the matching private key still exists. Full instructions in §6 "VAPID setup."
-2. **Deploy the Edge Function** — `supabase functions deploy send-recap-push --project-ref tbpoopsyhfuqcbugrjbh` OR ask Claude to do it via MCP `deploy_edge_function`.
+**~~D. Push pipeline not yet operational.~~** ✅ **DONE** May 18, 2026 morning. Fresh VAPID pair generated (Path B per §6); 3 Supabase secrets set (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`); Edge Function `send-recap-push` deployed (v1, ACTIVE, `verify_jwt=true`); Vercel env var `REACT_APP_VAPID_PUBLIC_KEY` updated to the new public key; Vercel redeployed (commit `ee0ca9ef` — the `claude/elegant-sanderson-80d1d0` merge that also brought the public-landing + push-pipeline code itself live). Function reachability verified (`POST /functions/v1/send-recap-push` without JWT → `401 UNAUTHORIZED_NO_AUTH_HEADER`, as expected). Two stale May-09/May-12 test push_subscriptions deleted; table now empty.
+
+**New private key location:** Pete saved to 1Password ("Rinkd VAPID keys (May 2026)"); tempfile `/tmp/vapid_keys.json` wiped. **Do NOT regenerate** — any future rotation invalidates all real-user subscriptions.
+
+**Still required:** real-device smoke test (Pete subscribes on iPhone+PWA-installed or Android → another account finalizes any pool game → first device receives a push within ~2s). Defer until pilot prep gets there.
 
 After secrets + deploy, smoke-test:
 - On a real iOS device (16.4+, **PWA installed to home screen**) or Android: sign in, navigate to `/tournament/b2789d66-1d77-4a62-862d-00b550da6a98`, tap "🔔 Follow", accept the OS prompt.
@@ -841,11 +822,11 @@ After secrets + deploy, smoke-test:
 
 ### 🟢 Pre-pilot checklist (in order)
 
-1. **Pete** — Merge worktree branch + push to main (§4 merge command). Vercel auto-deploys.
-2. **Pete** — Fix Forgot Password (§6 dashboard config), verify E2E (§8). **P0 B.**
-3. **Pete** — Find existing VAPID private key (or regenerate pair); set 3 Supabase Edge Function secrets (§6 + §12 D); ping Claude to deploy `send-recap-push` via MCP. **P0 D.**
+1. **~~Merge worktree branch + push to main.~~** ✅ Done May 18 morning — `ee0ca9ef` is the merge commit; Vercel auto-deployed.
+2. **~~Fix Forgot Password.~~** ✅ Done May 18 morning — §6 dashboard config + E2E verified end-to-end as `pete@rinkd.app`.
+3. **~~VAPID secrets + Edge Function deploy.~~** ✅ Done May 18 morning — Path B fresh pair, 3 secrets set, `send-recap-push` v1 ACTIVE, Vercel public key updated + redeployed.
 4. **Pete** — Get team names + logos from Nick. Swap placeholders in TournamentManage → Teams + Settings → Branding logo upload.
-5. **Pete** — Smoke-test push end-to-end on a real device (§12 D smoke-test steps).
+5. **Pete** — Smoke-test push end-to-end on a real device (§12 D smoke-test steps). Sign in, Follow tournament, accept push prompt, then have a director finalize any game in ScorerView from a 2nd device → first device should receive push within ~2s.
 6. **Pete** — Smoke-test ScorerView on iPad (P1 G above).
 7. **Pete** — Send pilot URL `https://rinkd.app/tournament/b2789d66-1d77-4a62-862d-00b550da6a98` to BLPA captains. They'll see the public landing without signing up; sign-up CTA brings them into Rinkd, then they can Follow + receive recap pushes.
 8. **Fri Jun 12 afternoon** — verify status is still `active` (it is now, but Pete may have flipped to draft for pre-event privacy).
@@ -855,7 +836,7 @@ After secrets + deploy, smoke-test:
 12. **Sun Jun 14** — Run championship games. SO winner prompt fires on tied bracket games; bracket auto-fills as each semi ends.
 13. **Sun end** — Champion banner appears. Pete flips status to `complete`.
 
-Realistic effort to clear remaining P0: ~10 min Pete dashboard config (B) + ~10-30 min Pete VAPID setup + Claude function deploy (D). **No code work remains for pilot** — everything else is operations.
+**P0 backlog is empty.** Remaining items are operations + content (team names from Nick) + smoke testing — no Pete-config or Claude-code work blocks the pilot.
 
 ---
 
