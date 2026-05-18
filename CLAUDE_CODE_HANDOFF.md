@@ -43,17 +43,23 @@ BUILD_PATH=/tmp/rinkd-build npx react-scripts build
 
 ---
 
-## 4. Current state — verified May 17, 2026 late evening
+## 4. Current state — verified May 18, 2026 morning
 
-`main` HEAD is **`28b97793`** (`docs: monetization model — 4 billing arrangements + BLPA Pass-through proof-point`). Pete merged the first 4 worktree commits into main as `799343b0` (`merge: tournament UI punch-list + BLPA pilot batch ...`). The worktree branch
-`claude/elegant-sanderson-80d1d0` is **still 2 commits ahead of main** (the public-landing + push-pipeline additions made after the initial merge), pending Pete's second merge + push. After merge, HEAD will be **`2b793247`** (or a merge commit above it). Full history:
+**Local `main` and `origin/main` are out of sync** — distinguish them carefully:
+
+- **`origin/main` HEAD: `799343b0`** (`merge: tournament UI punch-list + BLPA pilot batch ...`) — the first merge from May 16 evening. **This is what's deployed on Vercel.**
+- **Local `main` HEAD: `d46f3d22`** (`docs: new §13 Operational artifacts — fresh-session onboarding guide`) — **8 commits ahead of `origin/main`**, all `docs:` updates to this handoff doc. No code, no Vercel impact, but the doc on GitHub is stale until Pete pushes.
+- **`claude/elegant-sanderson-80d1d0`** still has **2 unmerged code commits** (the public-landing + push-pipeline additions made after the first merge). Not in local `main`, not in `origin/main` → **NOT deployed on Vercel.** Pending Pete's second merge + push.
+
+After both pushes, `origin/main` HEAD will be a merge commit above **`2b793247`**. Full history:
 
 ```
-[worktree branch — STILL pending merge to main (2 commits):]
+[worktree branch claude/elegant-sanderson-80d1d0 — STILL pending merge to main (2 commits):]
 2b793247  feat: push notifications — tournament follow + recap pipeline (pilot)
 80f71e54  feat: public landing for tournament discovery (BLPA pilot)
 
-[on main now — recent docs commits (May 17 evening, in order):]
+[on LOCAL main only, unpushed to origin/main (8 docs commits, May 17 → May 18 evening):]
+d46f3d22  docs: new §13 Operational artifacts — fresh-session onboarding guide
 28b97793  docs: monetization model — 4 billing arrangements + BLPA Pass-through proof-point
 45a16c0c  docs: BLPA Cleveland now 3-day pilot (Fri 6/12 + Sat 6/13 + Sun 6/14)
 ee529e2d  docs: handoff §7 — add Team engine (coaching tools) roadmap subsection
@@ -62,7 +68,7 @@ da2b2915  docs: handoff — correct §4 merge state (first 4 commits already mer
 0979969a  docs: handoff update — public landing + push pipeline + status flip
 c3947bbc  docs: handoff update — May 16 evening BLPA pilot batch + §12 pilot-readiness audit
 
-[on main — code:]
+[on origin/main — code (this is what's actually deployed):]
 799343b0  merge: tournament UI punch-list + BLPA pilot batch (scorer lockout, auto-recap, championship bracket gen, format-aware standings, logo upload, status enum fix)
 9c773ff6  fix: layout polish — bottom nav padding + HelpButton overlap
 5c3e42e5  feat: scorer lockout + auto-recap + shootout winner + bracket advancement
@@ -84,10 +90,19 @@ e995f3ef  fix: site-audit pass — 6 Criticals + 10 Highs
 37e50791  Tournament pilot ...
 ```
 
-**Second merge command for the 2 remaining commits** (Pete runs from `~/Downloads/rinkd_live`):
+**Two pending operations (Pete runs from `~/Downloads/rinkd_live`, NOT from a worktree subdir):**
+
+**(1)** Push the 8 local-only docs commits to `origin/main`. Zero risk — docs only, no Vercel deploy:
+```
+git checkout main && git push origin main
+```
+
+**(2)** Merge the 2 feature commits from `claude/elegant-sanderson-80d1d0` into `main` and push (THIS triggers a Vercel deploy — public landing + push pipeline go live in production):
 ```
 rm -f .git/index.lock && git checkout main && git merge claude/elegant-sanderson-80d1d0 --no-ff -m "merge: public tournament landing + push notification pipeline" && git push origin main
 ```
+
+Either order works (the merge in #2 will carry the docs commits with it if #1 hasn't run yet). After #2, public landing + push code is in production — but push still needs VAPID secrets + Edge Function deploy to actually fire (§6 / §12 D).
 
 **Working tree state:** clean. Two pre-existing strays remain uncommitted (`scripts/chiller/data/seed-leagues.json`, `supabase/functions/send-onboarding-emails/index.ts`) — leave them alone unless Pete asks otherwise.
 
