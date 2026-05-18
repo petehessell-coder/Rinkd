@@ -128,7 +128,7 @@ export async function createGameRecapPost({ scorerId, gameId, content, tournamen
   return { data, error };
 }
 
-export async function createPost(authorId, { content, tag, tagColor, mediaUrl, mediaType, livebarnVenueId, teamId }) {
+export async function createPost(authorId, { content, tag, tagColor, mediaUrl, mediaType, livebarnVenueId, teamId, tournamentId }) {
   const { data, error } = await supabase
     .from('posts')
     .insert({
@@ -140,6 +140,7 @@ export async function createPost(authorId, { content, tag, tagColor, mediaUrl, m
       media_type: mediaType || null,
       livebarn_venue_id: livebarnVenueId || null,
       team_id: teamId || null,
+      tournament_id: tournamentId || null,
       likes: 0,
       comment_count: 0,
       repost_count: 0,

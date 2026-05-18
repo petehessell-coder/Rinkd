@@ -6,7 +6,8 @@ import { getLiveBarnUrl } from '../lib/livebarn';
 import { teamInitials } from '../lib/teamInitials';
 import { followTournament, unfollowTournament, isFollowingTournament } from '../lib/tournamentSubscriptions';
 import { subscribeToPush, isPushSubscribed } from '../lib/push';
-import { getTournamentPosts, timeAgo } from '../lib/posts';
+import { getTournamentPosts, createPost, uploadMedia, timeAgo } from '../lib/posts';
+import PostActionMenu from '../components/PostActionMenu';
 
 
 const TABS = ['Standings','Schedule','Bracket','Feed','Info'];
@@ -465,7 +466,14 @@ export default function TournamentPage({ currentUser }) {
         )}
 
         {activeTab === 'Feed' && (
-          <FeedTab posts={feedPosts} loading={feedLoading} navigate={navigate} />
+          <FeedTab
+            posts={feedPosts}
+            setPosts={setFeedPosts}
+            loading={feedLoading}
+            navigate={navigate}
+            currentUser={currentUser}
+            tournamentId={id}
+          />
         )}
 
         {activeTab === 'Info' && <InfoTab tournament={tournament} />}
@@ -475,53 +483,154 @@ export default function TournamentPage({ currentUser }) {
   );
 }
 
-// Tournament-scoped feed. Currently surfaces auto-recap posts created on
-// game finalize (see createGameRecapPost in lib/posts.js). Render is
-// intentionally minimal — extract a shared PostCard later if user-authored
-// posts get added to this surface.
-function FeedTab({ posts, loading, navigate }) {
-  if (loading || posts === null) {
-    return <div style={{textAlign:'center',color:'#7C8B9F',fontSize:13,padding:'24px 16px'}}>Loading…</div>;
-  }
-  if (posts.length === 0) {
-    return (
-      <div style={{textAlign:'center',color:'#7C8B9F',fontSize:13,padding:'40px 16px',lineHeight:1.6}}>
-        <div style={{fontSize:32,marginBottom:8}}>📰</div>
-        No updates yet.<br />
-        Recaps appear here when games finalize.
-      </div>
-    );
-  }
+// Tournament-scoped feed. Surfaces auto-recap posts AND user-authored posts
+// scoped to this tournament. Render is intentionally minimal — extract a
+// shared PostCard later when there's enough reuse to justify the refactor.
+// User posts do NOT trigger pushes (only recaps do) to keep notification
+// volume sane.
+function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId }) {
+  const [draft, setDraft] = useState('');
+  const [mediaFile, setMediaFile] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [composerError, setComposerError] = useState(null);
+
+  const handleSubmit = async () => {
+    if (!currentUser?.id || !tournamentId || submitting) return;
+    const content = draft.trim();
+    if (!content && !mediaFile) return;
+    setSubmitting(true);
+    setComposerError(null);
+    try {
+      let mediaUrl = null;
+      let mediaType = null;
+      if (mediaFile) {
+        const up = await uploadMedia(mediaFile, currentUser.id);
+        if (up.error) { setComposerError('Upload failed'); setSubmitting(false); return; }
+        mediaUrl = up.url;
+        mediaType = up.mediaType;
+      }
+      const { data, error } = await createPost(currentUser.id, { content, mediaUrl, mediaType, tournamentId });
+      if (error) { setComposerError(error.message || 'Post failed'); setSubmitting(false); return; }
+      // Optimistic: prepend the new post to the feed so the author sees it
+      // immediately. The next refetch picks up the same row by id.
+      if (data) {
+        const newPost = { ...data, profiles: currentUser.profile || null };
+        setPosts((prev) => [newPost, ...(prev || [])]);
+      }
+      setDraft('');
+      setMediaFile(null);
+    } catch (e) {
+      setComposerError(e?.message || 'Post failed');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleHidden = (postId) => setPosts((prev) => (prev || []).filter((p) => p.id !== postId));
+  const handleAuthorBlocked = (authorId) => setPosts((prev) => (prev || []).filter((p) => p.author_id !== authorId));
+
   return (
-    <div style={{display:'flex',flexDirection:'column',gap:8,padding:'0 12px'}}>
-      {posts.map((p) => {
-        const lines = String(p.content || '').split('\n').filter(Boolean);
-        const headline = lines[0] || 'Update';
-        const body = lines.slice(1).join(' · ');
-        const author = p.profiles?.name || p.profiles?.handle || '';
-        return (
-          <div key={p.id} style={{background:'#11253E',borderRadius:10,padding:'12px 14px',color:'#F4F7FA',fontFamily:'Barlow,sans-serif'}}>
-            {p.tag && (
-              <div style={{display:'inline-block',background:(p.tag_color||'#2E5B8C')+'40',color:p.tag_color||'#9BB5D6',fontSize:10,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',padding:'2px 8px',borderRadius:4,marginBottom:6}}>
-                {p.tag}
-              </div>
-            )}
-            <div style={{fontWeight:700,fontSize:15,lineHeight:1.3,marginBottom:body?4:0}}>{headline}</div>
-            {body && <div style={{fontSize:13,color:'#C5D2E1',lineHeight:1.4,marginBottom:8}}>{body}</div>}
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:11,color:'#7C8B9F',marginTop:6}}>
-              <span>{author ? `${author} · ` : ''}{timeAgo(p.created_at)} ago</span>
-              {p.recap_for_game_id && (
-                <button
-                  onClick={() => navigate(`/game/${p.recap_for_game_id}`)}
-                  style={{background:'transparent',border:'none',color:'#5B9FE2',fontSize:12,fontWeight:600,cursor:'pointer',padding:0}}
-                >
-                  View game →
-                </button>
-              )}
+    <div style={{display:'flex',flexDirection:'column',gap:12,padding:'0 12px'}}>
+      {currentUser && (
+        <div style={{background:'#11253E',borderRadius:10,padding:'10px 12px'}}>
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value.slice(0, 500))}
+            placeholder="Post to the tournament feed…"
+            rows={2}
+            style={{width:'100%',background:'#07111F',color:'#F4F7FA',border:'1px solid #1F3553',borderRadius:6,padding:'8px 10px',fontFamily:'Barlow,sans-serif',fontSize:13,resize:'vertical',outline:'none'}}
+          />
+          {mediaFile && (
+            <div style={{display:'flex',alignItems:'center',gap:8,fontSize:11,color:'#9BB5D6',marginTop:6}}>
+              <span>📎 {mediaFile.name}</span>
+              <button onClick={() => setMediaFile(null)} style={{background:'transparent',border:'none',color:'#E26B6B',fontSize:11,cursor:'pointer'}}>Remove</button>
             </div>
+          )}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:8}}>
+            <label style={{cursor:'pointer',fontSize:12,color:'#9BB5D6'}}>
+              📷 Photo
+              <input
+                type="file"
+                accept="image/*,video/*"
+                style={{display:'none'}}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) setMediaFile(f); }}
+              />
+            </label>
+            <button
+              onClick={handleSubmit}
+              disabled={submitting || (!draft.trim() && !mediaFile)}
+              style={{background:submitting||(!draft.trim()&&!mediaFile)?'#1F3553':'#5B9FE2',color:'#F4F7FA',border:'none',borderRadius:6,padding:'6px 14px',fontFamily:'Barlow,sans-serif',fontSize:12,fontWeight:700,cursor:submitting?'wait':'pointer'}}
+            >
+              {submitting ? 'Posting…' : 'Post'}
+            </button>
           </div>
-        );
-      })}
+          {composerError && <div style={{color:'#E26B6B',fontSize:11,marginTop:6}}>{composerError}</div>}
+          <div style={{fontSize:10,color:'#7C8B9F',marginTop:4,textAlign:'right'}}>{draft.length}/500</div>
+        </div>
+      )}
+
+      {loading || posts === null ? (
+        <div style={{textAlign:'center',color:'#7C8B9F',fontSize:13,padding:'24px 16px'}}>Loading…</div>
+      ) : posts.length === 0 ? (
+        <div style={{textAlign:'center',color:'#7C8B9F',fontSize:13,padding:'40px 16px',lineHeight:1.6}}>
+          <div style={{fontSize:32,marginBottom:8}}>📰</div>
+          No updates yet.<br />
+          Recaps appear here when games finalize. You can post too.
+        </div>
+      ) : (
+        posts.map((p) => {
+          const lines = String(p.content || '').split('\n').filter(Boolean);
+          const headline = lines[0] || 'Update';
+          const body = lines.slice(1).join(' · ');
+          const author = p.profiles?.name || p.profiles?.handle || '';
+          return (
+            <div key={p.id} style={{background:'#11253E',borderRadius:10,padding:'12px 14px',color:'#F4F7FA',fontFamily:'Barlow,sans-serif'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
+                <div style={{flex:1,minWidth:0}}>
+                  {p.tag && (
+                    <div style={{display:'inline-block',background:(p.tag_color||'#2E5B8C')+'40',color:p.tag_color||'#9BB5D6',fontSize:10,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',padding:'2px 8px',borderRadius:4,marginBottom:6}}>
+                      {p.tag}
+                    </div>
+                  )}
+                  <div style={{fontWeight:p.recap_for_game_id?700:500,fontSize:p.recap_for_game_id?15:13,lineHeight:1.3,marginBottom:body?4:0}}>{headline}</div>
+                  {body && <div style={{fontSize:13,color:'#C5D2E1',lineHeight:1.4,marginBottom:8}}>{body}</div>}
+                </div>
+                {currentUser && p.author_id !== currentUser.id && (
+                  <PostActionMenu
+                    kind="post"
+                    targetId={p.id}
+                    authorId={p.author_id}
+                    authorHandle={p.profiles?.handle}
+                    currentUserId={currentUser.id}
+                    onReported={() => handleHidden(p.id)}
+                    onBlocked={() => handleAuthorBlocked(p.author_id)}
+                  />
+                )}
+              </div>
+              {p.media_url && (
+                <div style={{marginTop:6,marginBottom:6,borderRadius:6,overflow:'hidden'}}>
+                  {p.media_type === 'video' ? (
+                    <video src={p.media_url} controls style={{width:'100%',display:'block'}} />
+                  ) : (
+                    <img src={p.media_url} alt="" style={{width:'100%',display:'block'}} />
+                  )}
+                </div>
+              )}
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:11,color:'#7C8B9F',marginTop:6}}>
+                <span>{author ? `${author} · ` : ''}{timeAgo(p.created_at)} ago</span>
+                {p.recap_for_game_id && (
+                  <button
+                    onClick={() => navigate(`/game/${p.recap_for_game_id}`)}
+                    style={{background:'transparent',border:'none',color:'#5B9FE2',fontSize:12,fontWeight:600,cursor:'pointer',padding:0}}
+                  >
+                    View game →
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })
+      )}
     </div>
   );
 }
