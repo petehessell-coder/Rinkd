@@ -7,6 +7,7 @@ import { teamInitials } from '../lib/teamInitials';
 import { followTournament, unfollowTournament, isFollowingTournament } from '../lib/tournamentSubscriptions';
 import { subscribeToPush, isPushSubscribed } from '../lib/push';
 import { getTournamentPosts, createPost, uploadMedia, timeAgo } from '../lib/posts';
+import { isExtraDirector as isDirectorRole } from '../lib/tournamentDirectors';
 import PostActionMenu from '../components/PostActionMenu';
 
 
@@ -85,6 +86,10 @@ export default function TournamentPage({ currentUser }) {
   // Function targeting). Loaded once on mount.
   const [isFollowing, setIsFollowing] = useState(false);
   const [followBusy, setFollowBusy] = useState(false);
+  // Additional directors granted via tournament_roles — Tournament.js needs
+  // this to gate the Manage button, canScore, and Follow-button-hiding the
+  // same way the original tournaments.director_id does.
+  const [isExtraDirector, setIsExtraDirector] = useState(false);
   // Tournament-scoped Feed tab — auto-recaps land here when a game finalizes
   // (see createGameRecapPost). Lazy-loaded the first time the Feed tab opens
   // so the standings/schedule landing stays fast.
@@ -189,6 +194,14 @@ export default function TournamentPage({ currentUser }) {
     let cancelled = false;
     if (!id || !currentUser?.id) { setIsFollowing(false); return; }
     isFollowingTournament(currentUser.id, id).then((v) => { if (!cancelled) setIsFollowing(v); });
+    return () => { cancelled = true; };
+  }, [id, currentUser?.id]);
+
+  // And for the additional-director check.
+  useEffect(() => {
+    let cancelled = false;
+    if (!id || !currentUser?.id) { setIsExtraDirector(false); return; }
+    isDirectorRole(currentUser.id, id).then((v) => { if (!cancelled) setIsExtraDirector(v); });
     return () => { cancelled = true; };
   }, [id, currentUser?.id]);
 
@@ -312,9 +325,12 @@ export default function TournamentPage({ currentUser }) {
   // Directors AND assigned scorers see the in-card "Open Scorer View"
   // shortcut. ScorerView itself enforces the actual access check, so this is
   // purely about which users see the button — spectators don't.
-  const canScore = !!(currentUser && tournament && (
-    tournament.director_id === currentUser.id || isAssignedScorer
+  // True for the founding director, any added director (tournament_roles
+  // role='director'), or any assigned scorer.
+  const isDirector = !!(currentUser && tournament && (
+    tournament.director_id === currentUser.id || isExtraDirector
   ));
+  const canScore = !!(currentUser && tournament && (isDirector || isAssignedScorer));
 
   return (
     <div style={{background:'#07111F',minHeight:'100vh',fontFamily:'Barlow,sans-serif',color:'#F4F7FA'}}>
@@ -330,7 +346,7 @@ export default function TournamentPage({ currentUser }) {
                 inside handleFollowToggle). Director gets the Manage button
                 instead since they're already getting events from their own
                 writes. */}
-            {tournament && currentUser && tournament.director_id !== currentUser.id && (
+            {tournament && currentUser && !isDirector && (
               <button onClick={handleFollowToggle} disabled={followBusy}
                 style={{
                   background: isFollowing ? 'rgba(46,91,140,0.25)' : accent,
@@ -345,7 +361,7 @@ export default function TournamentPage({ currentUser }) {
                 {followBusy ? '...' : isFollowing ? '🔕 Following' : '🔔 Follow'}
               </button>
             )}
-            {tournament && currentUser && tournament.director_id === currentUser.id && (
+            {tournament && currentUser && isDirector && (
               <button onClick={() => navigate(`/tournament/${id}/manage`)}
                 style={{background:accent,color:'#fff',border:'none',borderRadius:999,padding:'5px 12px',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',letterSpacing:'0.05em',textTransform:'uppercase'}}>
                 ⚙ Manage

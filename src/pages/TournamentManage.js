@@ -13,6 +13,7 @@ import {
 } from '../lib/tournamentManage';
 import { listRinks } from '../lib/rinks';
 import { listScorers, addScorerByInput, removeScorer } from '../lib/tournamentScorers';
+import { listDirectors, addDirectorByInput, removeDirector, isExtraDirector as isDirectorRole } from '../lib/tournamentDirectors';
 import { teamInitials } from '../lib/teamInitials';
 import { uploadMedia } from '../lib/posts';
 import { classifyImage } from '../lib/imageModeration';
@@ -74,7 +75,28 @@ export default function TournamentManagePage({ currentUser, profile }) {
     return () => clearTimeout(t);
   }, [flash]);
 
-  const isDirector = tournament && currentUser && tournament.director_id === currentUser.id;
+  // Additional directors granted via tournament_roles. Loaded async; the
+  // original director (tournaments.director_id) gates synchronously below.
+  // We track a "checked" flag so we don't flash the "🔒 access denied" screen
+  // to extra directors during the brief window between page load and the
+  // role check resolving.
+  const [isExtraDirector, setIsExtraDirector] = useState(false);
+  const [extraDirectorChecked, setExtraDirectorChecked] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    if (!id || !currentUser?.id) { setIsExtraDirector(false); setExtraDirectorChecked(true); return; }
+    setExtraDirectorChecked(false);
+    isDirectorRole(currentUser.id, id).then((v) => {
+      if (cancelled) return;
+      setIsExtraDirector(v);
+      setExtraDirectorChecked(true);
+    });
+    return () => { cancelled = true; };
+  }, [id, currentUser?.id]);
+
+  const isDirector = tournament && currentUser && (
+    tournament.director_id === currentUser.id || isExtraDirector
+  );
 
   const load = useCallback(async () => {
     try {
@@ -112,6 +134,16 @@ export default function TournamentManagePage({ currentUser, profile }) {
       <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.ice, gap: 12 }}>
         <div>{error || 'Tournament not found'}</div>
         <button onClick={() => navigate('/tournaments')} style={btnPrimary}>Back</button>
+      </div>
+    </Layout>
+  );
+  // Wait for the extra-director async check before deciding to lock out.
+  // Without this gate, a freshly-added director navigating to /manage sees
+  // the lock screen for a beat while tournament_roles is being queried.
+  if (!extraDirectorChecked) return (
+    <Layout profile={profile}>
+      <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice }}>
+        Loading…
       </div>
     </Layout>
   );
@@ -172,7 +204,7 @@ export default function TournamentManagePage({ currentUser, profile }) {
           {tab === 'Teams' && <TeamsTab tournamentId={id} teams={teams} standingsByTeam={standingsByTeam} reload={load} flash={showFlash} />}
           {tab === 'Schedule' && <ScheduleTab tournamentId={id} tournament={tournament} teams={teams} games={games} rinks={rinks} reload={load} flash={showFlash} />}
           {tab === 'Bracket' && <BracketTab tournamentId={id} tournament={tournament} teams={teams} games={games} rinks={rinks} reload={load} flash={showFlash} />}
-          {tab === 'Scorers' && <ScorersTab tournamentId={id} tournamentName={tournament.name} profile={profile} flash={showFlash} />}
+          {tab === 'Scorers' && <ScorersTab tournamentId={id} tournamentName={tournament.name} originalDirectorId={tournament.director_id} profile={profile} flash={showFlash} />}
           {tab === 'Settings' && <SettingsTab tournament={tournament} currentUser={currentUser} reload={load} flash={showFlash} />}
         </div>
       </div>
@@ -1061,7 +1093,7 @@ function SettingsTab({ tournament, currentUser, reload, flash }) {
 }
 
 // ====================== SCORERS TAB ======================
-function ScorersTab({ tournamentId, tournamentName, profile, flash }) {
+function ScorersTab({ tournamentId, tournamentName, originalDirectorId, profile, flash }) {
   const [scorers, setScorers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [input, setInput] = useState('');
@@ -1122,6 +1154,11 @@ function ScorersTab({ tournamentId, tournamentName, profile, flash }) {
 
   return (
     <div>
+      <DirectorsSection tournamentId={tournamentId} originalDirectorId={originalDirectorId} flash={flash} />
+
+      <div style={{ fontSize: 13, color: C.steel, marginTop: 24, marginBottom: 4, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+        Scorers
+      </div>
       <div style={{ fontSize: 13, color: C.steel, marginBottom: 14, lineHeight: 1.5 }}>
         Scorers can run the live scoreboard for this tournament. Add them by Rinkd handle or email —
         anyone without an account yet gets a sign-up invite, and you add them here once they've joined.
@@ -1195,6 +1232,122 @@ function ScorersTab({ tournamentId, tournamentName, profile, flash }) {
                   {p.handle && <div style={{ fontSize: 12, color: C.steel }}>@{p.handle}</div>}
                 </div>
                 <button onClick={() => remove(s.id, name)} style={{ ...btnGhost, color: C.red, borderColor: C.red }}>Remove</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Directors sub-section rendered above ScorersTab's scorer list. Lets the
+// current director add additional directors (who'll have full management
+// access — schedule, scorers, teams, settings). Directors must have an
+// existing Rinkd account; we don't email-invite directors (too privileged).
+// The original director (matching tournaments.director_id) is shown with a
+// "founder" badge and cannot be removed — RLS enforces this server-side.
+function DirectorsSection({ tournamentId, originalDirectorId, flash }) {
+  const [directors, setDirectors] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [input, setInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const load = async () => {
+    setLoading(true);
+    const { data } = await listDirectors(tournamentId);
+    setDirectors(data);
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, [tournamentId]);
+
+  const add = async () => {
+    if (!input.trim() || busy) return;
+    setBusy(true); setMsg(null);
+    const res = await addDirectorByInput({ tournamentId, input });
+    setBusy(false);
+    if (res.status === 'added') {
+      setMsg({ ok: true, text: `Added ${res.profile.name || '@' + res.profile.handle} as a director.` });
+      setInput(''); load();
+    } else if (res.status === 'already') {
+      setMsg({ ok: true, text: `${res.profile.name || '@' + res.profile.handle} already has a ${res.role} role here.` });
+      setInput('');
+    } else if (res.status === 'no_account') {
+      setMsg({ ok: false, text: `No Rinkd account for "${res.input}". Directors must sign up first — share the link and add them once they've joined.` });
+    } else {
+      setMsg({ ok: false, text: res.message || 'Could not add director.' });
+    }
+  };
+
+  const remove = async (roleId, name) => {
+    if (!window.confirm(`Remove ${name} as a director? They'll lose full management access.`)) return;
+    const { error } = await removeDirector(roleId);
+    if (error) { flash?.('error', `Remove failed: ${error.message}`); return; }
+    flash?.('success', `${name} removed as a director.`);
+    load();
+  };
+
+  return (
+    <div>
+      <div style={{ fontSize: 13, color: C.steel, marginBottom: 4, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+        Directors
+      </div>
+      <div style={{ fontSize: 13, color: C.steel, marginBottom: 14, lineHeight: 1.5 }}>
+        Directors have full management access — schedule, teams, bracket, settings, scorer assignments.
+        Add by handle or email. They must already have a Rinkd account.
+      </div>
+
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+        <label style={labelStyle}>Add a director</label>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && add()}
+            placeholder="@handle or email"
+            style={{ ...inputStyle, flex: 1 }}
+          />
+          <button onClick={add} disabled={busy} style={btnPrimary}>{busy ? 'Adding…' : '+ Add'}</button>
+        </div>
+        {msg && (
+          <div style={{ marginTop: 10, fontSize: 12, color: msg.ok ? C.green : C.red, lineHeight: 1.5 }}>{msg.text}</div>
+        )}
+      </div>
+
+      {loading ? (
+        <div style={{ color: C.steel, fontSize: 13, padding: '20px 0', textAlign: 'center' }}>Loading directors…</div>
+      ) : directors.length === 0 ? (
+        <div style={{ textAlign: 'center', color: C.steel, padding: '24px 0', fontSize: 13 }}>
+          No directors yet. (The original director isn't tracked here separately — they're set on the tournament itself.)
+        </div>
+      ) : (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+          {directors.map((d, i) => {
+            const p = d.profile || {};
+            const name = p.name || (p.handle ? '@' + p.handle : 'Unknown');
+            const isFounder = d.user_id === originalDirectorId;
+            return (
+              <div key={d.id} style={{ display: 'flex', alignItems: 'center', padding: 12, borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none', gap: 12 }}>
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: p.avatar_color || C.navy, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 13, color: '#fff' }}>
+                  {p.avatar_initials || (name[0] || '?').toUpperCase()}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>
+                    {name}
+                    {isFounder && (
+                      <span style={{ marginLeft: 8, fontSize: 10, padding: '2px 6px', background: C.amber + '30', color: C.amber, borderRadius: 4, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                        Founder
+                      </span>
+                    )}
+                  </div>
+                  {p.handle && <div style={{ fontSize: 12, color: C.steel }}>@{p.handle}</div>}
+                </div>
+                {isFounder ? (
+                  <div style={{ fontSize: 11, color: C.steel }}>Can't remove</div>
+                ) : (
+                  <button onClick={() => remove(d.id, name)} style={{ ...btnGhost, color: C.red, borderColor: C.red }}>Remove</button>
+                )}
               </div>
             );
           })}

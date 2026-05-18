@@ -177,10 +177,15 @@ export default function ScorerView() {
       } else {
         director = user.id === g.tournament?.director_id;
         ok = director || user.id === g.scorekeeper_id;
-        if (!ok && g.tournament_id) {
+        if (g.tournament_id) {
+          // Also check tournament_roles — added directors get full director
+          // powers (Reopen, OT toggle, etc.) and scorers get scorekeeper access.
           const { data: roleRows } = await supabase.from('tournament_roles')
             .select('role').eq('tournament_id', g.tournament_id).eq('user_id', user.id).limit(1);
-          ok = !!(roleRows && roleRows.length);
+          if (roleRows && roleRows.length) {
+            ok = true;
+            if (roleRows[0].role === 'director') director = true;
+          }
         }
       }
     }

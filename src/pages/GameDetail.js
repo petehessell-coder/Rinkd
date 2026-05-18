@@ -83,8 +83,21 @@ export default function GameDetail({ profile }) {
         } else if (isTeamGame) {
           setIsOrganizer(g.team?.manager_id === user.id);
         } else {
+          // Tournament games: organizer = original director OR any user with
+          // role='director' in tournament_roles for this tournament.
           const { data: tourn } = await supabase.from('tournaments').select('director_id').eq('id', g.tournament_id).maybeSingle();
-          setIsOrganizer(tourn?.director_id === user.id);
+          if (tourn?.director_id === user.id) {
+            setIsOrganizer(true);
+          } else {
+            const { data: extra } = await supabase
+              .from('tournament_roles')
+              .select('id')
+              .eq('tournament_id', g.tournament_id)
+              .eq('user_id', user.id)
+              .eq('role', 'director')
+              .limit(1);
+            setIsOrganizer(!!(extra && extra.length));
+          }
         }
       }
 
