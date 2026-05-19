@@ -67,9 +67,9 @@ export default function Teams({ profile }) {
             style={{ background: '#0f2847', border: `0.5px solid ${C.border}`, borderRadius: 12, padding: '14px 16px', marginBottom: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14, transition: 'border 0.15s' }}
             onMouseEnter={e => e.currentTarget.style.border = '0.5px solid rgba(46,91,140,0.8)'}
             onMouseLeave={e => e.currentTarget.style.border = `0.5px solid ${C.border}`}>
-            {/* Team logo */}
-            <div style={{ width: 48, height: 48, borderRadius: 10, background: team.logo_color || C.red, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, color: '#fff', flexShrink: 0 }}>
-              {team.logo_initials || team.name.slice(0, 2).toUpperCase()}
+            {/* Team logo — uploaded image takes precedence over colored initials */}
+            <div style={{ width: 48, height: 48, borderRadius: 10, background: team.logo_url ? `url(${team.logo_url}) center/cover, ${team.logo_color || C.red}` : (team.logo_color || C.red), display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, color: '#fff', flexShrink: 0 }}>
+              {!team.logo_url && (team.logo_initials || team.name.slice(0, 2).toUpperCase())}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 17, color: C.ice, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{team.name.toUpperCase()}</div>

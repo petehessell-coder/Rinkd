@@ -5,6 +5,8 @@ import DateTimePicker from '../components/DateTimePicker';
 import { getTeam, getTeamMembers, getTeamGames, getJoinRequests, createTeam, updateTeam, addTeamMember, removeTeamMember, updateTeamMember, addTeamGame, approveJoinRequest, denyJoinRequest } from '../lib/teams';
 import { supabase } from '../lib/supabase';
 import RosterUpload from '../components/RosterUpload';
+import { uploadMedia } from '../lib/posts';
+import { classifyImage } from '../lib/imageModeration';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 const inputStyle = { width:'100%', background:'#07111F', border:`0.5px solid ${C.border}`, borderRadius:8, padding:'10px 12px', color:C.ice, fontFamily:'Barlow, sans-serif', fontSize:14, outline:'none' };
@@ -49,9 +51,10 @@ function ActionBtn({ onClick, children, variant = 'primary', small = false }) {
 
 // ── CREATE FLOW ───────────────────────────────────────────────
 function CreateTeam({ profile, navigate }) {
-  const [form, setForm] = useState({ name: '', division: '', level: '', location: '', home_rink: '', logo_color: '#D72638', logo_initials: '' });
+  const [form, setForm] = useState({ name: '', division: '', level: '', location: '', home_rink: '', logo_color: '#D72638', logo_initials: '', logo_url: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   const handleCreate = async () => {
@@ -61,6 +64,32 @@ function CreateTeam({ profile, navigate }) {
       const team = await createTeam(form);
       navigate('/team/' + team.id + '/manage');
     } catch(e) { setError(e.message); setSaving(false); }
+  };
+
+  // Same upload pattern as profile avatars: 5MB cap, NSFW pre-check via
+  // classifyImage, then uploadMedia → public URL into form state. The team
+  // hasn't been saved yet here, so the URL is pinned by setForm and persists
+  // when Create is clicked.
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert(`Logo is ${(file.size / 1024 / 1024).toFixed(1)}MB — max 5MB.`);
+      e.target.value = '';
+      return;
+    }
+    const verdict = await classifyImage(file);
+    if (!verdict.ok) {
+      alert("Looks like this image may violate Rinkd's community guidelines. Try a different one.");
+      e.target.value = '';
+      return;
+    }
+    setUploadingLogo(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    const { url, error: upErr } = await uploadMedia(file, user.id);
+    setUploadingLogo(false);
+    if (upErr || !url) { alert('Upload failed. Try again.'); return; }
+    set('logo_url', url);
   };
 
   const initials = form.logo_initials || form.name.split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase();
@@ -75,11 +104,21 @@ function CreateTeam({ profile, navigate }) {
 
       {/* Logo preview */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
-        <div style={{ width: 64, height: 64, borderRadius: 12, background: form.logo_color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 26, color: '#fff' }}>
-          {initials || '?'}
+        <div style={{ width: 64, height: 64, borderRadius: 12, background: form.logo_url ? `url(${form.logo_url}) center/cover, ${form.logo_color}` : form.logo_color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 26, color: '#fff' }}>
+          {!form.logo_url && (initials || '?')}
         </div>
         <div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(244,247,250,0.4)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Logo Color</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(244,247,250,0.4)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Logo</div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label style={{ cursor: 'pointer', fontSize: 11, color: '#9BB5D6', padding: '4px 10px', borderRadius: 999, background: 'rgba(46,91,140,0.25)', border: '0.5px solid rgba(46,91,140,0.5)' }}>
+              {uploadingLogo ? 'Uploading…' : form.logo_url ? '📷 Replace' : '📷 Upload'}
+              <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} disabled={uploadingLogo} />
+            </label>
+            {form.logo_url && (
+              <button type="button" onClick={() => set('logo_url', '')} style={{ background: 'transparent', border: 'none', color: '#E26B6B', fontSize: 11, cursor: 'pointer', padding: 0 }}>Remove</button>
+            )}
+          </div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(244,247,250,0.4)', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 12, marginBottom: 6 }}>{form.logo_url ? 'Fallback Color' : 'Logo Color'}</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {LOGO_COLORS.map(col => (
               <div key={col} onClick={() => set('logo_color', col)}
@@ -390,8 +429,9 @@ function ManageTeam({ id, profile, navigate }) {
 }
 
 function TeamSettings({ team, onSave }) {
-  const [form, setForm] = useState({ name: team.name, division: team.division || '', level: team.level || '', location: team.location || '', home_rink: team.home_rink || '', logo_color: team.logo_color || C.red, logo_initials: team.logo_initials || '' });
+  const [form, setForm] = useState({ name: team.name, division: team.division || '', level: team.level || '', location: team.location || '', home_rink: team.home_rink || '', logo_color: team.logo_color || C.red, logo_initials: team.logo_initials || '', logo_url: team.logo_url || '' });
   const [saving, setSaving] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   const handleSave = async () => {
@@ -400,19 +440,54 @@ function TeamSettings({ team, onSave }) {
     setSaving(false);
   };
 
+  // Mirrors the Create flow's uploader. The team is already saved here, so
+  // the URL goes into local form state and ships with the next Save Changes.
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert(`Logo is ${(file.size / 1024 / 1024).toFixed(1)}MB — max 5MB.`);
+      e.target.value = '';
+      return;
+    }
+    const verdict = await classifyImage(file);
+    if (!verdict.ok) {
+      alert("Looks like this image may violate Rinkd's community guidelines. Try a different one.");
+      e.target.value = '';
+      return;
+    }
+    setUploadingLogo(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    const { url, error: upErr } = await uploadMedia(file, user.id);
+    setUploadingLogo(false);
+    if (upErr || !url) { alert('Upload failed. Try again.'); return; }
+    set('logo_url', url);
+  };
+
   return (
     <>
       <SectionLabel>Team Settings</SectionLabel>
       <Card>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
-          <div style={{ width: 56, height: 56, borderRadius: 10, background: form.logo_color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 22, color: '#fff' }}>
-            {form.logo_initials || form.name.split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase()}
+          <div style={{ width: 56, height: 56, borderRadius: 10, background: form.logo_url ? `url(${form.logo_url}) center/cover, ${form.logo_color}` : form.logo_color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 22, color: '#fff' }}>
+            {!form.logo_url && (form.logo_initials || form.name.split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase())}
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {LOGO_COLORS.map(col => (
-              <div key={col} onClick={() => set('logo_color', col)}
-                style={{ width: 22, height: 22, borderRadius: '50%', background: col, cursor: 'pointer', border: form.logo_color === col ? '2px solid #fff' : '2px solid transparent' }} />
-            ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <label style={{ cursor: 'pointer', fontSize: 11, color: '#9BB5D6', padding: '4px 10px', borderRadius: 999, background: 'rgba(46,91,140,0.25)', border: '0.5px solid rgba(46,91,140,0.5)' }}>
+                {uploadingLogo ? 'Uploading…' : form.logo_url ? '📷 Replace logo' : '📷 Upload logo'}
+                <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} disabled={uploadingLogo} />
+              </label>
+              {form.logo_url && (
+                <button type="button" onClick={() => set('logo_url', '')} style={{ background: 'transparent', border: 'none', color: '#E26B6B', fontSize: 11, cursor: 'pointer', padding: 0 }}>Remove</button>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {LOGO_COLORS.map(col => (
+                <div key={col} onClick={() => set('logo_color', col)}
+                  style={{ width: 22, height: 22, borderRadius: '50%', background: col, cursor: 'pointer', border: form.logo_color === col ? '2px solid #fff' : '2px solid transparent' }} />
+              ))}
+            </div>
           </div>
         </div>
         <Field label="Team Name"><input style={inputStyle} value={form.name} onChange={e => set('name', e.target.value)} /></Field>

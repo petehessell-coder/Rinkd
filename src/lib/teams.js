@@ -25,10 +25,10 @@ export async function listTeams({ search = '' } = {}) {
   return data || [];
 }
 
-export async function createTeam({ name, division, level, location, home_rink, logo_color, logo_initials }) {
+export async function createTeam({ name, division, level, location, home_rink, logo_color, logo_initials, logo_url }) {
   const { data: { user } } = await supabase.auth.getUser();
   const { data, error } = await supabase.from('teams')
-    .insert({ name, division, level, location, home_rink, logo_color, logo_initials, manager_id: user.id })
+    .insert({ name, division, level, location, home_rink, logo_color, logo_initials, logo_url: logo_url || null, manager_id: user.id })
     .select().single();
   if (error) throw error;
   // Auto-add manager as member

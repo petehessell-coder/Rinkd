@@ -237,8 +237,8 @@ export default function TeamPage({ currentUser, profile }) {
 
         {/* TEAM BANNER */}
         <div style={{ background: 'linear-gradient(135deg,#0B1F3A 0%,#1a3a5c 100%)', padding: '20px 16px 16px', display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ width: 64, height: 64, borderRadius: 12, background: team.logo_color || C.red, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 26, color: '#fff', flexShrink: 0, border: `2px solid ${team.logo_color || C.red}88` }}>
-            {team.logo_initials || team.name.slice(0, 2).toUpperCase()}
+          <div style={{ width: 64, height: 64, borderRadius: 12, background: team.logo_url ? `url(${team.logo_url}) center/cover, ${team.logo_color || C.red}` : (team.logo_color || C.red), display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 26, color: '#fff', flexShrink: 0, border: `2px solid ${team.logo_color || C.red}88` }}>
+            {!team.logo_url && (team.logo_initials || team.name.slice(0, 2).toUpperCase())}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 22, color: C.ice, lineHeight: 1.1 }}>{team.name}</div>
