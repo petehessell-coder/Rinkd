@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase';
 import RosterUpload from '../components/RosterUpload';
 import { uploadMedia } from '../lib/posts';
 import { classifyImage } from '../lib/imageModeration';
+import { listTeamManagers, addTeamManagerByInput, removeTeamManager, demoteTeamManager } from '../lib/teamManagers';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 const inputStyle = { width:'100%', background:'#07111F', border:`0.5px solid ${C.border}`, borderRadius:8, padding:'10px 12px', color:C.ice, fontFamily:'Barlow, sans-serif', fontSize:14, outline:'none' };
@@ -272,6 +273,8 @@ function ManageTeam({ id, profile, navigate }) {
         {/* ROSTER */}
         {activeTab === 'Roster' && (
           <>
+            <ManagersSection teamId={id} foundingManagerId={team?.manager_id} />
+
             <SectionLabel>Bulk Roster Upload</SectionLabel>
             <Card>
               <div style={{ fontSize: 13, color: C.steel, lineHeight: 1.6, marginBottom: 12 }}>
@@ -507,6 +510,140 @@ function TeamSettings({ team, onSave }) {
         onMouseLeave={e => { e.currentTarget.style.background = C.red; e.currentTarget.style.color = '#fff'; }}>
         {saving ? 'Saving...' : 'Save Changes'}
       </button>
+    </>
+  );
+}
+
+// ── MANAGERS SECTION (multi-manager support) ──────────────────
+// Lives at the top of the Roster tab. Mirrors the Directors section
+// on TournamentManage's Scorers tab. The founding manager
+// (teams.manager_id) gets a "Founder" badge and cannot be removed —
+// RLS enforces this server-side too.
+function ManagersSection({ teamId, foundingManagerId }) {
+  const [managers, setManagers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [input, setInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data } = await listTeamManagers(teamId);
+    setManagers(data);
+    setLoading(false);
+  }, [teamId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleAdd = async () => {
+    if (!input.trim() || busy) return;
+    setBusy(true); setMsg(null);
+    const res = await addTeamManagerByInput({ teamId, input });
+    setBusy(false);
+    if (res.status === 'added') {
+      setMsg({ ok: true, text: `Added ${res.profile.name || '@' + res.profile.handle} as a manager.` });
+      setInput(''); load();
+    } else if (res.status === 'promoted') {
+      if (res.previousRole === 'manager') {
+        setMsg({ ok: true, text: `${res.profile.name || '@' + res.profile.handle} is already a manager.` });
+      } else {
+        setMsg({ ok: true, text: `Promoted ${res.profile.name || '@' + res.profile.handle} from ${res.previousRole} to manager.` });
+      }
+      setInput(''); load();
+    } else if (res.status === 'no_account') {
+      setMsg({ ok: false, text: `No Rinkd account for "${res.input}". Managers must sign up first — share the link and add them once they've joined.` });
+    } else {
+      setMsg({ ok: false, text: res.message || 'Could not add manager.' });
+    }
+  };
+
+  const handleRemove = async (memberId, name) => {
+    if (!window.confirm(`Remove ${name} as a manager? They'll lose management access. (To keep them on the roster as a player, use Demote instead.)`)) return;
+    const { error } = await removeTeamManager(memberId);
+    if (error) { alert(`Remove failed: ${error.message}`); return; }
+    load();
+  };
+
+  const handleDemote = async (memberId, name) => {
+    if (!window.confirm(`Demote ${name} to player? They'll stay on the roster but lose management access.`)) return;
+    const { error } = await demoteTeamManager(memberId);
+    if (error) { alert(`Demote failed: ${error.message}`); return; }
+    load();
+  };
+
+  return (
+    <>
+      <SectionLabel>Managers</SectionLabel>
+      <div style={{ fontSize: 13, color: C.steel, marginBottom: 10, lineHeight: 1.5 }}>
+        Managers have full management access — edit settings, roster, schedule, volunteer slots, and add or remove other managers. Add by Rinkd handle or email.
+      </div>
+
+      <Card>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+            placeholder="@handle or email"
+            style={{ ...inputStyle, flex: 1 }}
+          />
+          <button onClick={handleAdd} disabled={busy}
+            style={{ background: C.red, color: '#fff', border: 'none', borderRadius: 999, padding: '0 18px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+            {busy ? 'Adding…' : '+ Add'}
+          </button>
+        </div>
+        {msg && (
+          <div style={{ marginTop: 10, fontSize: 12, color: msg.ok ? '#22C55E' : C.red, lineHeight: 1.5 }}>{msg.text}</div>
+        )}
+      </Card>
+
+      {loading ? (
+        <div style={{ color: C.steel, fontSize: 13, padding: '16px 0', textAlign: 'center' }}>Loading managers…</div>
+      ) : managers.length === 0 ? (
+        <div style={{ textAlign: 'center', color: C.steel, padding: '20px 0', fontSize: 13 }}>
+          No managers yet (the founder isn't tracked here separately — they're set on the team itself).
+        </div>
+      ) : (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 24 }}>
+          {managers.map((m, i) => {
+            const p = m.profile || {};
+            const name = p.name || (p.handle ? '@' + p.handle : m.invite_name || 'Unknown');
+            const isFounder = m.user_id === foundingManagerId;
+            return (
+              <div key={m.id} style={{ display: 'flex', alignItems: 'center', padding: 12, borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none', gap: 12 }}>
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: p.avatar_color || C.navy, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 13, color: '#fff' }}>
+                  {p.avatar_initials || (name[0] || '?').toUpperCase()}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>
+                    {name}
+                    {isFounder && (
+                      <span style={{ marginLeft: 8, fontSize: 10, padding: '2px 6px', background: 'rgba(245,158,11,0.18)', color: '#F59E0B', borderRadius: 4, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                        Founder
+                      </span>
+                    )}
+                  </div>
+                  {p.handle && <div style={{ fontSize: 12, color: C.steel }}>@{p.handle}</div>}
+                </div>
+                {isFounder ? (
+                  <div style={{ fontSize: 11, color: C.steel }}>Can't remove</div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={() => handleDemote(m.id, name)}
+                      style={{ background: 'transparent', border: `0.5px solid ${C.border}`, borderRadius: 999, color: C.steel, fontSize: 11, padding: '5px 10px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                      Demote
+                    </button>
+                    <button onClick={() => handleRemove(m.id, name)}
+                      style={{ background: 'transparent', border: `0.5px solid ${C.red}40`, borderRadius: 999, color: C.red, fontSize: 11, padding: '5px 10px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                      Remove
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </>
   );
 }

@@ -84,7 +84,10 @@ export default function TeamPage({ currentUser, profile }) {
     </Layout>
   );
 
-  const isManager = userRole?.role === 'manager';
+  // Manager = founding manager (teams.manager_id) OR has team_members.role='manager'.
+  // Both paths are honored server-side via the is_team_manager() helper used in
+  // RLS; client-side we OR the two checks so the UI matches what the server will allow.
+  const isManager = userRole?.role === 'manager' || (currentUser && team && team.manager_id === currentUser.id);
   const isMember = !!userRole;
   const goalies = members.filter(m => m.role === 'goalie' || m.position?.toLowerCase().includes('goalie'));
   const defense = members.filter(m => m.position?.toLowerCase().includes('defense') || m.position?.toLowerCase().includes('d'));
