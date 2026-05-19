@@ -108,7 +108,9 @@ export function roleMenuSections(role) {
   const manager = {
     label: 'Manager',
     items: [
-      { path: '/volunteer-coordinator', icon: '🙋', label: 'Volunteer Coordinator' },
+      // Volunteer Coordinator was moved to a top-tab on /teams (May 19 2026) —
+      // see src/components/TeamsHeaderTabs.js. Kept out of the More drawer
+      // to avoid duplicate entry points.
       { path: '/dues-tracker',          icon: '💸', label: 'Dues Tracker' },
     ],
   };
