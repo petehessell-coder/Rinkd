@@ -7,13 +7,14 @@ import MapLink from '../components/MapLink';
 import CalendarButton from '../components/CalendarButton';
 import LineupModal from '../components/LineupModal';
 import TeamFeed from '../components/TeamFeed';
+import TeamVolunteer from '../components/TeamVolunteer';
 import SEO from '../components/SEO';
 import { buildIcsMulti, downloadIcs } from '../lib/ics';
 import SubscribeCalendarSheet from '../components/SubscribeCalendarSheet';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 
-const TABS = ['Roster', 'Schedule', 'Feed', 'Info'];
+const TABS = ['Roster', 'Schedule', 'Feed', 'Volunteer', 'Info'];
 
 function Avatar({ name, color, initials, size = 34 }) {
   return (
@@ -115,6 +116,12 @@ export default function TeamPage({ currentUser, profile }) {
     const teamScore = g.is_home ? g.home_score : g.away_score;
     const oppScore = g.is_home ? g.away_score : g.home_score;
     return teamScore < oppScore;
+  }).length;
+  const ties = games.filter(g => {
+    if (g.status !== 'final') return false;
+    const teamScore = g.is_home ? g.home_score : g.away_score;
+    const oppScore = g.is_home ? g.away_score : g.home_score;
+    return teamScore === oppScore && teamScore != null;
   }).length;
 
   const renderMemberRow = (m) => (
@@ -280,6 +287,7 @@ export default function TeamPage({ currentUser, profile }) {
             { num: games.filter(g => g.status === 'final').length, label: 'Games' },
             { num: wins, label: 'Wins', color: '#22C55E' },
             { num: losses, label: 'Losses', color: C.red },
+            { num: ties, label: 'Ties', color: 'rgba(244,247,250,0.65)' },
           ].map((s, i) => (
             <div key={i} style={{ padding: '10px 0', textAlign: 'center', borderRight: i < 3 ? '0.5px solid rgba(46,91,140,0.3)' : 'none' }}>
               <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, color: s.color || C.ice }}>{s.num}</div>
@@ -469,6 +477,11 @@ export default function TeamPage({ currentUser, profile }) {
           {/* FEED TAB */}
           {activeTab === 'Feed' && (
             <TeamFeed teamId={team.id} currentUser={currentUser} isMember={isMember} />
+          )}
+
+          {/* VOLUNTEER TAB — open slots, claim/release, manager can add */}
+          {activeTab === 'Volunteer' && (
+            <TeamVolunteer teamId={team.id} isManager={isManager} currentUser={currentUser} />
           )}
 
           {/* INFO TAB */}

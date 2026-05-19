@@ -4,7 +4,6 @@ import Layout, { BRAND_COLORS as C } from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { listSlotsForTeams, listMyAssignedSlots, createSlot, updateSlot, deleteSlot, releaseSlot } from '../lib/volunteers';
 import { getTeamGames } from '../lib/teams';
-import TeamsHeaderTabs from '../components/TeamsHeaderTabs';
 
 const ROLE_PRESETS = ['Scorekeeper', 'Snack Parent', 'Locker Room Monitor', 'Gear Hauler', 'Statkeeper', 'Off-ice Official', 'Tournament Volunteer'];
 
@@ -80,8 +79,6 @@ export default function VolunteerCoordinator({ profile }) {
         </div>
 
         <div style={{ maxWidth: 920, margin: '0 auto', padding: 20 }}>
-          <TeamsHeaderTabs active="volunteer" />
-
           {teams.length === 0 ? (
             <EmptyManager navigate={navigate} />
           ) : (

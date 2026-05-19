@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { listTeams } from '../lib/teams';
 import MapLink from '../components/MapLink';
-import TeamsHeaderTabs from '../components/TeamsHeaderTabs';
 
 export default function Teams({ profile }) {
   const navigate = useNavigate();
@@ -27,8 +26,6 @@ export default function Teams({ profile }) {
   return (
     <Layout profile={profile}>
       <div style={{ background: C.dark, minHeight: '100vh', padding: 20, fontFamily: 'Barlow, sans-serif', color: C.ice }}>
-
-        <TeamsHeaderTabs active="teams" />
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
