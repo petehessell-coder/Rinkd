@@ -406,54 +406,82 @@ export default function TournamentPage({ currentUser }) {
               // DEX needs lowest_pim as the secondary key so we recompute here.
               const sorted = sortByTiebreakers(rawRows, tiebreakers).map((r, i) => ({ ...r, pool_rank: i + 1 }));
               // Pick which extra tiebreaker columns to show. The base columns
-              // (GP/W/L/T/GF/GA/PTS) are always present; DIFF is the universal
-              // fallback. GQ/PIM/PeriodPts each appear only when listed in
-              // settings.tiebreakers. Grid template adjusts with the count.
+              // (GP/W/L/T/GF/GA) are always in the middle scroll area; PTS is
+              // the right-frozen column. GQ/PIM/PeriodPts each appear only when
+              // listed in settings.tiebreakers.
               const tbCols = [];
-              if (showGQ)        tbCols.push({ key: 'gq',  label: 'GQ',   render: (r) => (Number(r.goal_quotient) || 0).toFixed(2), width: 36 });
-              if (showPeriodPts) tbCols.push({ key: 'pp',  label: 'P.PT', render: (r) => r.period_pts ?? 0, width: 32 });
-              if (showPIM)       tbCols.push({ key: 'pim', label: 'PIM',  render: (r) => r.pim ?? 0, width: 32 });
+              if (showGQ)        tbCols.push({ key: 'gq',  label: 'GQ',   render: (r) => (Number(r.goal_quotient) || 0).toFixed(2) });
+              if (showPeriodPts) tbCols.push({ key: 'pp',  label: 'P.PT', render: (r) => r.period_pts ?? 0 });
+              if (showPIM)       tbCols.push({ key: 'pim', label: 'PIM',  render: (r) => r.pim ?? 0 });
               // Always show DIFF as the final fallback column when no GQ is
               // shown — otherwise the GQ column carries the same signal.
-              if (!showGQ)       tbCols.push({ key: 'd',   label: 'DIFF', render: (r) => (r.goal_diff > 0 ? `+${r.goal_diff}` : r.goal_diff), width: 32, color: (r) => r.goal_diff > 0 ? '#22C55E' : r.goal_diff < 0 ? '#D72638' : 'rgba(244,247,250,0.5)' });
-              const baseTemplate = '1fr 22px 22px 22px 22px 26px 26px';
-              const tbTemplate   = tbCols.map(c => `${c.width}px`).join(' ');
-              const ptsTemplate  = '32px';
-              const gridTemplate = [baseTemplate, tbTemplate, ptsTemplate].filter(Boolean).join(' ');
+              if (!showGQ)       tbCols.push({ key: 'd',   label: 'DIFF', render: (r) => (r.goal_diff > 0 ? `+${r.goal_diff}` : r.goal_diff), color: (r) => r.goal_diff > 0 ? '#22C55E' : r.goal_diff < 0 ? '#D72638' : 'rgba(244,247,250,0.5)' });
+              // Middle (scrollable) columns: GP, W, L, T, GF, GA, then any
+              // tiebreaker cols. TEAM and PTS are sticky and not in this list.
+              const midCols = [
+                { key: 'gp',  label: 'GP',  render: (r) => r.gp,     color: 'rgba(244,247,250,0.5)' },
+                { key: 'w',   label: 'W',   render: (r) => r.wins,   color: 'rgba(244,247,250,0.65)' },
+                { key: 'l',   label: 'L',   render: (r) => r.losses, color: 'rgba(244,247,250,0.65)' },
+                { key: 't',   label: 'T',   render: (r) => r.ties,   color: 'rgba(244,247,250,0.65)' },
+                { key: 'gf',  label: 'GF',  render: (r) => r.gf,     color: 'rgba(244,247,250,0.65)' },
+                { key: 'ga',  label: 'GA',  render: (r) => r.ga,     color: 'rgba(244,247,250,0.65)' },
+                ...tbCols,
+              ];
+              // Sticky column visuals: solid bg color matching the card so
+              // scrolled middle content doesn't bleed through. Subtle shadow
+              // hints at horizontal scrollability without being intrusive.
+              const stickyBg = '#0f2847';
+              const stickyHdrBg = '#152e54'; // header tint of stickyBg
+              const stickyLeft = { position: 'sticky', left: 0, zIndex: 2, background: stickyBg, boxShadow: '4px 0 6px -4px rgba(0,0,0,0.4)' };
+              const stickyRight = { position: 'sticky', right: 0, zIndex: 2, background: stickyBg, boxShadow: '-4px 0 6px -4px rgba(0,0,0,0.4)' };
+              const stickyLeftHdr = { ...stickyLeft, background: stickyHdrBg };
+              const stickyRightHdr = { ...stickyRight, background: stickyHdrBg };
+              const midCellW = 36; // px per scrollable column
               return (
               <div key={pool} style={{marginBottom:16}}>
                 <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.1em',color:'rgba(244,247,250,0.3)',textTransform:'uppercase',marginBottom:8}}>{pool}</div>
-                <div style={{background:'#0f2847',border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,overflow:'hidden'}}>
-                  <div style={{display:'grid',gridTemplateColumns:gridTemplate,gap:4,padding:'8px 10px',background:'rgba(46,91,140,0.2)',fontSize:10,fontWeight:700,color:'rgba(244,247,250,0.35)',textTransform:'uppercase'}}>
-                    <span>TEAM</span>
-                    <span style={{textAlign:'center'}}>GP</span>
-                    <span style={{textAlign:'center'}}>W</span>
-                    <span style={{textAlign:'center'}}>L</span>
-                    <span style={{textAlign:'center'}}>T</span>
-                    <span style={{textAlign:'center'}}>GF</span>
-                    <span style={{textAlign:'center'}}>GA</span>
-                    {tbCols.map(c => <span key={c.key} style={{textAlign:'center'}}>{c.label}</span>)}
-                    <span style={{textAlign:'center'}}>PTS</span>
+                <div style={{background:stickyBg,border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,overflow:'hidden'}}>
+                  <div style={{overflowX:'auto', WebkitOverflowScrolling:'touch'}}>
+                  <table style={{borderCollapse:'collapse', width:'100%', minWidth: 'max-content', tableLayout:'auto'}}>
+                    <thead>
+                      <tr style={{background:'rgba(46,91,140,0.2)',fontSize:10,fontWeight:700,color:'rgba(244,247,250,0.35)',textTransform:'uppercase'}}>
+                        <th style={{...stickyLeftHdr,textAlign:'left',padding:'8px 10px',minWidth:130,maxWidth:160}}>TEAM</th>
+                        {midCols.map(c => (
+                          <th key={c.key} style={{textAlign:'center',padding:'8px 4px',width:midCellW,minWidth:midCellW}}>{c.label}</th>
+                        ))}
+                        <th style={{...stickyRightHdr,textAlign:'center',padding:'8px 10px',minWidth:44}}>PTS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                    {sorted.map((row, i) => (
+                      <React.Fragment key={row.team_id}>
+                        {i === adv && (
+                          <tr>
+                            <td colSpan={2 + midCols.length} style={{padding:0}}>
+                              <div style={{height:2,background:'rgba(215,38,56,0.4)',margin:'0 12px'}}/>
+                              <div style={{fontSize:10,color:'rgba(215,38,56,0.55)',padding:'4px 12px'}}>↑ ADVANCES TO BRACKET</div>
+                            </td>
+                          </tr>
+                        )}
+                        <tr style={{borderTop:'0.5px solid rgba(244,247,250,0.06)'}}>
+                          <td style={{...stickyLeft,padding:'10px',minWidth:130,maxWidth:160}}>
+                            <div style={{display:'flex',alignItems:'center',gap:6,minWidth:0}}>
+                              <span style={{width:18,height:18,borderRadius:'50%',background:row.pool_rank===1?'#D72638':row.pool_rank===2?'#2E5B8C':'rgba(244,247,250,0.1)',color:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,flexShrink:0}}>{row.pool_rank}</span>
+                              <span style={{fontSize:12,fontWeight:600,color:'#F4F7FA',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{row.team_name}</span>
+                            </div>
+                          </td>
+                          {midCols.map(c => (
+                            <td key={c.key} style={{fontSize:11,textAlign:'center',color:c.color ? (typeof c.color === 'function' ? c.color(row) : c.color) : 'rgba(244,247,250,0.65)',padding:'10px 4px',width:midCellW,minWidth:midCellW}}>
+                              {c.render(row)}
+                            </td>
+                          ))}
+                          <td style={{...stickyRight,fontSize:13,fontWeight:700,textAlign:'center',color:row.pool_rank===1?'#D72638':'#F4F7FA',padding:'10px',minWidth:44}}>{row.pts}</td>
+                        </tr>
+                      </React.Fragment>
+                    ))}
+                    </tbody>
+                  </table>
                   </div>
-                  {sorted.map((row, i) => (
-                    <React.Fragment key={row.team_id}>
-                      {i === adv && <><div style={{height:2,background:'rgba(215,38,56,0.4)',margin:'0 12px'}}/><div style={{fontSize:10,color:'rgba(215,38,56,0.55)',padding:'4px 12px'}}>↑ ADVANCES TO BRACKET</div></>}
-                      <div style={{display:'grid',gridTemplateColumns:gridTemplate,gap:4,padding:'10px 10px',borderTop:'0.5px solid rgba(244,247,250,0.06)',alignItems:'center'}}>
-                        <div style={{display:'flex',alignItems:'center',gap:6,minWidth:0}}>
-                          <span style={{width:18,height:18,borderRadius:'50%',background:row.pool_rank===1?'#D72638':row.pool_rank===2?'#2E5B8C':'rgba(244,247,250,0.1)',color:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,flexShrink:0}}>{row.pool_rank}</span>
-                          <span style={{fontSize:12,fontWeight:600,color:'#F4F7FA',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{row.team_name}</span>
-                        </div>
-                        <span style={{fontSize:11,textAlign:'center',color:'rgba(244,247,250,0.5)'}}>{row.gp}</span>
-                        <span style={{fontSize:11,textAlign:'center',color:'rgba(244,247,250,0.65)'}}>{row.wins}</span>
-                        <span style={{fontSize:11,textAlign:'center',color:'rgba(244,247,250,0.65)'}}>{row.losses}</span>
-                        <span style={{fontSize:11,textAlign:'center',color:'rgba(244,247,250,0.65)'}}>{row.ties}</span>
-                        <span style={{fontSize:11,textAlign:'center',color:'rgba(244,247,250,0.65)'}}>{row.gf}</span>
-                        <span style={{fontSize:11,textAlign:'center',color:'rgba(244,247,250,0.65)'}}>{row.ga}</span>
-                        {tbCols.map(c => <span key={c.key} style={{fontSize:11,textAlign:'center',color:c.color ? c.color(row) : 'rgba(244,247,250,0.65)'}}>{c.render(row)}</span>)}
-                        <span style={{fontSize:13,fontWeight:700,textAlign:'center',color:row.pool_rank===1?'#D72638':'#F4F7FA'}}>{row.pts}</span>
-                      </div>
-                    </React.Fragment>
-                  ))}
                 </div>
               </div>
               );
