@@ -1,14 +1,14 @@
 # Rinkd — Claude Code Handoff
 
 **Created:** May 15, 2026 — supersedes the previous handoff. Self-contained: a fresh Claude Code session should be able to pick up from here without reading the prior doc.
-**Last updated:** May 18, 2026 (late afternoon) — **Multi-director + Turnstile + security advisor pass.** Three more shipped commits (`4f145312` multi-director, `45f71a6d` Turnstile), three more DB migrations (`multi_director_support_helper_and_rls`, `multi_director_rls_extend_to_games_and_tournaments`, `close_security_definer_views_and_media_listing`), and a Cloudflare Turnstile widget standing up bot protection on signup. (1) **Multi-director:** tournament directors can now add other directors via the Scorers tab → new Directors section. New SECURITY DEFINER function `is_tournament_director(p_tournament_id, p_user_id)` + email-based lookup so Pete's UUID isn't hardcoded. The founding director (tournaments.director_id) gets a "Founder" badge + "Can't remove" affordance — RLS forbids deletion of their role row. Permission checks updated in 5 sites (TournamentManage page gate, Tournament canScore + Manage button + Follow-button-hiding, GameDetail isOrganizer, ScorerView director flag). TournamentManage shows a "Loading…" gate while the async role check is pending so a freshly-added director doesn't see the 🔒 lock screen flash. (2) **Turnstile on signup:** Cloudflare Turnstile in Managed mode. Widget renders on step 3 of signup; token forwarded to `supabase.auth.signUp({ options: { captchaToken } })`. Supabase Dashboard → Auth → Bot Protection enabled with secret key. Vercel env `REACT_APP_TURNSTILE_SITE_KEY` set. Verified: direct API signup without token returns `400 captcha_failed`. Auth via web UI requires solving the challenge first. Bug report + survey form Turnstile gating is filed as a post-pilot follow-up (the `qual = true` RLS on those tables means write-spam is theoretically possible; not pilot-blocking — only 25 days till live and abuse is unlikely at our scale). (3) **Architectural review fixes:** the 4 SECURITY DEFINER views (`analytics_daily`, `analytics_dau`, `league_standings`, `tournament_standings`) flipped to `security_invoker = on`. The `media` storage bucket's broad SELECT policy dropped (bucket is `public = true` so `/object/public/media/…` URLs still resolve, but anon can no longer enumerate via the listing API). 85 multiple_permissive_policies advisor warnings remain — backlog cleanup for post-pilot. **Last updated:** May 18, 2026 (afternoon) — **Tournament feed shipped + auto-follow Pete trigger.** Triggered by Pete noticing the auto-recap landed in the global Feed where unaffiliated users had no context. Three shipped commits + two DB migrations + a 19-user backfill. (1) `posts.tournament_id` column (nullable, FK to tournaments, ON DELETE SET NULL) with partial index on `(tournament_id, created_at desc)`. Migration `posts_add_tournament_id_for_tournament_scoped_feed`. (2) `getPosts` and `getFollowingPosts` filter `tournament_id IS NULL` — global/following feeds stay clean. New `getTournamentPosts(tournamentId, limit)` mirrors `getTeamPosts`. `createGameRecapPost` accepts `tournamentId`; insert + re-finalize update paths both stamp it. ScorerView passes `game.tournament_id` on finalize. (3) New **Feed tab** on Tournament.js between Bracket and Info — lazy-loaded, renders recap headline + body + author + "View game →"; non-recap posts get the existing `PostActionMenu` for report + block. (4) Tournament feed composer — anyone signed in can post chirps (text + optional photo via existing `uploadMedia`); 500-char cap; optimistic prepend. User posts do NOT trigger pushes (recap-only); avoids notification spam during a busy game. (5) Earlier same day: `lib/push.js` `subscribeToPush` now calls `getSubscription().unsubscribe()` before requesting fresh permission — fixes the `InvalidStateError` that surfaces when a browser holds an existing subscription registered against a rotated VAPID public key (commit `30b40986`). (6) **Auto-follow Pete on new account** — DB trigger `tr_auto_follow_pete` on `public.profiles AFTER INSERT`. SECURITY DEFINER, email-based Pete lookup (not hardcoded UUID), idempotent via `on conflict do nothing`. 19 existing users backfilled in a single transaction. Migration `auto_follow_pete_on_new_profile`. Live commits on `origin/main`: `30b40986` (push.js fix), `4ec187c4` (tournament feed), `ae4d7985` (composer). Live build: `ae4d79852ca5`. **Last updated:** May 18, 2026 (morning) — **Both P0 pre-pilot blockers cleared.** (1) Forgot Password flow fixed via Supabase URL Configuration (Site URL `www.rinkd.app` → apex; Redirect URLs allowlist now includes `https://rinkd.app/reset-password`, `https://rinkd.app/*`, `https://www.rinkd.app/*`, `http://localhost:3000/*`); E2E verified end-to-end as `pete@rinkd.app` (the first successful prod password reset in Rinkd history — Nick's May 14 attempt had silently failed against the old config). (2) Push pipeline activated via Path B: fresh VAPID pair generated, 3 Supabase secrets set, `send-recap-push` Edge Function deployed (v1, ACTIVE, JWT-verified), Vercel `REACT_APP_VAPID_PUBLIC_KEY` updated + redeployed; 2 stale May-09/May-12 test subscriptions purged. Private key stored in Pete's 1Password under "Rinkd VAPID keys (May 2026)" — **never rotate** post-pilot. Pete also completed the long-pending `claude/elegant-sanderson-80d1d0` merge (commit `ee0ca9ef`) — public landing + push pipeline code are now in production. **Pre-pilot P0 backlog is empty.** **Last updated:** May 17, 2026 (late evening) — New §13 "Operational artifacts" added (rinkd_v4 docs, roadmap xlsx, live state, new-session reading order). §7 Revenue + monetization subsection: 9 new items spanning Stripe Connect, registration fees, hotel affiliate, sponsorships, marketplaces, insurance partnership. **BenchBoss reframed from 3-tier pricing to 4 billing arrangements**: Community ($0) / Organizer-pays ($25/team) / **Pass-through ($15/team Technology fee billed to participating teams, BLPA-founding-partner model)** / Pro (custom annual). BIZ-BLPA-1 = post-pilot proof-point worth **~$1,840 / event** while BLPA pays nothing. **BLPA Cleveland pilot now 3 days (Fri 6/12 + Sat 6/13 + Sun 6/14)**, was 2 days. 12 pool games rescheduled in place: 6 Friday evening + 6 Saturday morning. Migration `cleveland_pilot_3day_reschedule_fri_sat_sun` live in prod. §7 roadmap expanded with **GameSheet + LeagueApps parity items** (15 new gaps total) — see `rinkd_v4/GAMESHEET_PARITY_GAPS.md` and `rinkd_v4/LEAGUEAPPS_PARITY_GAPS.md`.
+**Last updated:** May 19, 2026 — **BLPA Cleveland moved to BAM (Strongsville, OH); pool play compressed to Saturday only.** Venue is now **Brunswick Auto Mart Arena (BAM)** at 15381 Royalton Rd, Strongsville, OH 44136. Tournament is now 2-day: Sat 6/13 (all 12 pool games) + Sun 6/14 (championship). Migration `blpa_cleveland_move_to_bam_strongsville_sat_sun_only` updated `tournaments.settings.venue_name` + `venue_address`, refreshed the 2 rinks rows (preserving UUIDs so game FKs stay intact), and moved the 6 Friday games onto Saturday afternoon slots. Follow-up migration `blpa_cleveland_minimize_back_to_back_games` resequenced the 12 pool games to minimize per-team back-to-backs: now 4 of 8 teams have one BB each (A3/A4/B3/B4), down from 6 of 8. **Mathematical floor:** a 4-team round-robin in 6 single-sheet slots cannot fully eliminate BBs — proven by the disjoint patterns {1,3,5} and {2,4,6}, which means at least two teams must hit a consecutive-slot pairing. Sheet assignment normalized: Pool A always on Sheet 1, Pool B always on Sheet 2. New Saturday schedule: 08:00 / 09:15 / 10:30 / 11:45 / 13:00 / 14:15 EDT, last puck Saturday ~15:30. Sunday championship times still TBD until Sat afternoon when Pete generates the bracket and picks first puck. **Last updated:** May 18, 2026 (late afternoon) — **Multi-director + Turnstile + security advisor pass.** Three more shipped commits (`4f145312` multi-director, `45f71a6d` Turnstile), three more DB migrations (`multi_director_support_helper_and_rls`, `multi_director_rls_extend_to_games_and_tournaments`, `close_security_definer_views_and_media_listing`), and a Cloudflare Turnstile widget standing up bot protection on signup. (1) **Multi-director:** tournament directors can now add other directors via the Scorers tab → new Directors section. New SECURITY DEFINER function `is_tournament_director(p_tournament_id, p_user_id)` + email-based lookup so Pete's UUID isn't hardcoded. The founding director (tournaments.director_id) gets a "Founder" badge + "Can't remove" affordance — RLS forbids deletion of their role row. Permission checks updated in 5 sites (TournamentManage page gate, Tournament canScore + Manage button + Follow-button-hiding, GameDetail isOrganizer, ScorerView director flag). TournamentManage shows a "Loading…" gate while the async role check is pending so a freshly-added director doesn't see the 🔒 lock screen flash. (2) **Turnstile on signup:** Cloudflare Turnstile in Managed mode. Widget renders on step 3 of signup; token forwarded to `supabase.auth.signUp({ options: { captchaToken } })`. Supabase Dashboard → Auth → Bot Protection enabled with secret key. Vercel env `REACT_APP_TURNSTILE_SITE_KEY` set. Verified: direct API signup without token returns `400 captcha_failed`. Auth via web UI requires solving the challenge first. Bug report + survey form Turnstile gating is filed as a post-pilot follow-up (the `qual = true` RLS on those tables means write-spam is theoretically possible; not pilot-blocking — only 25 days till live and abuse is unlikely at our scale). (3) **Architectural review fixes:** the 4 SECURITY DEFINER views (`analytics_daily`, `analytics_dau`, `league_standings`, `tournament_standings`) flipped to `security_invoker = on`. The `media` storage bucket's broad SELECT policy dropped (bucket is `public = true` so `/object/public/media/…` URLs still resolve, but anon can no longer enumerate via the listing API). 85 multiple_permissive_policies advisor warnings remain — backlog cleanup for post-pilot. **Last updated:** May 18, 2026 (afternoon) — **Tournament feed shipped + auto-follow Pete trigger.** Triggered by Pete noticing the auto-recap landed in the global Feed where unaffiliated users had no context. Three shipped commits + two DB migrations + a 19-user backfill. (1) `posts.tournament_id` column (nullable, FK to tournaments, ON DELETE SET NULL) with partial index on `(tournament_id, created_at desc)`. Migration `posts_add_tournament_id_for_tournament_scoped_feed`. (2) `getPosts` and `getFollowingPosts` filter `tournament_id IS NULL` — global/following feeds stay clean. New `getTournamentPosts(tournamentId, limit)` mirrors `getTeamPosts`. `createGameRecapPost` accepts `tournamentId`; insert + re-finalize update paths both stamp it. ScorerView passes `game.tournament_id` on finalize. (3) New **Feed tab** on Tournament.js between Bracket and Info — lazy-loaded, renders recap headline + body + author + "View game →"; non-recap posts get the existing `PostActionMenu` for report + block. (4) Tournament feed composer — anyone signed in can post chirps (text + optional photo via existing `uploadMedia`); 500-char cap; optimistic prepend. User posts do NOT trigger pushes (recap-only); avoids notification spam during a busy game. (5) Earlier same day: `lib/push.js` `subscribeToPush` now calls `getSubscription().unsubscribe()` before requesting fresh permission — fixes the `InvalidStateError` that surfaces when a browser holds an existing subscription registered against a rotated VAPID public key (commit `30b40986`). (6) **Auto-follow Pete on new account** — DB trigger `tr_auto_follow_pete` on `public.profiles AFTER INSERT`. SECURITY DEFINER, email-based Pete lookup (not hardcoded UUID), idempotent via `on conflict do nothing`. 19 existing users backfilled in a single transaction. Migration `auto_follow_pete_on_new_profile`. Live commits on `origin/main`: `30b40986` (push.js fix), `4ec187c4` (tournament feed), `ae4d7985` (composer). Live build: `ae4d79852ca5`. **Last updated:** May 18, 2026 (morning) — **Both P0 pre-pilot blockers cleared.** (1) Forgot Password flow fixed via Supabase URL Configuration (Site URL `www.rinkd.app` → apex; Redirect URLs allowlist now includes `https://rinkd.app/reset-password`, `https://rinkd.app/*`, `https://www.rinkd.app/*`, `http://localhost:3000/*`); E2E verified end-to-end as `pete@rinkd.app` (the first successful prod password reset in Rinkd history — Nick's May 14 attempt had silently failed against the old config). (2) Push pipeline activated via Path B: fresh VAPID pair generated, 3 Supabase secrets set, `send-recap-push` Edge Function deployed (v1, ACTIVE, JWT-verified), Vercel `REACT_APP_VAPID_PUBLIC_KEY` updated + redeployed; 2 stale May-09/May-12 test subscriptions purged. Private key stored in Pete's 1Password under "Rinkd VAPID keys (May 2026)" — **never rotate** post-pilot. Pete also completed the long-pending `claude/elegant-sanderson-80d1d0` merge (commit `ee0ca9ef`) — public landing + push pipeline code are now in production. **Pre-pilot P0 backlog is empty.** **Last updated:** May 17, 2026 (late evening) — New §13 "Operational artifacts" added (rinkd_v4 docs, roadmap xlsx, live state, new-session reading order). §7 Revenue + monetization subsection: 9 new items spanning Stripe Connect, registration fees, hotel affiliate, sponsorships, marketplaces, insurance partnership. **BenchBoss reframed from 3-tier pricing to 4 billing arrangements**: Community ($0) / Organizer-pays ($25/team) / **Pass-through ($15/team Technology fee billed to participating teams, BLPA-founding-partner model)** / Pro (custom annual). BIZ-BLPA-1 = post-pilot proof-point worth **~$1,840 / event** while BLPA pays nothing. **BLPA Cleveland pilot now 3 days (Fri 6/12 + Sat 6/13 + Sun 6/14)**, was 2 days. 12 pool games rescheduled in place: 6 Friday evening + 6 Saturday morning. Migration `cleveland_pilot_3day_reschedule_fri_sat_sun` live in prod. §7 roadmap expanded with **GameSheet + LeagueApps parity items** (15 new gaps total) — see `rinkd_v4/GAMESHEET_PARITY_GAPS.md` and `rinkd_v4/LEAGUEAPPS_PARITY_GAPS.md`.
 **Source:** continuation of the audit-fix work, plus a full BLPA-spec implementation pass based on `rinkd_v4/CLEVELAND_BUILD_PLAN.md`.
 
 ---
 
 ## 1. What you're working on
 
-Rinkd (rinkd.app) is a mobile-first social platform for the hockey community — players, parents, coaches, fans. **React 18 + React Router 6 (Create React App) + Supabase + Vercel**, shipped as a PWA. Core surfaces: feed ("chirps"), teams, leagues, tournaments, and live game scoring. Solo founder (Pete), pre-seed, moving fast toward a **Jun 12-14 BLPA tournament pilot in Cleveland** (3 days: Fri pool play + Sat pool play + Sun championship).
+Rinkd (rinkd.app) is a mobile-first social platform for the hockey community — players, parents, coaches, fans. **React 18 + React Router 6 (Create React App) + Supabase + Vercel**, shipped as a PWA. Core surfaces: feed ("chirps"), teams, leagues, tournaments, and live game scoring. Solo founder (Pete), pre-seed, moving fast toward a **Jun 13-14 BLPA tournament pilot at Brunswick Auto Mart Arena (BAM), Strongsville, OH** (2 days: Sat pool play + Sun championship).
 
 **This repo (`rinkd_live`) is the deployed app.** Edit code here. There is an older app copy inside the `rinkd_v4` folder — ignore it, it does not deploy. Strategy docs live in `rinkd_v4` (BLPA, brand voice, canonical data model, etc.).
 
@@ -103,7 +103,7 @@ e995f3ef  fix: site-audit pass — 6 Criticals + 10 Highs
 Two pre-existing strays remain uncommitted (`scripts/chiller/data/seed-leagues.json`, `supabase/functions/send-onboarding-emails/index.ts`) — leave them alone unless Pete asks otherwise.
 
 **Operational state (verified May 18 late afternoon):**
-- BLPA Cleveland tournament `b2789d66-1d77-4a62-862d-00b550da6a98` is `active`, dates Jun 12-14, 8 placeholder teams, 12 pool games seeded. Pristine state — any test data from today's smoke tests has been rolled back.
+- BLPA Cleveland tournament `b2789d66-1d77-4a62-862d-00b550da6a98` is `active`, dates **Jun 13-14 (Sat-Sun)**, venue **Brunswick Auto Mart Arena (BAM), 15381 Royalton Rd, Strongsville, OH 44136**, 8 placeholder teams, 12 pool games seeded — all Saturday. Pristine state — any test data from today's smoke tests has been rolled back.
 - Forgot Password flow: ✅ working (§6 + §8 verified end-to-end).
 - Push pipeline: ✅ live — `send-recap-push` Edge Function deployed (v1, ACTIVE, JWT verification on); 3 VAPID secrets set; Vercel client bundle has the matching public key (`BMiwvt78h-…Eitc`); smoke-tested end-to-end with `mvntrec@gmail.com` on Android.
 - Tournament feed: ✅ live — new Feed tab on Tournament.js (between Bracket and Info). Auto-recaps from finalize land here, NOT in global feed. User composer (text + photo) for anyone signed in. Report + block per-card via existing PostActionMenu.
@@ -308,13 +308,12 @@ fallback shows DIFF. New `sortByTiebreakers` helper handles `lowest_pim`,
     initially, flipped to `active` May 16 evening.
 
 **Cleveland day-of flow:**
-1. **Now → Jun 12:** Pete renames placeholder teams as Nick sends rosters,
+1. **Now → Jun 13:** Pete renames placeholder teams as Nick sends rosters,
    uploads logos via the new logo upload field, flips status to `active`.
-2. **Fri Jun 12 evening (5:00-9:00 PM):** Scorers run first 6 pool games (3 slots × 2 sheets). Standings populate live with BLPA tiebreaker order (Points → GQ → Period Pts).
-3. **Sat Jun 13 morning (8:00 AM - noon):** Remaining 6 pool games. Pool play complete.
-4. **Sat afternoon/evening:** Pete opens TournamentManage → Bracket → "🏆 Generate Bracket". 8 games auto-create across 2 pools (semis with teams; gold + bronze with TBD).
-5. **Sun Jun 14:** Each semi finalizes → ScorerView prompts for SO winner if tied → gold/bronze slots auto-fill with the right teams. Pete (or his scorers) runs the gold + bronze games. Auto-recap posts hit the global feed as each finalizes.
-6. **Sun end:** Champion banner appears on the Bracket tab. Pete flips tournament status to `complete`.
+2. **Sat Jun 13 (8:00 AM - ~3:30 PM EDT at BAM, Strongsville OH):** Scorers run all 12 pool games (6 time slots × 2 sheets). Standings populate live with BLPA tiebreaker order (Points → GQ → Period Pts).
+3. **Sat afternoon (post-pool play ~3:30 PM):** Pete opens TournamentManage → Bracket → "🏆 Generate Bracket". 8 games auto-create across 2 pools (semis with teams; gold + bronze with TBD). Pete picks Sunday first-puck time + per-game minutes at generation.
+4. **Sun Jun 14:** Each semi finalizes → ScorerView prompts for SO winner if tied → gold/bronze slots auto-fill with the right teams. Pete (or his scorers) runs the gold + bronze games. Auto-recap posts hit the tournament Feed tab + push subscribers as each finalizes.
+5. **Sun end:** Champion banner appears on the Bracket tab. Pete flips tournament status to `complete`.
 
 ### Late evening of May 16 — Push notification pipeline (`2b793247`)
 
@@ -506,6 +505,43 @@ Verified end-to-end: direct API signup attempt without a token returns `HTTP 400
 
 **Spreadsheet drift:** `~/Downloads/rinkd-sprints.xlsx` is now further out of sync with §7. Handoff doc remains source of truth.
 
+### May 19, 2026 — BLPA Cleveland venue change + 2-day compress + minimum-BB resequence
+
+Pete swapped the venue (RMU Island Sports Center, Pittsburgh → Brunswick Auto Mart Arena, Strongsville, OH) and dropped Friday games. All 12 pool games now run Saturday 6/13. Sunday 6/14 stays championship.
+
+**Migration `blpa_cleveland_move_to_bam_strongsville_sat_sun_only`:**
+- `tournaments.settings.venue_name` → `"Brunswick Auto Mart Arena (BAM)"`
+- `tournaments.settings.venue_address` → `"15381 Royalton Rd, Strongsville, OH 44136"`
+- Dropped the stale `settings.venue` key (Lakewood, predates venue_name/venue_address)
+- Updated 2 `rinks` rows in place (preserve UUIDs to keep game FKs intact)
+- Moved 6 Friday games onto Saturday afternoon slots (11:45 / 13:00 / 14:15 EDT)
+- Tournament start_date was already `2026-06-13` (corrected pre-session)
+- Assumption: BAM has 2 sheets (matches the existing 2-sheet schedule shape; Pete confirmed by request)
+
+**Migration `blpa_cleveland_minimize_back_to_back_games`:**
+- Re-sequenced the 12 pool games to minimize per-team back-to-backs.
+- Per-team gaps:
+  - A1/B1: 08:00, 10:30, 13:00 (2.5h, 2.5h) ✓ no BB
+  - A2/B2: 08:00, 11:45, 14:15 (3.75h, 2.5h) ✓ no BB
+  - A3/B3: 09:15, 10:30, 14:15 (1.25h, 3.75h) ❌ 1 BB
+  - A4/B4: 09:15, 11:45, 13:00 (2.5h, 1.25h) ❌ 1 BB
+- 4 of 8 teams have one BB each. Down from 6 of 8 after the first venue migration.
+- **Mathematical floor:** 4-team round-robin in 6 single-sheet slots cannot fully eliminate BBs. Only 4 valid no-BB patterns exist for 3 of 6 slots — {1,3,5}, {1,3,6}, {1,4,6}, {2,4,6} — and {1,3,5} ∩ {2,4,6} is empty, so any 2 teams assigned those patterns can never play each other. Best achievable is 2 BB-free + 2 BB-prone per pool.
+- Sheet assignment normalized: Pool A on Sheet 1, Pool B on Sheet 2.
+
+**Final Saturday schedule (all EDT, BAM):**
+
+| Slot | Sheet 1 | Sheet 2 |
+|---|---|---|
+| 08:00 | A1 v A2 | B1 v B2 |
+| 09:15 | A3 v A4 | B3 v B4 |
+| 10:30 | A1 v A3 | B1 v B3 |
+| 11:45 | A2 v A4 | B2 v B4 |
+| 13:00 | A1 v A4 | B1 v B4 |
+| 14:15 | A2 v A3 | B2 v B3 |
+
+Last puck Saturday ~15:30. Sunday championship times still TBD until Pete generates the bracket Saturday afternoon.
+
 ---
 
 ## 6. **Open config items** — Pete to verify in dashboards
@@ -557,7 +593,9 @@ Audit work is **done**. The post-audit landscape, in priority order:
 ### Tournament UI bugs (§11) — **DONE May 16 evening**
 - All 21 punch-list items shipped on worktree branch (4 commits, pending merge — see §4). §11 retained as a historical reference; do not re-implement.
 
-### May 17 evening — BLPA Cleveland rescheduled to 3 days
+### May 17 evening — BLPA Cleveland rescheduled to 3 days (SUPERSEDED May 19)
+
+> **SUPERSEDED:** This 3-day plan was reverted on May 19 to 2-day (Sat-Sun only, BAM in Strongsville). See the May 19 §5 entry. Retained for historical context only.
 
 Pete confirmed the tournament starts Friday Jun 12, not Saturday Jun 13. New shape: **Fri 6/12 + Sat 6/13 + Sun 6/14**. Pool play splits across Fri evening + Sat morning so every team plays 1-2 games per day instead of 3-on-1-day-0-on-the-other. Championship stays Sunday.
 
@@ -746,7 +784,7 @@ After Pete updates Site URL + Redirect URLs in the Supabase dashboard:
 1. Read this doc top to bottom — **especially §13 (operational artifacts) which tells you what files/tools exist outside this doc**, then §5 (recent shipped work — most recent entries first), §7 (forward roadmap), §12 (pilot-readiness audit), and §9 (working notes — invariants you'll regret missing).
 2. Run `cd ~/Downloads/rinkd_live && git log --oneline -10 && git status` to confirm state matches §4.
    - Expected `origin/main` HEAD: **`45f71a6d`** (`feat: Cloudflare Turnstile …`). If it's later, even better — read the new commits to catch up.
-   - Confirm BLPA Cleveland is seeded + active: `select name, start_date, end_date, status from public.tournaments where id = 'b2789d66-1d77-4a62-862d-00b550da6a98'` should return `BLPA Cleveland · 2026-06-12 · 2026-06-14 · active`. Team count = 8, game count = 12 pool games.
+   - Confirm BLPA Cleveland is seeded + active: `select name, start_date, end_date, status, settings->>'venue_name' from public.tournaments where id = 'b2789d66-1d77-4a62-862d-00b550da6a98'` should return `BLPA Cleveland · 2026-06-13 · 2026-06-14 · active · Brunswick Auto Mart Arena (BAM)`. Team count = 8, game count = 12 pool games (all Saturday).
    - Confirm the May 18 schema additions: `posts.tournament_id` column exists; `tr_auto_follow_pete` trigger exists; `is_tournament_director` function exists (`select 1 from pg_proc where proname = 'is_tournament_director'`).
    - Confirm Edge Function deployed: use Supabase MCP `list_edge_functions` and look for `send-recap-push` (slug). Should be `status: ACTIVE`, `verify_jwt: true`.
    - Confirm Turnstile is gating signup: anonymous POST to `/auth/v1/signup` without a `captcha_token` should return `400 captcha_failed`.
@@ -851,7 +889,7 @@ Total: roughly a half-day to land P1+P2+top-of-P3, which would meaningfully chan
 
 ---
 
-## 12. Pilot-readiness audit (May 16 late evening — what's left for BLPA Cleveland Jun 12-14)
+## 12. Pilot-readiness audit (May 16 late evening — what's left for BLPA Cleveland Jun 13-14)
 
 The BLPA pilot batch shipped a huge amount (see §5 May 16 evening entries). This is the swept-up list of what could still trip up the live event, ranked by blast radius. **Updated May 16 late evening: ~~strikethrough~~ = done.**
 
@@ -879,7 +917,7 @@ After secrets + deploy, smoke-test:
 
 **E. Real team names + logos.** Director (Pete) swaps placeholders via TournamentManage → Teams → Edit; uploads logos via the new Settings → Branding upload. Needs Nick's roster file. Standings + bracket + auto-recap all keyed on UUIDs so renames are safe at any time.
 
-**F. Sunday championship game times.** Friday + Saturday's 12 pool games are seeded with hard times (Fri 6/12 17:00/18:15/19:30 EDT + Sat 6/13 08:00/09:15/10:30 EDT). Sunday's 8 championship games are generated on-demand via the Bracket tab button Sat afternoon; Pete picks the first start time + per-game minutes when generating. Plan Sat afternoon: "Sunday games start at X" — pick a buffer that fits all 8 games across 2 sheets (each pool plays semis then a final or bronze, so the bronze + final per pool need to be sequential on a single sheet OR split across sheets).
+**F. Sunday championship game times.** Saturday's 12 pool games are seeded with hard times (Sat 6/13 08:00/09:15/10:30/11:45/13:00/14:15 EDT at BAM). Sunday's 8 championship games are generated on-demand via the Bracket tab button Sat afternoon (after the last pool game ~15:30 EDT); Pete picks the first start time + per-game minutes when generating. Plan Sat afternoon: "Sunday games start at X" — pick a buffer that fits all 8 games across 2 sheets (each pool plays semis then a final or bronze, so the bronze + final per pool need to be sequential on a single sheet OR split across sheets).
 
 **G. iPad usability of ScorerView.** Spec calls for it. Wake lock works on Safari 16.4+, warning banner shown otherwise. 44px touch targets per spec. **Smoke-test on the actual iPad before pilot.** Open ScorerView for one game, walk through Log Goal / Add Penalty / Period change / Finalize / Reopen. Anything weird → bring it up.
 
@@ -895,7 +933,7 @@ After secrets + deploy, smoke-test:
 
 **K. Mid-game wifi drop.** Optimistic UI rollback on failure already exists (`5c3e42e5`'s changeScore + the goal/penalty error paths). If a scorer fully loses connection, they can't save. Have a backup paper scoresheet at each sheet. The pilot is one weekend at one venue; this is mitigable with prep, not a code fix.
 
-**L. LiveBarn at RMU.** Unknown if RMU Island Sports Center has LiveBarn cameras. If not, leave `rinks.live_barn_venue_id` null on both Sheet 1 + Sheet 2 — the LiveBarn pill auto-hides when the venue ID is missing or placeholder. If yes, set the real venue IDs (one per sheet) once Pete confirms.
+**L. LiveBarn at BAM.** Unknown if Brunswick Auto Mart Arena has LiveBarn cameras. If not, leave `rinks.live_barn_venue_id` null on both Sheet 1 + Sheet 2 — the LiveBarn pill auto-hides when the venue ID is missing or placeholder. If yes, set the real venue IDs (one per sheet) once Pete confirms.
 
 **M. Onboarding modal on tournament URLs.** Pre-existing behavior — flagged in original §11 P5 entry. New users following a BLPA Cleveland link land on the auth screen, sign up, then immediately see the onboarding modal before the tournament. Mildly annoying but not pilot-blocking.
 
@@ -908,12 +946,11 @@ After secrets + deploy, smoke-test:
 5. **Pete** — Smoke-test push end-to-end on a real device (§12 D smoke-test steps). Sign in, Follow tournament, accept push prompt, then have a director finalize any game in ScorerView from a 2nd device → first device should receive push within ~2s.
 6. **Pete** — Smoke-test ScorerView on iPad (P1 G above).
 7. **Pete** — Send pilot URL `https://rinkd.app/tournament/b2789d66-1d77-4a62-862d-00b550da6a98` to BLPA captains. They'll see the public landing without signing up; sign-up CTA brings them into Rinkd, then they can Follow + receive recap pushes.
-8. **Fri Jun 12 afternoon** — verify status is still `active` (it is now, but Pete may have flipped to draft for pre-event privacy).
-9. **Fri Jun 12 evening (5:00-9:00 PM EDT)** — Run pool play day 1 (6 games); standings populate live; auto-recap posts hit Feed + push subscribers as each game finalizes.
-10. **Sat Jun 13 morning (8:00 AM - noon EDT)** — Run pool play day 2 (6 games); all pool play complete; standings final.
-11. **Sat afternoon** — Pete clicks "🏆 Generate Bracket"; picks Sunday start time + rink. 8 championship games created (semis with teams; gold + bronze with TBD).
-12. **Sun Jun 14** — Run championship games. SO winner prompt fires on tied bracket games; bracket auto-fills as each semi ends.
-13. **Sun end** — Champion banner appears. Pete flips status to `complete`.
+8. **Sat Jun 13 morning (pre-08:00 EDT at BAM)** — verify status is still `active` (it is now, but Pete may have flipped to draft for pre-event privacy).
+9. **Sat Jun 13 (08:00 AM - ~3:30 PM EDT at BAM)** — Run all 12 pool games across 6 slots × 2 sheets (08:00 / 09:15 / 10:30 / 11:45 / 13:00 / 14:15). Standings populate live; auto-recap posts hit the tournament Feed tab + push subscribers as each game finalizes.
+10. **Sat ~3:30 PM** — Pete clicks "🏆 Generate Bracket"; picks Sunday start time + rink. 8 championship games created (semis with teams; gold + bronze with TBD).
+11. **Sun Jun 14** — Run championship games. SO winner prompt fires on tied bracket games; bracket auto-fills as each semi ends.
+12. **Sun end** — Champion banner appears. Pete flips status to `complete`.
 
 **P0 backlog is empty.** Remaining items are operations + content (team names from Nick) + smoke testing — no Pete-config or Claude-code work blocks the pilot.
 
@@ -944,8 +981,8 @@ A four-tab xlsx that's the operational view of the roadmap. Pete uploads to Goog
 |---|---|---|
 | **Rinkd Roadmap — May 17 2026** | 72 | All 71 roadmap items from §7 in a single grid. Columns: ID · Category · Item · Priority · Effort · Status · **Sprint** · Brief explanation · Dependency · Spec ref. **Sprint column** is colored: 🟥 S0 (pre-pilot Pete tasks), 🟦 S1.1-S1.5 (Sprint 1 revenue cluster in build order), 🟧 S2, 🟩 S3, ⬜ S4, S5+ / ongoing / consumer / superseded / gated. Bottom has live COUNTIF summary by Status. |
 | **Sprint plan** | 17 | Sequenced execution view of S0 (pre-pilot) + S1 (post-pilot revenue cluster). Each row has Target week + Depends on + What it unlocks. Includes a 3-line summary footer (S1 effort total, first-dollar moment, expected first-month revenue from BLPA Pass-through). |
-| **Per-day checklist** | 26 | Milestone-based pre-pilot checklist (T-26 → T+4). Pete checks off as you go; footer COUNTIFs show "X of Y complete". Sat May 17 (T-26) = today; Fri Jun 12 (T+0) = pilot start. |
-| **Cleveland day-of** | 38 | Hour-by-hour run sheet across 3 days. Friday (orange) = pool play day 1 with hard times (3:30 PM arrival → 9:00 PM close). Saturday (blue) = pool play day 2 + bracket generation. Sunday (red) = championship with placeholder times (`{{ FIRST PUCK }}` / `{{ +90min }}` markers) Pete fills in once RMU ice times confirm. |
+| **Per-day checklist** | 26 | Milestone-based pre-pilot checklist (T-26 → T+4). Pete checks off as you go; footer COUNTIFs show "X of Y complete". **STALE since May 19:** the Friday-start label is wrong (pilot is now Sat 6/13 start at BAM). The xlsx needs regenerating from the current §7 to reflect the 2-day + BAM venue. |
+| **Cleveland day-of** | 38 | Hour-by-hour run sheet. **STALE since May 19:** built for the 3-day RMU plan that was superseded. The current Saturday schedule (12 pool games, 08:00-14:15 EDT at BAM) and 1-day Sunday championship are NOT reflected. Re-derive from §5 May 19 entry when xlsx is regenerated. |
 
 **When to update the spreadsheet:** any time §7 changes (new roadmap item, item completion, sprint re-ordering). Re-run the build scripts in `/tmp/` or re-derive. **Critical:** the spreadsheet is downstream of this handoff doc — handoff doc is source of truth, spreadsheet is its operational projection.
 
