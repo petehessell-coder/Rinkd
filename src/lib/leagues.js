@@ -96,7 +96,7 @@ export async function getLeagueGames(leagueId) {
     .select(`*,
       home_lt:league_teams!home_team_id(id, team_name, logo_color, logo_initials, team:teams(id, name, logo_color, logo_initials)),
       away_lt:league_teams!away_team_id(id, team_name, logo_color, logo_initials, team:teams(id, name, logo_color, logo_initials)),
-      rink:rinks(id, name, sub_rink, live_barn_venue_id)
+      rink:rinks(id, name, sub_rink, live_barn_venue_id, youtube_url)
     `)
     .eq('league_id', leagueId)
     .order('start_time', { ascending: true });
@@ -104,9 +104,14 @@ export async function getLeagueGames(leagueId) {
   return data || [];
 }
 
-export async function addLeagueGame({ league_id, home_team_id, away_team_id, rink_id, location, start_time, live_barn_venue_id }) {
+export async function addLeagueGame({ league_id, home_team_id, away_team_id, rink_id, location, start_time, live_barn_venue_id, youtube_url }) {
   const { data, error } = await supabase.from('league_games')
-    .insert({ league_id, home_team_id, away_team_id, rink_id, location, start_time, live_barn_venue_id: live_barn_venue_id || null, status: 'scheduled' })
+    .insert({
+      league_id, home_team_id, away_team_id, rink_id, location, start_time,
+      live_barn_venue_id: live_barn_venue_id || null,
+      youtube_url: (youtube_url || '').trim() || null,
+      status: 'scheduled',
+    })
     .select().single();
   if (error) throw error;
   return data;

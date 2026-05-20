@@ -194,6 +194,11 @@ export async function bulkInsertLeagueGames(leagueId, games) {
     // Default matches the DB column default; passing 'playoffs' from the
     // (future) bracket generator keeps that path easy.
     phase: g.phase || 'regular_season',
+    // Per-game stream URL override (KOHA + future YouTube/Twitch-broadcast
+    // leagues). NULL means inherit from the rink at render time. The smart
+    // schedule generator doesn't know URLs so this is null for generated
+    // games; commissioners fill it per-game later or set a rink default.
+    youtube_url: (g.youtube_url || '').trim() || null,
   }));
   const { data, error } = await supabase
     .from('league_games')

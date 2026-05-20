@@ -11,6 +11,7 @@ import { getLeaguePosts, createPost, uploadMedia, timeAgo } from '../lib/posts';
 import PostActionMenu from '../components/PostActionMenu';
 import { LedR } from '../components/Logos';
 import { getLiveBarnUrl } from '../lib/livebarn';
+import { resolveStreamUrl, streamButtonLabel, detectStreamPlatform } from '../lib/streamUrl';
 import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
 import SubscribeCalendarSheet from '../components/SubscribeCalendarSheet';
@@ -35,6 +36,12 @@ function GameRow({ game, isCommissioner, navigate }) {
   const venueId = game.live_barn_venue_id || game.rink?.live_barn_venue_id;
   const liveBarnUrl = getLiveBarnUrl(venueId);
   const hasStream = !!liveBarnUrl;  // only real, non-placeholder venue IDs count
+  // KOHA + future YouTube/Twitch/Facebook-broadcast leagues. Resolved from
+  // game.youtube_url with fallback to rink.youtube_url. Independent of
+  // LiveBarn — a game can have both, neither, or one.
+  const streamUrl = resolveStreamUrl(game);
+  const streamLabel = streamUrl ? streamButtonLabel(streamUrl) : null;
+  const streamPlatform = streamUrl ? detectStreamPlatform(streamUrl) : null;
 
   return (
     <div onClick={() => navigate('/league-game/' + game.id + '?type=league')} style={{ padding: '12px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)', cursor: 'pointer' }} onMouseEnter={e=>e.currentTarget.style.background='rgba(46,91,140,0.08)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
@@ -93,6 +100,26 @@ function GameRow({ game, isCommissioner, navigate }) {
           <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:14,color:'#D72638',marginLeft:10}}>10% off</div>
         </div>
       )}
+
+      {/* Stream URL button — independent of LiveBarn. YouTube / Twitch /
+          Facebook / Vimeo / other. Visible pre-game (live stream) AND
+          post-final (most platforms archive the broadcast at the same URL).
+          Color follows the platform: YouTube red, Twitch purple, Facebook
+          blue, fallback navy. */}
+      {streamUrl && (() => {
+        const platformColor = streamPlatform === 'youtube'  ? '#FF0000'
+                            : streamPlatform === 'twitch'   ? '#9146FF'
+                            : streamPlatform === 'facebook' ? '#1877F2'
+                            : streamPlatform === 'vimeo'    ? '#1AB7EA'
+                            : '#0B1F3A';
+        return (
+          <button onClick={() => window.open(streamUrl, '_blank', 'noopener,noreferrer')}
+            style={{display:'inline-flex',alignItems:'center',gap:7,background:platformColor,color:'#FFFFFF',border:'none',borderRadius:999,padding:'8px 16px',fontFamily:'Barlow,sans-serif',fontSize:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap',marginTop:10,marginLeft:hasStream ? 8 : 0}}>
+            <span style={{fontSize:12}}>▶</span>
+            {streamLabel || 'Watch live'}
+          </button>
+        );
+      })()}
 
       {/* Scorer View */}
       {isCommissioner && !isFinal && (

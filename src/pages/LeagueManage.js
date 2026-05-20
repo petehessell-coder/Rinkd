@@ -76,7 +76,7 @@ function ManageLeague({ id, navigate }) {
   const [showScheduleBuilder, setShowScheduleBuilder] = useState(false);
   const [teamSearch, setTeamSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
-  const [gameForm, setGameForm] = useState({ home_team_id: '', away_team_id: '', rink_id: '', location: '', start_time: '', live_barn_venue_id: '' });
+  const [gameForm, setGameForm] = useState({ home_team_id: '', away_team_id: '', rink_id: '', location: '', start_time: '', live_barn_venue_id: '', youtube_url: '' });
   const [unlinkedEmail, setUnlinkedEmail] = useState('');
   const [linkingTeam, setLinkingTeam] = useState(null);
   const [linkSearch, setLinkSearch] = useState('');
@@ -158,6 +158,10 @@ function ManageLeague({ id, navigate }) {
       // venue_id input still wins if filled in.
       const rink = rinks.find(r => r.id === gameForm.rink_id);
       const live_barn_venue_id = (gameForm.live_barn_venue_id || '').trim() || rink?.live_barn_venue_id || null;
+      // Per-game stream URL override; falls back to the rink default if
+      // present. Generic enough for YouTube / Twitch / Facebook etc. —
+      // detection happens at render time via lib/streamUrl.
+      const youtube_url = (gameForm.youtube_url || '').trim() || rink?.youtube_url || null;
       await addLeagueGame({
         league_id: id,
         home_team_id: gameForm.home_team_id,
@@ -166,8 +170,9 @@ function ManageLeague({ id, navigate }) {
         location: gameForm.location || null,
         start_time: gameForm.start_time,
         live_barn_venue_id,
+        youtube_url,
       });
-      setGameForm(p => ({ ...p, rink_id: '', location: '', start_time: '', live_barn_venue_id: '' }));
+      setGameForm(p => ({ ...p, rink_id: '', location: '', start_time: '', live_barn_venue_id: '', youtube_url: '' }));
       await load();
     } catch(e) { setError(e.message); }
   };
@@ -369,6 +374,7 @@ function ManageLeague({ id, navigate }) {
               </Field>
               <Field label="Location (optional)"><input style={inputStyle} value={gameForm.location} onChange={e => setGameForm(p => ({ ...p, location: e.target.value }))} placeholder="Free-text note — only used when the rink isn't in the list" /></Field>
               <Field label="LiveBarn Venue ID (optional override)"><input style={inputStyle} value={gameForm.live_barn_venue_id} onChange={e => setGameForm(p => ({ ...p, live_barn_venue_id: e.target.value }))} placeholder={(rinks.find(r => r.id === gameForm.rink_id)?.live_barn_venue_id) || 'e.g. 12345'} /></Field>
+              <Field label="Stream URL (YouTube / Twitch / Facebook · optional)"><input style={inputStyle} value={gameForm.youtube_url} onChange={e => setGameForm(p => ({ ...p, youtube_url: e.target.value }))} placeholder={(rinks.find(r => r.id === gameForm.rink_id)?.youtube_url) || 'https://youtube.com/@kanataoldtimers/live'} /></Field>
               <Field label="Date & Time"><DateTimePicker value={gameForm.start_time} onChange={v => setGameForm(p => ({ ...p, start_time: v }))} placeholder="Select date & time" /></Field>
               <Btn onClick={handleAddGame}>+ Add Game</Btn>
             </Card>
