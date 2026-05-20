@@ -71,15 +71,22 @@ function Row({ kind, item, onToggle, busyId }) {
     return parts.join(' · ');
   }, [item, kind]);
 
+  // Normalize the avatar fields across the two shapes:
+  //   tournaments: accent_color + logo_url (no logo_color / logo_initials)
+  //   leagues:     logo_color + logo_initials + logo_url
+  // Both fall back to a name-derived 2-letter chip on a blue background.
+  const avatarColor = item.logo_color || item.accent_color || C.blue;
+  const avatarInitials = item.logo_initials || (item.name || '?').slice(0, 2).toUpperCase();
+
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
       <div style={{
         width: 36, height: 36, borderRadius: 8,
-        background: item.logo_url ? `url(${item.logo_url}) center/cover, ${item.logo_color || C.blue}` : (item.logo_color || C.blue),
+        background: item.logo_url ? `url(${item.logo_url}) center/cover, ${avatarColor}` : avatarColor,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 13, color: '#fff', flexShrink: 0,
       }}>
-        {!item.logo_url && (item.logo_initials || (item.name || '?').slice(0, 2).toUpperCase())}
+        {!item.logo_url && avatarInitials}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -113,9 +120,12 @@ export default function AdminActivations({ currentUser, profile }) {
     setLoading(true);
     setError(null);
     try {
+      // tournaments don't carry logo_color / logo_initials (only accent_color
+      // + logo_url); leagues have all four. Select what each table actually
+      // exposes and normalize at render time via the Row component.
       const [t, l] = await Promise.all([
         supabase.from('tournaments')
-          .select('id, name, division, start_date, end_date, is_activated, logo_color, logo_initials, logo_url, created_at')
+          .select('id, name, division, start_date, end_date, is_activated, accent_color, logo_url, created_at')
           .order('created_at', { ascending: false })
           .limit(200),
         supabase.from('leagues')
