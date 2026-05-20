@@ -85,14 +85,27 @@ export default function Auth() {
   // env var isn't set (dev / preview), the widget renders nothing and the
   // signup flow proceeds unblocked (isTurnstileEnabled === false).
   const [captchaToken, setCaptchaToken] = useState(null);
+  // Bumping this `key` on the TurnstileWidget forces React to remount the
+  // widget — gives us a fresh challenge after a failed login (where Supabase
+  // consumed the previous token and we cleared it server-side, but the widget
+  // UI was still showing "Success!"). Without the remount, users saw a green
+  // check next to a red "please complete the verification" message.
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
+  const resetTurnstile = () => {
+    setCaptchaToken(null);
+    setTurnstileResetKey((k) => k + 1);
+  };
 
-  // Reset the Turnstile token whenever the user switches between login /
-  // signup / forgot. Tokens are challenge-specific + short-lived — a token
-  // captured on the signup form would be rejected when forwarded to /signin,
-  // and stale tokens from an abandoned mode shouldn't poison the next attempt.
-  // The widget itself unmounts on mode change (different JSX trees), so React
-  // tears it down; this clears the parent state to match.
-  useEffect(() => { setCaptchaToken(null); }, [mode]);
+  // Reset the Turnstile token + widget whenever the user switches between
+  // login / signup / forgot. Tokens are challenge-specific + short-lived —
+  // a token captured on the signup form would be rejected when forwarded to
+  // /signin, and stale tokens from an abandoned mode shouldn't poison the
+  // next attempt. Inline the resetTurnstile body so the effect deps stay
+  // honest under CRA's default eslint config.
+  useEffect(() => {
+    setCaptchaToken(null);
+    setTurnstileResetKey((k) => k + 1);
+  }, [mode]);
 
   const [form, setForm] = useState({
     email: '', password: '', name: '', handle: '',
@@ -116,9 +129,11 @@ export default function Auth() {
     if (err) {
       track('login_failed', { reason: err.message?.slice(0, 80) });
       setError(err.message);
-      // A failed sign-in consumes the Turnstile token. Force a fresh challenge
-      // by clearing it so the next attempt re-validates.
-      setCaptchaToken(null);
+      // Supabase consumed the Turnstile token even on a wrong-password
+      // rejection. Remount the widget so the UI matches state (otherwise
+      // the user sees a stale "Success!" check next to a "please complete"
+      // error on their next submit).
+      resetTurnstile();
     } else { track('login_success'); navigate(returnTo); }
   };
 
@@ -139,7 +154,7 @@ export default function Auth() {
     if (err) {
       track('password_reset_request_failed', { reason: err.message?.slice(0, 80) });
       setError(err.message);
-      setCaptchaToken(null);
+      resetTurnstile();
       return;
     }
     track('password_reset_requested');
@@ -308,6 +323,7 @@ export default function Auth() {
                     also requires a token under the global CAPTCHA Protection
                     setting. */}
                 <TurnstileWidget
+                  key={`forgot-${turnstileResetKey}`}
                   onToken={(t) => { setCaptchaToken(t); if (error?.startsWith('Please complete')) setError(''); }}
                   onError={() => setCaptchaToken(null)}
                 />
@@ -365,8 +381,12 @@ export default function Auth() {
               {/* Turnstile bot-protection challenge. Renders nothing when
                   REACT_APP_TURNSTILE_SITE_KEY isn't set (dev / preview).
                   Most users see no visible challenge — Managed mode
-                  only shows the puzzle when bot heuristics fire. */}
+                  only shows the puzzle when bot heuristics fire.
+                  `key={turnstileResetKey}` lets handleLogin force a fresh
+                  challenge after a failed sign-in (Supabase consumed the
+                  previous token so we need a new one). */}
               <TurnstileWidget
+                key={`login-${turnstileResetKey}`}
                 onToken={(t) => { setCaptchaToken(t); if (error?.startsWith('Please complete')) setError(''); }}
                 onError={() => setCaptchaToken(null)}
               />
