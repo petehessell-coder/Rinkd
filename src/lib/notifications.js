@@ -96,11 +96,13 @@ export function subscribe(userId, onChange) {
 }
 
 export const KIND_META = {
-  comment:            { icon: '💬', label: 'Comment' },
-  like:               { icon: '❤️', label: 'Like' },
-  follow:             { icon: '👀', label: 'New follower' },
-  team_join_request:  { icon: '🏒', label: 'Roster request' },
-  game_reminder:      { icon: '⏰', label: 'Game reminder' },
-  team_invite:        { icon: '✉️', label: 'Team invite' },
-  league_invite:      { icon: '🏆', label: 'League invite' },
+  comment:             { icon: '💬', label: 'Comment' },
+  like:                { icon: '❤️', label: 'Like' },
+  follow:              { icon: '👀', label: 'New follower' },
+  team_join_request:   { icon: '🏒', label: 'Roster request' },
+  team_join_approved:  { icon: '✅', label: 'Roster approved' },
+  team_join_denied:    { icon: '🚫', label: 'Roster request not accepted' },
+  game_reminder:       { icon: '⏰', label: 'Game reminder' },
+  team_invite:         { icon: '✉️', label: 'Team invite' },
+  league_invite:       { icon: '🏆', label: 'League invite' },
 };

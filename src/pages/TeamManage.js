@@ -183,7 +183,8 @@ function ManageTeam({ id, profile, navigate }) {
     setSaving(true); setError(null);
     try {
       let userId = null;
-      if (memberForm.email.trim()) {
+      const email = memberForm.email.trim().toLowerCase();
+      if (email) {
         // `.limit(1)` rather than `.maybeSingle()` so a (newly impossible
         // after the UNIQUE constraint, but historically possible) duplicate
         // email doesn't blow up the whole add-member flow. We just take the
@@ -191,7 +192,7 @@ function ManageTeam({ id, profile, navigate }) {
         const { data: matches } = await supabase
           .from('profiles')
           .select('id')
-          .eq('email', memberForm.email.trim().toLowerCase())
+          .eq('email', email)
           .limit(1);
         if (matches && matches[0]) userId = matches[0].id;
       }
@@ -205,6 +206,34 @@ function ManageTeam({ id, profile, navigate }) {
         invite_name: memberForm.name.trim(),
         invite_email: memberForm.email.trim() || null,
       });
+
+      // Fire the team_invite email when we added a placeholder by email
+      // (no matching profile). The link_invited_player trigger will
+      // auto-flip user_id + status=active when they sign up with this
+      // email, so the email just needs to motivate the signup. Skipped
+      // when no email given (no way to reach them) or when the email
+      // matched an existing user (they're already on Rinkd; we'd want
+      // a different "you've been added" notification eventually — not
+      // shipped yet, low priority).
+      if (email && !userId) {
+        try {
+          await supabase.functions.invoke('send-invite', {
+            body: {
+              type: 'team_invite',
+              to_email: email,
+              to_name: memberForm.name.trim(),
+              team_name: team?.name || null,
+              invited_by: profile?.name || null,
+            },
+          });
+        } catch (e) {
+          // Non-fatal — the row is on the roster either way. Log so we
+          // can see this if/when it ever surfaces.
+          // eslint-disable-next-line no-console
+          console.warn('[team] invite email send failed; roster row created anyway:', e?.message || e);
+        }
+      }
+
       setMemberForm({ name: '', email: '', jersey_number: '', position: 'Center', role: 'player', shot_hand: 'left' });
       await load();
     } catch(e) { setError(e.message); }
