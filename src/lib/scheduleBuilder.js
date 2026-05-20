@@ -189,6 +189,11 @@ export async function bulkInsertLeagueGames(leagueId, games) {
     status: g.status || 'scheduled',
     period: 1,
     round: g.round != null ? String(g.round) : null,
+    // Phase 3 of the league-parity build: tag every generated game with its
+    // phase so the league_standings view can filter to regular_season only.
+    // Default matches the DB column default; passing 'playoffs' from the
+    // (future) bracket generator keeps that path easy.
+    phase: g.phase || 'regular_season',
   }));
   const { data, error } = await supabase
     .from('league_games')

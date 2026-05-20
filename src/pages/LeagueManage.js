@@ -1,13 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import DateTimePicker from '../components/DateTimePicker';
-import { getLeague, getLeagueTeams, getLeagueGames, createLeague, updateLeague, addLeagueTeam, removeLeagueTeam, addLeagueGame, linkLeagueTeam } from '../lib/leagues';
+import { getLeague, getLeagueTeams, getLeagueGames, getLeagueStandings, updateLeague, addLeagueTeam, removeLeagueTeam, addLeagueGame, linkLeagueTeam } from '../lib/leagues';
+import { generatePlayoffRoundOne, generatePlayoffNextRound, SUPPORTED_BRACKET_SIZES } from '../lib/leaguePlayoffGenerator';
 import { listRinks } from '../lib/rinks';
 import { supabase } from '../lib/supabase';
 import { sendLeagueInvite } from '../lib/invites';
 import ScheduleBuilderModal from '../components/ScheduleBuilderModal';
-import { rescheduleGame, deleteLeagueGame } from '../lib/scheduleBuilder';
+import { rescheduleGame, deleteLeagueGame, bulkInsertLeagueGames } from '../lib/scheduleBuilder';
+import { generateLeagueSchedule } from '../lib/leagueScheduleGenerator';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 const inputStyle = { width:'100%', background:'#07111F', border:`0.5px solid ${C.border}`, borderRadius:8, padding:'10px 12px', color:C.ice, fontFamily:'Barlow, sans-serif', fontSize:14, outline:'none' };
@@ -57,78 +59,17 @@ function Btn({ onClick, children, disabled, variant = 'primary' }) {
   );
 }
 
-// ── CREATE ────────────────────────────────────────────────────
-function CreateLeague({ navigate }) {
-  const [form, setForm] = useState({ name: '', division: '', level: '', location: '', season: '', logo_color: '#2E5B8C', logo_initials: '', settings: { points_win: 2, points_tie: 1, points_loss: 0 } });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
-  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
-  const initials = form.logo_initials || form.name.split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase();
-
-  const handleCreate = async () => {
-    if (!form.name.trim()) { setError('League name is required'); return; }
-    setSaving(true); setError(null);
-    try {
-      const league = await createLeague(form);
-      navigate('/league/' + league.id + '/manage');
-    } catch(e) { setError(e.message); setSaving(false); }
-  };
-
-  return (
-    <div style={{ background: C.dark, minHeight: '100vh', padding: 20, fontFamily: 'Barlow, sans-serif', color: C.ice, maxWidth: 520, margin: '0 auto' }}>
-      <button onClick={() => navigate('/leagues')} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.5)', fontSize: 13, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', marginBottom: 16 }}>← Leagues</button>
-      <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 26, marginBottom: 4 }}>Create League</div>
-      <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.4)', marginBottom: 20 }}>Season-long competition · Real-time standings</div>
-      {error && <div style={{ background: 'rgba(215,38,56,0.15)', border: '0.5px solid rgba(215,38,56,0.4)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: C.red }}>{error}</div>}
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
-        <div style={{ width: 64, height: 64, borderRadius: 12, background: form.logo_color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 26, color: '#fff' }}>{initials || '?'}</div>
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(244,247,250,0.4)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Logo Color</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {LOGO_COLORS.map(col => <div key={col} onClick={() => set('logo_color', col)} style={{ width: 24, height: 24, borderRadius: '50%', background: col, cursor: 'pointer', border: form.logo_color === col ? '2px solid #fff' : '2px solid transparent' }} />)}
-          </div>
-        </div>
-      </div>
-
-      <Card>
-        <Field label="League Name *"><input style={inputStyle} value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Chicago Hockey League" /></Field>
-        <Field label="Logo Initials"><input style={inputStyle} value={form.logo_initials} onChange={e => set('logo_initials', e.target.value.toUpperCase().slice(0, 3))} placeholder="Auto from name" maxLength={3} /></Field>
-        <Row2>
-          <Field label="Division"><input style={inputStyle} value={form.division} onChange={e => set('division', e.target.value)} placeholder="e.g. 14U AA" /></Field>
-          <Field label="Level"><input style={inputStyle} value={form.level} onChange={e => set('level', e.target.value)} placeholder="e.g. AAA, Rec" /></Field>
-        </Row2>
-        <Row2>
-          <Field label="Location"><input style={inputStyle} value={form.location} onChange={e => set('location', e.target.value)} placeholder="e.g. Chicago, IL" /></Field>
-          <Field label="Season"><input style={inputStyle} value={form.season} onChange={e => set('season', e.target.value)} placeholder="e.g. Fall 2026" /></Field>
-        </Row2>
-      </Card>
-
-      <SecLabel>Point System</SecLabel>
-      <Card>
-        <Row2>
-          <Field label="Win"><select style={inputStyle} value={form.settings.points_win} onChange={e => set('settings', {...form.settings, points_win: parseInt(e.target.value)})}>{[0,1,2,3].map(n => <option key={n} value={n}>{n} pts</option>)}</select></Field>
-          <Field label="Tie"><select style={inputStyle} value={form.settings.points_tie} onChange={e => set('settings', {...form.settings, points_tie: parseInt(e.target.value)})}>{[0,1,2].map(n => <option key={n} value={n}>{n} pt{n!==1?'s':''}</option>)}</select></Field>
-        </Row2>
-        <Field label="Loss"><select style={inputStyle} value={form.settings.points_loss} onChange={e => set('settings', {...form.settings, points_loss: parseInt(e.target.value)})}>{[0,1].map(n => <option key={n} value={n}>{n} pts</option>)}</select></Field>
-      </Card>
-
-      <button onClick={handleCreate} disabled={saving}
-        style={{ width: '100%', padding: 14, background: C.red, border: 'none', borderRadius: 999, color: '#fff', fontSize: 15, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'Barlow, sans-serif', opacity: saving ? 0.7 : 1, transition: 'all 0.15s' }}
-        onMouseEnter={e => { if (!saving) { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}}
-        onMouseLeave={e => { e.currentTarget.style.background = C.red; e.currentTarget.style.color = '#fff'; }}>
-        {saving ? 'Creating...' : '🏆 Create League'}
-      </button>
-    </div>
-  );
-}
-
 // ── MANAGE ────────────────────────────────────────────────────
+// (Inline CreateLeague stripped May 19, 2026 — Phase 1 of the league-parity
+//  build ships a real 4-step wizard at /league/create → src/pages/LeagueCreate.js.
+//  LeagueManage now only handles /league/:id/manage.)
 function ManageLeague({ id, navigate }) {
   const [league, setLeague] = useState(null);
   const [teams, setTeams] = useState([]);
   const [games, setGames] = useState([]);
   const [rinks, setRinks] = useState([]);
+  // Standings drives the Playoffs tab — used to seed round-1 bracket games.
+  const [standings, setStandings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('Teams');
   const [error, setError] = useState(null);
@@ -146,8 +87,12 @@ function ManageLeague({ id, navigate }) {
       // Fetch rinks alongside league/teams/games so the single-game form can
       // attach a real rink_id (and the rink shows up on the game cards via the
       // rinks join in getLeagueGames). listRinks() is small and cheap.
-      const [l, t, g, r] = await Promise.all([getLeague(id), getLeagueTeams(id), getLeagueGames(id), listRinks().catch(() => [])]);
-      setLeague(l); setTeams(t); setGames(g); setRinks(r || []);
+      const [l, t, g, r, s] = await Promise.all([
+        getLeague(id), getLeagueTeams(id), getLeagueGames(id),
+        listRinks().catch(() => []),
+        getLeagueStandings(id).catch(() => []),
+      ]);
+      setLeague(l); setTeams(t); setGames(g); setRinks(r || []); setStandings(s || []);
       if (t.length >= 2) setGameForm(p => ({ ...p, home_team_id: t[0].id, away_team_id: t[1].id }));
     } catch(e) { console.error(e); }
     finally { setLoading(false); }
@@ -227,7 +172,7 @@ function ManageLeague({ id, navigate }) {
     } catch(e) { setError(e.message); }
   };
 
-  const MANAGE_TABS = ['Teams', 'Schedule', 'Settings'];
+  const MANAGE_TABS = ['Teams', 'Schedule', 'Playoffs', 'Settings'];
 
   if (loading) return <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Loading...</div>;
 
@@ -251,6 +196,17 @@ function ManageLeague({ id, navigate }) {
       </div>
 
       <div style={{ padding: 16, maxWidth: 520, margin: '0 auto' }}>
+        {league && league.is_activated === false && (
+          <div style={{ background: 'rgba(245,158,11,0.12)', border: '0.5px solid rgba(245,158,11,0.4)', borderRadius: 10, padding: '12px 14px', marginBottom: 14, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+            <div style={{ fontSize: 18 }}>🔒</div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#F59E0B' }}>Activation pending</div>
+              <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.65)', marginTop: 4, lineHeight: 1.5 }}>
+                You can set up teams, schedule, and bracket now. Live scoring + auto-recap pushes are locked until Rinkd activates this league. Email <a href="mailto:hello@rinkd.app?subject=League Activation Request" style={{ color: '#F59E0B' }}>hello@rinkd.app</a> to activate.
+              </div>
+            </div>
+          </div>
+        )}
         {error && <div style={{ background: 'rgba(215,38,56,0.15)', border: '0.5px solid rgba(215,38,56,0.4)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: C.red }}>{error}</div>}
 
         {/* TEAMS */}
@@ -357,18 +313,28 @@ function ManageLeague({ id, navigate }) {
 
         {activeTab === 'Schedule' && (
           <>
-            <SecLabel>Generate Full Season</SecLabel>
+            <SecLabel>⚡ Smart Generator — Target Games Per Team</SecLabel>
+            <Card>
+              <SmartScheduleGenerator
+                leagueId={id}
+                teams={teams}
+                rinks={rinks}
+                onPublished={async () => { await load(); }}
+              />
+            </Card>
+
+            <SecLabel>Advanced — Single/Double Round-Robin Wizard</SecLabel>
             <Card>
               <div style={{ fontSize: 13, color: C.steel, lineHeight: 1.6, marginBottom: 12 }}>
-                Got at least 2 teams? Auto-build the whole season — round-robin pairings,
-                weekly slots, home/away balanced. We'll warn about rink double-bookings
-                before you publish.
+                Need finer control? The advanced builder does single/double
+                round-robin with explicit rink-by-team mapping + double-booking
+                conflict detection.
               </div>
               <button onClick={() => setShowScheduleBuilder(true)}
                 disabled={!teams || teams.length < 2}
-                style={{ padding: '11px 18px', borderRadius: 999, background: teams.length < 2 ? C.border : C.red, border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: teams.length < 2 ? 'not-allowed' : 'pointer', fontFamily: 'Barlow, sans-serif', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                style={{ padding: '11px 18px', borderRadius: 999, background: teams.length < 2 ? C.border : C.blue, border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: teams.length < 2 ? 'not-allowed' : 'pointer', fontFamily: 'Barlow, sans-serif', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 16 }}>📅</span>
-                <span>Generate Schedule</span>
+                <span>Open advanced builder</span>
               </button>
             </Card>
 
@@ -452,6 +418,18 @@ function ManageLeague({ id, navigate }) {
           </>
         )}
 
+        {/* PLAYOFFS — Phase 3b */}
+        {activeTab === 'Playoffs' && (
+          <PlayoffsTab
+            leagueId={id}
+            teams={teams}
+            standings={standings}
+            games={games}
+            rinks={rinks}
+            onPublished={async () => { await load(); }}
+          />
+        )}
+
         {showScheduleBuilder && (
           <ScheduleBuilderModal
             leagueId={id}
@@ -467,6 +445,591 @@ function ManageLeague({ id, navigate }) {
           <LeagueSettings league={league} onSave={async (updates) => { await updateLeague(id, updates); await load(); }} />
         )}
       </div>
+    </div>
+  );
+}
+
+// ── PLAYOFFS TAB ───────────────────────────────────────────────
+// Phase 3b of the league-parity build. Single-round-at-a-time bracket
+// generator. Because league_games.home_team_id / away_team_id are NOT
+// NULL (unlike tournaments.games which allows TBD placeholders), we
+// only emit games once their teams are resolved:
+//   - Round 1: seed from standings (top N teams, standard 1v8 / 4v5 / 3v6 / 2v7 etc.)
+//   - Round 2+: pair winners from the prior round; bronze game pairs the
+//     two losing semifinalists when that round was 'semifinal'.
+//
+// Both flows share the same scheduling form (start date / days-of-week /
+// games-per-day / rink / first puck / spacing) and write through
+// bulkInsertLeagueGames with phase='playoffs' + round='quarterfinal' |
+// 'semifinal' | 'final' | 'bronze'.
+function PlayoffsTab({ leagueId, teams, standings, games, rinks, onPublished }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [bracketSize, setBracketSize] = useState(() => {
+    // Pick the largest supported size that fits the team count.
+    const N = teams?.length || 0;
+    if (N >= 8) return 8;
+    if (N >= 4) return 4;
+    if (N >= 2) return 2;
+    return 4;
+  });
+  const [form, setForm] = useState({
+    startDate: today,
+    daysOfWeek: [0],
+    gamesPerDay: 2,
+    rinkId: '',
+    firstPuckHour: 18,
+    firstPuckMinute: 0,
+    gameBlockMinutes: 75,
+    includeBronze: true,
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+  const toggleDay = (d) => set('daysOfWeek',
+    form.daysOfWeek.includes(d)
+      ? form.daysOfWeek.filter((x) => x !== d)
+      : [...form.daysOfWeek, d].sort()
+  );
+
+  // Existing playoff games on this league, grouped by round.
+  const playoffGames = useMemo(() => (games || []).filter((g) => g.phase === 'playoffs'), [games]);
+  const byRound = useMemo(() => {
+    const map = {};
+    for (const g of playoffGames) {
+      const r = g.round || 'unknown';
+      (map[r] = map[r] || []).push(g);
+    }
+    return map;
+  }, [playoffGames]);
+
+  // Find the most-recently-finalized round so the "Generate next round"
+  // button can pre-fill the winners.
+  const ROUND_ORDER = ['quarterfinal', 'semifinal', 'final'];
+  const lastFinalRound = useMemo(() => {
+    for (let i = ROUND_ORDER.length - 1; i >= 0; i--) {
+      const r = ROUND_ORDER[i];
+      const rGames = byRound[r] || [];
+      if (rGames.length > 0 && rGames.every((g) => g.status === 'final')) return r;
+    }
+    return null;
+  }, [byRound]);
+
+  const hasRound1 = !!byRound[firstRoundLabelFromSize(bracketSize)];
+
+  // Round 1 generator
+  const round1Preview = useMemo(() => {
+    if (hasRound1) return null;
+    return generatePlayoffRoundOne({
+      standings,
+      bracketSize,
+      startDate: form.startDate,
+      daysOfWeek: form.daysOfWeek,
+      gamesPerDay: form.gamesPerDay,
+      rinkId: form.rinkId || null,
+      firstPuckHour: form.firstPuckHour,
+      firstPuckMinute: form.firstPuckMinute,
+      gameBlockMinutes: form.gameBlockMinutes,
+    });
+  }, [standings, bracketSize, form, hasRound1]);
+
+  // Next round generator (round 2+) — uses last finalized round as input.
+  const nextRoundPreview = useMemo(() => {
+    if (!lastFinalRound) return null;
+    const prev = (byRound[lastFinalRound] || []).slice().sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+    return generatePlayoffNextRound({
+      previousRound: prev,
+      bracketSize,
+      includeBronze: form.includeBronze,
+      startDate: form.startDate,
+      daysOfWeek: form.daysOfWeek,
+      gamesPerDay: form.gamesPerDay,
+      rinkId: form.rinkId || null,
+      firstPuckHour: form.firstPuckHour,
+      firstPuckMinute: form.firstPuckMinute,
+      gameBlockMinutes: form.gameBlockMinutes,
+    });
+  }, [byRound, lastFinalRound, bracketSize, form]);
+
+  const handleGenerate = async (rows, errorOverride) => {
+    if (busy || !rows || rows.length === 0) return;
+    setBusy(true);
+    setError(errorOverride || null);
+    const { error: insertErr } = await bulkInsertLeagueGames(leagueId, rows);
+    setBusy(false);
+    if (insertErr) { setError(insertErr.message || 'Insert failed.'); return; }
+    await onPublished?.();
+  };
+
+  const teamNameByLtId = useMemo(() => {
+    const m = {};
+    for (const lt of teams || []) m[lt.id] = lt.team?.name || lt.team_name || '—';
+    return m;
+  }, [teams]);
+
+  if ((teams?.length || 0) < 2) {
+    return (
+      <Card>
+        <div style={{ fontSize: 13, color: C.steel, lineHeight: 1.6 }}>
+          Add at least 2 teams to set up a playoff bracket. The Playoffs tab needs final standings so it can seed round 1 from the top N teams.
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <>
+      {/* Bracket / scheduling form */}
+      <SecLabel>🏆 Generate Playoff Bracket</SecLabel>
+      <Card>
+        <div style={{ fontSize: 13, color: C.steel, lineHeight: 1.6, marginBottom: 12 }}>
+          {hasRound1
+            ? 'Round 1 is on the books. Finalize all round-1 games, then come back here to generate the next round from the winners.'
+            : 'Pick how many teams advance from the standings. Higher seed gets home ice. Game times stagger from your start date / days-of-week.'}
+        </div>
+        <Row2>
+          <Field label="Bracket Size">
+            <select style={inputStyle} value={bracketSize}
+              onChange={(e) => setBracketSize(parseInt(e.target.value, 10))}>
+              {SUPPORTED_BRACKET_SIZES.map((n) => (
+                <option key={n} value={n} disabled={n > (teams?.length || 0)}>
+                  {n} teams{n > (teams?.length || 0) ? ' — not enough teams' : ''}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Start Date">
+            <input style={inputStyle} type="date" value={form.startDate}
+              onChange={(e) => set('startDate', e.target.value)} />
+          </Field>
+        </Row2>
+
+        <Field label="Game Days">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {DAY_NAMES.map((name, d) => {
+              const on = form.daysOfWeek.includes(d);
+              return (
+                <button key={d} type="button" onClick={() => toggleDay(d)}
+                  style={{
+                    background: on ? C.red : 'rgba(46,91,140,0.18)',
+                    border: `0.5px solid ${on ? C.red : C.border}`,
+                    color: on ? '#fff' : C.steel,
+                    borderRadius: 999, padding: '6px 12px',
+                    fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                    fontFamily: 'Barlow, sans-serif',
+                  }}>
+                  {name}
+                </button>
+              );
+            })}
+          </div>
+        </Field>
+
+        <Row2>
+          <Field label="Games Per Day">
+            <input style={inputStyle} type="number" min={1} max={20}
+              value={form.gamesPerDay}
+              onChange={(e) => set('gamesPerDay', Math.max(1, parseInt(e.target.value, 10) || 1))} />
+          </Field>
+          <Field label="Rink (optional)">
+            <select style={inputStyle} value={form.rinkId} onChange={(e) => set('rinkId', e.target.value)}>
+              <option value="">— No rink —</option>
+              {rinks.map((r) => (
+                <option key={r.id} value={r.id}>{r.name}{r.sub_rink ? ` · ${r.sub_rink}` : ''}</option>
+              ))}
+            </select>
+          </Field>
+        </Row2>
+
+        <Row2>
+          <Field label="First Puck (24h)">
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input style={{ ...inputStyle, flex: 1 }} type="number" min={0} max={23}
+                value={form.firstPuckHour}
+                onChange={(e) => set('firstPuckHour', Math.min(23, Math.max(0, parseInt(e.target.value, 10) || 0)))} />
+              <input style={{ ...inputStyle, flex: 1 }} type="number" min={0} max={59} step={5}
+                value={form.firstPuckMinute}
+                onChange={(e) => set('firstPuckMinute', Math.min(59, Math.max(0, parseInt(e.target.value, 10) || 0)))} />
+            </div>
+          </Field>
+          <Field label="Minutes Between Games">
+            <input style={inputStyle} type="number" min={30} max={300} step={5}
+              value={form.gameBlockMinutes}
+              onChange={(e) => set('gameBlockMinutes', Math.max(30, parseInt(e.target.value, 10) || 30))} />
+          </Field>
+        </Row2>
+
+        {/* Round 1 path */}
+        {!hasRound1 && round1Preview && (
+          <div style={{ background: 'rgba(46,91,140,0.15)', border: `0.5px solid ${C.border}`, borderRadius: 10, padding: '12px 14px', marginTop: 6 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.5)', textTransform: 'uppercase', marginBottom: 6 }}>
+              Round 1 preview — {round1Preview.label || '—'}
+            </div>
+            {round1Preview.error === 'not_enough_teams' && (
+              <div style={{ fontSize: 13, color: '#E26B6B' }}>Only {standings.length} teams have a standings rank — need at least {bracketSize}.</div>
+            )}
+            {round1Preview.error === 'calendar_exhausted' && (
+              <div style={{ fontSize: 13, color: '#E26B6B' }}>Calendar full — try more days-of-week or more games-per-day.</div>
+            )}
+            {!round1Preview.error && round1Preview.rows.length > 0 && (
+              <div style={{ fontSize: 13, color: C.ice, lineHeight: 1.7 }}>
+                {round1Preview.rows.map((r, i) => {
+                  const homeName = teamNameByLtId[r.home_team_id] || '—';
+                  const awayName = teamNameByLtId[r.away_team_id] || '—';
+                  const t = new Date(r.start_time).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+                  return (
+                    <div key={i}>
+                      <strong>{homeName}</strong> vs. <strong>{awayName}</strong>
+                      <span style={{ color: C.steel }}> — {t}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <button onClick={() => handleGenerate(round1Preview.rows)}
+              disabled={busy || round1Preview.error || round1Preview.rows.length === 0}
+              style={{
+                marginTop: 10, padding: '10px 16px', borderRadius: 999,
+                background: busy || round1Preview.error || round1Preview.rows.length === 0 ? C.border : C.red,
+                border: 'none', color: '#fff', fontSize: 13, fontWeight: 700,
+                cursor: busy || round1Preview.error || round1Preview.rows.length === 0 ? 'not-allowed' : 'pointer',
+                fontFamily: 'Barlow, sans-serif',
+              }}>
+              {busy ? 'Generating…' : `🏆 Generate ${round1Preview.label || 'round 1'} (${round1Preview.rows.length} games)`}
+            </button>
+          </div>
+        )}
+
+        {/* Next round path */}
+        {hasRound1 && lastFinalRound && (
+          <div style={{ background: 'rgba(46,91,140,0.15)', border: `0.5px solid ${C.border}`, borderRadius: 10, padding: '12px 14px', marginTop: 6 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.5)', textTransform: 'uppercase', marginBottom: 6 }}>
+              Next round preview — from finalized {lastFinalRound}
+            </div>
+            {nextRoundPreview?.error === 'tournament_complete' && (
+              <div style={{ fontSize: 13, color: C.steel }}>Final has been played — bracket complete.</div>
+            )}
+            {nextRoundPreview?.error === 'incomplete_winners' && (
+              <div style={{ fontSize: 13, color: '#E26B6B' }}>Some {lastFinalRound} games ended in a tie or have no clear winner — fix the scores before generating next round.</div>
+            )}
+            {nextRoundPreview?.error === 'calendar_exhausted' && (
+              <div style={{ fontSize: 13, color: '#E26B6B' }}>Calendar full — try more days-of-week or more games-per-day.</div>
+            )}
+            {!nextRoundPreview?.error && nextRoundPreview?.rows?.length > 0 && (
+              <>
+                {lastFinalRound === 'semifinal' && (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: C.steel, marginBottom: 6 }}>
+                    <input type="checkbox" checked={form.includeBronze} onChange={(e) => set('includeBronze', e.target.checked)} />
+                    Also generate bronze-medal game (losers of semis)
+                  </label>
+                )}
+                <div style={{ fontSize: 13, color: C.ice, lineHeight: 1.7 }}>
+                  {nextRoundPreview.rows.map((r, i) => {
+                    const homeName = teamNameByLtId[r.home_team_id] || '—';
+                    const awayName = teamNameByLtId[r.away_team_id] || '—';
+                    const t = new Date(r.start_time).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+                    return (
+                      <div key={i}>
+                        <span style={{ display: 'inline-block', minWidth: 60, fontSize: 10, fontWeight: 700, padding: '1px 6px', marginRight: 6, borderRadius: 4, background: r.round === 'final' ? 'rgba(245,158,11,0.2)' : r.round === 'bronze' ? 'rgba(180,83,9,0.2)' : 'rgba(46,91,140,0.3)', color: r.round === 'final' ? '#F59E0B' : r.round === 'bronze' ? '#B45309' : C.steel, textAlign: 'center' }}>
+                          {(r.round || '').toUpperCase()}
+                        </span>
+                        <strong>{homeName}</strong> vs. <strong>{awayName}</strong>
+                        <span style={{ color: C.steel }}> — {t}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+            <button onClick={() => handleGenerate(nextRoundPreview?.rows)}
+              disabled={busy || !nextRoundPreview || nextRoundPreview.error || (nextRoundPreview.rows?.length || 0) === 0}
+              style={{
+                marginTop: 10, padding: '10px 16px', borderRadius: 999,
+                background: busy || !nextRoundPreview || nextRoundPreview.error || (nextRoundPreview.rows?.length || 0) === 0 ? C.border : C.red,
+                border: 'none', color: '#fff', fontSize: 13, fontWeight: 700,
+                cursor: busy || !nextRoundPreview || nextRoundPreview.error || (nextRoundPreview.rows?.length || 0) === 0 ? 'not-allowed' : 'pointer',
+                fontFamily: 'Barlow, sans-serif',
+              }}>
+              {busy ? 'Generating…' : `🏆 Generate ${nextRoundPreview?.label || 'next round'} (${nextRoundPreview?.rows?.length || 0} games)`}
+            </button>
+          </div>
+        )}
+
+        {error && (
+          <div style={{ background: 'rgba(215,38,56,0.15)', border: '0.5px solid rgba(215,38,56,0.4)', borderRadius: 8, padding: '8px 12px', marginTop: 10, fontSize: 12, color: C.red }}>
+            {error}
+          </div>
+        )}
+      </Card>
+
+      {/* Standings preview — which teams would seed which slots */}
+      <SecLabel>Top {bracketSize} from Standings (Seeding)</SecLabel>
+      <Card>
+        {standings.length === 0 ? (
+          <div style={{ fontSize: 13, color: C.steel }}>No regular-season standings yet — finalize at least one game so the table populates.</div>
+        ) : (
+          <div>
+            {standings.slice(0, bracketSize).map((row, i) => (
+              <div key={row.lt_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: i < bracketSize - 1 ? '0.5px solid rgba(244,247,250,0.06)' : 'none' }}>
+                <span style={{ width: 22, height: 22, borderRadius: '50%', background: i === 0 ? C.red : 'rgba(46,91,140,0.4)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff' }}>{i + 1}</span>
+                <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: C.ice }}>{row.team_name}</span>
+                <span style={{ fontSize: 11, color: C.steel }}>{row.wins}-{row.losses}-{row.ties} · {row.pts} pts</span>
+              </div>
+            ))}
+            {standings.length < bracketSize && (
+              <div style={{ marginTop: 8, fontSize: 12, color: '#E26B6B' }}>
+                Only {standings.length} teams have a standings rank — need {bracketSize} for this bracket size.
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
+
+      {/* Current bracket — what's already on the books */}
+      {playoffGames.length > 0 && (
+        <>
+          <SecLabel>Current Bracket ({playoffGames.length} games)</SecLabel>
+          <Card>
+            {ROUND_ORDER.concat(['bronze']).map((r) => {
+              const list = (byRound[r] || []).slice().sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+              if (list.length === 0) return null;
+              return (
+                <div key={r} style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.5)', textTransform: 'uppercase', marginBottom: 4 }}>
+                    {r === 'quarterfinal' ? 'Quarterfinals' : r === 'semifinal' ? 'Semifinals' : r === 'final' ? 'Final' : r === 'bronze' ? 'Bronze' : r}
+                  </div>
+                  {list.map((g) => {
+                    const homeName = g.home_lt?.team?.name || g.home_lt?.team_name || teamNameByLtId[g.home_team_id] || '—';
+                    const awayName = g.away_lt?.team?.name || g.away_lt?.team_name || teamNameByLtId[g.away_team_id] || '—';
+                    const isFinal = g.status === 'final';
+                    const t = new Date(g.start_time).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+                    return (
+                      <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', fontSize: 13 }}>
+                        <span style={{ flex: 1, color: C.ice }}>
+                          <strong>{homeName}</strong> <span style={{ color: C.steel }}>vs.</span> <strong>{awayName}</strong>
+                          {isFinal && <span style={{ marginLeft: 8, fontSize: 12, color: C.steel }}>· {g.home_score}–{g.away_score}</span>}
+                        </span>
+                        <span style={{ fontSize: 11, color: C.steel, whiteSpace: 'nowrap' }}>{t}</span>
+                        {isFinal && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: 'rgba(244,247,250,0.08)', color: 'rgba(244,247,250,0.5)' }}>FINAL</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </Card>
+        </>
+      )}
+    </>
+  );
+}
+
+function firstRoundLabelFromSize(n) {
+  if (n === 8) return 'quarterfinal';
+  if (n === 4) return 'semifinal';
+  if (n === 2) return 'final';
+  return null;
+}
+
+// ── SMART SCHEDULE GENERATOR ───────────────────────────────────
+// Phase 3 of the league-parity build. "Option B" UX from Pete's May 19
+// decision: commissioner picks a TARGET games per team; the generator
+// computes the round-robin meetings + slots them onto a calendar built
+// from days-of-week + games-per-day. Live preview re-runs the generator
+// on every form change (no DB hit) so the commissioner sees the actual
+// games-per-team / total-games / end-date before committing.
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function SmartScheduleGenerator({ leagueId, teams, rinks, onPublished }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [form, setForm] = useState({
+    targetGamesPerTeam: 20,
+    startDate: today,
+    daysOfWeek: [0],            // Sun by default; commissioner toggles chips
+    gamesPerDay: 1,
+    rinkId: '',
+    firstPuckHour: 18,
+    firstPuckMinute: 0,
+    gameBlockMinutes: 75,
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [confirmExisting, setConfirmExisting] = useState(false);
+  const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+  const toggleDay = (d) => set('daysOfWeek',
+    form.daysOfWeek.includes(d)
+      ? form.daysOfWeek.filter((x) => x !== d)
+      : [...form.daysOfWeek, d].sort()
+  );
+
+  // Live preview — pure function, no DB. Re-runs on every form change.
+  const preview = useMemo(() => {
+    if (!teams || teams.length < 2) return null;
+    return generateLeagueSchedule({
+      teams,
+      targetGamesPerTeam: form.targetGamesPerTeam,
+      startDate: form.startDate,
+      daysOfWeek: form.daysOfWeek,
+      gamesPerDay: form.gamesPerDay,
+      rinkId: form.rinkId || null,
+      firstPuckHour: form.firstPuckHour,
+      firstPuckMinute: form.firstPuckMinute,
+      gameBlockMinutes: form.gameBlockMinutes,
+    });
+  }, [teams, form]);
+
+  const handleGenerate = async () => {
+    if (busy) return;
+    setError(null);
+    if (!preview || preview.shape.totalGames === 0) {
+      setError('Need at least 2 teams and a positive target.');
+      return;
+    }
+    if (preview.error === 'calendar_exhausted') {
+      setError('The chosen days-of-week + start date don\'t fit the schedule within 3 years. Pick more days per week or fewer target games.');
+      return;
+    }
+    if (!confirmExisting) {
+      // Soft warning. The bulk insert doesn't dedupe — re-generating
+      // doubles the schedule. Force a one-tap confirm before we touch the
+      // DB so a commissioner doesn't accidentally double their season.
+      setConfirmExisting(true);
+      return;
+    }
+    setBusy(true);
+    const { error: insertErr } = await bulkInsertLeagueGames(leagueId, preview.rows);
+    setBusy(false);
+    if (insertErr) {
+      setError(insertErr.message || 'Insert failed.');
+      return;
+    }
+    setConfirmExisting(false);
+    await onPublished?.();
+  };
+
+  const lastSlotLabel = preview?.lastSlotDate
+    ? new Date(preview.lastSlotDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+    : '—';
+
+  return (
+    <div>
+      <div style={{ fontSize: 13, color: C.steel, lineHeight: 1.6, marginBottom: 12 }}>
+        Type the games you want each team to play. We compute the round-robin meetings, balance home/away, and lay them out on the days you pick. Edit any game by hand after generating.
+      </div>
+
+      <Row2>
+        <Field label="Target Games Per Team">
+          <input style={inputStyle} type="number" min={1} max={200}
+            value={form.targetGamesPerTeam}
+            onChange={(e) => set('targetGamesPerTeam', Math.max(1, parseInt(e.target.value, 10) || 1))} />
+        </Field>
+        <Field label="Start Date">
+          <input style={inputStyle} type="date" value={form.startDate}
+            onChange={(e) => set('startDate', e.target.value)} />
+        </Field>
+      </Row2>
+
+      <Field label="Game Days">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {DAY_NAMES.map((name, d) => {
+            const on = form.daysOfWeek.includes(d);
+            return (
+              <button key={d} type="button" onClick={() => toggleDay(d)}
+                style={{
+                  background: on ? C.red : 'rgba(46,91,140,0.18)',
+                  border: `0.5px solid ${on ? C.red : C.border}`,
+                  color: on ? '#fff' : C.steel,
+                  borderRadius: 999, padding: '6px 12px',
+                  fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                  fontFamily: 'Barlow, sans-serif',
+                }}>
+                {name}
+              </button>
+            );
+          })}
+        </div>
+      </Field>
+
+      <Row2>
+        <Field label="Games Per Day">
+          <input style={inputStyle} type="number" min={1} max={20}
+            value={form.gamesPerDay}
+            onChange={(e) => set('gamesPerDay', Math.max(1, parseInt(e.target.value, 10) || 1))} />
+        </Field>
+        <Field label="Rink (optional)">
+          <select style={inputStyle} value={form.rinkId} onChange={(e) => set('rinkId', e.target.value)}>
+            <option value="">— No rink (add per game) —</option>
+            {rinks.map((r) => (
+              <option key={r.id} value={r.id}>{r.name}{r.sub_rink ? ` · ${r.sub_rink}` : ''}</option>
+            ))}
+          </select>
+        </Field>
+      </Row2>
+
+      <Row2>
+        <Field label="First Puck (24h)">
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input style={{ ...inputStyle, flex: 1 }} type="number" min={0} max={23}
+              value={form.firstPuckHour}
+              onChange={(e) => set('firstPuckHour', Math.min(23, Math.max(0, parseInt(e.target.value, 10) || 0)))} />
+            <input style={{ ...inputStyle, flex: 1 }} type="number" min={0} max={59} step={5}
+              value={form.firstPuckMinute}
+              onChange={(e) => set('firstPuckMinute', Math.min(59, Math.max(0, parseInt(e.target.value, 10) || 0)))} />
+          </div>
+        </Field>
+        <Field label="Minutes Between Games">
+          <input style={inputStyle} type="number" min={30} max={300} step={5}
+            value={form.gameBlockMinutes}
+            onChange={(e) => set('gameBlockMinutes', Math.max(30, parseInt(e.target.value, 10) || 30))} />
+        </Field>
+      </Row2>
+
+      {/* Live preview */}
+      <div style={{ background: 'rgba(46,91,140,0.15)', border: `0.5px solid ${C.border}`, borderRadius: 10, padding: '12px 14px', marginTop: 6, marginBottom: 12 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.5)', textTransform: 'uppercase', marginBottom: 6 }}>
+          Preview
+        </div>
+        {!teams || teams.length < 2 ? (
+          <div style={{ fontSize: 13, color: C.steel }}>Add at least 2 teams to preview the schedule.</div>
+        ) : preview?.shape?.totalGames === 0 ? (
+          <div style={{ fontSize: 13, color: C.steel }}>Set a target above to preview.</div>
+        ) : preview?.error === 'calendar_exhausted' ? (
+          <div style={{ fontSize: 13, color: '#E26B6B' }}>
+            Calendar full — try more days-of-week or more games-per-day.
+          </div>
+        ) : (
+          <div style={{ fontSize: 13, color: C.ice, lineHeight: 1.55 }}>
+            <strong>{preview.shape.totalGames}</strong> games across <strong>{teams.length}</strong> teams.<br/>
+            Each team plays each opponent <strong>{preview.shape.meetingsPerPair}×</strong> = <strong>{preview.shape.gamesPerTeam} games per team</strong>.<br/>
+            Last game: <strong>{lastSlotLabel}</strong>.
+          </div>
+        )}
+      </div>
+
+      {error && (
+        <div style={{ background: 'rgba(215,38,56,0.15)', border: '0.5px solid rgba(215,38,56,0.4)', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: C.red }}>
+          {error}
+        </div>
+      )}
+
+      <button onClick={handleGenerate} disabled={busy || !preview || preview.shape.totalGames === 0}
+        style={{
+          padding: '11px 18px', borderRadius: 999,
+          background: busy || !preview || preview.shape.totalGames === 0 ? C.border : C.red,
+          border: 'none', color: '#fff', fontSize: 14, fontWeight: 700,
+          cursor: busy || !preview || preview.shape.totalGames === 0 ? 'not-allowed' : 'pointer',
+          fontFamily: 'Barlow, sans-serif', display: 'inline-flex', alignItems: 'center', gap: 8,
+        }}>
+        <span style={{ fontSize: 16 }}>⚡</span>
+        <span>
+          {busy ? 'Generating…' : confirmExisting ? `Confirm — insert ${preview?.shape?.totalGames || 0} games` : 'Generate Schedule'}
+        </span>
+      </button>
+      {confirmExisting && !busy && (
+        <button onClick={() => setConfirmExisting(false)}
+          style={{ marginLeft: 8, background: 'transparent', border: 'none', color: C.steel, fontSize: 12, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>
+          Cancel
+        </button>
+      )}
     </div>
   );
 }
@@ -517,6 +1080,10 @@ function LeagueSettings({ league, onSave }) {
 export default function LeagueManage({ profile }) {
   const { id } = useParams();
   const navigate = useNavigate();
-  if (!id || id === 'create') return <Layout profile={profile}><CreateLeague navigate={navigate} /></Layout>;
+  // /league/create now routes to <LeagueCreate /> directly in App.js — this
+  // page only handles the /league/:id/manage flow. The defensive redirect
+  // catches any stale links that still hit /league/create through this
+  // component (shouldn't be reachable via App.js routing).
+  if (!id || id === 'create') { navigate('/league/create', { replace: true }); return null; }
   return <Layout profile={profile}><ManageLeague id={id} navigate={navigate} /></Layout>;
 }

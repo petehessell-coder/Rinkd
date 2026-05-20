@@ -19,10 +19,34 @@ export async function getLeague(id) {
   return data;
 }
 
-export async function createLeague({ name, division, level, location, season, logo_color, logo_initials, settings }) {
+export async function createLeague({
+  name, division, level, location, season,
+  logo_color, logo_initials, logo_url, accent_color,
+  start_date, end_date, venue_name, venue_address,
+  settings,
+}) {
   const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Your session expired — please sign in again.');
+  // Null out empty-string date fields so Postgres doesn't reject them.
+  const nz = v => (typeof v === 'string' && v.trim() === '' ? null : v);
   const { data, error } = await supabase.from('leagues')
-    .insert({ name, division, level, location, season, logo_color, logo_initials, settings, commissioner_id: user.id })
+    .insert({
+      name,
+      division: nz(division),
+      level: nz(level),
+      location: nz(location),
+      season: nz(season),
+      logo_color,
+      logo_initials: nz(logo_initials),
+      logo_url: nz(logo_url),
+      accent_color: nz(accent_color),
+      start_date: nz(start_date),
+      end_date: nz(end_date),
+      venue_name: nz(venue_name),
+      venue_address: nz(venue_address),
+      settings,
+      commissioner_id: user.id,
+    })
     .select().single();
   if (error) throw error;
   return data;
@@ -104,10 +128,36 @@ export async function getLeagueStandings(leagueId) {
   return data || [];
 }
 
+/**
+ * Returns the highest role the current user has on this league.
+ *
+ *   'commissioner' — founding commissioner OR has league_roles.role = 'commissioner'
+ *   'scorer'       — has league_roles.role = 'scorer'
+ *   'viewer'       — signed in but no role on this league
+ *   null           — not signed in
+ *
+ * Multi-commissioner support shipped Phase 1: any caller that previously
+ * compared `league.commissioner_id === currentUser.id` synchronously
+ * should still work for the founder, but should ALSO honor an async
+ * isExtraCommissioner check (or call this function) so additional
+ * commissioners get the same access. See src/lib/leagueCommissioners.js.
+ */
 export async function getUserLeagueRole(leagueId) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
-  const { data } = await supabase.from('leagues').select('commissioner_id').eq('id', leagueId).single();
-  if (!data) return null;
-  return data.commissioner_id === user.id ? 'commissioner' : 'viewer';
+
+  const { data: lg } = await supabase.from('leagues').select('commissioner_id').eq('id', leagueId).single();
+  if (!lg) return null;
+  if (lg.commissioner_id === user.id) return 'commissioner';
+
+  const { data: role } = await supabase
+    .from('league_roles')
+    .select('role')
+    .eq('league_id', leagueId)
+    .eq('user_id', user.id)
+    .limit(1)
+    .maybeSingle();
+  if (role?.role === 'commissioner') return 'commissioner';
+  if (role?.role === 'scorer') return 'scorer';
+  return 'viewer';
 }

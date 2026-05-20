@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { RinkdLogo, Wordmark } from '../components/Logos';
 import { signIn, signUp } from '../lib/auth';
@@ -86,6 +86,14 @@ export default function Auth() {
   // signup flow proceeds unblocked (isTurnstileEnabled === false).
   const [captchaToken, setCaptchaToken] = useState(null);
 
+  // Reset the Turnstile token whenever the user switches between login /
+  // signup / forgot. Tokens are challenge-specific + short-lived — a token
+  // captured on the signup form would be rejected when forwarded to /signin,
+  // and stale tokens from an abandoned mode shouldn't poison the next attempt.
+  // The widget itself unmounts on mode change (different JSX trees), so React
+  // tears it down; this clears the parent state to match.
+  useEffect(() => { setCaptchaToken(null); }, [mode]);
+
   const [form, setForm] = useState({
     email: '', password: '', name: '', handle: '',
     position: 'Fan', level: 'Beer League', dob: '',
@@ -95,23 +103,45 @@ export default function Auth() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    // Turnstile gate (mirror of the signup path). Supabase's CAPTCHA Protection
+    // is on globally — without a token /auth/v1/signin returns
+    // "captcha protection: request disallowed (no captcha_token found)".
+    if (isTurnstileEnabled && !captchaToken) {
+      setError('Please complete the verification challenge below.');
+      return;
+    }
     setLoading(true); setError('');
-    const { error: err } = await signIn({ email: form.email, password: form.password });
+    const { error: err } = await signIn({ email: form.email, password: form.password, captchaToken });
     setLoading(false);
-    if (err) { track('login_failed', { reason: err.message?.slice(0, 80) }); setError(err.message); }
-    else { track('login_success'); navigate(returnTo); }
+    if (err) {
+      track('login_failed', { reason: err.message?.slice(0, 80) });
+      setError(err.message);
+      // A failed sign-in consumes the Turnstile token. Force a fresh challenge
+      // by clearing it so the next attempt re-validates.
+      setCaptchaToken(null);
+    } else { track('login_success'); navigate(returnTo); }
   };
 
   const handleForgot = async (e) => {
     e.preventDefault();
     if (!forgotEmail.trim()) return;
+    if (isTurnstileEnabled && !captchaToken) {
+      setError('Please complete the verification challenge below.');
+      return;
+    }
     setForgotBusy(true); setError('');
     const { supabase } = await import('../lib/supabase');
     const { error: err } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim(), {
       redirectTo: `${window.location.origin}/reset-password`,
+      captchaToken: captchaToken || undefined,
     });
     setForgotBusy(false);
-    if (err) { track('password_reset_request_failed', { reason: err.message?.slice(0, 80) }); setError(err.message); return; }
+    if (err) {
+      track('password_reset_request_failed', { reason: err.message?.slice(0, 80) });
+      setError(err.message);
+      setCaptchaToken(null);
+      return;
+    }
     track('password_reset_requested');
     setForgotSent(true);
   };
@@ -274,6 +304,13 @@ export default function Auth() {
               <form onSubmit={handleForgot}>
                 <Input label="Email" type="email" value={forgotEmail}
                   onChange={e => setForgotEmail(e.target.value)} placeholder="you@example.com" required />
+                {/* Same Turnstile gate as login + signup. /auth/v1/recover
+                    also requires a token under the global CAPTCHA Protection
+                    setting. */}
+                <TurnstileWidget
+                  onToken={(t) => { setCaptchaToken(t); if (error?.startsWith('Please complete')) setError(''); }}
+                  onError={() => setCaptchaToken(null)}
+                />
                 {error && <p style={{ color: C.red, fontSize: 13, marginBottom: 12 }}>{error}</p>}
                 <button type="submit" disabled={forgotBusy || !forgotEmail.trim()} style={{
                   width: '100%', padding: '14px', borderRadius: 10,
@@ -325,6 +362,14 @@ export default function Auth() {
                 onChange={e => set('email', e.target.value)} placeholder="you@example.com" required />
               <Input label="Password" type="password" value={form.password}
                 onChange={e => set('password', e.target.value)} placeholder="••••••••" required />
+              {/* Turnstile bot-protection challenge. Renders nothing when
+                  REACT_APP_TURNSTILE_SITE_KEY isn't set (dev / preview).
+                  Most users see no visible challenge — Managed mode
+                  only shows the puzzle when bot heuristics fire. */}
+              <TurnstileWidget
+                onToken={(t) => { setCaptchaToken(t); if (error?.startsWith('Please complete')) setError(''); }}
+                onError={() => setCaptchaToken(null)}
+              />
               {error && <p style={{ color: C.red, fontSize: 13, marginBottom: 12 }}>{error}</p>}
               <button type="submit" disabled={loading} style={{
                 width: '100%', padding: '14px', borderRadius: 10,

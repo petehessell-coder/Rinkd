@@ -97,6 +97,7 @@ export default function MoreDrawer({ open, onClose, userId, onSignOut }) {
         {isRinkdAdmin && (
           <DrawerSection title="Rinkd Admin">
             <DrawerRow item={{ path: '/admin/analytics', icon: '📈', label: 'Analytics', sub: 'DAU + events firehose' }} onClose={onClose} />
+            <DrawerRow item={{ path: '/admin/activations', icon: '🔓', label: 'Activations', sub: 'Flip tournaments + leagues on' }} onClose={onClose} />
             <DrawerRow item={{ path: '/admin/feedback', icon: '📬', label: 'Bug reports', sub: 'Triage user reports' }} onClose={onClose} />
             <DrawerRow item={{ path: '/admin/moderation', icon: '🛡️', label: 'Moderation', sub: 'Flagged content + blocklist' }} onClose={onClose} />
           </DrawerSection>

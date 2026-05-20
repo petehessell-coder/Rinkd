@@ -22,6 +22,7 @@ import Tournaments from './pages/Tournaments';
 import TournamentCreate from './pages/TournamentCreate';
 import TournamentManage from './pages/TournamentManage';
 import AdminAnalytics from './pages/AdminAnalytics';
+import AdminActivations from './pages/AdminActivations';
 import AdminFeedback from './pages/AdminFeedback';
 import AdminModeration from './pages/AdminModeration';
 import Settings from './pages/Settings';
@@ -34,6 +35,7 @@ import ResetPassword from './pages/ResetPassword';
 import Teams from './pages/Teams';
 import League from './pages/League';
 import LeagueManage from './pages/LeagueManage';
+import LeagueCreate from './pages/LeagueCreate';
 import Team from './pages/Team';
 import TeamManage from './pages/TeamManage';
 import ScorerView from './pages/ScorerView';
@@ -156,7 +158,14 @@ function AppRoutes() {
       <Route path="/crease" element={<ProtectedRoute><Crease currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/crease/:slug" element={<ProtectedRoute><CreaseShow currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/crease/:showSlug/:episodeNumber" element={<ProtectedRoute><CreaseEpisode currentUser={user} profile={profile} /></ProtectedRoute>} />
-      <Route path="/leagues" element={<ProtectedRoute><Leagues profile={profile} /></ProtectedRoute>} />
+      {/* Leagues index + league detail are publicly viewable so spectators
+          can discover events without a Rinkd account. Mirrors the tournament
+          pattern shipped May 18 (commit 80f71e54). Anonymous users see a
+          PublicLeagueLanding teaser (name / season / venue / teams); live
+          data (standings, schedule, scoresheet, feed composer) is gated
+          inside League.js based on currentUser. RLS allows anonymous SELECT
+          on is_public=true leagues + their teams + games. */}
+      <Route path="/leagues" element={<Leagues profile={profile} />} />
       <Route path="/store" element={<ProtectedRoute><Store profile={profile} /></ProtectedRoute>} />
       <Route path="/discover" element={<ProtectedRoute><Discover currentUser={user} profile={profile} /></ProtectedRoute>} />
       {/* Tournaments index + tournament detail are publicly viewable so
@@ -168,14 +177,15 @@ function AppRoutes() {
           complete tournaments and their teams/games/rinks. */}
       <Route path="/tournaments" element={<Tournaments profile={profile} currentUser={user} />} />
       <Route path="/teams" element={<ProtectedRoute><Teams profile={profile} /></ProtectedRoute>} />
-      <Route path="/league/create" element={<ProtectedRoute><LeagueManage profile={profile} /></ProtectedRoute>} />
+      <Route path="/league/create" element={<ProtectedRoute><LeagueCreate profile={profile} /></ProtectedRoute>} />
       <Route path="/league/:id/manage" element={<ProtectedRoute><LeagueManage profile={profile} /></ProtectedRoute>} />
-      <Route path="/league/:id" element={<ProtectedRoute><League profile={profile} /></ProtectedRoute>} />
+      <Route path="/league/:id" element={<League currentUser={user} profile={profile} />} />
       <Route path="/team/create" element={<ProtectedRoute><TeamManage profile={profile} /></ProtectedRoute>} />
       <Route path="/team/:id/manage" element={<ProtectedRoute><TeamManage profile={profile} /></ProtectedRoute>} />
       <Route path="/team/:id" element={<ProtectedRoute><Team currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/tournament/create" element={<ProtectedRoute><TournamentCreate profile={profile} /></ProtectedRoute>} />
       <Route path="/tournament/:id/manage" element={<ProtectedRoute><TournamentManage currentUser={user} profile={profile} /></ProtectedRoute>} />
+      <Route path="/admin/activations" element={<ProtectedRoute><AdminActivations currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/admin/analytics" element={<ProtectedRoute><AdminAnalytics currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/admin/feedback" element={<ProtectedRoute><AdminFeedback currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/admin/moderation" element={<ProtectedRoute><AdminModeration currentUser={user} profile={profile} /></ProtectedRoute>} />

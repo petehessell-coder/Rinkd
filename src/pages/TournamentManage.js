@@ -168,6 +168,18 @@ export default function TournamentManagePage({ currentUser, profile }) {
           </div>
           <div style={{ fontSize: 13, color: C.steel, marginBottom: 18 }}>{tournament.name} · {tournament.division}</div>
 
+          {tournament.is_activated === false && (
+            <div style={{ background: 'rgba(245,158,11,0.12)', border: '0.5px solid rgba(245,158,11,0.4)', borderRadius: 10, padding: '12px 14px', marginBottom: 18, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <div style={{ fontSize: 18 }}>🔒</div>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#F59E0B' }}>Activation pending</div>
+                <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.65)', marginTop: 4, lineHeight: 1.5 }}>
+                  You can set up teams, schedule, and bracket now. Live scoring + auto-recap pushes are locked until Rinkd activates this tournament. Email <a href="mailto:hello@rinkd.app?subject=Tournament Activation Request" style={{ color: '#F59E0B' }}>hello@rinkd.app</a> to activate.
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Tabs — wrapped in a relative container so the right-edge gradient
               mask hints at horizontal scroll on narrow viewports where "Settings"
               clips off-screen. Without the mask, mobile users miss the last tab. */}

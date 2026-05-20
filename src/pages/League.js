@@ -1,15 +1,21 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import SEO from '../components/SEO';
 import MapLink from '../components/MapLink';
 import { getLeague, getLeagueTeams, getLeagueGames, getLeagueStandings, getUserLeagueRole } from '../lib/leagues';
+import { isExtraCommissioner as isExtraCommissionerLookup } from '../lib/leagueCommissioners';
+import { followLeague, unfollowLeague, isFollowingLeague } from '../lib/leagueSubscriptions';
+import { subscribeToPush, isPushSubscribed } from '../lib/push';
+import { getLeaguePosts, createPost, uploadMedia, timeAgo } from '../lib/posts';
+import PostActionMenu from '../components/PostActionMenu';
 import { LedR } from '../components/Logos';
 import { getLiveBarnUrl } from '../lib/livebarn';
+import { supabase } from '../lib/supabase';
 import SubscribeCalendarSheet from '../components/SubscribeCalendarSheet';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
-const TABS = ['Schedule', 'Standings', 'Teams', 'Info'];
+const TABS = ['Schedule', 'Standings', 'Teams', 'Feed', 'Info'];
 
 function TeamLogo({ team, size = 32 }) {
   return (
@@ -100,7 +106,7 @@ function GameRow({ game, isCommissioner, navigate }) {
   );
 }
 
-export default function LeaguePage({ profile }) {
+export default function LeaguePage({ currentUser, profile }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const [league, setLeague] = useState(null);
@@ -113,13 +119,31 @@ export default function LeaguePage({ profile }) {
   const [activeTab, setActiveTab] = useState('Schedule');
   const [showAll, setShowAll] = useState(false);
   const [subscribeOpen, setSubscribeOpen] = useState(false);
+  // Additional commissioner granted via league_roles — mirror of the
+  // multi-director pattern. Loaded once after league + currentUser resolve;
+  // ORed into isCommissioner so the Manage button + scorer paths honor it.
+  const [isExtraCommissioner, setIsExtraCommissioner] = useState(false);
+  // "🔔 Follow league" — opt-in for push notifications fired when any league
+  // game finalizes (per send-league-recap-push Edge Function targeting).
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followBusy, setFollowBusy] = useState(false);
+  // League-scoped Feed tab — auto-recaps land here when a game finalizes
+  // via ScorerView (see createGameRecapPost + triggerLeagueRecapPush). Lazy-
+  // loaded the first time the Feed tab opens so the Schedule landing stays
+  // fast.
+  const [feedPosts, setFeedPosts] = useState(null); // null = not loaded yet
+  const [feedLoading, setFeedLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
+      // userRole comes back as null for anon users — that's fine, we render
+      // PublicLeagueLanding before any role-gated UI. The other four queries
+      // all hit public-read policies so they work for anon too.
       const [l, t, g, s, r] = await Promise.all([
-        getLeague(id), getLeagueTeams(id), getLeagueGames(id), getLeagueStandings(id), getUserLeagueRole(id)
+        getLeague(id), getLeagueTeams(id), getLeagueGames(id), getLeagueStandings(id),
+        currentUser ? getUserLeagueRole(id) : Promise.resolve(null),
       ]);
       setLeague(l); setTeams(t); setGames(g); setStandings(s); setUserRole(r);
     } catch(e) {
@@ -131,9 +155,86 @@ export default function LeaguePage({ profile }) {
       console.error('[League] load failed', e);
       setError(e?.message || 'Failed to load league');
     } finally { setLoading(false); }
-  }, [id]);
+  }, [id, currentUser]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Resolve isFollowing once on mount / user change. Cheap single-row lookup.
+  useEffect(() => {
+    let cancelled = false;
+    if (!id || !currentUser?.id) { setIsFollowing(false); return; }
+    isFollowingLeague(currentUser.id, id).then((v) => { if (!cancelled) setIsFollowing(v); });
+    return () => { cancelled = true; };
+  }, [id, currentUser?.id]);
+
+  // Resolve isExtraCommissioner — non-founder commissioners need the same
+  // Manage button + scorer affordances as the founder.
+  useEffect(() => {
+    let cancelled = false;
+    if (!id || !currentUser?.id) { setIsExtraCommissioner(false); return; }
+    isExtraCommissionerLookup(currentUser.id, id).then((v) => { if (!cancelled) setIsExtraCommissioner(v); });
+    return () => { cancelled = true; };
+  }, [id, currentUser?.id]);
+
+  // Lazy-load the league-scoped feed the first time the Feed tab opens.
+  useEffect(() => {
+    let cancelled = false;
+    if (activeTab !== 'Feed' || !id || feedPosts !== null) return;
+    setFeedLoading(true);
+    getLeaguePosts(id, 50).then(({ data }) => {
+      if (cancelled) return;
+      setFeedPosts(data || []);
+      setFeedLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [activeTab, id, feedPosts]);
+
+  // Realtime: spectators see scores update live when scorers finalize a
+  // game. Mirrors the Tournament.js pattern (channel name carries a random
+  // suffix to survive StrictMode remounts). Filter on league_id so we only
+  // wake up for this league's writes.
+  useEffect(() => {
+    if (!id) return;
+    let channel = null;
+    try {
+      const name = `league:${id}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+      channel = supabase.channel(name)
+        .on('postgres_changes',
+          { event: '*', schema: 'public', table: 'league_games', filter: `league_id=eq.${id}` },
+          () => { try { load(); } catch { /* swallow */ } })
+        .subscribe();
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[league] realtime subscribe failed; spectators may see stale data:', err);
+    }
+    return () => { try { if (channel) supabase.removeChannel(channel); } catch { /* swallow */ } };
+  }, [id, load]);
+
+  const handleFollowToggle = async () => {
+    if (!currentUser?.id || !id || followBusy) return;
+    setFollowBusy(true);
+    if (isFollowing) {
+      const { error: unfollowErr } = await unfollowLeague(currentUser.id, id);
+      setFollowBusy(false);
+      if (!unfollowErr) setIsFollowing(false);
+      return;
+    }
+    // First-time follow: ensure push pipeline is wired. Same fall-through as
+    // tournament Follow — DB row gets created either way; if the user later
+    // enables push from Profile, future recaps will deliver.
+    const alreadyOn = await isPushSubscribed();
+    if (!alreadyOn) {
+      const sub = await subscribeToPush(currentUser.id);
+      if (!sub) {
+        setFollowBusy(false);
+        // eslint-disable-next-line no-alert
+        window.alert("Push notifications are off for this device, so following won't deliver pushes yet. You can still enable them later from your Profile.");
+      }
+    }
+    const { error: followErr } = await followLeague(currentUser.id, id);
+    setFollowBusy(false);
+    if (!followErr) setIsFollowing(true);
+  };
 
   if (loading) return <Layout profile={profile}><div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Loading...</div></Layout>;
   if (error) return (
@@ -151,9 +252,48 @@ export default function LeaguePage({ profile }) {
       </div>
     </Layout>
   );
-  if (!league) return <Layout profile={profile}><div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>League not found</div></Layout>;
+  if (!league) {
+    // Anon users get the same "private league" framing tournaments use —
+    // RLS already filters non-public leagues out of getLeague.
+    const isAnon = !currentUser;
+    return (
+      <Layout profile={profile}>
+        <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif', padding: 20, textAlign: 'center' }}>
+          <div style={{ maxWidth: 380 }}>
+            <div style={{ fontSize: 32, marginBottom: 10 }}>{isAnon ? '🔒' : '⚠️'}</div>
+            <div style={{ color: isAnon ? C.ice : C.red, fontWeight: 600, marginBottom: 4 }}>
+              {isAnon ? 'This league is private' : 'League not found'}
+            </div>
+            <div style={{ color: 'rgba(244,247,250,0.5)', fontSize: 12, marginBottom: 16 }}>
+              {isAnon ? 'Sign in to view standings, schedule, and team pages — or it may not be published yet.' : 'It may have been removed or never published.'}
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+              {isAnon ? <>
+                <button onClick={() => navigate('/login')} style={{ background: C.red, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', cursor: 'pointer', fontFamily: 'Barlow, sans-serif', fontWeight: 700 }}>Sign in / Sign up</button>
+                <button onClick={() => navigate('/leagues')} style={{ background: C.blue, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>Browse leagues</button>
+              </> : <>
+                <button onClick={load} style={{ background: C.red, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer', fontFamily: 'Barlow, sans-serif', fontWeight: 700 }}>Retry</button>
+                <button onClick={() => navigate('/leagues')} style={{ background: C.blue, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>Back to Leagues</button>
+              </>}
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
-  const isCommissioner = userRole === 'commissioner';
+  // Anonymous spectators: render the teaser landing with metadata + teams.
+  // Live standings / schedule / scoresheet stay gated behind sign-up. After
+  // auth they're back here for the full experience.
+  if (!currentUser) {
+    return <Layout profile={profile}><PublicLeagueLanding league={league} teams={teams} games={games} navigate={navigate} /></Layout>;
+  }
+
+  // Multi-commissioner: the founder (leagues.commissioner_id) lands as
+  // userRole='commissioner' via getUserLeagueRole; additional commissioners
+  // come back through the isExtraCommissioner async lookup. Either path
+  // grants the same Manage button + scorer affordances.
+  const isCommissioner = userRole === 'commissioner' || isExtraCommissioner;
   const now = new Date();
   const liveGames = games.filter(g => g.status === 'live');
   const upcomingGames = games.filter(g => g.status === 'scheduled' && new Date(g.start_time) >= now);
@@ -188,7 +328,31 @@ export default function LeaguePage({ profile }) {
               <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, marginTop: 6, background: league.status === 'active' ? 'rgba(34,197,94,0.15)' : 'rgba(244,247,250,0.08)', color: league.status === 'active' ? '#22C55E' : 'rgba(244,247,250,0.4)', letterSpacing: '0.06em' }}>
                 {league.status === 'active' ? '● IN SEASON' : league.status === 'complete' ? 'SEASON COMPLETE' : 'DRAFT'}
               </span>
+              {league.is_activated === false && (
+                <span title="Live scoring + push notifications are locked until a Rinkd admin activates this league."
+                  style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, marginTop: 6, marginLeft: 6, background: 'rgba(245,158,11,0.18)', color: '#F59E0B', letterSpacing: '0.06em' }}>
+                  🔒 Activation pending
+                </span>
+              )}
             </div>
+            {/* Follow button — hidden for commissioners (they already get
+                events from their own writes via the live recap path).
+                Mirrors the Tournament.js Follow pattern. */}
+            {currentUser && !isCommissioner && (
+              <button onClick={handleFollowToggle} disabled={followBusy}
+                style={{
+                  background: isFollowing ? 'rgba(46,91,140,0.25)' : C.red,
+                  color: isFollowing ? C.ice : '#fff',
+                  border: isFollowing ? '1px solid rgba(46,91,140,0.5)' : 'none',
+                  borderRadius: 999, padding: '5px 12px', fontSize: 11, fontWeight: 700,
+                  cursor: followBusy ? 'wait' : 'pointer',
+                  fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic',
+                  letterSpacing: '0.05em', textTransform: 'uppercase',
+                  opacity: followBusy ? 0.6 : 1, whiteSpace: 'nowrap',
+                }}>
+                {isFollowing ? '🔔 Following' : '🔔 Follow'}
+              </button>
+            )}
             {isCommissioner && (
               <button onClick={() => navigate(`/league/${id}/manage`)}
                 style={{ background: 'rgba(46,91,140,0.25)', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 20, padding: '5px 12px', fontSize: 12, fontWeight: 600, color: C.ice, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap', transition: 'all 0.15s' }}
@@ -359,6 +523,18 @@ export default function LeaguePage({ profile }) {
             </>
           )}
 
+          {/* FEED TAB — auto-recaps + user posts scoped to this league */}
+          {activeTab === 'Feed' && (
+            <LeagueFeedTab
+              posts={feedPosts}
+              setPosts={setFeedPosts}
+              loading={feedLoading}
+              navigate={navigate}
+              currentUser={currentUser}
+              leagueId={id}
+            />
+          )}
+
           {/* INFO TAB */}
           {activeTab === 'Info' && (
             <>
@@ -403,3 +579,252 @@ function getWeekLabel(dateStr) {
 
 const secLabel = { fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'rgba(244,247,250,0.3)', textTransform: 'uppercase', marginBottom: 8 };
 const card = { background: '#0f2847', border: '0.5px solid rgba(46,91,140,0.4)', borderRadius: 12, overflow: 'hidden', marginBottom: 14 };
+
+// League-scoped feed. Mirror of the Tournament Feed tab pattern shipped
+// May 18 (commit 4ec187c4 + ae4d7985). Surfaces auto-recap posts (from
+// ScorerView finalize → createGameRecapPost + triggerLeagueRecapPush) AND
+// user-authored posts scoped to this league. User posts do NOT trigger
+// pushes — only recaps do — to keep notification volume sane.
+function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, leagueId }) {
+  const [draft, setDraft] = useState('');
+  const [mediaFile, setMediaFile] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [composerError, setComposerError] = useState(null);
+
+  const handleSubmit = async () => {
+    if (!currentUser?.id || !leagueId || submitting) return;
+    const content = draft.trim();
+    if (!content && !mediaFile) return;
+    setSubmitting(true);
+    setComposerError(null);
+    try {
+      let mediaUrl = null;
+      let mediaType = null;
+      if (mediaFile) {
+        const up = await uploadMedia(mediaFile, currentUser.id);
+        if (up.error) { setComposerError('Upload failed'); setSubmitting(false); return; }
+        mediaUrl = up.url;
+        mediaType = up.mediaType;
+      }
+      const { data, error } = await createPost(currentUser.id, { content, mediaUrl, mediaType, leagueId });
+      if (error) { setComposerError(error.message || 'Post failed'); setSubmitting(false); return; }
+      if (data) {
+        // Optimistic prepend so the author sees their post immediately. The
+        // next refetch picks up the same row by id.
+        const newPost = { ...data, profiles: currentUser.profile || null };
+        setPosts((prev) => [newPost, ...(prev || [])]);
+      }
+      setDraft('');
+      setMediaFile(null);
+    } catch (e) {
+      setComposerError(e?.message || 'Post failed');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleHidden = (postId) => setPosts((prev) => (prev || []).filter((p) => p.id !== postId));
+  const handleAuthorBlocked = (authorId) => setPosts((prev) => (prev || []).filter((p) => p.author_id !== authorId));
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {currentUser && (
+        <div style={{ background: '#11253E', borderRadius: 10, padding: '10px 12px' }}>
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value.slice(0, 500))}
+            placeholder="Post to the league feed…"
+            rows={2}
+            style={{ width: '100%', background: '#07111F', color: C.ice, border: '1px solid #1F3553', borderRadius: 6, padding: '8px 10px', fontFamily: 'Barlow, sans-serif', fontSize: 13, resize: 'vertical', outline: 'none' }}
+          />
+          {mediaFile && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#9BB5D6', marginTop: 6 }}>
+              <span>📎 {mediaFile.name}</span>
+              <button onClick={() => setMediaFile(null)} style={{ background: 'transparent', border: 'none', color: '#E26B6B', fontSize: 11, cursor: 'pointer' }}>Remove</button>
+            </div>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+            <label style={{ cursor: 'pointer', fontSize: 12, color: '#9BB5D6' }}>
+              📷 Photo
+              <input type="file" accept="image/*,video/*" style={{ display: 'none' }}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) setMediaFile(f); }} />
+            </label>
+            <button onClick={handleSubmit} disabled={submitting || (!draft.trim() && !mediaFile)}
+              style={{ background: submitting || (!draft.trim() && !mediaFile) ? '#1F3553' : '#5B9FE2', color: C.ice, border: 'none', borderRadius: 6, padding: '6px 14px', fontFamily: 'Barlow, sans-serif', fontSize: 12, fontWeight: 700, cursor: submitting ? 'wait' : 'pointer' }}>
+              {submitting ? 'Posting…' : 'Post'}
+            </button>
+          </div>
+          {composerError && <div style={{ color: '#E26B6B', fontSize: 11, marginTop: 6 }}>{composerError}</div>}
+          <div style={{ fontSize: 10, color: '#7C8B9F', marginTop: 4, textAlign: 'right' }}>{draft.length}/500</div>
+        </div>
+      )}
+
+      {loading || posts === null ? (
+        <div style={{ textAlign: 'center', color: '#7C8B9F', fontSize: 13, padding: '24px 16px' }}>Loading…</div>
+      ) : posts.length === 0 ? (
+        <div style={{ textAlign: 'center', color: '#7C8B9F', fontSize: 13, padding: '40px 16px', lineHeight: 1.6 }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>📰</div>
+          No updates yet.<br />
+          Recaps appear here when games finalize. You can post too.
+        </div>
+      ) : (
+        posts.map((p) => {
+          const lines = String(p.content || '').split('\n').filter(Boolean);
+          const headline = lines[0] || 'Update';
+          const body = lines.slice(1).join(' · ');
+          const author = p.profiles?.name || p.profiles?.handle || '';
+          return (
+            <div key={p.id} style={{ background: '#11253E', borderRadius: 10, padding: '12px 14px', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {p.tag && (
+                    <div style={{ display: 'inline-block', background: (p.tag_color || '#2E5B8C') + '40', color: p.tag_color || '#9BB5D6', fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', padding: '2px 8px', borderRadius: 4, marginBottom: 6 }}>
+                      {p.tag}
+                    </div>
+                  )}
+                  <div style={{ fontWeight: p.recap_for_game_id ? 700 : 500, fontSize: p.recap_for_game_id ? 15 : 13, lineHeight: 1.3, marginBottom: body ? 4 : 0 }}>{headline}</div>
+                  {body && <div style={{ fontSize: 13, color: '#C5D2E1', lineHeight: 1.4, marginBottom: 8 }}>{body}</div>}
+                </div>
+                {currentUser && p.author_id !== currentUser.id && (
+                  <PostActionMenu
+                    kind="post"
+                    targetId={p.id}
+                    authorId={p.author_id}
+                    authorHandle={p.profiles?.handle}
+                    currentUserId={currentUser.id}
+                    onReported={() => handleHidden(p.id)}
+                    onBlocked={() => handleAuthorBlocked(p.author_id)}
+                  />
+                )}
+              </div>
+              {p.media_url && (
+                <div style={{ marginTop: 6, marginBottom: 6, borderRadius: 6, overflow: 'hidden' }}>
+                  {p.media_type === 'video'
+                    ? <video src={p.media_url} controls style={{ width: '100%', display: 'block' }} />
+                    : <img src={p.media_url} alt="" style={{ width: '100%', display: 'block' }} />}
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: '#7C8B9F', marginTop: 6 }}>
+                <span>{author ? `${author} · ` : ''}{timeAgo(p.created_at)} ago</span>
+                {p.recap_for_game_id && (
+                  <button onClick={() => navigate(`/league-game/${p.recap_for_game_id}`)}
+                    style={{ background: 'transparent', border: 'none', color: '#5B9FE2', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}>
+                    View game →
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+// Anonymous-spectator landing for /league/:id. Shows league metadata + teams
+// + a clear "sign up to view live" CTA. Live data (standings, scoresheet,
+// feed composer) stays gated — the conversion lever is "see live scores +
+// follow your team's results." League details (name/dates/venue/season) are
+// intentionally public to make the URL shareable + Google-indexable.
+//
+// Direct mirror of PublicTournamentLanding in Tournament.js.
+function PublicLeagueLanding({ league, teams, games, navigate }) {
+  const accent = league?.accent_color || '#D72638';
+  const venueLine = [league?.venue_name, league?.venue_address].filter(Boolean).join(' · ');
+  const dateLine = [league?.start_date, league?.end_date].filter(Boolean).join(' – ');
+  const seasonLine = [league?.season, league?.division, league?.level, league?.location].filter(Boolean).join(' · ');
+  const totalTeams = teams?.length || 0;
+  const totalGames = games?.length || 0;
+  const playedGames = useMemo(() => (games || []).filter((g) => g.status === 'final').length, [games]);
+  const returnTo = encodeURIComponent(`/league/${league.id}`);
+  return (
+    <div style={{ background: C.dark, minHeight: '100vh', fontFamily: 'Barlow, sans-serif', color: C.ice }}>
+      <div style={{ background: C.navy, padding: '16px 18px 0', borderTop: `3px solid ${accent}`, borderBottom: '0.5px solid rgba(46,91,140,0.4)' }}>
+        <button onClick={() => navigate('/leagues')} style={{ color: 'rgba(244,247,250,0.6)', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Barlow, sans-serif', marginBottom: 8 }}>← All leagues</button>
+        {league?.logo_url && (
+          <img src={league.logo_url} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            style={{ height: 48, width: 'auto', display: 'block', marginBottom: 10, borderRadius: 6 }} />
+        )}
+        <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 28, lineHeight: 1.05 }}>
+          {(league?.name || '').toUpperCase()}
+        </div>
+        {seasonLine && <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.6)', marginTop: 4 }}>{seasonLine}</div>}
+        {(dateLine || venueLine) && (
+          <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.5)', margin: '8px 0 16px' }}>
+            {dateLine}{dateLine && venueLine ? ' · ' : ''}{venueLine}
+          </div>
+        )}
+      </div>
+
+      <div style={{ padding: '20px 18px', maxWidth: 560, margin: '0 auto' }}>
+        {/* Sign-up hero */}
+        <div style={{ background: `linear-gradient(135deg,${accent}33 0%,#0f2847 100%)`, border: `1px solid ${accent}66`, borderRadius: 14, padding: '20px 18px', marginBottom: 18, textAlign: 'center' }}>
+          <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, marginBottom: 6, textTransform: 'uppercase' }}>Follow live</div>
+          <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.75)', marginBottom: 16, lineHeight: 1.55 }}>
+            Sign up free to see live standings, full schedule, team pages, and game recaps as they happen.
+          </div>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button onClick={() => navigate(`/login?returnTo=${returnTo}`)}
+              style={{ background: accent, color: '#fff', border: 'none', borderRadius: 999, padding: '12px 28px', fontFamily: 'Barlow, sans-serif', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+              Sign up to view live →
+            </button>
+            <button onClick={() => navigate(`/login?returnTo=${returnTo}`)}
+              style={{ background: 'transparent', color: C.ice, border: '1px solid rgba(244,247,250,0.3)', borderRadius: 999, padding: '12px 22px', fontFamily: 'Barlow, sans-serif', fontSize: 13, cursor: 'pointer' }}>
+              Sign in
+            </button>
+          </div>
+        </div>
+
+        {/* At-a-glance stats */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 18 }}>
+          {[
+            { num: totalTeams, label: 'Teams' },
+            { num: totalGames, label: 'Games' },
+            { num: playedGames, label: 'Played' },
+          ].map((s) => (
+            <div key={s.label} style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: '14px 12px', textAlign: 'center' }}>
+              <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 28, color: accent, lineHeight: 1 }}>{s.num}</div>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.5)', textTransform: 'uppercase', marginTop: 4 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Teams list — names + colored chips. Records hidden behind sign-up. */}
+        {teams?.length > 0 && (
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 15, marginBottom: 10, textTransform: 'uppercase' }}>
+              Competing teams
+            </div>
+            <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+              {teams.map((lt, i) => {
+                const name = lt.team?.name || lt.team_name || '—';
+                const color = lt.team?.logo_color || lt.logo_color || C.blue;
+                const initials = lt.team?.logo_initials || lt.logo_initials || name.slice(0, 2).toUpperCase();
+                const logoUrl = lt.team?.logo_url || lt.logo_url;
+                return (
+                  <div key={lt.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderTop: i ? '0.5px solid rgba(244,247,250,0.06)' : 'none' }}>
+                    <div style={{ width: 30, height: 30, borderRadius: '50%', background: logoUrl ? `url(${logoUrl}) center/cover, ${color}` : color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 11, color: '#fff', flexShrink: 0 }}>
+                      {!logoUrl && initials}
+                    </div>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{name}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Secondary CTA for scrollers */}
+        <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: '18px 16px', textAlign: 'center' }}>
+          <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.65)', marginBottom: 12, lineHeight: 1.55 }}>
+            Live standings · real-time scoring · team pages · game recaps. Free to join.
+          </div>
+          <button onClick={() => navigate(`/login?returnTo=${returnTo}`)}
+            style={{ background: accent, color: '#fff', border: 'none', borderRadius: 999, padding: '11px 24px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+            Create your free account
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

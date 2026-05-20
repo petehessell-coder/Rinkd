@@ -160,8 +160,16 @@ export async function ensureProfileForUser(user) {
   return { data: { id: user.id }, error: null };
 }
 
-export async function signIn({ email, password }) {
-  return supabase.auth.signInWithPassword({ email, password });
+export async function signIn({ email, password, captchaToken }) {
+  // Forward the Cloudflare Turnstile token when one is captured. Supabase
+  // CAPTCHA Protection (enabled in the dashboard May 18) applies globally
+  // to /auth/v1/signin, so without a token here every sign-in fails with
+  // "captcha protection: request disallowed (no captcha_token found)".
+  // The widget renders next to the login form in Auth.js.
+  return supabase.auth.signInWithPassword({
+    email, password,
+    options: { captchaToken: captchaToken || undefined },
+  });
 }
 
 export async function signOut() {

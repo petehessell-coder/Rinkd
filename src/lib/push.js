@@ -17,6 +17,23 @@ export async function triggerTournamentRecapPush(postId) {
   }
 }
 
+// League-recap push — mirror of triggerTournamentRecapPush. Same
+// don't-trust-the-client architecture: the Edge Function looks up the
+// post, walks post → game → league, fans out to league_subscriptions
+// subscribers via push_subscriptions, all under service role.
+export async function triggerLeagueRecapPush(postId) {
+  if (!postId) return { sent: 0, error: null };
+  try {
+    const { supabase } = await import('./supabase');
+    const { data, error } = await supabase.functions.invoke('send-league-recap-push', {
+      body: { post_id: postId },
+    });
+    return { ...(data || {}), error: error || null };
+  } catch (err) {
+    return { sent: 0, error: err };
+  }
+}
+
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');

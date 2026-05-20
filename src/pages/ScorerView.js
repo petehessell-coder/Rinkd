@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useWakeLock } from '../lib/useWakeLock';
 import { createGameRecapPost } from '../lib/posts';
 import { resolveBracketSlotsFromSemis } from '../lib/tournamentManage';
-import { triggerTournamentRecapPush } from '../lib/push';
+import { triggerTournamentRecapPush, triggerLeagueRecapPush } from '../lib/push';
 
 const C = {
   dark: '#07111F', navy: '#0B1F3A', blue: '#2E5B8C',
@@ -19,11 +19,16 @@ const selectStyle = { ...inputStyle };
 // Headline for auto-recap posts. Bracket games get the round + 🏆 framing;
 // pool play gets the pool letter. Stays under 280 chars so it doesn't get
 // truncated in the Feed card preview.
-function buildRecapContent({ home, away, round, tournamentName }) {
+function buildRecapContent({ home, away, round, tournamentName, leagueName }) {
   const winner = home.score > away.score ? 'home' : away.score > home.score ? 'away' : null;
   const headline = `🏒 FINAL · ${home.name || 'Home'} ${home.score ?? 0}, ${away.name || 'Away'} ${away.score ?? 0}`;
   const isBracket = round && round !== 'pool';
+  // League games don't use the tournament round concept — the round-label
+  // branch below is a no-op for them (round is null), so the context line
+  // collapses to just the league name. Phase 3 will introduce
+  // league_games.phase for playoffs and this can plug in the same way.
   const roundLabel = (() => {
+    if (leagueName && !round) return 'Regular season';
     if (!round || round === 'pool') return 'Pool play';
     const r = String(round).toLowerCase();
     if (r === 'final' || r === 'championship') return '🏆 Championship';
@@ -33,7 +38,8 @@ function buildRecapContent({ home, away, round, tournamentName }) {
     if (r === 'bronze') return 'Bronze Medal';
     return r.replace(/\b\w/g, c => c.toUpperCase());
   })();
-  const context = [roundLabel, tournamentName].filter(Boolean).join(' · ');
+  const competitionName = leagueName || tournamentName;
+  const context = [roundLabel, competitionName].filter(Boolean).join(' · ');
   const winnerLine = isBracket && winner && (round === 'final' || round === 'championship')
     ? `\n${winner === 'home' ? home.name : away.name} are the champions.`
     : '';
@@ -153,13 +159,14 @@ export default function ScorerView() {
   const load = useCallback(async () => {
     const { data: g } = isLeague
       ? await supabase.from('league_games')
-          .select('*, home_team:league_teams!home_team_id(id, team_name, team:teams(id,name)), away_team:league_teams!away_team_id(id, team_name, team:teams(id,name)), rink:rinks(name,sub_rink), league:leagues(name,commissioner_id)')
+          .select('*, home_team:league_teams!home_team_id(id, team_name, team:teams(id,name)), away_team:league_teams!away_team_id(id, team_name, team:teams(id,name)), rink:rinks(name,sub_rink), league:leagues(name,commissioner_id,is_activated)')
           .eq('id', gameId).single()
       : await supabase.from('games')
           // Pull tournament settings so the period selector can hide OT/SO
           // when the format says they're not allowed (e.g., BLPA Bash is
-          // regulation → shootout, no OT).
-          .select('*, home_team:tournament_teams!home_team_id(id,team_name), away_team:tournament_teams!away_team_id(id,team_name), rink:rinks(name,sub_rink), tournament:tournaments(name,director_id,settings)')
+          // regulation → shootout, no OT). is_activated drives the monetization
+          // gate — show the activation-pending wall instead of the scorer UI.
+          .select('*, home_team:tournament_teams!home_team_id(id,team_name), away_team:tournament_teams!away_team_id(id,team_name), rink:rinks(name,sub_rink), tournament:tournaments(name,director_id,settings,is_activated)')
           .eq('id', gameId).single();
     if (!g) { navigate(-1); return; }
 
@@ -358,9 +365,10 @@ export default function ScorerView() {
     const { error } = await updateScore(homeScore, awayScore, newPeriod, newStatus, opts);
 
     // Auto-recap post — fire once the score save succeeds and we just
-    // transitioned to 'final'. Tournament games only; league games will
-    // get their own recap pathway later. Failure to post the recap should
-    // never block the finalize itself — the game is finalized regardless.
+    // transitioned to 'final'. Failure to post the recap should never block
+    // the finalize itself; the game is finalized regardless. Tournament
+    // path also runs bracket auto-fill on semifinals; league path skips
+    // that (no bracket games in Phase 2 — Phase 3 brings playoff support).
     if (!error && newStatus === 'final' && !isLeague && game?.tournament_id) {
       try {
         const { data: { user } } = await supabase.auth.getUser();
@@ -397,6 +405,28 @@ export default function ScorerView() {
           // eslint-disable-next-line no-console
           console.warn('[scorer] bracket auto-fill threw:', e?.message || e);
         }
+      }
+    } else if (!error && newStatus === 'final' && isLeague && game?.league_id) {
+      // League auto-recap (Phase 2 of league-parity build). Direct mirror
+      // of the tournament branch above — different Edge Function target
+      // (send-league-recap-push) and different content context (league
+      // name instead of tournament). Failure non-fatal: the game is
+      // finalized regardless.
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        const content = buildRecapContent({
+          home: { name: homeTeam?.team_name, score: homeScore },
+          away: { name: awayTeam?.team_name, score: awayScore },
+          round: null,                  // Phase 3 will plug in league_games.phase for playoffs
+          leagueName: game.league?.name,
+        });
+        const { data: recapPost } = await createGameRecapPost({ scorerId: user?.id, gameId, content, leagueId: game.league_id });
+        if (recapPost?.id) {
+          triggerLeagueRecapPush(recapPost.id);
+        }
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('[scorer] league recap post failed; game still finalized:', e?.message || e);
       }
     }
   };
@@ -501,6 +531,26 @@ export default function ScorerView() {
         <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, marginBottom: 8 }}>Scorer access only</div>
         <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.5)', marginBottom: 18, lineHeight: 1.5 }}>
           Only the {isLeague ? 'league commissioner or assigned scorekeeper' : 'tournament director or an assigned scorer'} can run live scoring for this game.
+        </div>
+        <button onClick={() => navigate(-1)} style={{ background: C.blue, border: 'none', borderRadius: 999, color: '#fff', padding: '10px 22px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>← Back</button>
+      </div>
+    </div>
+  );
+
+  // Activation gate. RLS already blocks any UPDATE / goal insert / penalty
+  // insert when is_activated=false; this wall just keeps users from staring
+  // at a scorer UI that silently refuses every write.
+  const parentActivated = isLeague
+    ? (game?.league?.is_activated !== false)
+    : (game?.tournament?.is_activated !== false);
+  if (!parentActivated) return (
+    <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', padding: 24 }}>
+      <div style={{ textAlign: 'center', maxWidth: 360 }}>
+        <div style={{ fontSize: 32, marginBottom: 12 }}>🔒</div>
+        <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, marginBottom: 8 }}>Activation pending</div>
+        <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.65)', marginBottom: 18, lineHeight: 1.6 }}>
+          Live scoring is locked until Rinkd activates this {isLeague ? 'league' : 'tournament'}.
+          Email <a href={`mailto:hello@rinkd.app?subject=${encodeURIComponent((isLeague ? 'League' : 'Tournament') + ' Activation Request')}`} style={{ color: '#F59E0B' }}>hello@rinkd.app</a> to activate.
         </div>
         <button onClick={() => navigate(-1)} style={{ background: C.blue, border: 'none', borderRadius: 999, color: '#fff', padding: '10px 22px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>← Back</button>
       </div>

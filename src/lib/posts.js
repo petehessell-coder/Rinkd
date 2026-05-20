@@ -5,9 +5,10 @@ export async function getPosts(limit = 30, before = null) {
   let query = supabase
     .from('posts')
     .select(`*, profiles(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position)`)
-    // Tournament-scoped posts live only on the tournament's Feed tab. Keep
-    // the global feed clean for users who haven't opted into that context.
+    // Tournament- and league-scoped posts live on their own Feed tabs. Keep
+    // the global feed clean for users who haven't opted into those contexts.
     .is('tournament_id', null)
+    .is('league_id', null)
     .order('created_at', { ascending: false })
     .limit(limit);
   // Keyset pagination — fetch the page of posts older than the last one we hold.
@@ -44,8 +45,9 @@ export async function getFollowingPosts(userId, limit = 30, before = null) {
     .from('posts')
     .select(`*, profiles(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position)`)
     .in('author_id', ids)
-    // Tournament-scoped posts live only on the tournament's Feed tab.
+    // Tournament- and league-scoped posts live on their own Feed tabs.
     .is('tournament_id', null)
+    .is('league_id', null)
     .order('created_at', { ascending: false })
     .limit(limit);
   // Keyset pagination — fetch the page of posts older than the last one we hold.
@@ -71,6 +73,23 @@ export async function getTournamentPosts(tournamentId, limit = 50) {
   return { data, error };
 }
 
+// Posts scoped to a single league — surfaces auto-recaps on the League
+// page's Feed tab. Phase 2 of the league-parity build (May 19, 2026).
+// Direct mirror of getTournamentPosts; partial index
+// posts_league_id_created_at_idx covers the read.
+export async function getLeaguePosts(leagueId, limit = 50) {
+  if (!leagueId) return { data: [], error: null };
+  let query = supabase
+    .from('posts')
+    .select(`*, profiles(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position)`)
+    .eq('league_id', leagueId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  query = await excludeBlocked(query, 'author_id');
+  const { data, error } = await query;
+  return { data, error };
+}
+
 // Auto-recap post on game finalize. Idempotent: re-finalize after a Reopen
 // updates the existing recap row (kept unique by posts_recap_for_game_id_unique_idx)
 // rather than spamming the global feed with a second recap. Tournament games
@@ -80,7 +99,7 @@ export async function getTournamentPosts(tournamentId, limit = 50) {
 const GAME_RECAP_TAG = 'Game Recap';
 const GAME_RECAP_TAG_COLOR = '#2E5B8C';
 
-export async function createGameRecapPost({ scorerId, gameId, content, tournamentId = null }) {
+export async function createGameRecapPost({ scorerId, gameId, content, tournamentId = null, leagueId = null }) {
   if (!scorerId || !gameId || !content) {
     return { data: null, error: new Error('createGameRecapPost requires scorerId, gameId, and content') };
   }
@@ -98,11 +117,12 @@ export async function createGameRecapPost({ scorerId, gameId, content, tournamen
     // Re-finalize after a Reopen — keep the original author (the user who
     // first finalized) so the post's permalink-style attribution doesn't
     // shift around. Just refresh the content with the new score line.
-    // Also re-stamp tournament_id in case the caller now has one (older recap
-    // rows may pre-date the column; this self-heals on re-finalize).
+    // Also re-stamp tournament_id / league_id in case the caller now has one
+    // (older recap rows may pre-date the columns; this self-heals on
+    // re-finalize).
     const { data, error } = await supabase
       .from('posts')
-      .update({ content, tag: GAME_RECAP_TAG, tag_color: GAME_RECAP_TAG_COLOR, tournament_id: tournamentId })
+      .update({ content, tag: GAME_RECAP_TAG, tag_color: GAME_RECAP_TAG_COLOR, tournament_id: tournamentId, league_id: leagueId })
       .eq('id', existing.id)
       .select()
       .single();
@@ -118,6 +138,7 @@ export async function createGameRecapPost({ scorerId, gameId, content, tournamen
       tag_color: GAME_RECAP_TAG_COLOR,
       recap_for_game_id: gameId,
       tournament_id: tournamentId,
+      league_id: leagueId,
       likes: 0,
       comment_count: 0,
       repost_count: 0,
@@ -128,7 +149,7 @@ export async function createGameRecapPost({ scorerId, gameId, content, tournamen
   return { data, error };
 }
 
-export async function createPost(authorId, { content, tag, tagColor, mediaUrl, mediaType, livebarnVenueId, teamId, tournamentId }) {
+export async function createPost(authorId, { content, tag, tagColor, mediaUrl, mediaType, livebarnVenueId, teamId, tournamentId, leagueId }) {
   const { data, error } = await supabase
     .from('posts')
     .insert({
@@ -141,6 +162,7 @@ export async function createPost(authorId, { content, tag, tagColor, mediaUrl, m
       livebarn_venue_id: livebarnVenueId || null,
       team_id: teamId || null,
       tournament_id: tournamentId || null,
+      league_id: leagueId || null,
       likes: 0,
       comment_count: 0,
       repost_count: 0,

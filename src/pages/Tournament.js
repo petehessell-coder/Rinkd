@@ -341,6 +341,12 @@ export default function TournamentPage({ currentUser }) {
           <button onClick={() => navigate(-1)} style={{color:'rgba(244,247,250,0.6)',fontSize:13,background:'none',border:'none',cursor:'pointer',fontFamily:'Barlow,sans-serif'}}>← Events</button>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             {liveGames.length > 0 && <span style={{background:accent+'26',color:accent,fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:20}}>● Live now</span>}
+            {tournament && tournament.is_activated === false && (
+              <span title="Live scoring + push notifications are locked until a Rinkd admin activates this tournament."
+                style={{background:'rgba(245,158,11,0.18)',color:'#F59E0B',fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:20,letterSpacing:'0.04em'}}>
+                🔒 Activation pending
+              </span>
+            )}
             {/* Follow toggle — opt-in for tournament push notifications. Fires
                 a one-time push permission prompt the first time (handled
                 inside handleFollowToggle). Director gets the Manage button
