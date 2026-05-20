@@ -907,6 +907,42 @@ Three RLS rewrites enforce the gate:
 
 **Pending Pete approval to merge.** Same branch — Phase 1 + Phase 2 + Phase 3 + activation gate ship as one merge.
 
+### May 20, 2026 — Pricing model locked: per-season / per-event ladders. BIZ-TIER-1 SUPERSEDED.
+
+Pete delivered a clean pricing guide (`docs/Rinkd_Pricing_Guide.docx`) that **replaces the May 17 BIZ-TIER-1 BenchBoss-arrangement model**. The new structure is simpler, easier to communicate, easier to bill, and aligns cleanly with the activation gate's binary toggle (one tier choice per activation event).
+
+**Leagues — per-season fee, all features unlocked:**
+| Tier | Teams | $/season |
+|---|---|---|
+| Starter | ≤6 | $299 |
+| **Standard** ⭐ most popular | ≤12 | $599 |
+| Pro | ≤20 | $999 |
+| Division add-on | +1 division | +$99 |
+
+**Tournaments — per-event fee:**
+| Tier | Teams | $/event |
+|---|---|---|
+| Small | ≤8 | $149 |
+| Standard | ≤16 | $299 |
+| Large | ≤24 | $499 |
+| Premier | 25+ | $799 |
+
+**Cross-sell:**
+- Year 1: first tournament FREE with any active league plan.
+- Year 2+: 15% off all tournaments for active league members.
+
+**Registration (when LA-1 / TOURN-REG-1 ship):**
+- Platform fee: **1%** (down from the old 1.5-2% in BIZ-TIER-1).
+- Payment processing: 2.9% + $0.30, **passed through at cost to the registrant at checkout** — no organizer absorption, no Rinkd markup. (Reverses the May 17 decision where organizer absorbed Stripe fees.)
+
+**What this changes vs the old model:**
+1. **BIZ-TIER-1 is dead.** Old "Community / Organizer-pays / Pass-through / Pro" framework superseded — see updated row in §7.
+2. **Registration math shifted** — 1% platform fee, registrant absorbs Stripe.
+3. **Activation gate maps cleanly to a tier** — each `is_activated=true` flip is implicitly a "Pete picked a tier at billing time" event. Currently the admin UI is binary; tier enforcement (team caps, upgrade prompts) is a Sprint-2 follow-up — defer until the first paying customer.
+4. **BLPA Cleveland is explicitly OUT of this ladder.** Stays as a custom deal Pete is still negotiating; BIZ-BLPA-1 row updated to reflect "TBD custom contract".
+
+**No code changes from this update** — pure docs + pricing alignment. The activation gate already exists; tier-enforcement build comes later.
+
 ### ~~🔴 Forgot-password flow~~ — ✅ FIXED May 18, 2026 morning
 
 **Root cause (now resolved):** The Supabase reset email's `redirect_to` was `https://www.rinkd.app` (Site URL fallback), NOT `https://rinkd.app/reset-password` that the app sends. The allowlist rejected the apex redirect because the apex domain wasn't permitted. **0 users had ever successfully completed a password reset** in production prior to this fix (including BLPA Nick on May 14 — his recovery token was never consumed).
@@ -1051,7 +1087,7 @@ Spec'd in **`rinkd_v4/LEAGUEAPPS_PARITY_GAPS.md`** (May 17). 8 gaps for the leag
 
 | # | Gap | Priority | Effort | Notes |
 |---|---|---|---|---|
-| LA-1 | **Stripe registration + payments** — teams register + pay season fees self-service; commissioner sees real-time registration + collection | **P0** post-pilot | 5-8 days | New `league_registrations` table; columns on `leagues` for fee + deadline + capacity. New `LeagueRegister` public page. New `stripe-webhook` Edge Function. New Vercel env `REACT_APP_STRIPE_PUBLISHABLE_KEY`; Supabase secrets `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET`. Unlocks revenue. **Shares core build with TOURN-REG-1** (tournament registration) — same Stripe Connect + webhook + Edge Function pattern; consider folding both into one polymorphic `registrations` table keyed by `(parent_type, parent_id)` to avoid duplication. |
+| LA-1 | **Stripe registration + payments** — teams register + pay season fees self-service; commissioner sees real-time registration + collection. **1% platform fee** to Rinkd; Stripe 2.9% + $0.30 **passed through to the registrant at checkout** (same math as TOURN-REG-1 per May 20 pricing guide). | **P0** post-pilot | 5-8 days | New `league_registrations` table; columns on `leagues` for fee + deadline + capacity. New `LeagueRegister` public page. New `stripe-webhook` Edge Function. New Vercel env `REACT_APP_STRIPE_PUBLISHABLE_KEY`; Supabase secrets `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET`. Unlocks revenue. **Shares core build with TOURN-REG-1** — same Stripe Connect + webhook + Edge Function pattern; consider folding both into one polymorphic `registrations` table keyed by `(parent_type, parent_id)` to avoid duplication. |
 | LA-2 | **Digital waivers** — commissioner attaches a waiver to a league; players sign before joining; signatures exportable | **P1** | 3-4 days | New `league_waivers` + `league_waiver_signatures` tables. New `WaiverModal` + standalone sign route `/league/:id/waiver/:waiverId`. Legal protection — pair with LA-1 before opening leagues to public sign-up. |
 | LA-3 | **USA Hockey membership validation** — players enter USAH member # at registration; sanctioned leagues require valid active membership | **P1** for sanctioned leagues, **N/A** for BLPA-style rec leagues | 3-5 days | USAH has no public API — sanctioned path requires their bulk-export integration; non-sanctioned path is self-attestation. **Skip unless Rinkd pursues youth/sanctioned leagues.** |
 | LA-4 | **Financial reporting** — commissioner dashboard with total collected, outstanding, refunds, Stripe net | **P1** (depends on LA-1) | 2-3 days | No new tables — derives from `league_registrations` + Stripe balance API. New `LeagueManage` → Financials tab. CSV export. |
@@ -1075,7 +1111,7 @@ Pete's ask (May 17): "line combos and shift tracking, manager/coach runs from th
 
 ### Revenue + monetization (post-pilot — Phase 1 + Phase 2)
 
-Spec'd by Pete May 17 evening + refined later same evening based on screenshots of the monetization roadmap + BenchBoss pricing tiers + the "BLPA is the founding-partner pass-through customer" model. Two phases: Phase 1 (0-6 months — Ship Now) and Phase 2 (6-18 months — Build After Cleveland). All revenue items share a foundational dependency on BIZ-INFRA-1 (Stripe Connect platform-fee setup). **Pricing tiers (BIZ-TIER-1) are intentionally post-pilot — don't introduce pricing during Cleveland, ship as Sprint 1 work after.**
+Spec'd by Pete May 17 + **pricing model locked May 20 via `docs/Rinkd_Pricing_Guide.docx`** (per-size ladder; superseded the old BIZ-TIER-1 4-arrangement model — see the May 20 §5 entry above). Two phases: Phase 1 (0-6 months — Ship Now) and Phase 2 (6-18 months — Build After Cleveland). All revenue items share a foundational dependency on BIZ-INFRA-1 (Stripe Connect platform-fee setup). **Tier enforcement (BIZ-TIER-2) is intentionally post-pilot — don't introduce pricing during Cleveland, ship as Sprint 1 work after.**
 
 **Key pricing decisions captured May 17 (don't re-litigate without explicit Pete review):**
 - **Stripe fee absorption:** organizer eats the 2.9% + 30¢ processing fees on every checkout. Standard marketplace practice. Means BLPA gets ~$2,427 of a $2,500 entry fee per team (with $15 BenchBoss + $58 platform fee + Stripe deducted from the $2,515 gross).
@@ -1088,11 +1124,12 @@ Spec'd by Pete May 17 evening + refined later same evening based on screenshots 
 | # | Item | Priority | Effort | Notes |
 |---|---|---|---|---|
 | BIZ-INFRA-1 | **Stripe Connect platform-fee setup** — onboard Rinkd as a Stripe platform, configure Connect accounts for tournament organizers + photographers + refs (later), enable platform-fee on every charge | **P0 (revenue track)** | 3-5 days | Foundation under every paid item below. Without this, Rinkd can take checkouts but can't take a cut. New Edge Function for Connect-account onboarding; webhook to mirror payouts to a `stripe_payouts` table for visibility. Organizer eats Stripe processing fees (standard). |
-| TOURN-REG-1 | **Tournament registration + 1.5-2% platform fee** — teams register + pay entry fee via the tournament public landing; organizer keeps ~98%, Rinkd takes 1.5-2% as platform fee | **P0** | shares core build with LA-1 (extends to tournaments) | Reuses `league_registrations` schema pattern → `tournament_registrations` table (or fold into one polymorphic `registrations` table). Webhook updates `paid_at`; auto-approves team into `tournament_teams` on payment. **HARD DEPENDENCY for Pass-through billing arrangement (see BIZ-TIER-1)** — without TOURN-REG-1 live, there's no way to collect the $15/team Technology fee from participating teams. Reference revenue: $2,000 per Mad Man event at 2% take. |
+| TOURN-REG-1 | **Tournament registration + 1% platform fee** — teams register + pay entry fee via the tournament public landing; organizer keeps 99%, Rinkd takes **1%** as platform fee. Stripe processing (2.9% + $0.30) is **passed through at cost to the registrant at checkout** — no organizer absorption, no Rinkd markup. (Updated May 20 from the original 1.5-2% + organizer-absorbed model.) | **P0** | shares core build with LA-1 (extends to tournaments) | Reuses `league_registrations` schema pattern → `tournament_registrations` table (or fold into one polymorphic `registrations` table). Webhook updates `paid_at`; auto-approves team into `tournament_teams` on payment. Reference revenue at 1%: $1,000 per Mad Man event @ $100K gross. Pricing canonical in `docs/Rinkd_Pricing_Guide.docx`. |
 | BIZ-1 | **Hotel affiliate (Lucid Travel / HotelPlanner)** — generate a hotel block URL per tournament; tracking pixel; 3-5% commission per room booked | **P1 (high ROI / zero engineering)** | 1-2 days | No payment infrastructure needed. New `tournament.hotel_affiliate_url` field; tournament public landing surfaces "Book your hotel" button; UTM-tracked affiliate link. Reference revenue: $300-800 per tournament passive, scales with attendance. **Ship before Stripe Connect even goes live** — doesn't depend on it. |
 | BIZ-2 | **Tournament sponsorships** — "presented by" placement on tournament pages, brackets, and recap push notifications | **P1** | 5-7 days | New `tournament_sponsors` table (name, logo, tier, placement, contract dates). UI: sponsor logos on Tournament public page header + Bracket tab + game cards (subtle). Push integration: extend `send-recap-push` payload to include sponsor mention. Sponsorship management UI for organizers. Reference revenue: $200-1,500 per tournament. Revshare split TBD when shipping — historical default: organizer-sold = Rinkd 20-30%; Rinkd-sold-direct = Rinkd 70-80% with 20-30% kickback to organizer. |
-| BIZ-TIER-1 | **BenchBoss billing arrangements (4 modes, not 3 tiers)** — Community ($0, ≤16 teams), Organizer-pays ($25/team to organizer), **Pass-through ($15/team Technology fee charged directly to participating teams)**, Pro (custom annual flat, white-label, multi-tournament dashboard, dedicated onboarding) | **P0 post-pilot** (Sprint 1 work after BLPA Cleveland — NOT during pilot) | 5-10 days | **Replaces obsolete MONEY-2** (BenchBoss $15/mo captain consumer framing — superseded). New `tournaments.billing_model` enum (`community | organizer_pays | pass_through | pro`) + `bench_fee_cents` (defaults: 0 / 2500 / 1500 / per-contract). Feature-gating layer keys off billing_model. Plan-selection UI in TournamentCreate. Pro tier carries over MONEY-2's higher-spec items (white-label, multi-tournament dashboard, custom formats/rules config, priority support, dedicated onboarding). **Pass-through is the BLPA-style founding-partner arrangement**: organizer gets BenchBoss free; participating teams see "Technology fee $15.00" line item at registration checkout (per TOURN-REG-1). Target customers: Community = booster clubs / house leagues; Organizer-pays = Mad Man Hockey / Hockey Time Productions / regional operators; Pass-through = BLPA Cleveland (founding partner) + similar partnership deals; Pro = BLPA long-term / Breakaway / 3rd Line (10+ tournaments/year). |
-| BIZ-BLPA-1 | **BLPA Cleveland post-pilot conversion to Pass-through billing** — flip `tournaments.billing_model='pass_through'`, `bench_fee_cents=1500`; enable TOURN-REG-1 registration flow for the next BLPA event after Cleveland | **P1 post-pilot** | ~1 day config + content updates (once TOURN-REG-1 live) | The **proof point** that Pass-through billing generates revenue. First event @ ~16 teams = $240 BenchBoss + $1,600 platform fee on $80K of entry fees = **$1,840 / event** for Rinkd. Track first-month revenue carefully — becomes the sales pitch artifact for Mad Man / Hockey Time conversations: *"BLPA is making us $1,840/event passively while paying nothing themselves. Want the same?"* |
+| ~~BIZ-TIER-1~~ | **SUPERSEDED May 20, 2026** by the per-size pricing ladder in `docs/Rinkd_Pricing_Guide.docx`. Old "Community / Organizer-pays / Pass-through / Pro" 4-arrangement model dropped — simpler size-tier ladder takes its place (League Starter/Standard/Pro/Division-add-on at $299/$599/$999/$99-add; Tournament Small/Standard/Large/Premier at $149/$299/$499/$799). Year-1 first-tournament-free cross-sell for league plans; Year-2+ 15% off tournaments for active league members. See the May 20 §5 entry above. | — | — | Activation-gate UI is binary today; team-cap + tier enforcement (`tournaments.tier` / `leagues.tier` enum + UPGRADE prompts) is a Sprint-2 follow-up — defer until first paying customer. |
+| BIZ-TIER-2 | **Per-size pricing ladder** (replaces BIZ-TIER-1) — League: Starter ≤6 $299, Standard ≤12 $599, Pro ≤20 $999, Division add-on +$99. Tournament: Small ≤8 $149, Standard ≤16 $299, Large ≤24 $499, Premier 25+ $799. All features unlocked at every tier — only the team cap differs. | **P0 post-pilot** (Sprint 1 work after BLPA Cleveland — NOT during pilot) | 3-5 days for tier enforcement build | Add `tier` text column to both tournaments + leagues (CHECK constraint per-shape). Optional `division_count` on leagues for the add-on math. Activation panel gets a tier dropdown next to the toggle. Team-cap enforcement at LeagueManage / TournamentManage when adding teams (warn before exceeding cap, hard block at +1 over). Canonical pricing in `docs/Rinkd_Pricing_Guide.docx`. |
+| BIZ-BLPA-1 | **BLPA Cleveland — custom deal, TBD** (May 20). Explicitly OUT of the per-size pricing ladder. Pete is still negotiating the post-pilot arrangement. Original Pass-through model ($15/team Technology fee + 2% on registration) is on the table as one option but no longer the default. Document the final terms here once Pete locks them in. | **P1 post-pilot** | TBD once contract is signed | Hardcode the BLPA tournament(s) to whatever bespoke billing model Pete settles on. Probably a `tournaments.tier='custom'` enum value + bespoke handling rather than fitting into the standard ladder. |
 
 **Phase 2 — Build After Cleveland (6-18 months)**
 
@@ -1102,7 +1139,7 @@ Spec'd by Pete May 17 evening + refined later same evening based on screenshots 
 | BIZ-4 | **Photography marketplace** — organizers connect with local sports photographers, 15% booking fee, photos auto-drop into the Feed | **P2** | 5-7 days | Best **social-flywheel** item: photos auto-drop into auto-recap posts = engagement spike per game + photographer earns + organizer pays + spectator gets richer content. All three sides win. New `photographers` + `photography_bookings` tables; Storage bucket for photo uploads with proper RLS; integration into the existing `recap_for_game_id` post flow so the recap post gets a photo gallery attached. Reference revenue: $300-800 per tournament. |
 | BIZ-5 | **Tournament insurance partnership** — K&K Insurance or Markel (standard in amateur sports), referral fee per policy issued through Rinkd | **P3** | 1 day build + weeks of partnership outreach | Mostly outreach. Lightweight referral form on the organizer Settings page; UTM-tagged redirect to the insurance partner; insurance partner pays per-issued-policy. Reference revenue: $50-150 referral per tournament, hands-off recurring once signed. |
 
-**Total post-pilot revenue work:** ~30-40 days of build, sequenced across roughly 6 months if shipped serially. **Sprint 1 post-pilot cluster** (highest priority): BIZ-INFRA-1 + TOURN-REG-1 + BIZ-TIER-1 + BIZ-BLPA-1 + BIZ-1. That cluster alone unlocks ~$1,840/event from BLPA + $300-800/event from hotel affiliate + foundation for everything else.
+**Total post-pilot revenue work:** ~30-40 days of build, sequenced across roughly 6 months if shipped serially. **Sprint 1 post-pilot cluster** (highest priority): BIZ-INFRA-1 + TOURN-REG-1 + LA-1 + BIZ-TIER-2 (tier enforcement build) + BIZ-1. BLPA-1 (custom deal) lands separately once Pete locks the contract terms.
 
 **TBD-when-shipping (deferred decisions captured but not blocking):**
 - Volume pricing on Organizer-pays tier (flat $25/team vs sliding scale vs per-event cap) — defer to first Operator sales conversation
@@ -1393,7 +1430,8 @@ The `rinkd_v4` folder is **strategy only** — its app code does not deploy, so 
 | `LEAGUEAPPS_PARITY_GAPS.md` | 8 gaps for league management surface (Stripe registration, waivers, USAH, financials, divisions, multi-season, analytics, embeds). | When working on any LA-* item from §7. |
 | `LEAGUE_PARITY_PHASE_1_BUILD.md` | **May 19 self-contained build doc for a fresh Claude Code session** — full Phase 1 instructions for bringing the league flow to tournament parity. Includes migration templates (schema + RLS), index choices, lib helper port-from-tournament instructions, 4-step `LeagueCreate.js` wizard spec, hot-path EXPLAIN queries, scale/reliability/stability guardrails, smoke-test plan, scope guardrails, and Definition of Done. | Read top-to-bottom BEFORE writing any code for the league parity work. |
 | `RINKD_STATE_OF_PLAY.md` | Broader orientation doc — BLPA partnership context, post-pilot specs, pending tasks. Older than this handoff. | First-time new sessions; for partnership/business context. |
-| `Rinkd_BenchBoss_Captain_Tier_Spec.md` | **SUPERSEDED** by BIZ-TIER-1 (the 4-arrangement B2B BenchBoss billing model — see §7 Revenue). Retained as historical reference only. | Don't act on it. |
+| `Rinkd_BenchBoss_Captain_Tier_Spec.md` | **SUPERSEDED** twice — first by BIZ-TIER-1 (4-arrangement model), then May 20 by the per-size pricing ladder in `~/Downloads/rinkd_live/docs/Rinkd_Pricing_Guide.docx`. Retained as historical reference only. | Don't act on it. |
+| `~/Downloads/rinkd_live/docs/Rinkd_Pricing_Guide.docx` | **CANONICAL pricing source as of May 20, 2026.** Per-season league ladder (Starter $299 / Standard $599 / Pro $999 / Division add-on +$99), per-event tournament ladder (Small $149 / Standard $299 / Large $499 / Premier $799), Year-1 free-tournament + Year-2+ 15% cross-sell, 1% registration platform fee + Stripe pass-through. BLPA Cleveland is OUT (custom deal, TBD). | When quoting prices to customers; when building tier enforcement (BIZ-TIER-2). |
 | `Rinkd_Brand_Voice_Guidelines.md`, `Rinkd_Marketing_Kit.md`, etc. | Brand + marketing source material. | When writing user-facing copy, sales pitches, etc. |
 
 ### 13.2 Roadmap spreadsheet (`~/Downloads/rinkd-sprints.xlsx`)
