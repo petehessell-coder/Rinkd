@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { getTeam, getTeamMembers, getTeamGames, getUserRoleOnTeam, requestToJoin } from '../lib/teams';
+import { supabase } from '../lib/supabase';
 import RsvpBlock from '../components/RsvpBlock';
 import MapLink from '../components/MapLink';
 import CalendarButton from '../components/CalendarButton';
@@ -48,6 +49,22 @@ export default function TeamPage({ currentUser, profile }) {
         getTeam(id), getTeamMembers(id), getTeamGames(id), getUserRoleOnTeam(id)
       ]);
       setTeam(t); setMembers(m); setGames(g); setUserRole(r);
+
+      // Hydrate joinRequested from the DB so a reload after requesting
+      // doesn't show the button as fresh-and-active. RLS lets a user
+      // SELECT their own pending requests; the row may have any status —
+      // we only suppress the button when there's an unresolved 'pending'.
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: existing } = await supabase
+          .from('team_join_requests')
+          .select('status')
+          .eq('team_id', id)
+          .eq('user_id', user.id)
+          .eq('status', 'pending')
+          .maybeSingle();
+        if (existing) setJoinRequested(true);
+      }
     } catch(e) { console.error(e); }
     finally { setLoading(false); }
   }, [id]);
