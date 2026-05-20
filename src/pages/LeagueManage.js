@@ -140,7 +140,21 @@ function ManageLeague({ id, navigate }) {
   const handleAddUnlinkedTeam = async () => {
     if (!teamSearch.trim()) { setError('Enter a team name first'); return; }
     try {
-      await addLeagueTeam(id, { teamName: teamSearch.trim(), logoColor: DEFAULT_TEAM_COLOR, logoInitials: teamSearch.trim().split(' ').map(w=>w[0]).join('').slice(0,3).toUpperCase() });
+      // Use the create_league_team RPC instead of bare addLeagueTeam so the
+      // new team gets a real public.teams row (manager_id NULL = unclaimed)
+      // alongside the public.league_teams link. Without this, league-added
+      // teams never surfaced on /teams and couldn't have a manager / roster.
+      // The RPC is SECURITY DEFINER + gated on is_league_commissioner.
+      const teamName = teamSearch.trim();
+      const initials = teamName.split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase();
+      const { error: rpcErr } = await supabase.rpc('create_league_team', {
+        p_league_id: id,
+        p_team_name: teamName,
+        p_logo_color: DEFAULT_TEAM_COLOR,
+        p_logo_initials: initials,
+        p_division: '',
+      });
+      if (rpcErr) throw rpcErr;
       if (unlinkedEmail.trim()) {
         await sendLeagueInvite({ to_email: unlinkedEmail.trim(), league_name: league?.name, league_id: id, division: league?.division, season: league?.season });
       }
