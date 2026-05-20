@@ -59,9 +59,14 @@ export async function updateLeague(id, updates) {
 }
 
 export async function getLeagueTeams(leagueId) {
+  // `manager:profiles` lets the LeagueManage Teams tab show "Manager:
+  // @handle" or "Unclaimed" per team without a second query. The FK hint
+  // disambiguates from any other profile relationship.
   const { data, error } = await supabase
     .from('league_teams')
-    .select('*, team_name, logo_color, logo_initials, team:teams(id, name, logo_color, logo_initials, home_rink, location)')
+    .select(`*, team_name, logo_color, logo_initials,
+      team:teams(id, name, logo_color, logo_initials, logo_url, home_rink, location, manager_id,
+        manager:profiles!teams_manager_id_fkey(id, name, handle, avatar_color, avatar_initials))`)
     .eq('league_id', leagueId)
     .order('joined_at');
   if (error) throw error;

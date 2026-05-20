@@ -12,6 +12,7 @@ import { rescheduleGame, deleteLeagueGame, bulkInsertLeagueGames } from '../lib/
 import { generateLeagueSchedule } from '../lib/leagueScheduleGenerator';
 import { uploadMedia } from '../lib/posts';
 import { classifyImage } from '../lib/imageModeration';
+import { assignTeamManagerByInput } from '../lib/leagueTeamManagers';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 const inputStyle = { width:'100%', background:'#07111F', border:`0.5px solid ${C.border}`, borderRadius:8, padding:'10px 12px', color:C.ice, fontFamily:'Barlow, sans-serif', fontSize:14, outline:'none' };
@@ -83,6 +84,36 @@ function ManageLeague({ id, navigate }) {
   const [linkingTeam, setLinkingTeam] = useState(null);
   const [linkSearch, setLinkSearch] = useState('');
   const [linkResults, setLinkResults] = useState([]);
+  // Per-team-row "assign manager" inline form state. One row open at a time;
+  // assignInput is the handle/email being typed; assignBusy guards a
+  // double-click during the RPC roundtrip.
+  const [assigningTeamId, setAssigningTeamId] = useState(null);
+  const [assignInput, setAssignInput] = useState('');
+  const [assignBusy, setAssignBusy] = useState(false);
+  const [assignFlash, setAssignFlash] = useState(null); // { kind: 'ok'|'err', text }
+
+  const handleAssignManager = async (lt) => {
+    if (!lt?.team_id) {
+      setAssignFlash({ kind: 'err', text: 'Link the team to Rinkd first (see "Link team" above).' });
+      return;
+    }
+    setAssignBusy(true);
+    setAssignFlash(null);
+    const result = await assignTeamManagerByInput({
+      leagueId: id, teamId: lt.team_id, input: assignInput,
+    });
+    setAssignBusy(false);
+    if (result.status === 'assigned') {
+      setAssignFlash({ kind: 'ok', text: `Manager set: ${result.profile.name || '@'+result.profile.handle}` });
+      setAssignInput('');
+      setAssigningTeamId(null);
+      await load();
+    } else if (result.status === 'no_account') {
+      setAssignFlash({ kind: 'err', text: `No Rinkd account for "${result.input}". Ask them to sign up first.` });
+    } else {
+      setAssignFlash({ kind: 'err', text: result.message || 'Could not assign manager.' });
+    }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -281,20 +312,63 @@ function ManageLeague({ id, navigate }) {
                 const color = lt.team?.logo_color || lt.logo_color || C.blue;
                 const initials = lt.team?.logo_initials || lt.logo_initials || name.slice(0, 2).toUpperCase();
                 const isLinked = !!lt.team_id;
+                const manager = lt.team?.manager;
+                const isClaimed = !!lt.team?.manager_id;
+                const isAssigning = assigningTeamId === lt.id;
                 return (
-                  <div key={lt.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
-                    <div style={{ width: 32, height: 32, borderRadius: 6, background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 12, color: '#fff', flexShrink: 0 }}>
-                      {initials}
+                  <div key={lt.id} style={{ borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px' }}>
+                      <div style={{ width: 32, height: 32, borderRadius: 6, background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 12, color: '#fff', flexShrink: 0 }}>
+                        {initials}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>{name}</div>
+                        {!isLinked && <div style={{ fontSize: 10, color: '#F59E0B', fontWeight: 700, marginTop: 2 }}>No Rinkd page · <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setLinkingTeam(lt)}>Link team</span></div>}
+                        {isLinked && !isClaimed && <div style={{ fontSize: 10, color: '#F59E0B', marginTop: 2, fontWeight: 700 }}>Unclaimed — no manager assigned</div>}
+                        {isLinked && isClaimed && (
+                          <div style={{ fontSize: 10, color: '#22C55E', marginTop: 2 }}>
+                            ✓ Manager: {manager ? (manager.name || ('@' + manager.handle)) : '<assigned>'}
+                          </div>
+                        )}
+                      </div>
+                      {isLinked && (
+                        <button onClick={() => { setAssigningTeamId(isAssigning ? null : lt.id); setAssignInput(''); setAssignFlash(null); }}
+                          style={{ background: 'rgba(46,91,140,0.25)', border: `0.5px solid ${C.border}`, color: C.steel, borderRadius: 999, padding: '5px 11px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap' }}
+                          title={isClaimed ? 'Add a co-manager' : 'Assign a manager to this team'}>
+                          {isAssigning ? 'Cancel' : (isClaimed ? '+ Co-manager' : '+ Manager')}
+                        </button>
+                      )}
+                      <button onClick={() => removeLeagueTeam(lt.id).then(load)}
+                        style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.2)', cursor: 'pointer', fontSize: 16 }}
+                        onMouseEnter={e => e.currentTarget.style.color = C.red}
+                        onMouseLeave={e => e.currentTarget.style.color = 'rgba(244,247,250,0.2)'}>✕</button>
                     </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>{name}</div>
-                      {!isLinked && <div style={{ fontSize: 10, color: '#F59E0B', fontWeight: 700, marginTop: 2 }}>No Rinkd page · <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setLinkingTeam(lt)}>Link team</span></div>}
-                      {isLinked && <div style={{ fontSize: 10, color: '#22C55E', marginTop: 2 }}>✓ Linked to Rinkd</div>}
-                    </div>
-                    <button onClick={() => removeLeagueTeam(lt.id).then(load)}
-                      style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.2)', cursor: 'pointer', fontSize: 16 }}
-                      onMouseEnter={e => e.currentTarget.style.color = C.red}
-                      onMouseLeave={e => e.currentTarget.style.color = 'rgba(244,247,250,0.2)'}>✕</button>
+                    {isAssigning && (
+                      <div style={{ padding: '0 14px 12px 56px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <input style={{ ...inputStyle, flex: 1 }}
+                            placeholder="@handle or email"
+                            value={assignInput}
+                            onChange={e => setAssignInput(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && !assignBusy && handleAssignManager(lt)}
+                            autoFocus />
+                          <button onClick={() => handleAssignManager(lt)} disabled={assignBusy || !assignInput.trim()}
+                            style={{ background: assignBusy || !assignInput.trim() ? C.border : C.red, color: '#fff', border: 'none', borderRadius: 8, padding: '0 14px', fontSize: 12, fontWeight: 700, cursor: assignBusy || !assignInput.trim() ? 'not-allowed' : 'pointer', fontFamily: 'Barlow, sans-serif' }}>
+                            {assignBusy ? '…' : 'Assign'}
+                          </button>
+                        </div>
+                        {assignFlash && (
+                          <div style={{ fontSize: 11, color: assignFlash.kind === 'ok' ? '#22C55E' : '#E26B6B' }}>
+                            {assignFlash.text}
+                          </div>
+                        )}
+                        <div style={{ fontSize: 10, color: 'rgba(244,247,250,0.4)' }}>
+                          They need a Rinkd account first. {isClaimed
+                            ? "Adding a co-manager doesn't change the founding manager — both can manage the roster."
+                            : 'They become the founding manager of this team.'}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
