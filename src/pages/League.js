@@ -538,12 +538,18 @@ export default function LeaguePage({ currentUser, profile }) {
           {/* INFO TAB */}
           {activeTab === 'Info' && (
             <>
-              <div style={{ background: 'linear-gradient(135deg,#0f2847 0%,#0B1F3A 100%)', border: '1px solid rgba(46,91,140,0.6)', borderRadius: 14, padding: '20px 18px', marginBottom: 16, textAlign: 'center' }}>
-                <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, marginBottom: 6 }}>Run your league on Rinkd</div>
-                <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.5)', marginBottom: 14, lineHeight: 1.6 }}>Live standings · real-time scoring · team management · season scheduling</div>
-                <a href="mailto:hello@rinkd.app?subject=League Hosting Inquiry" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: C.red, color: '#fff', border: 'none', borderRadius: 999, padding: '11px 22px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>✉️ hello@rinkd.app</a>
-                <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.3)', marginTop: 10 }}>We'll respond within 24 hours</div>
-              </div>
+              {/* "Run your league on Rinkd" marketing banner — only shown
+                  on non-activated leagues. Once Pete flips activation true
+                  this is a real paying customer's page; the lead-gen CTA
+                  belongs on demos + draft leagues only. */}
+              {league.is_activated === false && (
+                <div style={{ background: 'linear-gradient(135deg,#0f2847 0%,#0B1F3A 100%)', border: '1px solid rgba(46,91,140,0.6)', borderRadius: 14, padding: '20px 18px', marginBottom: 16, textAlign: 'center' }}>
+                  <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, marginBottom: 6 }}>Run your league on Rinkd</div>
+                  <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.5)', marginBottom: 14, lineHeight: 1.6 }}>Live standings · real-time scoring · team management · season scheduling</div>
+                  <a href="mailto:hello@rinkd.app?subject=League Hosting Inquiry" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: C.red, color: '#fff', border: 'none', borderRadius: 999, padding: '11px 22px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>✉️ hello@rinkd.app</a>
+                  <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.3)', marginTop: 10 }}>We'll respond within 24 hours</div>
+                </div>
+              )}
               <div style={card}>
                 {[['Division', league.division], ['Season', league.season], ['Location', league.location], ['Point System', `${league.settings?.points_win ?? 2}W · ${league.settings?.points_tie ?? 1}T · ${league.settings?.points_loss ?? 0}L`], ['Commissioner', league.commissioner ? `@${league.commissioner.handle}` : '—']].filter(([,v]) => v).map(([k, v]) => (
                   <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>

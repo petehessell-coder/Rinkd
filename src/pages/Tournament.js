@@ -920,12 +920,18 @@ function InfoTab({ tournament }) {
   })();
   return (
     <div>
-      <div style={{background:'linear-gradient(135deg,#0f2847 0%,#0B1F3A 100%)',border:'1px solid rgba(46,91,140,0.6)',borderRadius:14,padding:'20px 18px',marginBottom:16,textAlign:'center'}}>
-        <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:20,marginBottom:6}}>Host your tournament on Rinkd</div>
-        <div style={{fontSize:12,color:'rgba(244,247,250,0.5)',marginBottom:14,lineHeight:1.6}}>Live standings · real-time scoring · LiveBarn integration · bracket automation.<br/>Email us for pricing and availability.</div>
-        <a href="mailto:hello@rinkd.app?subject=Tournament Hosting Inquiry" style={{display:'inline-flex',alignItems:'center',gap:8,background:'#D72638',color:'#fff',border:'none',borderRadius:999,padding:'11px 22px',fontFamily:'Barlow,sans-serif',fontSize:13,fontWeight:700,textDecoration:'none'}}>✉️ hello@rinkd.app</a>
-        <div style={{fontSize:11,color:'rgba(244,247,250,0.3)',marginTop:10}}>We'll respond within 24 hours</div>
-      </div>
+      {/* "Host your tournament on Rinkd" marketing banner — only shown on
+          non-activated tournaments. Once an admin flips is_activated true
+          this is a real paying customer's page; the lead-gen CTA belongs
+          on demos + draft tournaments only. */}
+      {tournament.is_activated === false && (
+        <div style={{background:'linear-gradient(135deg,#0f2847 0%,#0B1F3A 100%)',border:'1px solid rgba(46,91,140,0.6)',borderRadius:14,padding:'20px 18px',marginBottom:16,textAlign:'center'}}>
+          <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:20,marginBottom:6}}>Host your tournament on Rinkd</div>
+          <div style={{fontSize:12,color:'rgba(244,247,250,0.5)',marginBottom:14,lineHeight:1.6}}>Live standings · real-time scoring · LiveBarn integration · bracket automation.<br/>Email us for pricing and availability.</div>
+          <a href="mailto:hello@rinkd.app?subject=Tournament Hosting Inquiry" style={{display:'inline-flex',alignItems:'center',gap:8,background:'#D72638',color:'#fff',border:'none',borderRadius:999,padding:'11px 22px',fontFamily:'Barlow,sans-serif',fontSize:13,fontWeight:700,textDecoration:'none'}}>✉️ hello@rinkd.app</a>
+          <div style={{fontSize:11,color:'rgba(244,247,250,0.3)',marginTop:10}}>We'll respond within 24 hours</div>
+        </div>
+      )}
 
       {venueLine && (
         <div style={{marginBottom:18}}>
