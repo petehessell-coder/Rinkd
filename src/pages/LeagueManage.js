@@ -100,16 +100,27 @@ function ManageLeague({ id, navigate }) {
     setAssignBusy(true);
     setAssignFlash(null);
     const result = await assignTeamManagerByInput({
-      leagueId: id, teamId: lt.team_id, input: assignInput,
+      leagueId: id,
+      teamId: lt.team_id,
+      input: assignInput,
+      leagueName: league?.name,
+      teamName: lt.team?.name || lt.team_name,
+      invitedBy: league?.commissioner?.name || null,
     });
     setAssignBusy(false);
     if (result.status === 'assigned') {
-      setAssignFlash({ kind: 'ok', text: `Manager set: ${result.profile.name || '@'+result.profile.handle}` });
+      setAssignFlash({ kind: 'ok', text: `Manager set: ${result.profile.name || '@' + result.profile.handle}` });
       setAssignInput('');
       setAssigningTeamId(null);
       await load();
-    } else if (result.status === 'no_account') {
-      setAssignFlash({ kind: 'err', text: `No Rinkd account for "${result.input}". Ask them to sign up first.` });
+    } else if (result.status === 'invited') {
+      // No Rinkd account yet — magic-link email sent. Don't refresh
+      // (manager state hasn't changed yet); show the success flash and
+      // keep the row expanded so the commissioner sees confirmation.
+      setAssignFlash({ kind: 'ok', text: `Invite emailed to ${result.email}. They'll be set up as manager once they sign up + click the link.` });
+      setAssignInput('');
+    } else if (result.status === 'needs_email') {
+      setAssignFlash({ kind: 'err', text: `No Rinkd account for "@${result.handle}". Enter their email instead and we'll send an invite.` });
     } else {
       setAssignFlash({ kind: 'err', text: result.message || 'Could not assign manager.' });
     }

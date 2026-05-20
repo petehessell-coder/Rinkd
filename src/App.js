@@ -36,6 +36,7 @@ import Teams from './pages/Teams';
 import League from './pages/League';
 import LeagueManage from './pages/LeagueManage';
 import LeagueCreate from './pages/LeagueCreate';
+import AcceptTeamInvite from './pages/AcceptTeamInvite';
 import Team from './pages/Team';
 import TeamManage from './pages/TeamManage';
 import ScorerView from './pages/ScorerView';
@@ -144,6 +145,11 @@ function AppRoutes() {
           them straight to returnTo instead of dropping them on /feed. Auth
           page handles the same query param on successful sign-in. */}
       <Route path="/login" element={user ? <LoginRedirect /> : <Auth />} />
+      {/* Magic-link landing for league-commissioner team-manager invites.
+          Public route — handles its own signed-in vs not-signed-in routing
+          via the AcceptTeamInvite component (bounces to /login?returnTo
+          when needed so the token survives the round trip). */}
+      <Route path="/accept-team-invite" element={<AcceptTeamInvite profile={profile} />} />
       {/* Survey is public — accessible from auth screen, marketing pages, and embedded in feeds */}
       <Route path="/survey" element={<Survey />} />
       {/* Password recovery — public, handles the magic-link redirect from Supabase */}
