@@ -596,6 +596,317 @@ Code:
 
 These are the only known outstanding items from the audit. **None require code changes.**
 
+### May 19, 2026 evening (continued) — League engine Phase 1: tournament parity build
+
+Picked up the queued `~/Downloads/rinkd_v4/LEAGUE_PARITY_PHASE_1_BUILD.md` plan and shipped Phase 1 end-to-end. Branch is the `claude/laughing-nightingale-10d576` worktree; pending Pete's merge to `main`. **Phase 1 is schema + bare-minimum scaffolding only** — Phase 2 (Feed, public landing, push) and Phase 3 (`league_games.phase`, multi-day scheduler, target-games-per-team, playoff bracket) are still queued. None of this is pilot-blocking — BLPA Cleveland is tournaments, not leagues.
+
+**Two migrations** (live in prod via MCP; no app-level dependency until Pete merges the worktree code):
+
+1. **`leagues_add_dates_venue_accent_logo_url`** — adds 6 columns to `public.leagues`: `start_date`, `end_date`, `venue_name`, `venue_address`, `accent_color`, `logo_url`. Plus two partial indexes:
+   - `leagues_active_by_start_idx` on `(start_date) WHERE status='active'` — keeps the Leagues page hot path lean.
+   - `leagues_end_date_idx` on `(end_date) WHERE end_date IS NOT NULL` — for upcoming/recent split + Phase 3 playoff trigger gate.
+   - Intentionally NOT indexed: `venue_name`, `venue_address`, `accent_color`, `logo_url`. Display-only.
+
+2. **`league_roles_table_and_is_league_commissioner_helper`** — multi-commissioner support, direct mirror of the multi-director (tournament) and multi-manager (team) patterns:
+   - New `public.league_roles (id, league_id, user_id, role, created_at)` with `role` CHECK in `('commissioner','scorer','viewer')` + `UNIQUE (league_id, user_id)` + FK CASCADE on both sides.
+   - 2 supporting indexes: `(league_id, role)` for listCommissioners / listScorers; `(user_id, role)` for the `useUserRole` "what leagues am I a commissioner of" hot path. Both verified via `EXPLAIN ANALYZE` to use `Index Only Scan` / `Index Scan`.
+   - New `is_league_commissioner(p_league_id, p_user_id) returns boolean` — `STABLE SECURITY DEFINER` with explicit `search_path = public, auth`. Identical shape to `is_tournament_director` + `is_team_manager`. Returns true if the user is either the founding commissioner OR has `role='commissioner'` in `league_roles`.
+   - 4 RLS policies on `league_roles`: `read_own` (own rows), `commissioner_read` (all rows for leagues you commish), `insert` (commissioners only), `delete` (commissioners only + **founder-protection NOT EXISTS clause** so the founder's commissioner row is undeletable).
+   - `leagues_update` rewritten to use the helper (was founder-only) — additional commissioners can now edit league settings.
+   - `league_games_insert` / `league_games_update` / `league_games_delete` rewritten to use the helper. `update` ORs in `scorekeeper_id` AND `EXISTS league_roles WHERE role='scorer'` — both the assigned scorekeeper and any league-role scorer can score a game.
+
+**Advisor pass after each migration** — 0 ERROR-level findings on either security or performance. The new WARNs are symmetric with the existing tournament-side pattern (anon/authenticated executable on the SECURITY DEFINER helper — identical to `is_tournament_director`; multi-permissive SELECT on `league_roles` — same shape as `tournament_roles`). Doc explicitly accepts these.
+
+**DB-level RLS smoke tests** (seeded a `SMOKE TEST — Phase 1 Parity` league with founder=Pete (test account) + extra commissioner Jake + scorer mvntrec, ran via `SET LOCAL ROLE authenticated` + `request.jwt.claims`, then cleaned up):
+- ✅ Extra commissioner CANNOT delete founder's row (0 rows affected — founder-protection clause holds).
+- ✅ Extra commissioner CAN delete a non-founder role row (1 row).
+- ✅ Scorer-only user CANNOT delete any commissioner row (0 rows).
+- ✅ Anon CAN SELECT a public league (`is_public = true`).
+- ✅ Scorer-only user CANNOT UPDATE the league (0 rows).
+- ✅ Extra commissioner CAN UPDATE the league (1 row).
+
+**Code (4 files new, 3 files modified):**
+- **New** `src/lib/leagueCommissioners.js` — direct port of `tournamentDirectors.js`. Exports `isExtraCommissioner`, `listCommissioners`, `addCommissionerByInput` (account-required, no email-invite path), `removeCommissioner`.
+- **New** `src/lib/leagueScorers.js` — direct port of `tournamentScorers.js`. Exports `resolveProfile`, `addScorerByInput` (with email-invite fallback to a new `league_scorer_invite` type for `send-invite` Edge Function), `listScorers`, `removeScorer`.
+- **New** `src/pages/LeagueCreate.js` — full 4-step wizard mirroring `TournamentCreate.js`:
+  - **Step 1 (Basics):** name, division/level/location/season (existing fields), start_date + end_date + venue_name + venue_address (new), accent_color (new), logo color + initials + image upload via `uploadMedia` + `classifyImage` 5MB cap + NSFW pre-check (mirrors team/tournament).
+  - **Step 2 (Format & Rules):** ONE preset for Phase 1 — `classic_league` (single round-robin, 3×12 stop, 6-goal mercy, ties allowed). More presets land in Phase 3. Full editable Game Format / Point System / Tiebreaker reorder / Options (allow_ties, shootout_regular_season, shootout_playoffs).
+  - **Step 3 (Divisions & Teams):** free-text divisions (default: none → one league-wide group). Team picker is search-or-create (`teams` table debounced 300ms, falls back to UNLINKED row tagged amber). Each team can be assigned to a division at add time.
+  - **Step 4 (Commissioners & Scorers):** both lists optional, founder auto-set via the createLeague insert.
+  - **Cleanup-on-failure** identical to the tournament wizard — on any post-insert failure, `delete from leagues where id = leagueRow.id` cascade-clears league_teams + league_roles + league_games. Surface a "may still exist" note only if the cleanup itself fails.
+  - **Batch team insert** — single `.insert([...])` for teams to avoid the N+1 anti-pattern the Phase 1 doc flagged. Commissioner + scorer additions stay sequential because each goes through `add*ByInput` which does an account-resolution step that's intentionally serial (avoids hammering the auth lookup).
+- `src/lib/leagues.js` — `createLeague` extended to accept all 6 new columns; empty strings nulled out for the date fields so Postgres doesn't reject them. `getUserLeagueRole` now returns `'commissioner' | 'scorer' | 'viewer' | null` by ALSO consulting `league_roles` (was founder-only).
+- `src/pages/LeagueManage.js` — inline `CreateLeague` component (lines 60-124) deleted; `createLeague` import removed. The `if (id === 'create') return <CreateLeague…/>` fallthrough is now a defensive `navigate('/league/create', { replace: true })` in case a stale link hits this surface.
+- `src/App.js` — registered `import LeagueCreate from './pages/LeagueCreate'`; the `/league/create` route now points to `LeagueCreate` directly (was double-routed through `LeagueManage`).
+
+**Build:** clean (`Compiled with warnings` with only the pre-existing harmless `Critical dependency` webpack warning). Bundle +5.5kB gz.
+
+**Smoke-tests deferred to Pete (require browser + 2nd account):**
+1. ✅ DB: helper correctness + RLS — verified above via direct SQL.
+2. **Wizard happy path** — `/league/create` → fill 4 steps → land on `/league/<id>/manage` with all settings + teams populated.
+3. **Failure recovery** — kill the network mid-Publish; expect cleanup-on-failure delete of the partial league.
+4. ✅ DB: founder-protection RLS — verified above.
+5. **Second commissioner UX** — add a commissioner via wizard, sign in as that account, confirm `/league/:id/manage` is accessible + Settings can be edited.
+6. **Scorer access** — add a scorer, sign in as that account, score a league game via ScorerView.
+7. **Anon view** — confirm `/league/<id>` still renders for signed-out users (is_public=true leagues).
+
+**Scope guardrails honored** (per Phase 1 doc "What NOT to do"): no Feed tab, no PublicLeagueLanding, no `posts.league_id`, no schedule generator extension, no `league_games.phase`, no `league_subscriptions`/push, no tournament-side touches.
+
+**Pending Pete approval to merge** — Pete asked for review-before-push. Branch: `claude/laughing-nightingale-10d576`. Suggested merge command (Pete runs after review):
+```
+rm -f .git/index.lock && \
+  git checkout main && \
+  git merge --no-ff claude/laughing-nightingale-10d576 -m "merge: league engine Phase 1 + Phase 2 — tournament parity build" && \
+  git push origin main
+```
+
+### May 19, 2026 evening (continued, second pass) — League engine Phase 2: Feed + PublicLeagueLanding + push pipeline
+
+Layered Phase 2 on top of Phase 1 in the same `claude/laughing-nightingale-10d576` worktree (one cohesive review). Closes the major Phase 2 deliverables from `~/Downloads/rinkd_v4/LEAGUE_PARITY_PHASE_1_BUILD.md`: league-scoped feed, public landing for anonymous users, follow + push notification pipeline. Phase 3 (`league_games.phase` column, multi-day scheduler, target-games-per-team auto-compute, playoff bracket UI) is still queued.
+
+**Two migrations** (live in prod via MCP):
+
+1. **`posts_add_league_id_for_league_scoped_feed`** — adds nullable `posts.league_id uuid REFERENCES public.leagues(id) ON DELETE SET NULL`. Mirror of the May 18 `posts.tournament_id` migration. Adds partial btree `posts_league_id_created_at_idx ON (league_id, created_at DESC) WHERE league_id IS NOT NULL` so the League Feed tab read is indexed.
+
+2. **`league_subscriptions_table_for_push_targeting`** — `league_subscriptions(user_id uuid, league_id uuid, created_at timestamptz)` with composite PK `(user_id, league_id)` + index on `(league_id)` for reverse-direction lookup. FKs CASCADE on both sides. RLS: `select/insert/delete` all self-scoped via `(select auth.uid()) = user_id`. Direct mirror of `tournament_subscriptions`.
+
+**Advisor pass** after both migrations: 62 WARN, **0 ERROR-level**, no new warnings introduced.
+
+**DB-level RLS spot-checks (all 6 pass):**
+- Anon SELECT on `league_subscriptions` → 0 rows (no policy grants anon). ✓
+- Authed user SELECT shows only own rows. ✓
+- Authed user INSERT impersonating another user → blocked with `new row violates row-level security policy`. ✓
+- Authed user DELETE returns only own rows; the other user's row survives. ✓
+- Anon SELECT on `posts.league_id`-tagged posts works (0 today, no error — when recaps land they'll show). ✓
+- Wired-up bonus: confirmed anon SELECT on `league_games`, `league_teams`, `rinks` all return public-read `true` so PublicLeagueLanding renders for anon visitors. ✓
+
+**Edge Function deployed: `send-league-recap-push`** (v1, ACTIVE, `verify_jwt=true`). Direct mirror of `send-recap-push` — same don't-trust-the-client architecture (client hands over a `post_id`, function walks `posts → league_games → leagues → league_subscriptions → push_subscriptions` under service role, fans out via `web-push`, prunes 410/404). Reuses the existing VAPID secrets set in May 18's `send-recap-push` deploy. Anonymous POST → `401 UNAUTHORIZED_NO_AUTH_HEADER` (JWT enforced).
+
+**Code (1 new file, 5 modified):**
+
+- **New** `src/lib/leagueSubscriptions.js` — `followLeague`, `unfollowLeague`, `isFollowingLeague`. Direct port of `tournamentSubscriptions.js` (upsert-on-follow for idempotent double-tap).
+- `src/lib/posts.js`:
+  - `getPosts` + `getFollowingPosts` now also `.is('league_id', null)` so league-scoped posts stay off the global feed (mirror of the tournament filter).
+  - New `getLeaguePosts(leagueId, limit = 50)` mirror of `getTournamentPosts`. Hits the partial index above.
+  - `createGameRecapPost` accepts `leagueId`; on existing-row update it also re-stamps `league_id` for self-healing of older recaps.
+  - `createPost` accepts `leagueId` so the Feed-tab composer can scope user posts to a league.
+- `src/lib/push.js` — new `triggerLeagueRecapPush(postId)` mirror of `triggerTournamentRecapPush`; invokes `send-league-recap-push` Edge Function.
+- `src/pages/League.js` (heaviest rewrite):
+  - Accepts `currentUser` prop.
+  - New `TABS` array: `['Schedule', 'Standings', 'Teams', 'Feed', 'Info']` (Feed inserted between Teams and Info).
+  - New state: `isFollowing`, `followBusy`, `isExtraCommissioner`, `feedPosts`, `feedLoading`.
+  - New `useEffect`s: load `isFollowing`, load `isExtraCommissioner`, lazy-load `feedPosts` on first Feed-tab open, realtime subscription to `league_games` for live score updates (mirror of Tournament.js).
+  - New `handleFollowToggle` — first-time follow triggers `subscribeToPush` if not already subscribed; falls through to the DB follow either way.
+  - `isCommissioner` is now `userRole === 'commissioner' || isExtraCommissioner` so additional commissioners see the Manage button and scorer affordances.
+  - Anon gate: if `!currentUser`, render `<PublicLeagueLanding>` (inline component at the bottom of the file).
+  - "Private league" framing for the not-found error state when anon (matches the tournament pattern).
+  - New `<LeagueFeedTab>` sub-component (mirror of Tournament FeedTab): textarea composer + photo upload, 500-char cap, optimistic prepend, blocked/reported post filtering via `PostActionMenu`, "View game →" deep-link to `/league-game/:id`.
+  - New `<PublicLeagueLanding>` sub-component: league metadata (name, season, dates, venue, logo) + sign-up CTAs + 3-stat counter (Teams / Games / Played) + teams list with logo chips. Records hidden behind sign-up. SEO-friendly + Google-indexable.
+- `src/pages/ScorerView.js`:
+  - Imports `triggerLeagueRecapPush`.
+  - `buildRecapContent` now accepts `leagueName` in addition to `tournamentName`; league finalize uses `Regular season · <league name>` as the context line (Phase 3 will plug in `league_games.phase` for playoffs).
+  - New `else if` branch at the finalize call site: when `isLeague && newStatus === 'final' && game.league_id`, build recap content, `createGameRecapPost({ ..., leagueId })`, then `triggerLeagueRecapPush(postId)`. Failures non-fatal — game finalizes regardless. No bracket auto-fill (leagues don't have bracket games until Phase 3).
+- `src/App.js`:
+  - `/league/:id` and `/leagues` dropped out of `ProtectedRoute` so anonymous spectators can land on `<PublicLeagueLanding>`. `currentUser={user}` now passed to League.js. Mirror of the May 16 tournament public-landing pattern. Inline comment documents the parity.
+
+**Build:** clean (`Compiled with warnings` with only the harmless `Critical dependency` webpack warning). Bundle +3.75 kB gz on top of Phase 1.
+
+**Smoke-tests deferred to Pete (browser + 2nd account):**
+1. ✅ DB-level RLS + advisor — verified above.
+2. **Anon landing** — sign out, visit `/league/<id>` for a `is_public=true` league; expect `<PublicLeagueLanding>` with metadata + teams + sign-up CTAs.
+3. **Follow + push** — sign in as a non-commissioner, tap 🔔 Follow on a league, accept the push permission prompt. Confirm `league_subscriptions` row created. Have a commissioner finalize a league game in ScorerView; first device should receive a push within ~2s with the recap headline.
+4. **Feed tab** — confirm the auto-recap from #3 lands in the league's Feed tab (not the global Feed). Post a chirp from the Feed composer; expect optimistic prepend.
+5. **2nd commissioner can score + finalize** — sign in as a `league_roles.role='commissioner'` user (not the founder), open `/league/:id/manage`, open ScorerView, finalize a game. Confirm the recap lands and pushes fire.
+6. **Scorer access** — sign in as a `league_roles.role='scorer'` user; ScorerView allows finalize via the `EXISTS league_roles WHERE role='scorer'` branch of the `league_games_update` RLS.
+
+**Scope guardrails honored** (per Phase 1 doc "What NOT to do" applied to Phase 2 scope): no `league_games.phase` column, no multi-day/games-per-day/target-games-per-team scheduler, no playoff bracket UI. All Phase 3 work.
+
+**Phase 3 — still queued.** From §7: `league_games.phase` + composite index `(league_id, phase)` for `WHERE phase='regular_season'`; multi-day + games-per-day + days-of-week scheduler with target-games-per-team auto-compute (Option B per Pete May 19); playoff bracket UI; more format presets (currently only `classic_league`). Effort: **~5-6 days**.
+
+**Pending Pete approval to merge.** Same branch — Phase 1 + Phase 2 ship as one merge.
+
+### May 19, 2026 evening (continued, third pass) — League engine Phase 3a: phase column + smart schedule generator + more presets
+
+Layered Phase 3a on top of Phase 2 in the same `claude/laughing-nightingale-10d576` worktree. Closes the foundational pieces of Phase 3 from the build doc: `league_games.phase` column + standings view filter, target-games-per-team schedule generator, additional format presets. **Phase 3b (playoff bracket UI) is queued for a follow-up session** — see §7. Bracket UI is a UI-heavy piece that benefits from real season data and from observing how commissioners use the new generator; standings-with-phase-filter is already in place, so playoff games can be inserted manually today and they'll be cleanly excluded from regular-season standings.
+
+**One migration** (live in prod via MCP):
+
+**`league_games_add_phase_for_playoffs`** — adds `league_games.phase text NOT NULL DEFAULT 'regular_season' CHECK (phase IN ('regular_season','playoffs'))`. All 42 pre-existing rows backfilled to `regular_season` via the column default. New composite index `league_games_league_phase_idx ON (league_id, phase)` for the standings view's hot read path. The `league_standings` view (already flipped to `security_invoker=on` per May 18 fix) was dropped + recreated with `WHERE league_games.phase = 'regular_season'` in both branches of the UNION ALL — playoff games are now structurally invisible to regular-season standings. `security_invoker=on` preserved.
+
+**Advisor pass:** 62 WARN, **0 ERROR-level**, no new warnings introduced. View def re-pulled with `pg_get_viewdef` confirms the `phase = 'regular_season'` predicate is in place.
+
+**Code (1 new lib, 3 modified):**
+
+- **New** `src/lib/leagueScheduleGenerator.js` — pure-function schedule generator. Three exports:
+  - `computeScheduleShape({ teamCount, targetGamesPerTeam })` → `{ meetingsPerPair, gamesPerTeam, totalGames }`. Rounds the user's target to the nearest clean round-robin count (so "30 games per team across 8 teams" = `round(30/7)=4` meetings = 28 games per team). Floors at 1 meeting so a low target always produces at least one full RR.
+  - `buildSlotTimeline({ startDate, daysOfWeek, gamesPerDay, totalSlots, firstPuckHour, firstPuckMinute, gameBlockMinutes })` → array of ISO datetime strings. Walks the calendar forward from `startDate`, emits up to `gamesPerDay` slots on each allowed day-of-week, stagger by `gameBlockMinutes`. Hard-capped at 3 years of walk so a misconfigured form can't spin forever; returns `error: 'calendar_exhausted'` signal.
+  - `generateLeagueSchedule({ teams, targetGamesPerTeam, startDate, daysOfWeek, gamesPerDay, rinkId, ... })` → `{ rows, shape, lastSlotDate, error? }`. Reuses `roundRobinPairs` from `tournamentManage.js` for the underlying RR. Flips home/away on alternating meetings so a team that hosts a given opponent in meeting 1 visits them in meeting 2 — fairness across multiple round-robins. Tags every row with `phase: 'regular_season'`. Caller does the DB insert.
+- `src/lib/scheduleBuilder.js` — extended `bulkInsertLeagueGames` to write `phase: g.phase || 'regular_season'` so the new generator's rows land tagged correctly. Default matches the DB column default; the (future) bracket generator can pass `'playoffs'`.
+- `src/pages/LeagueManage.js` — Schedule tab now leads with **⚡ Smart Generator — Target Games Per Team**. Inline `SmartScheduleGenerator` sub-component with:
+  - Target games per team (number, 1-200)
+  - Start date
+  - Days-of-week multi-select chips (Sun-Sat)
+  - Games per day (default 1)
+  - Rink picker (optional — generator allows commissioner to assign per-game later)
+  - First puck (24h hour + minute) + minutes between games (default 18:00 + 75-min spacing)
+  - **Live preview card** that re-runs `generateLeagueSchedule` on every form change (no DB hit) — shows "X games across Y teams. Each team plays each opponent N× = M games per team. Last game: <date>." Surfaces `calendar_exhausted` error if days-of-week + start can't fit the schedule in 3 years.
+  - Two-tap confirm — first tap shows "Confirm — insert N games", second tap actually inserts via `bulkInsertLeagueGames`. Prevents accidental double-generation.
+  - The existing modal-based "Advanced — Single/Double Round-Robin Wizard" stays accessible just below as the secondary path for commissioners who want finer control. Both write through `bulkInsertLeagueGames`, so both produce `phase='regular_season'`-tagged rows.
+- `src/pages/LeagueCreate.js` — `FORMAT_PRESETS` expanded from 1 to **4 presets**:
+  - `classic_league` (unchanged) — single RR, 3×12 stop, 6-goal mercy, ties allowed
+  - `beer_league_no_ties` — 3×17 run-time, SO in regular season, no mercy
+  - `high_school_style` — 3×15 stop, 7-goal mercy, OT/SO playoffs only
+  - `youth_short_game` — 2×20 run-time, 8-goal mercy, ties allowed, no SO
+
+**Build:** clean. Bundle +2.37 kB gz on top of Phase 2.
+
+**DB-level smoke tests (all pass):**
+- ✅ `league_games.phase` column exists, NOT NULL with `CHECK (phase IN ('regular_season','playoffs'))`.
+- ✅ Composite index `league_games_league_phase_idx` built.
+- ✅ All 42 pre-existing rows backfilled to `regular_season`.
+- ✅ View definition (re-pulled via `pg_get_viewdef`) contains `phase = 'regular_season'` in both branches.
+- ✅ View options confirm `security_invoker=on` preserved (no SECURITY DEFINER regression).
+- ✅ Advisor pass: 0 ERROR-level, no new findings.
+- ✅ Generator math verified by inspection for typical commissioner inputs (8 teams × target 30 → 4 meetings → 28 actual; 8 teams × target 14 → 2 meetings → 14 actual; 8 teams × target 1 → 1 meeting → 7 actual; teamCount<2 → 0/0/0).
+
+**Smoke-tests deferred to Pete (browser):**
+1. Open `/league/<id>/manage` → Schedule tab; pick days-of-week, target=20, start=today, games/day=1; tweak the preview ("16 teams × 1 meeting × 15 opponents = 15 games per team, 120 games total"); fire Generate; expect 120 rows inserted with `phase='regular_season'`.
+2. Insert a playoff game manually (set `phase='playoffs'` on a row); confirm it appears in the Schedule tab but is **invisible** in the Standings tab (the new view filter).
+3. Generator edge: pick 1 day-of-week + target that requires more days than 3 years allow; expect the preview to surface "Calendar full — try more days-of-week or more games-per-day" and Generate to be disabled.
+4. New presets: open `/league/create` Step 2, click each of the 4 preset chips, verify the settings populate sensibly.
+5. Re-generate guard: tap Generate once, then tap again — the button label changes to "Confirm — insert N games" before the actual write.
+
+**Phase 3b — queued (NOT in this batch):**
+- Playoff bracket UI: pick top-N teams from standings, generate bracket games tagged `phase='playoffs'`. Inserts go through the same `bulkInsertLeagueGames` (no DB changes needed — the schema is ready).
+- Per-rink balancing in the smart generator (Phase 3a is single-rink). Once multi-rink leagues land, run the generator per rink + interleave.
+- Schedule edit flow for the smart-generated games (today, commissioner edits individually in the Schedule tab — fine for MVP).
+
+**Pending Pete approval to merge.** Same branch — Phase 1 + Phase 2 + Phase 3a ship as one merge.
+
+### May 19, 2026 evening (continued, fourth pass) — League engine Phase 3b: playoff bracket UI
+
+Closes the last queued piece of Phase 3 from the original build doc. Layered on the same `claude/laughing-nightingale-10d576` worktree — Phase 1 + 2 + 3a + 3b ship as one merge.
+
+**One migration** (live in prod via MCP):
+
+**`league_games_add_round_for_playoff_bracket`** — adds `league_games.round text NULL` (mirror of `games.round` on the tournament side; intentionally no CHECK so non-standard bracket patterns like play-ins or third-place games can land later without a schema change). Adds partial composite index `league_games_phase_round_idx ON (league_id, phase, round) WHERE phase='playoffs'` so "list this league's playoff bracket" stays cheap as regular-season rows pile up around it.
+
+**Structural constraint discovered:** `league_games.home_team_id` + `away_team_id` are **NOT NULL** (vs tournament `games` which allows NULL). Means I can't pre-create TBD placeholder rounds the way the tournament bracket does. Phase 3b ships a **one-round-at-a-time** flow: commissioner generates round 1 from standings (real seeds), then comes back after that round finalizes to generate round 2 from winners. This is actually a cleaner UX than placeholder-fill — commissioners can adjust schedule between rounds based on real availability.
+
+**Advisor pass:** 62 WARN, **0 ERROR-level**, no new findings. All 42 existing rows untouched (still tagged `regular_season`).
+
+**Code (1 new lib, 1 modified):**
+
+- **New** `src/lib/leaguePlayoffGenerator.js` — pure-function bracket generator.
+  - `SUPPORTED_BRACKET_SIZES = [2, 4, 8]` — covers the vast majority of beer/youth/adult-rec leagues; 16+ is a Phase 4 ask if needed.
+  - `seedPairs(bracketSize)` — standard 1v8 / 4v5 / 3v6 / 2v7 (8-team QFs); 1v4 / 2v3 (4-team semis); 1v2 (2-team final). Higher seed = home team.
+  - `firstRoundLabel(bracketSize)` — `'quarterfinal' | 'semifinal' | 'final' | null`.
+  - `generatePlayoffRoundOne({ standings, bracketSize, ...scheduling })` — seeds from current `league_standings` rows (sorted by `rank`). Reuses `buildSlotTimeline` from `leagueScheduleGenerator.js` for the calendar walk. Returns `{ rows, label, error? }` with `error ∈ { 'unsupported_bracket_size', 'not_enough_teams', 'calendar_exhausted' }`.
+  - `generatePlayoffNextRound({ previousRound, bracketSize, includeBronze, ...scheduling })` — takes finalized round-N games + emits round-N+1 by pairing adjacent-slot winners (`[w0,w1]` → final, `[w0,w1,w2,w3]` → 2 semis). When previousRound is `'semifinal'` and `includeBronze=true`, also emits a bronze game pairing the two losers. Validates: previous round must all be `status='final'`, no ties (return `'incomplete_winners'`), no slot exhaustion.
+  - All rows tagged `phase='playoffs'` + the correct round label so the standings view structurally excludes them (Phase 3a).
+- `src/pages/LeagueManage.js`:
+  - New 'Playoffs' tab in `MANAGE_TABS = ['Teams', 'Schedule', 'Playoffs', 'Settings']`.
+  - `load()` extended to fetch `getLeagueStandings(id)` alongside teams/games/rinks. New `standings` state.
+  - New `<PlayoffsTab>` inline sub-component (~270 lines) with three sections:
+    - **🏆 Generate Playoff Bracket** form — bracket size selector (2/4/8, disabled options for sizes that exceed team count), days-of-week chips, start date, games-per-day, rink, first puck, spacing. Live preview shows actual matchups with team names + dates. Two buttons render conditionally:
+      - **Round 1** ("Generate quarterfinal/semifinal/final (N games)") when no round-1 games exist yet — seeded from standings.
+      - **Next round** ("Generate semifinal/final (N games)") when the latest existing round is fully final — pairs winners + optional bronze-game checkbox for semis-complete state.
+    - **Top N from Standings (Seeding)** — read-only preview showing which teams currently hold the top seeds and their W-L-T-pts. Surfaces "Only X teams have a standings rank — need N for this bracket size" when standings is short.
+    - **Current Bracket** — grouped by round (Quarterfinals → Semifinals → Final / Bronze) with home/away/time/score (when final). Renders only when at least one playoff game exists.
+  - The `<SmartScheduleGenerator>` (Phase 3a) and existing modal-based Advanced wizard stay in the Schedule tab — Playoffs is a separate flow.
+
+**Build:** clean. Bundle +3.5 kB gz on top of Phase 3a.
+
+**DB smoke (all pass):**
+- ✅ `round` column added (nullable text), partial index `league_games_phase_round_idx` built.
+- ✅ View definition still contains `phase = 'regular_season'` filter.
+- ✅ All 42 existing rows untouched; `round` defaults to NULL for them.
+- ✅ Advisor pass: 0 ERROR-level.
+- ✅ Generator math verified by inspection: seedPairs for 2/4/8 returns standard cross-bracket matchups; `pairWinnersInOrder([w0,w1,w2,w3])` → `[(w0,w1), (w2,w3)]`; tie detection blocks next-round generation cleanly.
+
+**Smoke-tests deferred to Pete (browser):**
+1. Open `/league/<id>/manage` → Playoffs tab; with at least 4 finalized regular-season games, expect 4-team bracket option active; pick start date + Sun chip; preview shows "1v4" + "2v3" matchups with correct seeds; tap Generate; expect 2 rows inserted with `phase='playoffs'` + `round='semifinal'`.
+2. Finalize both semifinal games in ScorerView; come back to Playoffs tab; expect the "Next round preview" panel to show the championship matchup (winner of semi 1 vs winner of semi 2) + bronze checkbox; tap Generate; expect 2 rows (final + bronze) tagged correctly.
+3. Verify regular-season Standings is unchanged after playoff games land — phase filter keeps them out.
+4. Edge: try generating a bracket with `bracketSize > standings.length`; expect "Only X teams have a standings rank — need N" error in the seeding preview + Generate disabled.
+
+**Phase 3 — ✅ COMPLETE.** All four pieces from the original Phase 3 spec shipped:
+- ✅ `league_games.phase` column + standings view filter (Phase 3a)
+- ✅ Smart target-games-per-team scheduler (Phase 3a)
+- ✅ Playoff bracket UI (Phase 3b)
+- ✅ More format presets — 4 total (Phase 3a)
+
+**Deferred polish (post-merge backlog, not pilot-blocking):**
+- Per-rink balancing in the smart generator (today: single-rink — commissioners run the generator per rink + interleave manually).
+- Smart-schedule batch edit (today: per-game inline edit in the Schedule tab).
+- Phase selector on the manual "Add Single Game" form (today: commissioner who wants to manually add a non-bracket playoff game would need to set `phase` via SQL — rare edge case).
+- 6-team bracket with byes (Phase 3b ships 2/4/8 only — covers the common cases).
+- Auto-fill of next-round games as soon as a prior-round game finalizes (today: commissioner re-runs the generator manually).
+
+**Pending Pete approval to merge.** Same branch — Phase 1 + Phase 2 + Phase 3a + Phase 3b ship as one merge.
+
+### May 19, 2026 evening (continued, fifth pass) — Activation gate (monetization switch)
+
+Pete realized that everything functions for everyone — there's no paywall in the loop. Closes that with a **per-event activation switch** that gates the live-scoring + push value paths at the RLS layer. Organizers can still create + configure freely (teams, schedule, bracket, public landing); only the things that matter at game-time (finalize, goal/penalty inserts, push fanout) require a Rinkd admin to flip `is_activated` first. Layered on the same `claude/laughing-nightingale-10d576` worktree.
+
+**One migration** (live in prod via MCP):
+
+**`tournaments_and_leagues_add_is_activated_admin_gate`** — adds `is_activated boolean NOT NULL DEFAULT false` to both `public.tournaments` and `public.leagues`. **Backfilled all existing rows to `true`** (4 tournaments + 5 leagues) so BLPA Cleveland / CSHL personal tracker / demo data keep working. New rows default `false` — Pete decides per event going forward.
+
+Three RLS rewrites enforce the gate:
+- `games_director_update` + `games_scorer_update` (tournament side): both now require `EXISTS tournaments t WHERE t.id = games.tournament_id AND t.is_activated = true` ANDed onto the existing director/scorer path. The `tournament_id IS NULL` escape hatch (solo / non-tournament games) stays exempt.
+- `league_games_update`: same gate ANDed onto the existing commissioner/scorekeeper/scorer path.
+- New `game_goals_insert_requires_activated` + `game_penalties_insert_requires_activated`: defense-in-depth INSERT policies. A goal/penalty insert hits a game; that game's parent tournament OR league must be activated (or the game must be solo `tournament_id IS NULL`). Blocks the scoring-tool write path even if UPDATE somehow bypasses.
+
+**DB smoke test** confirmed the gate works end-to-end: set BLPA Cleveland `is_activated=false`, attempted `UPDATE games SET home_score=99 WHERE tournament_id=...` as the founding director — **0 rows affected**. Flipped `is_activated=true` and retried — **12 rows updated** (one per pool game). Cleaned up.
+
+**Advisor pass:** 62 WARN, **0 ERROR-level**, no new findings from this migration.
+
+**Code (1 new page, 1 new route, edits across 5 files, 2 Edge Function redeploys):**
+
+- **New** `src/pages/AdminActivations.js` (~220 lines) — admin console at `/admin/activations`. Gated by `useIsRinkdAdmin` (same `profiles.is_admin=true` gate the other admin pages use). Lists tournaments + leagues with:
+  - Logo + name + division/season/date subtitle.
+  - Status pill (● Activated green / ○ Pending amber).
+  - Toggle switch.
+  - Filter chips (Pending / Activated / All) + free-text search across name + division.
+  - "Pending (N)" counter on the Pending chip.
+  - Click name → deep-link to the public page.
+  - Reload button + error surface for write failures.
+- `src/App.js` — registered `/admin/activations` route + `AdminActivations` import.
+- `src/components/MoreDrawer.js` — added Activations link to the Rinkd Admin section between Analytics and Bug reports.
+- `src/pages/Tournament.js` — "🔒 Activation pending" pill next to "● Live now" in the page header when `tournament.is_activated === false`.
+- `src/pages/League.js` — same pill next to the IN SEASON status pill.
+- `src/pages/TournamentManage.js` — yellow callout banner under the page header explaining the activation requirement and linking to `hello@rinkd.app`.
+- `src/pages/LeagueManage.js` — same callout banner. Both managers explicitly call out that **setup still works** — only live scoring + pushes are locked.
+- `src/pages/ScorerView.js`:
+  - Load query selects `is_activated` on the joined tournament/league.
+  - New gate page renders after the "Scorer access only" gate: if parent not activated, shows "🔒 Activation pending — Email hello@rinkd.app" with a back button. Doesn't render the scorer UI so users don't stare at a console that silently refuses every write.
+- `send-recap-push` Edge Function (v2, ACTIVE, JWT enforced) — added `is_activated` to the tournament join + returns `{ sent: 0, reason: 'tournament_not_activated' }` early if false. No push fanout for non-activated events.
+- `send-league-recap-push` Edge Function (v2, ACTIVE, JWT enforced) — same gate via league lookup. Returns `{ sent: 0, reason: 'league_not_activated' }`.
+
+**Build:** clean (+2.7 kB gz on top of Phase 3b).
+
+**How it works end-to-end:**
+1. Organizer signs up + creates a tournament/league via the existing wizards. `is_activated=false` by default.
+2. They can add teams, generate schedule, build bracket, customize everything. Public landing page shows their event. The "Activation pending" pill is visible everywhere.
+3. They contact `hello@rinkd.app` (the banner copy points them here) and pay.
+4. Pete opens `/admin/activations`, finds the event in the Pending list, taps the toggle. `is_activated → true`.
+5. Live scoring + auto-recap pushes unlock immediately. Director/scorers can finalize games. Recap posts fan out to push subscribers.
+6. If a refund/dispute lands, Pete flips the toggle back to false. Scoring re-locks. No data loss.
+
+**Smoke-tests deferred to Pete (browser):**
+1. Open `/admin/activations` — expect all 4 tournaments + 5 leagues showing ● Activated (backfill).
+2. Toggle BLPA Cleveland off; load the tournament page in another tab — expect "🔒 Activation pending" pill. Open TournamentManage — yellow callout banner. Open ScorerView for any game — expect the activation-pending wall (not the scorer console). Toggle back on; reload; everything restored.
+3. Create a fresh test league via `/league/create` — expect `is_activated=false` default. Try to score → wall. Activate → unlocks.
+4. As a non-admin user, navigate to `/admin/activations` — expect the "🔒 Activations is Rinkd staff only" gate.
+
+**Defense-in-depth layers (in order):**
+- **RLS** (the security): can't UPDATE games / INSERT goals / INSERT penalties without parent activated. Server enforces.
+- **Edge Functions** (defense in depth): both push functions refuse to fan out for non-activated events.
+- **UX banners** (the usability): pills, callouts, ScorerView wall so users understand why writes fail.
+
+**Pending Pete approval to merge.** Same branch — Phase 1 + Phase 2 + Phase 3 + activation gate ship as one merge.
+
 ### ~~🔴 Forgot-password flow~~ — ✅ FIXED May 18, 2026 morning
 
 **Root cause (now resolved):** The Supabase reset email's `redirect_to` was `https://www.rinkd.app` (Site URL fallback), NOT `https://rinkd.app/reset-password` that the app sends. The allowlist rejected the apex redirect because the apex domain wasn't permitted. **0 users had ever successfully completed a password reset** in production prior to this fix (including BLPA Nick on May 14 — his recovery token was never consumed).
@@ -684,13 +995,55 @@ Spec'd in **`rinkd_v4/GAMESHEET_PARITY_GAPS.md`** (May 17). 7 gaps between Rinkd
 | GS-6 | **Embed widgets** — `/embed/tournament/:id/standings` + `/schedule` iframes for league/club websites | **P3** | 1-2 days | Two new no-auth routes outside ProtectedRoute. 30s polling (not realtime — iframes drop WebSockets). LeagueApps gap LA-8 below shares this architecture; build both at once. |
 | GS-7 | **iOS PWA install banner** — push doesn't reach iOS users unless they install the PWA to home screen (16.4+). Banner triggers on 3rd visit or on Follow-tournament tap | **P1** | 4-6 hours | Already noted in passing in the post-pilot backlog; parity doc gives the full spec. **Pull forward** — small build, unblocks push on iOS. Trigger: 3rd visit (visit counter in localStorage) OR Follow-tap moment (highest intent). |
 
-### League engine — tournament parity build (May 19 plan, queued for fresh session)
+### League engine — tournament parity build (Phase 1 ✅ SHIPPED May 19 evening, Phases 2 + 3 queued)
 
 **Pete asked May 19 evening for the league flow to mirror tournaments + add league-specific features (start/end dates, separate playoff bracket, games-per-day, days-of-week multi-select, target-games-per-team auto-compute schedule).** Comprehensive gap analysis run + plan locked in. Decisions captured: playoff data model is `league_games.phase` column (NOT a separate table); cadence is ship-Phase-1-then-iterate (not big-bang); role model mirrors tournaments exactly (founder + additional commissioners + scorers); schedule generator UX is Option B (commissioner picks "30 games per team", system computes meetings + spread).
 
-**Phase 1 build doc:** **`~/Downloads/rinkd_v4/LEAGUE_PARITY_PHASE_1_BUILD.md`** — self-contained instructions for a fresh Claude Code session including (a) prerequisites + verification queries, (b) two migration templates with explicit index choices, (c) lib helper port-from-tournament instructions, (d) 4-step LeagueCreate.js wizard spec, (e) index + path checklist with hot-path EXPLAIN queries, (f) scale/reliability/stability guardrails, (g) smoke-test plan, (h) scope guardrails ("DO NOT in Phase 1"), (i) Definition of Done. Read it top-to-bottom before writing any code.
+**Phase 1 build doc:** **`~/Downloads/rinkd_v4/LEAGUE_PARITY_PHASE_1_BUILD.md`** — self-contained build plan. **DONE** — see the "May 19 evening (continued)" §5 entry above for the shipped detail.
 
-Total Phase 1 effort: **~3-4 days**. Total program (Phases 1+2+3): **~10-14 days**. Phase 2 = full tab parity (Feed, public landing, push, Scorers tab UI). Phase 3 = the league-specific innovations (`league_games.phase`, multi-day scheduler, target-games-per-team auto-compute, playoff bracket).
+**Phase 1 — ✅ SHIPPED** (pending Pete's merge of `claude/laughing-nightingale-10d576`):
+- ✅ Migration `leagues_add_dates_venue_accent_logo_url` — 6 new columns + 2 partial indexes.
+- ✅ Migration `league_roles_table_and_is_league_commissioner_helper` — multi-commissioner support with founder-protection clause; helper function mirrors `is_tournament_director` / `is_team_manager`; `league_games` + `leagues` RLS broadened to use the helper.
+- ✅ New `src/lib/leagueCommissioners.js` + `src/lib/leagueScorers.js`. `src/lib/leagues.js` extensions: `createLeague` accepts the new columns; `getUserLeagueRole` checks `league_roles` too.
+- ✅ New `src/pages/LeagueCreate.js` — full 4-step wizard with cleanup-on-failure, batch team insert, mirror of TournamentCreate.
+- ✅ Build clean, advisor pass clean (0 ERROR-level), 6 RLS smoke tests pass.
+
+**Phase 2 — ✅ SHIPPED** (pending Pete's merge of `claude/laughing-nightingale-10d576`, same branch as Phase 1):
+- ✅ Migration `posts_add_league_id_for_league_scoped_feed` — column + partial index.
+- ✅ Migration `league_subscriptions_table_for_push_targeting` — table + RLS (self-scoped) + reverse-lookup index.
+- ✅ New `src/lib/leagueSubscriptions.js`, extended `src/lib/posts.js` (3 functions touched + 1 new), extended `src/lib/push.js` (1 new function).
+- ✅ Edge Function `send-league-recap-push` deployed (v1, ACTIVE, JWT enforced).
+- ✅ `League.js` refactored: anon gate, inline `PublicLeagueLanding`, Feed tab + composer + recap renderer, Follow button + push subscribe flow, multi-commissioner check.
+- ✅ `App.js` — `/league/:id` + `/leagues` opened to anon (mirror of May 16 tournament pattern).
+- ✅ `ScorerView.js` finalize path now fires `createGameRecapPost({ leagueId })` + `triggerLeagueRecapPush(postId)` for league games.
+- ✅ Build clean, advisor pass clean (0 ERROR-level), 6 RLS spot-checks pass.
+
+**Phase 3a — ✅ SHIPPED** (pending Pete's merge of `claude/laughing-nightingale-10d576`, same branch as Phase 1 + Phase 2):
+- ✅ Migration `league_games_add_phase_for_playoffs` — column + check constraint + composite index. 42 existing rows backfilled.
+- ✅ `league_standings` view rebuilt with `WHERE phase = 'regular_season'` (security_invoker=on preserved).
+- ✅ New `src/lib/leagueScheduleGenerator.js` — `computeScheduleShape`, `buildSlotTimeline`, `generateLeagueSchedule`. Pure functions; commissioner-friendly target-games math (Option B per Pete May 19); home/away flips on alternating meetings.
+- ✅ `src/lib/scheduleBuilder.js` — `bulkInsertLeagueGames` writes `phase: g.phase || 'regular_season'` so both old and new paths produce tagged rows.
+- ✅ `src/pages/LeagueManage.js` — Schedule tab now leads with `SmartScheduleGenerator` inline panel: target games / days-of-week chips / games-per-day / rink / first-puck time / spacing. Live preview re-runs the pure generator on every form change (no DB hit). Two-tap confirm before insert. Existing modal-based "Advanced" wizard kept as secondary path.
+- ✅ `src/pages/LeagueCreate.js` — `FORMAT_PRESETS` expanded from 1 to **4 presets**: `classic_league`, `beer_league_no_ties`, `high_school_style`, `youth_short_game`.
+- ✅ Build clean (+2.37 kB gz). Advisor 0-ERROR. DB smoke tests pass.
+
+**Phase 3b — ✅ SHIPPED** (pending Pete's merge of `claude/laughing-nightingale-10d576`, same branch as Phase 1 + Phase 2 + Phase 3a):
+- ✅ Migration `league_games_add_round_for_playoff_bracket` — `round text` column + partial composite index `(league_id, phase, round) WHERE phase='playoffs'`.
+- ✅ New `src/lib/leaguePlayoffGenerator.js` — pure functions: `seedPairs`, `firstRoundLabel`, `generatePlayoffRoundOne`, `generatePlayoffNextRound`. Standard cross-bracket seeding (1v8/4v5/3v6/2v7 etc.); winner-pairing math for round N+1; optional bronze-game checkbox for the post-semis state.
+- ✅ `src/pages/LeagueManage.js` — new 'Playoffs' tab. Inline `PlayoffsTab` (~270 lines) with bracket size + scheduling form + live preview + standings seeding card + current-bracket display grouped by round.
+- ✅ Discovered + worked around structural constraint: `league_games.home_team_id`/`away_team_id` are NOT NULL (unlike tournament games), so the generator emits one round at a time with real teams — no TBD placeholders. Commissioner re-runs after each round to seed the next.
+- ✅ Build clean (+3.5 kB gz). Advisor 0-ERROR. DB smoke pass.
+
+**Phase 3 — ✅ COMPLETE.** All four pieces from the original Phase 3 spec shipped (`league_games.phase`, smart scheduler, playoff bracket UI, more presets).
+
+**Deferred polish (post-pilot backlog, not pilot-blocking):**
+- Per-rink balancing in the smart scheduler (today: single-rink; commissioners run separately per rink + interleave).
+- Smart-schedule batch edit (today: per-game inline edit works fine).
+- Phase selector on the manual "Add Single Game" form (today: rare edge case; SQL).
+- 6-team bracket with byes (today: 2/4/8 only).
+- Bracket auto-fill on game finalize (today: commissioner re-runs the generator after each round finalizes).
+
+Total program effort: Phase 1 ~1 day, Phase 2 ~1 day, Phase 3a ~0.5 day, Phase 3b ~0.5 day — **~3 days actual vs the original 10-14 day estimate.** Done.
 
 ### League engine — LeagueApps parity (post-pilot)
 
@@ -836,6 +1189,13 @@ After Pete updates Site URL + Redirect URLs in the Supabase dashboard:
 - **Volunteer Coordinator's two surfaces (May 19 evening).** Volunteer lives on the individual team page (`/team/:id` → Volunteer tab, `src/components/TeamVolunteer.js`) for the per-team experience. The standalone `/volunteer-coordinator` route still exists as a multi-team aggregate dashboard but is no longer linked from any nav (was removed from the More drawer's Manager section earlier). The per-team component handles Claim/Cancel/Open-up/Delete + a manager-only +Add composer with role presets + optional pin-to-game. Past slots collapse behind a toggle to keep the upcoming list focused. **When adding new volunteer behaviors**, prefer the team-page surface — it's the discovered path now.
 - **Standings table is a horizontally-scrollable HTML table with sticky columns (May 19 afternoon, commit `fc7d2904`).** TEAM (rank chip + team name, up to 160px) is `position: sticky; left: 0`; PTS is `position: sticky; right: 0`. Middle stat columns (GP/W/L/T/GF/GA + format-specific GQ/P.PT/PIM/DIFF) scroll horizontally on mobile via the wrapper's `overflowX: auto`. `tableLayout: auto` with `minWidth: max-content` on the `<table>` forces the overflow when content exceeds the container — desktop sees no scroll because the full table fits. Each sticky cell sets its own `background` color to match the surrounding row/header (otherwise scrolled content shows through), plus a subtle `box-shadow` at the scroll edge as an affordance hint. **When adding new tiebreaker columns to standings**, append to the `midCols` array in Tournament.js — they slot into the scrollable middle automatically; don't widen the sticky cells.
 - **Team logo uploads share the profile-avatar pattern (May 19 afternoon, commit `460a8990`, migration `teams_and_league_teams_add_logo_url`).** Both `teams.logo_url` and `league_teams.logo_url` are nullable text. Upload flow: 5MB cap → `classifyImage(file)` NSFW pre-check → `uploadMedia(file, currentUser.id)` from `lib/posts.js` → returns a public URL into form state → saved with the rest of the team settings. Rendering pattern: `background:`url(${logo_url}) center/cover, ${logo_color || fallback}`` so partially-transparent logos get the team color underneath; conditional hides the colored-initials text when `logo_url` is set. `tournament_teams.logo_url` already shipped earlier (commit `21785087`). **When adding new team-display surfaces (game cards, schedule rows, etc.)** follow the same fallback chain: `logo_url` → `logo_color + logo_initials` → derived from `name`.
+- **`league_games.phase` for regular-season vs playoffs (May 19 evening, Phase 3a).** `league_games.phase text NOT NULL DEFAULT 'regular_season' CHECK (phase IN ('regular_season','playoffs'))`. Composite index `league_games_league_phase_idx ON (league_id, phase)` covers the standings hot path. The `league_standings` view filters `WHERE phase = 'regular_season'` in both branches of its UNION ALL — playoff games are **structurally invisible** to regular-season standings. **When inserting league games via any path, default to `phase='regular_season'`** — both `bulkInsertLeagueGames` and the schema default already do this. Phase 3b's bracket generator will pass `phase='playoffs'` explicitly. **When recreating the view in the future, preserve `security_invoker=on`** (May 18 lesson — see [[security-definer-views]]).
+- **Activation gate (May 19 evening, monetization switch).** `tournaments.is_activated` + `leagues.is_activated` are `boolean NOT NULL DEFAULT false`. Both backfilled to `true` at migration time so nothing in flight broke. **The gate is at the RLS layer (hard, unbypassable):** `games_director_update`, `games_scorer_update`, `league_games_update`, `game_goals_insert_requires_activated`, `game_penalties_insert_requires_activated` all AND in `EXISTS parent WHERE is_activated = true`. Both push Edge Functions (`send-recap-push` v2, `send-league-recap-push` v2) also refuse to fanout when `is_activated=false` — defense-in-depth, not security. Admin toggle lives at `/admin/activations` (gated by `profiles.is_admin = true` via `useIsRinkdAdmin`). UX banners (header pill on Tournament/League, yellow callout on Manage, full-page wall in ScorerView) surface the state — they don't enforce it. **When adding new scoring-flavored write paths, default to ANDing in the same activation EXISTS check.** Reschedule / rink change / location edit / status='scheduled' tweaks all flow through `games`/`league_games` UPDATE and are currently also gated — accept this as a feature, not a bug (organizer "configures everything" pre-activation but can't sneak scoring in; minor tradeoff is they can't tweak start_time post-publish without activation, which is usually fine since they activate before going live).
+- **Playoff bracket pattern for leagues (May 19 evening, Phase 3b).** Because `league_games.home_team_id`/`away_team_id` are **NOT NULL** (vs tournament `games` which permits TBD placeholders), the bracket generator in `src/lib/leaguePlayoffGenerator.js` emits **one round at a time with real teams** — never placeholder rounds. Flow: commissioner generates round 1 from `league_standings` (top N teams, standard 1v8/4v5/3v6/2v7 seeding); after that round is fully `status='final'`, the Playoffs tab pre-fills round 2 from the winners (and optionally a bronze game pairing the semi losers); repeat until the final lands. Round labels are free-form text — `'quarterfinal' | 'semifinal' | 'final' | 'bronze'` are the canonical values; no DB CHECK, so a Phase 4 play-in or third-place pattern can land without schema work. **When generating a next-round game, validate the previous round is fully final + no ties — return `incomplete_winners` cleanly instead of inserting bad data.** Both generators (`generatePlayoffRoundOne` + `generatePlayoffNextRound`) tag every row with `phase='playoffs'` so the standings view filters them out structurally.
+- **Smart schedule generator pattern (May 19 evening, Phase 3a).** `src/lib/leagueScheduleGenerator.js` is **pure** (no DB calls) so the LeagueManage UI can render a live preview by re-running it on every form change. The DB write happens via the existing `bulkInsertLeagueGames` from `src/lib/scheduleBuilder.js` — the generator just returns proposed `{home_team_id, away_team_id, start_time, rink_id, status, phase}` rows for the caller to insert. **When adding new schedule-flavored UIs**, follow the same separation: pure generator → caller does the insert. Avoid coupling the math to Supabase. The home/away flip on alternating meetings means a team that hosted opponent X in meeting 1 visits X in meeting 2 — preserves fairness across multiple round-robins; don't undo this without thinking through the implications.
+- **League-scoped feed + push pipeline (May 19 evening, Phase 2).** Direct mirror of the tournament-scoped feed (commit `4ec187c4`, May 18). `posts.league_id` is nullable: `NULL` = global/other-scope post, `NOT NULL` = scoped to the referenced league's Feed tab and filtered OUT of global/following feeds. `getPosts` + `getFollowingPosts` apply `.is('league_id', null)` alongside the existing `.is('tournament_id', null)` filter. The partial index `posts_league_id_created_at_idx` only covers rows where `league_id IS NOT NULL`. `createGameRecapPost` accepts both `tournamentId` and `leagueId` — exactly one is expected to be set; the column for the other side stays NULL. Push targeting goes through `league_subscriptions` (PK `(user_id, league_id)`) + the `send-league-recap-push` Edge Function (mirror of `send-recap-push`; same don't-trust-the-client architecture — client hands over a `post_id`, function walks `posts → league_games → leagues → league_subscriptions → push_subscriptions` under service role). Follow button on `/league/:id` is hidden for the commissioner (they're already seeing events from their own writes) — to smoke-test push as a non-commissioner, use a second account. **When adding any new feed-style query, decide which surface it serves and apply the matching filter** — global/following must filter NULL for BOTH `tournament_id` and `league_id`.
+- **`/league/:id` and `/leagues` are anonymous-friendly (May 19 evening, Phase 2).** Both routes were dropped from `ProtectedRoute` so anon spectators can land on `PublicLeagueLanding` (rendered inside `League.js` when `!currentUser`). Mirror of the May 16 tournament pattern. RLS already allowed anon SELECT on `leagues` (is_public=true), `league_teams` (qual=true), `league_games` (qual=true), and `rinks` (qual=true), so no DB changes were needed. Live data (composer, Follow button, scorer affordances, Manage) all stay gated inside the `currentUser` branch. **When adding new league-detail features, default to gating them inside the `currentUser` branch unless they're explicitly safe to expose anonymously** — same rule as the tournament side.
+- **Multi-commissioner permission model for leagues (May 19 evening, Phase 1).** Direct mirror of the multi-director (tournaments) + multi-manager (teams) patterns. `leagues.commissioner_id` is the founding commissioner — IMMUTABLE. Additional commissioners live in `league_roles` with `role='commissioner'`. DB-level source of truth: `is_league_commissioner(p_league_id, p_user_id)` (`STABLE SECURITY DEFINER` with `set search_path = public, auth`). All league-related RLS policies that gate by "is commissioner" use this helper — `leagues` UPDATE, `league_roles` SELECT/INSERT/DELETE, `league_games` INSERT/UPDATE/DELETE. The `league_games_update` policy preserves the legacy `scorekeeper_id = auth.uid()` path AND adds an `EXISTS league_roles WHERE role='scorer'` path — both routes work. RLS protects the founder's row from deletion via `not exists (... where l.commissioner_id = lr.user_id AND lr.role='commissioner')` — don't fight this; league transfer/destruction should go through different surfaces. **When adding any new league-gated UI, check via `getUserLeagueRole` or `isExtraCommissioner` (from `src/lib/leagueCommissioners.js`), not raw `league.commissioner_id`.** The `addCommissionerByInput` path is account-required (no email-invite) — commissioners have powerful permissions, we don't want to grant them to an unverified email address. Scorers (`addScorerByInput` in `src/lib/leagueScorers.js`) DO have an email-invite fallback path because their privilege is bounded to "score games on this league". **NOTE:** the helper function carries the same anon/authenticated `executable_security_definer` advisor WARN as `is_tournament_director` — same trade-off, same accepted state.
 - **CSHL personal tracker is a "from the stands" use of the league surface (May 19 afternoon).** League `2f65dd9f-5c4a-4b58-9819-16a7c7bd84f6` (CSHL 10U Squirts 2026-27), team `d18e023c-354f-4d3b-b5a0-82574f05377d` (Shaker Heights Red Raiders), Pete as commissioner + manager. Henry Hessell #17 lives as a `team_members` roster row with `invite_name = 'Henry Hessell'` and `user_id = NULL` (COPPA — minors can't have Rinkd accounts; 13+ floor). CSHL is hosted on **Crossbar**; their public site exposes division standings at `/standings/show/<id>` and team stats at `/stats/division_instance/<id>` but renders client-side so WebFetch can't read it — Chrome MCP or manual paste is the import path when the 2026-27 schedule lands (expected mid-summer). The `leagues.settings` JSONB carries `source_org` + `source_url` + a `notes` string explaining the personal-tracker framing.
 
 ---
