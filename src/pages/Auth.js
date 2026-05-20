@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { RinkdLogo, Wordmark } from '../components/Logos';
 import { signIn, signUp } from '../lib/auth';
@@ -102,17 +102,39 @@ export default function Auth() {
   // /signin, and stale tokens from an abandoned mode shouldn't poison the
   // next attempt. Inline the resetTurnstile body so the effect deps stay
   // honest under CRA's default eslint config.
+  //
+  // Also fires `auth_view` so the funnel dashboard can distinguish "they
+  // saw the marketing splash" (landing_view from Landing.js) from "they
+  // saw the actual auth form" — different drop-off points.
   useEffect(() => {
     setCaptchaToken(null);
     setTurnstileResetKey((k) => k + 1);
+    track('auth_view', { mode });
   }, [mode]);
+
+  // First-input tracker — fires once per Auth mount when the user first
+  // engages with any form field. Tells us whether the form is a graveyard
+  // (low first-input rate) or whether users abandon mid-form (high
+  // first-input but low completion). Reset on mode change so each form
+  // gets its own first-input signal.
+  const firstInputFiredRef = useRef(null);
+  useEffect(() => { firstInputFiredRef.current = null; }, [mode]);
 
   const [form, setForm] = useState({
     email: '', password: '', name: '', handle: '',
     position: 'Fan', level: 'Beer League', dob: '',
   });
 
-  const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
+  const set = (key, val) => {
+    // First-input funnel signal: fires the moment a user engages with any
+    // form field in the current mode. Differentiates form abandoners from
+    // form non-starters in the analytics dashboard.
+    if (!firstInputFiredRef.current) {
+      firstInputFiredRef.current = key;
+      track('auth_first_input', { mode, field: key });
+    }
+    setForm(f => ({ ...f, [key]: val }));
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -163,7 +185,15 @@ export default function Auth() {
 
   const handleSignup = async (e) => {
     e.preventDefault();
-    if (step < 3) { setStep(s => s + 1); return; }
+    if (step < 3) {
+      // Track step advance so we can see where in the 3-step signup flow
+      // people drop off. Together with signup_failed + signup_success this
+      // pins down whether the form, the Turnstile, or post-Supabase auth
+      // is the conversion-killer.
+      track('signup_step_advanced', { from: step, to: step + 1 });
+      setStep(s => s + 1);
+      return;
+    }
     // Turnstile gate — only enforced when the site key is configured. Without
     // a token, Supabase's CAPTCHA Protection (when enabled in dashboard) would
     // reject the signup anyway; failing early gives a clearer error.
@@ -403,7 +433,7 @@ export default function Auth() {
               </button>
               <div style={{ textAlign: 'center', marginTop: 12 }}>
                 <button type="button"
-                  onClick={() => { setMode('forgot'); setForgotEmail(form.email); setForgotSent(false); setError(''); }}
+                  onClick={() => { track('forgot_password_clicked'); setMode('forgot'); setForgotEmail(form.email); setForgotSent(false); setError(''); }}
                   style={{ background: 'none', border: 'none', color: C.steel, fontSize: 13, cursor: 'pointer', fontFamily: "'Barlow', sans-serif", textDecoration: 'underline', textUnderlineOffset: 3 }}>
                   Forgot password?
                 </button>

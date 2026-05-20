@@ -8,6 +8,7 @@ import { followTournament, unfollowTournament, isFollowingTournament } from '../
 import { subscribeToPush, isPushSubscribed } from '../lib/push';
 import { getTournamentPosts, createPost, uploadMedia, timeAgo } from '../lib/posts';
 import { isExtraDirector as isDirectorRole } from '../lib/tournamentDirectors';
+import { track } from '../lib/analytics';
 import PostActionMenu from '../components/PostActionMenu';
 
 
@@ -691,6 +692,14 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
 // Tournament details (name/dates/venue/division/logo) are intentionally
 // public to make the URL shareable + Google-indexable.
 function PublicTournamentLanding({ tournament, games, navigate }) {
+  // Anon visitor funnel signal. Distinct from Landing.js's `landing_view`
+  // (which only fires on /) — this fires when someone hits a shared
+  // tournament URL directly (BLPA Cleveland, etc.) and so never touches
+  // the main marketing page. Without this we're blind to the bulk of
+  // share-driven top-of-funnel traffic.
+  useEffect(() => {
+    if (tournament?.id) track('tournament_public_view', { tournament_id: tournament.id });
+  }, [tournament?.id]);
   const accent = tournament?.accent_color || '#D72638';
   const s = tournament?.settings ?? {};
   const venueLine = [s.venue_name, s.venue_address].filter(Boolean).join(' · ');

@@ -12,6 +12,7 @@ import PostActionMenu from '../components/PostActionMenu';
 import { LedR } from '../components/Logos';
 import { getLiveBarnUrl } from '../lib/livebarn';
 import { supabase } from '../lib/supabase';
+import { track } from '../lib/analytics';
 import SubscribeCalendarSheet from '../components/SubscribeCalendarSheet';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
@@ -735,6 +736,12 @@ function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, league
 //
 // Direct mirror of PublicTournamentLanding in Tournament.js.
 function PublicLeagueLanding({ league, teams, games, navigate }) {
+  // Anon visitor funnel signal. Mirrors tournament_public_view — fires
+  // when someone hits a shared league URL directly. Without this we're
+  // blind to share-driven traffic that never touches the main landing.
+  useEffect(() => {
+    if (league?.id) track('league_public_view', { league_id: league.id });
+  }, [league?.id]);
   const accent = league?.accent_color || '#D72638';
   const venueLine = [league?.venue_name, league?.venue_address].filter(Boolean).join(' · ');
   const dateLine = [league?.start_date, league?.end_date].filter(Boolean).join(' – ');
