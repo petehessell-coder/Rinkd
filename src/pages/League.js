@@ -345,8 +345,13 @@ export default function LeaguePage({ currentUser, profile }) {
         {/* BANNER */}
         <div style={{ background: 'linear-gradient(135deg,#0B1F3A 0%,#1a3a5c 100%)', padding: '20px 16px 0' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
-            <div style={{ width: 60, height: 60, borderRadius: 12, background: league.logo_color || C.red, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 22, color: '#fff', flexShrink: 0 }}>
-              {league.logo_initials || league.name.slice(0, 2).toUpperCase()}
+            <div style={{
+              width: 60, height: 60, borderRadius: 12,
+              background: league.logo_url ? `url(${league.logo_url}) center/cover, ${league.logo_color || C.red}` : (league.logo_color || C.red),
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 22, color: '#fff', flexShrink: 0,
+            }}>
+              {!league.logo_url && (league.logo_initials || league.name.slice(0, 2).toUpperCase())}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 22, color: C.ice, lineHeight: 1.1 }}>{league.name}</div>

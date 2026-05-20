@@ -60,8 +60,13 @@ export default function Leagues({ profile }) {
             style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: '14px 16px', marginBottom: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14, transition: 'border 0.15s' }}
             onMouseEnter={e => e.currentTarget.style.border = '0.5px solid rgba(46,91,140,0.8)'}
             onMouseLeave={e => e.currentTarget.style.border = `0.5px solid ${C.border}`}>
-            <div style={{ width: 48, height: 48, borderRadius: 10, background: league.logo_color || C.red, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: '#fff', flexShrink: 0 }}>
-              {league.logo_initials || league.name.slice(0, 2).toUpperCase()}
+            <div style={{
+              width: 48, height: 48, borderRadius: 10,
+              background: league.logo_url ? `url(${league.logo_url}) center/cover, ${league.logo_color || C.red}` : (league.logo_color || C.red),
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: '#fff', flexShrink: 0,
+            }}>
+              {!league.logo_url && (league.logo_initials || league.name.slice(0, 2).toUpperCase())}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 17, color: C.ice, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{league.name.toUpperCase()}</div>

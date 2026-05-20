@@ -10,6 +10,8 @@ import { sendLeagueInvite } from '../lib/invites';
 import ScheduleBuilderModal from '../components/ScheduleBuilderModal';
 import { rescheduleGame, deleteLeagueGame, bulkInsertLeagueGames } from '../lib/scheduleBuilder';
 import { generateLeagueSchedule } from '../lib/leagueScheduleGenerator';
+import { uploadMedia } from '../lib/posts';
+import { classifyImage } from '../lib/imageModeration';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 const inputStyle = { width:'100%', background:'#07111F', border:`0.5px solid ${C.border}`, borderRadius:8, padding:'10px 12px', color:C.ice, fontFamily:'Barlow, sans-serif', fontSize:14, outline:'none' };
@@ -1041,23 +1043,85 @@ function SmartScheduleGenerator({ leagueId, teams, rinks, onPublished }) {
 }
 
 function LeagueSettings({ league, onSave }) {
-  const [form, setForm] = useState({ name: league.name, division: league.division || '', level: league.level || '', location: league.location || '', season: league.season || '', logo_color: league.logo_color || C.blue, logo_initials: league.logo_initials || '', status: league.status, settings: league.settings || {} });
+  const [form, setForm] = useState({
+    name: league.name,
+    division: league.division || '',
+    level: league.level || '',
+    location: league.location || '',
+    season: league.season || '',
+    logo_color: league.logo_color || C.blue,
+    logo_initials: league.logo_initials || '',
+    logo_url: league.logo_url || '',
+    status: league.status,
+    settings: league.settings || {},
+  });
   const [saving, setSaving] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  // Mirror the team / tournament / LeagueCreate logo upload flow: 5MB cap
+  // → classifyImage() NSFW pre-check → uploadMedia → returns public URL
+  // into form state → persists on Save Changes. The league hasn't been
+  // re-saved yet at this point so a Cancel reload still keeps the old
+  // logo until the commissioner explicitly commits.
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert(`Logo is ${(file.size / 1024 / 1024).toFixed(1)}MB — max 5MB.`);
+      e.target.value = '';
+      return;
+    }
+    const verdict = await classifyImage(file);
+    if (!verdict.ok) {
+      alert("Looks like this image may violate Rinkd's community guidelines. Try a different one.");
+      e.target.value = '';
+      return;
+    }
+    setUploadingLogo(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    const { url, error: upErr } = await uploadMedia(file, user.id);
+    setUploadingLogo(false);
+    if (upErr || !url) { alert('Upload failed. Try again.'); return; }
+    set('logo_url', url);
+  };
+
+  const initials = form.logo_initials || form.name.split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase();
 
   return (
     <>
       <SecLabel>League Settings</SecLabel>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
-        <div style={{ width: 56, height: 56, borderRadius: 10, background: form.logo_color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 22, color: '#fff' }}>
-          {form.logo_initials || form.name.split(' ').map(w=>w[0]).join('').slice(0,3).toUpperCase()}
+        <div style={{
+          width: 56, height: 56, borderRadius: 10,
+          background: form.logo_url ? `url(${form.logo_url}) center/cover, ${form.logo_color}` : form.logo_color,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 22, color: '#fff',
+          flexShrink: 0,
+        }}>
+          {!form.logo_url && (initials || '?')}
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {LOGO_COLORS.map(col => <div key={col} onClick={() => set('logo_color', col)} style={{ width: 22, height: 22, borderRadius: '50%', background: col, cursor: 'pointer', border: form.logo_color === col ? '2px solid #fff' : '2px solid transparent' }} />)}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+            <label style={{ cursor: 'pointer', fontSize: 11, color: '#9BB5D6', padding: '5px 12px', borderRadius: 999, background: 'rgba(46,91,140,0.25)', border: '0.5px solid rgba(46,91,140,0.5)' }}>
+              {uploadingLogo ? 'Uploading…' : form.logo_url ? '📷 Replace logo' : '📷 Upload logo'}
+              <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} disabled={uploadingLogo} />
+            </label>
+            {form.logo_url && (
+              <button type="button" onClick={() => set('logo_url', '')} style={{ background: 'transparent', border: 'none', color: '#E26B6B', fontSize: 11, cursor: 'pointer', padding: 0 }}>Remove</button>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(244,247,250,0.4)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              {form.logo_url ? 'Fallback color' : 'Color'}
+            </span>
+            {LOGO_COLORS.map(col => <div key={col} onClick={() => set('logo_color', col)} style={{ width: 22, height: 22, borderRadius: '50%', background: col, cursor: 'pointer', border: form.logo_color === col ? '2px solid #fff' : '2px solid transparent' }} />)}
+          </div>
         </div>
       </div>
       <Card>
         <Field label="League Name"><input style={inputStyle} value={form.name} onChange={e => set('name', e.target.value)} /></Field>
+        <Field label="Logo Initials (used when no logo image is set)"><input style={inputStyle} value={form.logo_initials} onChange={e => set('logo_initials', e.target.value.toUpperCase().slice(0, 3))} maxLength={3} placeholder="Auto from name" /></Field>
         <Row2>
           <Field label="Division"><input style={inputStyle} value={form.division} onChange={e => set('division', e.target.value)} /></Field>
           <Field label="Season"><input style={inputStyle} value={form.season} onChange={e => set('season', e.target.value)} /></Field>
@@ -1073,7 +1137,7 @@ function LeagueSettings({ league, onSave }) {
           </Field>
         </Row2>
       </Card>
-      <button onClick={async () => { setSaving(true); await onSave(form); setSaving(false); }} disabled={saving}
+      <button onClick={async () => { setSaving(true); await onSave(form); setSaving(false); }} disabled={saving || uploadingLogo}
         style={{ width: '100%', padding: 13, background: C.red, border: 'none', borderRadius: 999, color: '#fff', fontSize: 14, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'Barlow, sans-serif', opacity: saving ? 0.7 : 1, transition: 'all 0.15s' }}
         onMouseEnter={e => { if (!saving) { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}}
         onMouseLeave={e => { e.currentTarget.style.background = C.red; e.currentTarget.style.color = '#fff'; }}>
