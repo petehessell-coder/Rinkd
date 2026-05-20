@@ -148,16 +148,21 @@ export default function AdminActivations({ currentUser, profile }) {
 
   const onToggle = async (kind, id, nextValue) => {
     setBusyId(id);
-    const table = kind === 'tournament' ? 'tournaments' : 'leagues';
-    const { error: upErr } = await supabase.from(table).update({ is_activated: nextValue }).eq('id', id);
+    // Use the admin_set_activation RPC instead of a direct UPDATE.
+    // Tournaments + leagues UPDATE RLS only allows the founding director /
+    // commissioner to mutate the row, NOT site-wide Rinkd admins — so a
+    // direct UPDATE silently no-op'd on every event Pete didn't create.
+    // The RPC is SECURITY DEFINER, gates itself on profiles.is_admin = true,
+    // and is scoped to the is_activated column only.
+    const { error: rpcErr } = await supabase.rpc('admin_set_activation', {
+      p_kind: kind, p_id: id, p_value: nextValue,
+    });
     setBusyId(null);
-    if (upErr) {
-      setError(upErr.message || `Failed to update ${kind}`);
+    if (rpcErr) {
+      setError(rpcErr.message || `Failed to update ${kind}`);
       return;
     }
-    // Optimistic local update so the toggle reflects immediately without
-    // forcing a full reload. A subsequent realtime-driven refetch would
-    // be nice — for now manual.
+    // Optimistic local update so the toggle reflects immediately.
     const setter = kind === 'tournament' ? setTournaments : setLeagues;
     setter((prev) => prev.map((x) => (x.id === id ? { ...x, is_activated: nextValue } : x)));
   };
