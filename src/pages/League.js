@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import SEO from '../components/SEO';
@@ -186,6 +186,17 @@ export default function LeaguePage({ currentUser, profile }) {
   }, [id, currentUser]);
 
   useEffect(() => { load(); }, [load]);
+
+  // One view event per page load for EVERY visitor (not just logged-out),
+  // tagged with `anonymous` — measures total interest in a shared league page
+  // and still isolates share-driven anon traffic. Ref-guarded to fire once.
+  // (Was anon-only before, so logged-in views went uncounted.)
+  const viewTrackedRef = useRef(false);
+  useEffect(() => {
+    if (!league?.id || viewTrackedRef.current) return;
+    viewTrackedRef.current = true;
+    track('league_public_view', { league_id: league.id, anonymous: !currentUser });
+  }, [league?.id, currentUser]);
 
   // Resolve isFollowing once on mount / user change. Cheap single-row lookup.
   useEffect(() => {
@@ -779,12 +790,6 @@ function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, league
 //
 // Direct mirror of PublicTournamentLanding in Tournament.js.
 function PublicLeagueLanding({ league, teams, games, navigate }) {
-  // Anon visitor funnel signal. Mirrors tournament_public_view — fires
-  // when someone hits a shared league URL directly. Without this we're
-  // blind to share-driven traffic that never touches the main landing.
-  useEffect(() => {
-    if (league?.id) track('league_public_view', { league_id: league.id });
-  }, [league?.id]);
   const accent = league?.accent_color || '#D72638';
   const venueLine = [league?.venue_name, league?.venue_address].filter(Boolean).join(' · ');
   const dateLine = [league?.start_date, league?.end_date].filter(Boolean).join(' – ');

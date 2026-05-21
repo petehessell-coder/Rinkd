@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { LedR } from '../components/Logos';
@@ -145,6 +145,19 @@ export default function TournamentPage({ currentUser }) {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // One view event per page load for EVERY visitor (not just logged-out),
+  // tagged with an `anonymous` flag — lets us measure total interest in a
+  // shared event page and still isolate share-driven anon traffic. Ref-guarded
+  // so it fires once. (Previously this lived only in the anon
+  // PublicTournamentLanding branch, so logged-in views — the bulk of our
+  // traffic — went completely uncounted.)
+  const viewTrackedRef = useRef(false);
+  useEffect(() => {
+    if (!tournament?.id || viewTrackedRef.current) return;
+    viewTrackedRef.current = true;
+    track('tournament_public_view', { tournament_id: tournament.id, anonymous: !currentUser });
+  }, [tournament?.id, currentUser]);
 
   // Realtime subscription — spectators see standings and scores update live as
   // games finish. Channel name carries a per-call random suffix so a remount
@@ -716,14 +729,6 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
 // Tournament details (name/dates/venue/division/logo) are intentionally
 // public to make the URL shareable + Google-indexable.
 function PublicTournamentLanding({ tournament, games, navigate }) {
-  // Anon visitor funnel signal. Distinct from Landing.js's `landing_view`
-  // (which only fires on /) — this fires when someone hits a shared
-  // tournament URL directly (BLPA Cleveland, etc.) and so never touches
-  // the main marketing page. Without this we're blind to the bulk of
-  // share-driven top-of-funnel traffic.
-  useEffect(() => {
-    if (tournament?.id) track('tournament_public_view', { tournament_id: tournament.id });
-  }, [tournament?.id]);
   const accent = tournament?.accent_color || '#D72638';
   const s = tournament?.settings ?? {};
   const venueLine = [s.venue_name, s.venue_address].filter(Boolean).join(' · ');
