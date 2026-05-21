@@ -212,7 +212,7 @@ export default function LandingPage() {
       {/* Three-up brand row */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', maxWidth: 380, marginBottom: 22 }}>
         {[
-          { logo: '/rinkd-wordmark.png', tag: 'THE PLATFORM', body: 'Teams · Leagues · Schedules · Scoring · Stats' },
+          { logo: '/rinkd-wordmark-tape.png', tag: 'THE PLATFORM', body: 'Teams · Leagues · Schedules · Scoring · Stats' },
           { logo: '/rinkside-logo.png', tag: 'THE CONTENT', body: 'Daily reporting, features, and community storytelling' },
           { logo: '/crease-logo.png', tag: 'THE PREMIUM', body: 'Original long-form shows · launching soon' },
         ].map(({ logo, tag, body }) => (

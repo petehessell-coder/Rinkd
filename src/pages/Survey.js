@@ -611,7 +611,7 @@ export default function Survey() {
             </svg>
           </div>
           <div className="sv-brand-stack">
-            <img src="/rinkd-wordmark.png" alt="Rinkd" className="sv-wordmark" />
+            <img src="/rinkd-wordmark-tape.png" alt="Rinkd" className="sv-wordmark" />
             <div className="sv-brand-sub">The Platform Built for Hockey</div>
           </div>
         </div>
