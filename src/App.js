@@ -27,6 +27,7 @@ import AdminFeedback from './pages/AdminFeedback';
 import AdminModeration from './pages/AdminModeration';
 import Settings from './pages/Settings';
 import Landing from './pages/Landing';
+import Pricing from './pages/Pricing';
 import { setSentryUser } from './lib/sentry';
 import Notifications from './pages/Notifications';
 import OnboardingModal from './components/OnboardingModal';
@@ -152,6 +153,8 @@ function AppRoutes() {
       <Route path="/accept-team-invite" element={<AcceptTeamInvite profile={profile} />} />
       {/* Survey is public — accessible from auth screen, marketing pages, and embedded in feeds */}
       <Route path="/survey" element={<Survey />} />
+      {/* Pricing is public — shareable + indexable; linked from hosting CTAs, activation banners, and More */}
+      <Route path="/pricing" element={<Pricing currentUser={user} profile={profile} />} />
       {/* Password recovery — public, handles the magic-link redirect from Supabase */}
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/feed" element={<ProtectedRoute><Feed currentUser={user} profile={profile} /></ProtectedRoute>} />

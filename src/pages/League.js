@@ -603,6 +603,7 @@ export default function LeaguePage({ currentUser, profile }) {
                   <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.5)', marginBottom: 14, lineHeight: 1.6 }}>Live standings · real-time scoring · team management · season scheduling</div>
                   <a href="mailto:hello@rinkd.app?subject=League Hosting Inquiry" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: C.red, color: '#fff', border: 'none', borderRadius: 999, padding: '11px 22px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>✉️ hello@rinkd.app</a>
                   <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.3)', marginTop: 10 }}>We'll respond within 24 hours</div>
+                  <div style={{ marginTop: 8 }}><a href="/pricing" style={{ color: 'rgba(244,247,250,0.6)', fontSize: 12, textDecoration: 'underline' }}>See pricing →</a></div>
                 </div>
               )}
               <div style={card}>

@@ -43,6 +43,7 @@ export default function MoreDrawer({ open, onClose, userId, onSignOut }) {
     { path: '/crease',      iconImg: '/crease-logo.png',   label: 'Crease',   sub: 'Original premium shows', badge: 'Early Access' },
     { path: '/leagues',     IconNode: 'leagues', label: 'Leagues',     sub: 'Find or create a league' },
     { path: '/tournaments', IconNode: 'tournaments', label: 'Tournaments', sub: 'Browse + manage events' },
+    { path: '/pricing',     icon: '💲', label: 'Pricing',     sub: 'Plans for leagues + tournaments' },
   ];
 
   return (
