@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { listLeagues } from '../lib/leagues';
+import TapeText from '../components/TapeText';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 
@@ -27,7 +28,7 @@ export default function Leagues({ profile }) {
       <div style={{ background: C.dark, minHeight: '100vh', padding: 20, fontFamily: 'Barlow, sans-serif', color: C.ice }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
           <div>
-            <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 28 }}>LEAGUES</div>
+            <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 28 }}><TapeText height={28}>LEAGUES</TapeText></div>
             <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>Season-long competition · Real-time standings</div>
           </div>
           <button onClick={() => navigate('/league/create')}

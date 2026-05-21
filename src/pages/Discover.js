@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import SEO from '../components/SEO';
 import { Avatar, TierBadge } from '../components/Logos';
+import TapeText from '../components/TapeText';
 import { CardGridSkeleton, ListRowSkeleton, EmptyState } from '../components/Skeletons';
 import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
@@ -352,7 +353,7 @@ export default function Discover({ currentUser, profile }) {
 
           {/* Hero */}
           <div style={{ marginBottom: 18 }}>
-            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 30, lineHeight: 1.1, textTransform: 'uppercase' }}>Discover</div>
+            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 30, lineHeight: 1.1, textTransform: 'uppercase' }}><TapeText height={28}>Discover</TapeText></div>
             <div style={{ fontSize: 13, color: C.steel, marginTop: 2 }}>Players, teams, leagues, and stories across the Rinkd community.</div>
           </div>
 

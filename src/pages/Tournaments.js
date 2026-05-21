@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import Layout from '../components/Layout';
+import TapeText from '../components/TapeText';
 
 export default function Tournaments({ profile, currentUser }) {
   const navigate = useNavigate();
@@ -41,7 +42,7 @@ export default function Tournaments({ profile, currentUser }) {
     <Layout profile={profile}>
       <div style={{ background: '#07111F', minHeight: '100vh', padding: 20, fontFamily: 'Barlow, sans-serif', color: '#F4F7FA' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4, gap: 10 }}>
-          <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 28 }}>TOURNAMENTS</div>
+          <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 28 }}><TapeText height={26}>TOURNAMENTS</TapeText></div>
           {isAnon
             ? <button onClick={() => navigate('/login?returnTo=%2Ftournaments')}
                 style={{ background: '#D72638', color: '#fff', border: 'none', borderRadius: 999, padding: '9px 18px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>

@@ -8,7 +8,7 @@ export function RinkdLogo({ size = 40, showText = false }) {
       <img src={LOGO_B64} alt="Rinkd" style={{ width:size, height:size, objectFit:'cover', borderRadius:'18%' }}/>
       {showText && (
         <img
-          src="/rinkd-wordmark.png"
+          src="/rinkd-wordmark-tape.png"
           alt="Rinkd"
           style={{ height: Math.round(size * 0.72), width: 'auto', display: 'block' }}
         />
@@ -61,7 +61,7 @@ export function LedR({ size = 16, glowId = 'rinkd-led-glow' }) {
  * Standalone wordmark for hero/login spots. Use anywhere we'd otherwise
  * render "Rinkd" as Barlow Condensed Italic text.
  */
-export function Wordmark({ height = 60, style, src = '/rinkd-wordmark-large.png' }) {
+export function Wordmark({ height = 60, style, src = '/rinkd-wordmark-tape.png' }) {
   return (
     <img src={src} alt="Rinkd" style={{ height, width: 'auto', display: 'block', ...style }} />
   );
