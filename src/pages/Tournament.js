@@ -156,18 +156,32 @@ export default function TournamentPage({ currentUser }) {
   useEffect(() => {
     if (!id) return;
     let channel = null;
+    // Coalesce bursts of games changes (a scorer entering several goals in a
+    // row, or multiple games finalizing at once) into one reload per ~1.5s
+    // window. Without this, every goal tap by any scorer re-ran the full
+    // load() — including the tournament_standings view recompute — for every
+    // spectator with the page open. The debounce keeps updates feeling live
+    // while cutting redundant reloads (and view recomputes) under load.
+    let reloadTimer = null;
+    const scheduleReload = () => {
+      if (reloadTimer) clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(() => { try { load(); } catch { /* swallow */ } }, 1500);
+    };
     try {
       const name = `tournament:${id}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
       channel = supabase.channel(name)
         .on('postgres_changes',
           { event: '*', schema: 'public', table: 'games', filter: `tournament_id=eq.${id}` },
-          () => { try { load(); } catch { /* swallow */ } })
+          scheduleReload)
         .subscribe();
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn('[tournament] realtime subscribe failed; spectators will see stale data until they refresh:', err);
     }
-    return () => { try { if (channel) supabase.removeChannel(channel); } catch { /* swallow */ } };
+    return () => {
+      if (reloadTimer) clearTimeout(reloadTimer);
+      try { if (channel) supabase.removeChannel(channel); } catch { /* swallow */ }
+    };
   }, [id, load]);
 
   // Resolve whether the signed-in user has a scorer role on THIS tournament.

@@ -224,18 +224,29 @@ export default function LeaguePage({ currentUser, profile }) {
   useEffect(() => {
     if (!id) return;
     let channel = null;
+    // Debounce: coalesce bursts of league_games changes into one reload per
+    // ~1.5s window so a scorer entering several goals doesn't re-run the full
+    // load() (standings view included) for every spectator on every tap.
+    let reloadTimer = null;
+    const scheduleReload = () => {
+      if (reloadTimer) clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(() => { try { load(); } catch { /* swallow */ } }, 1500);
+    };
     try {
       const name = `league:${id}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
       channel = supabase.channel(name)
         .on('postgres_changes',
           { event: '*', schema: 'public', table: 'league_games', filter: `league_id=eq.${id}` },
-          () => { try { load(); } catch { /* swallow */ } })
+          scheduleReload)
         .subscribe();
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn('[league] realtime subscribe failed; spectators may see stale data:', err);
     }
-    return () => { try { if (channel) supabase.removeChannel(channel); } catch { /* swallow */ } };
+    return () => {
+      if (reloadTimer) clearTimeout(reloadTimer);
+      try { if (channel) supabase.removeChannel(channel); } catch { /* swallow */ }
+    };
   }, [id, load]);
 
   const handleFollowToggle = async () => {
