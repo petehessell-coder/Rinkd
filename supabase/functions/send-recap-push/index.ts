@@ -118,9 +118,18 @@ serve(async (req) => {
       sent++;
     } catch (err) {
       const statusCode = (err as { statusCode?: number })?.statusCode;
-      if (statusCode === 410 || statusCode === 404) stale.push(s.user_id);
-      // Other errors (network, malformed endpoint URL) are swallowed — one
-      // bad subscription shouldn't block the rest.
+      if (statusCode === 410 || statusCode === 404) {
+        stale.push(s.user_id);
+      } else {
+        // One bad subscription shouldn't block the rest — but log non-stale
+        // failures with context so a persistent delivery problem (network,
+        // JWT/VAPID, malformed endpoint) is visible instead of just a low
+        // `sent` count.
+        console.error('[send-recap-push] delivery failed', {
+          user_id: s.user_id, post_id: post.id, statusCode,
+          message: (err as { message?: string })?.message,
+        });
+      }
     }
   }));
 
