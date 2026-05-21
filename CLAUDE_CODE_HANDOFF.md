@@ -45,9 +45,10 @@ BUILD_PATH=/tmp/rinkd-build npx react-scripts build
 
 ## 4. Current state — verified May 20, 2026 evening
 
-`origin/main` HEAD is **`01894320`** (`feat: close the team-roster loop`). Vercel auto-deploys `main` to production. **The entire league engine (Phase 1+2+3 + Phase 3b), the activation gate, and ~13 May-20 fixes/features are all MERGED + live.** The league-parity worktree (`claude/laughing-nightingale-10d576`) was merged to main May 19 evening (`5eedabd0` + `83ebfab3`); everything since has gone straight to main.
+`origin/main` HEAD is **`ff792c5d`** (`fix(edge): pass JWT explicitly to getUser in submit-scoresheet` — May 20 pre-pilot audit batch). Vercel auto-deploys `main` to production. **The entire league engine (Phase 1+2+3 + Phase 3b), the activation gate, and ~13 May-20 fixes/features are all MERGED + live.** The league-parity worktree (`claude/laughing-nightingale-10d576`) was merged to main May 19 evening (`5eedabd0` + `83ebfab3`); everything since has gone straight to main.
 
 What's live, newest first (May 20 unless noted):
+- **Pre-pilot scale/reliability/security batch** (`9b50a41f`→`ff792c5d`) — auth screen opens on signup for cold traffic; Profile load parallelized + bounded; Tournament/League live-standings reload debounced; **`submit-scoresheet` Edge Function secured (v8 — caller auth + server-side recipients; ⚠️ happy path untested, see §12 checklist)**; push/scoresheet failure logging; `search_path` locked on 20 functions. See the §5 "Pre-pilot scale/reliability/security audit" entry.
 - **Team-roster loop closed** (`01894320`) — requester gets a notification on approve/deny; manager adding a player by email now fires the `team_invite` email (auto-links on signup via the existing `link_invited_player` trigger).
 - **Join-request flow fixes** (`434ad328`) — league commissioners can now action join requests on any team in their league (`is_league_commissioner_of_team` helper), notification trigger fans out to ALL managers + commissioners, trigger search_path locked.
 - **Email-invite path for team-manager grants** (`90f6666d`) — `team_manager_invites` table + magic-link `/accept-team-invite` flow.
@@ -936,6 +937,24 @@ Pete delivered a clean pricing guide (`docs/Rinkd_Pricing_Guide.docx`) that **re
 
 **No code changes from this update** — pure docs + pricing alignment. The activation gate already exists; tier-enforcement build comes later.
 
+### May 20, 2026 (continued) — Pre-pilot scale / reliability / security audit + fixes
+
+Ran a full scale/cost/reliability pass (two code-audit agents over the data layer + Edge Functions, plus Supabase perf + security advisors and table-size checks). **Headline: the foundation is solid and nothing is breaking at scale** — both advisors are 0-ERROR; the largest table is `analytics_events` at 500 rows; feed pagination + embedded selects are already in place; push fanout is parallel + per-recipient isolated; ScorerView's write path is clean; email crons are idempotent via ledger tables. Five commits shipped straight to main + 2 Edge Function deploys + 1 migration. HEAD `ff792c5d`.
+
+**🔴 Security — `submit-scoresheet` Edge Function hardened (`b52cb60c` + `ff792c5d`, deployed v8).** It ran on service-role but never verified the caller and took the recipient `manager_emails` straight from the request body — so any authenticated user could make `hello@rinkd.app` email an arbitrary PDF attachment to arbitrary addresses (domain-reputation abuse) and overwrite `scoresheet_url` on any game (tampering). Now: caller identified from JWT (`getUser(token)`); authorized for the specific game via assigned `scorekeeper_id` OR `is_tournament_director` / `is_league_commissioner` OR an assigned role-scorer (`tournament_roles`/`league_roles`) — a faithful mirror of the `games_update`/`league_games_update` RLS; recipients resolved server-side from the game's own teams (`tournament_teams.contact_email` / `league_teams`→`teams.manager_id`→`profiles.email`); body emails ignored. **⚠️ The happy path was NOT tested end-to-end** (couldn't mint a real director session JWT from Claude Code) — see the new §12 pre-pilot checklist item. Unauthorized path fails closed.
+
+**🟠 Perf — live-standings reload debounced (`dcb0afc6`).** `Tournament.js` + `League.js` re-ran the entire page load (incl. the standings view recompute) on every realtime `games`/`league_games` change — so each goal tap by any scorer triggered a full reload for every spectator with the page open. Now coalesced into one reload per ~1.5s window. Same fix on both pages.
+
+**🟢 Perf — Profile page (`4e35d21d`).** Collapsed a ~6-call serial-await waterfall into one `Promise.all`; capped the previously-unbounded `posts SELECT *` at 50.
+
+**🟢 Auth default (`9b50a41f`).** Cold landing traffic now opens the auth screen on signup instead of login (Landing passes `defaultMode="signup"`); `/login` still opens on login for returning-user intent (bookmarks, "sign in" links, `returnTo` invite flows). Motivated by the May 20 traffic review: all 12 auth-screen sessions that day opened in login mode and 7 bounced without typing.
+
+**🟢 Observability (`b52cb60c`).** `send-recap-push` (v3) now logs non-410/404 push delivery failures with context (were silently swallowed); `submit-scoresheet` surfaces Resend email failures instead of reporting `success`.
+
+**🟢 Security hygiene — migration `lock_search_path_on_legacy_functions`.** Locked `search_path` on the 20 functions the advisor flagged `function_search_path_mutable` (incl. trigger functions like `bump_post_like_count`, `link_invited_player`, `notify_*`) — closes the search-path-hijack class the §9 trigger lesson warns about. 20/20 verified locked. All `public` except `mark_all_notifications_read` (`public, auth`).
+
+**Deferred (not pilot-blocking, by decision):** `send-game-reminders` sequential email loop (only bites at ~100+ emails/hour); retry logic on web-push/email (crons self-heal); 100 `multiple_permissive_policies` advisor WARNs (behavior-affecting cleanup — do deliberately, read each cluster); 4 unindexed FKs on `team_manager_invites` (trivial); leaked-password protection toggle (HaveIBeenPwned — paid tier, Pete deferring until volume). The 33 `unused_index` INFO are expected at this data size — don't drop them, they're forward-looking.
+
 ### ~~🔴 Forgot-password flow~~ — ✅ FIXED May 18, 2026 morning
 
 **Root cause (now resolved):** The Supabase reset email's `redirect_to` was `https://www.rinkd.app` (Site URL fallback), NOT `https://rinkd.app/reset-password` that the app sends. The allowlist rejected the apex redirect because the apex domain wasn't permitted. **0 users had ever successfully completed a password reset** in production prior to this fix (including BLPA Nick on May 14 — his recovery token was never consumed).
@@ -1242,7 +1261,7 @@ After Pete updates Site URL + Redirect URLs in the Supabase dashboard:
 
 1. Read this doc top to bottom — **especially §13 (operational artifacts) which tells you what files/tools exist outside this doc**, then §5 (recent shipped work — most recent entries first), §7 (forward roadmap), §12 (pilot-readiness audit), and §9 (working notes — invariants you'll regret missing).
 2. Run `cd ~/Downloads/rinkd_live && git log --oneline -10 && git status` to confirm state matches §4.
-   - Expected `origin/main` HEAD: **`01894320`** (`feat: close the team-roster loop`). If later, read the new commits. Working tree should be clean except the two long-standing strays (`scripts/chiller/data/seed-leagues.json`, `supabase/functions/send-onboarding-emails/index.ts`) — leave them.
+   - Expected `origin/main` HEAD: **`ff792c5d`** (`fix(edge): pass JWT explicitly to getUser in submit-scoresheet`). If later, read the new commits. Working tree should be clean except the two long-standing strays (`scripts/chiller/data/seed-leagues.json`, `supabase/functions/send-onboarding-emails/index.ts`) — leave them.
    - Confirm BLPA Cleveland is seeded + active: `select name, start_date, end_date, status, is_activated, settings->>'venue_name' from public.tournaments where id = 'b2789d66-1d77-4a62-862d-00b550da6a98'` → `BLPA Cleveland · 2026-06-13 · 2026-06-14 · active · is_activated=true · Brunswick Auto Mart Arena (BAM)`. 8 teams, 12 pool games.
    - Confirm the league engine is live: `select proname from pg_proc where proname in ('is_league_commissioner','is_league_commissioner_of_team','create_league_team','assign_league_team_manager','admin_set_activation','accept_team_manager_invite')` should return all 6. `select count(*) from information_schema.columns where table_name in ('leagues','tournaments') and column_name='is_activated'` should return 2.
    - Confirm KOHA (first real external league): `select name, is_activated from public.leagues where name ilike '%kanata%'` → activated; its 8 teams now have real `public.teams` rows (`select count(*) from public.league_teams lt join public.teams t on t.id=lt.team_id where lt.league_id=(select id from leagues where name ilike '%kanata%')` = 8).
@@ -1406,12 +1425,13 @@ After secrets + deploy, smoke-test:
 4. **Pete** — Get team names + logos from Nick. Swap placeholders in TournamentManage → Teams + Settings → Branding logo upload.
 5. **Pete** — Smoke-test push end-to-end on a real device (§12 D smoke-test steps). Sign in, Follow tournament, accept push prompt, then have a director finalize any game in ScorerView from a 2nd device → first device should receive push within ~2s.
 6. **Pete** — Smoke-test ScorerView on iPad (P1 G above).
-7. **Pete** — Send pilot URL `https://rinkd.app/tournament/b2789d66-1d77-4a62-862d-00b550da6a98` to BLPA captains. They'll see the public landing without signing up; sign-up CTA brings them into Rinkd, then they can Follow + receive recap pushes.
-8. **Sat Jun 13 morning (pre-08:00 EDT at BAM)** — verify status is still `active` (it is now, but Pete may have flipped to draft for pre-event privacy).
-9. **Sat Jun 13 (08:00 AM - ~3:30 PM EDT at BAM)** — Run all 12 pool games across 6 slots × 2 sheets (08:00 / 09:15 / 10:30 / 11:45 / 13:00 / 14:15). Standings populate live; auto-recap posts hit the tournament Feed tab + push subscribers as each game finalizes.
-10. **Sat ~3:30 PM** — Pete clicks "🏆 Generate Bracket"; picks Sunday start time + rink. 8 championship games created (semis with teams; gold + bronze with TBD).
-11. **Sun Jun 14** — Run championship games. SO winner prompt fires on tied bracket games; bracket auto-fills as each semi ends.
-12. **Sun end** — Champion banner appears. Pete flips status to `complete`.
+7. **Pete** — **Verify the scoresheet submission flow end-to-end** (the May 20 `submit-scoresheet` security rewrite, deployed v8). Open a BLPA game's scoresheet as the director (or assigned scorekeeper), submit, and confirm BOTH the storage upload AND the email to team contacts succeed. The new caller-auth + server-side-recipient logic mirrors the scoring RLS but could **not** be tested from Claude Code (no real director session JWT). If it returns `forbidden` (403) for a legit director/scorer, or `email: skipped` when teams have contact emails, the role check or the server-side recipient lookup needs a look (see the §5 audit entry). The unauthorized path fails closed, so this is a "feature still works" check, not a security gate.
+8. **Pete** — Send pilot URL `https://rinkd.app/tournament/b2789d66-1d77-4a62-862d-00b550da6a98` to BLPA captains. They'll see the public landing without signing up; sign-up CTA brings them into Rinkd, then they can Follow + receive recap pushes.
+9. **Sat Jun 13 morning (pre-08:00 EDT at BAM)** — verify status is still `active` (it is now, but Pete may have flipped to draft for pre-event privacy).
+10. **Sat Jun 13 (08:00 AM - ~3:30 PM EDT at BAM)** — Run all 12 pool games across 6 slots × 2 sheets (08:00 / 09:15 / 10:30 / 11:45 / 13:00 / 14:15). Standings populate live; auto-recap posts hit the tournament Feed tab + push subscribers as each game finalizes.
+11. **Sat ~3:30 PM** — Pete clicks "🏆 Generate Bracket"; picks Sunday start time + rink. 8 championship games created (semis with teams; gold + bronze with TBD).
+12. **Sun Jun 14** — Run championship games. SO winner prompt fires on tied bracket games; bracket auto-fills as each semi ends.
+13. **Sun end** — Champion banner appears. Pete flips status to `complete`.
 
 **P0 backlog is empty.** Remaining items are operations + content (team names from Nick) + smoke testing — no Pete-config or Claude-code work blocks the pilot.
 
