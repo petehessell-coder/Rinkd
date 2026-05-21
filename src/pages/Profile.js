@@ -74,25 +74,34 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
       setProfile(data);
     }
     if (profileId) {
-      const { data } = await supabase.from('posts').select('*').eq('author_id', profileId).order('created_at', { ascending: false });
-      const stats = await getPlayerLeagueStats(profileId);
+      // These six reads are independent — fire them in parallel rather than as
+      // a serial waterfall (was ~6 sequential round-trips on profile open).
+      // Posts are capped at 50; the activity strip only uses the latest 20 and
+      // the grid stays useful without pulling a power-user's entire history.
+      const wantsRel = !isOwnProfile && currentUser;
+      const [postsRes, stats, counts, commentsRes, f, b] = await Promise.all([
+        supabase.from('posts').select('*').eq('author_id', profileId).order('created_at', { ascending: false }).limit(50),
+        getPlayerLeagueStats(profileId),
+        getFollowCounts(profileId),
+        supabase
+          .from('comments')
+          .select('id, content, created_at, post_id, posts(content, author_id)')
+          .eq('author_id', profileId)
+          .order('created_at', { ascending: false })
+          .limit(20),
+        wantsRel ? isFollowing(currentUser.id, profileId) : Promise.resolve(false),
+        wantsRel ? isBlockedByMe(profileId) : Promise.resolve(false),
+      ]);
+      const data = postsRes.data;
+      const comments = commentsRes.data;
       setLeagueStats(stats);
       setPosts(data || []);
-      const counts = await getFollowCounts(profileId);
       setFollowCounts(counts);
-      if (!isOwnProfile && currentUser) {
-        const f = await isFollowing(currentUser.id, profileId);
+      if (wantsRel) {
         setFollowing(f);
-        const b = await isBlockedByMe(profileId);
         setBlocked(b);
       }
       // Recent activity = posts + comments, last 20, newest first.
-      const { data: comments } = await supabase
-        .from('comments')
-        .select('id, content, created_at, post_id, posts(content, author_id)')
-        .eq('author_id', profileId)
-        .order('created_at', { ascending: false })
-        .limit(20);
       const acts = [
         ...(data || []).map((p) => ({ kind: 'post', id: p.id, at: p.created_at, post: p })),
         ...(comments || []).map((c) => ({ kind: 'comment', id: c.id, at: c.created_at, comment: c })),
