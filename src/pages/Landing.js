@@ -130,9 +130,10 @@ export default function LandingPage() {
     </div>
   ) : null;
 
-  // If user opts to continue in browser, just render Auth inline
+  // If user opts to continue in browser, just render Auth inline.
+  // Cold visitors land here from the marketing page → open on signup, not login.
   if (!showMarketing || continueClicked) {
-    return <>{deletedBanner}<Auth /></>;
+    return <>{deletedBanner}<Auth defaultMode="signup" /></>;
   }
 
   return (

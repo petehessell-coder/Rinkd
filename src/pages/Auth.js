@@ -68,11 +68,14 @@ function readReturnTo(searchParams) {
   return raw;
 }
 
-export default function Auth() {
+export default function Auth({ defaultMode = 'login' }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const returnTo = readReturnTo(searchParams);
-  const [mode, setMode] = useState('login'); // login | signup | coppa | forgot | check-email
+  // Initial view: cold visitors from the marketing Landing page open on the
+  // signup wizard (Landing passes defaultMode="signup"); /login renders Auth
+  // with no prop so returning-user intent still opens on login.
+  const [mode, setMode] = useState(defaultMode === 'signup' ? 'signup' : 'login'); // login | signup | coppa | forgot | check-email
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSent, setForgotSent] = useState(false);
   const [forgotBusy, setForgotBusy] = useState(false);
