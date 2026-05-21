@@ -6,6 +6,8 @@ import { getLiveBarnUrl } from '../lib/livebarn';
 import { teamInitials } from '../lib/teamInitials';
 import { followTournament, unfollowTournament, isFollowingTournament } from '../lib/tournamentSubscriptions';
 import { subscribeToPush, isPushSubscribed } from '../lib/push';
+import { iosCanInstallButHasnt } from '../lib/platform';
+import { IOS_INSTALL_EVENT } from '../components/IOSInstallBanner';
 import { getTournamentPosts, createPost, uploadMedia, timeAgo } from '../lib/posts';
 import { isExtraDirector as isDirectorRole } from '../lib/tournamentDirectors';
 import { track } from '../lib/analytics';
@@ -253,10 +255,18 @@ export default function TournamentPage({ currentUser }) {
       const sub = await subscribeToPush(currentUser.id);
       if (!sub) {
         setFollowBusy(false);
-        // eslint-disable-next-line no-alert
-        window.alert("Push notifications are off for this device, so following won't deliver pushes yet. You can still enable them later from your Profile.");
-        // Continue with the DB follow anyway — once they enable push from
-        // Profile, future recaps will deliver.
+        if (iosCanInstallButHasnt()) {
+          // On iOS Safari push is blocked until the PWA is on the home screen
+          // — surface the install banner (which shows how) at this high-intent
+          // moment instead of a dead-end alert that points to a Profile toggle
+          // that also can't work until they install.
+          window.dispatchEvent(new CustomEvent(IOS_INSTALL_EVENT));
+        } else {
+          // eslint-disable-next-line no-alert
+          window.alert("Push notifications are off for this device, so following won't deliver pushes yet. You can still enable them later from your Profile.");
+        }
+        // Continue with the DB follow anyway — once they enable push, future
+        // recaps will deliver.
       }
     }
     const { error } = await followTournament(currentUser.id, id);

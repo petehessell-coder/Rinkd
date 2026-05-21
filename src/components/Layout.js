@@ -5,6 +5,7 @@ import { signOut } from '../lib/auth';
 import NotificationBell from './NotificationBell';
 import HelpButton from './HelpButton';
 import MoreDrawer from './MoreDrawer';
+import IOSInstallBanner from './IOSInstallBanner';
 
 const B = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
@@ -275,6 +276,10 @@ export default function Layout({ children, profile }) {
           .desktop-back-row { display: none !important; }
         }
       `}</style>
+
+      {/* iOS PWA install nudge (GS-7) — self-gates: renders only for iOS
+          Safari that hasn't installed, on the 3rd app-open or a Follow-tap. */}
+      <IOSInstallBanner />
 
       {/* Floating help+feedback button, visible on every page */}
       <HelpButton />
