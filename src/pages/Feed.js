@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout, { BRAND_COLORS as C } from '../components/Layout';
+import TapeText from '../components/TapeText';
 import { Avatar, TierBadge } from '../components/Logos';
 import { getPosts, getFollowingPosts, createPost, toggleLike, getLikedPosts, getComments, createComment, uploadMedia, timeAgo } from '../lib/posts';
 import PushPrompt from '../components/PushPrompt';
@@ -428,7 +429,7 @@ export default function Feed({ currentUser, profile }) {
   return (
     <Layout profile={profile}>
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '24px 16px' }}>
-        <h1 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 32, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.02em', marginBottom: 20 }}>Chirps</h1>
+        <h1 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 32, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.02em', marginBottom: 20 }}><TapeText height={32}>Chirps</TapeText></h1>
 
         {/* Beta banner — sets expectations for new public testers. Disable later
             via REACT_APP_BETA_BANNER=0 once we exit beta. */}

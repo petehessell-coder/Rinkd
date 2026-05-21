@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
+import TapeText from '../components/TapeText';
 import { listTeams } from '../lib/teams';
 import MapLink from '../components/MapLink';
 
@@ -30,7 +31,7 @@ export default function Teams({ profile }) {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
           <div>
-            <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 28, color: C.ice }}>TEAMS</div>
+            <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 28, color: C.ice }}><TapeText height={28}>TEAMS</TapeText></div>
             <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>Find your team · Free to join</div>
           </div>
           <button onClick={() => navigate('/team/create')}

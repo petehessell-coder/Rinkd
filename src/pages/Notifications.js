@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
+import TapeText from '../components/TapeText';
 import SEO from '../components/SEO';
 import { Avatar } from '../components/Logos';
 import { EmptyState, ListRowSkeleton } from '../components/Skeletons';
@@ -70,7 +71,7 @@ export default function NotificationsPage({ currentUser, profile }) {
           {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <div>
-              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 28, lineHeight: 1.1, textTransform: 'uppercase' }}>Notifications</div>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 28, lineHeight: 1.1, textTransform: 'uppercase' }}><TapeText height={24}>Notifications</TapeText></div>
               <div style={{ fontSize: 12, color: C.steel, marginTop: 2 }}>{unreadCount} unread</div>
             </div>
             {unreadCount > 0 && (
