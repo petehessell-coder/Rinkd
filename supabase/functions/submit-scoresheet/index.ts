@@ -89,12 +89,14 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS })
   try {
     // Identify the caller from their JWT — never from the request body.
+    // Pass the token explicitly to getUser(): in a stateless edge function
+    // there's no persisted session, so the no-arg form would return null and
+    // 401 every legitimate call.
     const authHeader = req.headers.get("Authorization") || ""
-    if (!authHeader) return json({ error: "missing authorization" }, 401)
-    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-    })
-    const { data: { user }, error: userErr } = await userClient.auth.getUser()
+    const token = authHeader.replace(/^Bearer\s+/i, "")
+    if (!token) return json({ error: "missing authorization" }, 401)
+    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    const { data: { user }, error: userErr } = await userClient.auth.getUser(token)
     if (userErr || !user) return json({ error: "unauthorized" }, 401)
 
     const { pdf_base64, filename, game_id, is_league, home_team, away_team, context_name } = await req.json()
