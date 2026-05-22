@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import SEO from '../components/SEO';
 import TapeText from '../components/TapeText';
+import { track } from '../lib/analytics';
 
 // Canonical source: docs/Rinkd_Pricing_Guide.docx. Keep these in sync with
 // that file — it's the contract. BLPA Cleveland is intentionally OUT of this
@@ -60,6 +61,16 @@ function SectionLabel({ children, sub }) {
 export default function Pricing({ currentUser }) {
   const navigate = useNavigate();
   const go = (path) => navigate(currentUser ? path : `/login?returnTo=${encodeURIComponent(path)}`);
+
+  // Fire one view event per load with an `anonymous` flag (mirrors the
+  // tournament/league view events) so we can tell whether the pricing page is
+  // getting traffic and segment cold vs logged-in visitors.
+  const viewTrackedRef = useRef(false);
+  useEffect(() => {
+    if (viewTrackedRef.current) return;
+    viewTrackedRef.current = true;
+    track('pricing_view', { anonymous: !currentUser });
+  }, [currentUser]);
 
   const btn = (bg) => ({
     padding: '12px 22px', borderRadius: 999, border: 'none', cursor: 'pointer',
