@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { RinkdLogo, Wordmark } from '../components/Logos';
+import InAppBrowserNudge from '../components/InAppBrowserNudge';
 import { signIn, signUp } from '../lib/auth';
 import { track } from '../lib/analytics';
 import HelpButton from '../components/HelpButton';
@@ -290,6 +291,7 @@ export default function Auth({ defaultMode = 'login' }) {
         justifyContent: 'center', padding: '60px 48px',
         background: C.navy,
       }} className="auth-form">
+        <InAppBrowserNudge />
         {/* COPPA blocked */}
         {mode === 'coppa' ? (
           <div style={{ textAlign: 'center' }}>

@@ -40,3 +40,13 @@ export function detectPlatform() {
 export function iosCanInstallButHasnt() {
   return detectPlatform() === 'ios-safari' && !detectStandalone();
 }
+
+// True inside a social app's in-app webview (Instagram, Facebook, LinkedIn,
+// TikTok, etc.). These webviews are signup-hostile — no password manager /
+// autofill, and they routinely break Cloudflare Turnstile (which we require
+// for signup) — so we nudge users out to their real browser.
+export function isInAppBrowser() {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  return /FBAN|FBAV|FB_IAB|Instagram|Line\/|TikTok|musical_ly|Snapchat|Pinterest|LinkedInApp/i.test(ua);
+}

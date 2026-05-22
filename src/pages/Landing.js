@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Auth from './Auth';
+import InAppBrowserNudge from '../components/InAppBrowserNudge';
 import SEO from '../components/SEO';
 import { Wordmark, RinkdLogo } from '../components/Logos';
 import { track } from '../lib/analytics';
@@ -156,6 +157,9 @@ export default function LandingPage() {
           <Wordmark height={56} />
         </div>
       </div>
+
+      {/* In-app-browser nudge — IG/FB clicks land here and can't complete signup */}
+      <div style={{ width: '100%', maxWidth: 420 }}><InAppBrowserNudge /></div>
 
       {/* Headline */}
       <div style={{
