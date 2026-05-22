@@ -1131,6 +1131,24 @@ Spec'd in **`rinkd_v4/LEAGUEAPPS_PARITY_GAPS.md`** (May 17). 8 gaps for the leag
 | LA-7 | **Commissioner analytics** — scoring/penalty leaderboards per league; RSVP fill rate; volunteer fill rate over the season | **P3** | 2-3 days | No schema changes — pure query work. New `getLeagueAnalytics()` helper. New `LeaderboardTable` reusable component. New Analytics tab in `LeagueManage`. |
 | LA-8 | **League embed widgets** — `/embed/league/:id/{standings,schedule,leaders}` iframe routes for club websites | **P3** | 2-3 days | Shares architecture with GS-6 above — **build together**. Optional `?theme=&accent=` query params for white-label. |
 
+### KOHA stats parity (hockeypage replacement) — prioritized May 22, 2026
+
+KOHA's implicit first ask: don't make them lose stats vs their old system (hockeypage.com). Pete sent 8 season exports (standings, scoring, goalies, scoring-by-division, penalty frequency, raw penalty log, playoff scoring + goalies — analyzed this session). **Verdict: full parity is achievable with little-to-no schema change — Rinkd already CAPTURES everything; the gaps are reporting surfaces.** Captured today: `game_goals` (scorer + `assist1_number` + `assist2_number`), `game_penalties` (`penalty_type` + duration + period), `game_shots`, `game_goalie_changes`, `league_games.phase` (reg vs playoff).
+
+**Key design rule: leaderboards aggregate by `(team, jersey#)`, names resolved from `team_members.invite_name` — NOT by user account.** Most players have no Rinkd account, and KOHA re-drafts every year, so jersey# is the durable join key. Accounts layer on later (Phase 2). (Note: `get_player_league_stats` is per-USER — that's the Phase-2 profile path, not the Phase-1 leaderboard.)
+
+**Phasing (Pete, May 22):**
+- **Phase 1 — review-only Stats tab.** New "Stats" tab/section on the **League page** (`League.js`, already anon-public) with jersey-based leaderboards so KOHA can just review via a shared link: skater scoring (G/A/PTS/PIM), goalie stats (GP/GA/GAA/SV%), penalty leaders + by-type, plus standings (already live). No accounts needed.
+- **Phase 2 — tie to profiles.** Once players sign up + link to their roster row (`link_invited_player` backfills `user_id`), the same jersey-keyed stats surface on player profiles. No rebuild — accounts attach on top of the jersey aggregation.
+
+**Parity gap list (reporting surfaces to build; ~no schema change):**
+1. **Goalie leaderboard (GAA/SV%)** — the long pole: attribute shots-against + goals-against to whichever goalie was in net via the `game_goalie_changes` timeline.
+2. **Penalty frequency-by-type + raw-penalty export** — aggregation of `game_penalties` (overlaps LA-7).
+3. **Add team PIM to `league_standings`** view; make scoring/goalie leaderboards **phase-aware** (reg vs playoff) + **division-split**.
+4. **Verify `get_top_scorers`** is jersey-based + includes A/PIM; extend if not.
+
+Overlaps + extends **LA-7** (commissioner analytics). Post-pilot, KOHA-driven — prioritize once BLPA ships.
+
 ### Team engine — coaching tools (post-pilot)
 
 Pete's ask (May 17): "line combos and shift tracking, manager/coach runs from the team page." Phased so each piece is shippable on its own; later phases stack onto earlier ones without rework. All work lives on `/team/:id` (existing `Team.js` + `TeamManage.js`) and is coach/manager-gated via the existing `teams.manager_id` check. None of these are pilot-blocking — independent track of work that helps Rinkd compete with TeamSnap / Hockey Coach Vision / SportlyzerCoach for serious/youth/junior teams (BLPA-style rec teams probably won't engage with shift tracking as deeply).
