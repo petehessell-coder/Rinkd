@@ -109,7 +109,7 @@ export default function Store({ profile }) {
               <div style={{ background: C.card, border: `1px dashed ${C.border}`, borderRadius: 14, padding: '22px 18px', textAlign: 'center' }}>
                 <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 20, textTransform: 'uppercase' }}>Pro Shop — dropping soon</div>
                 <div style={{ fontSize: 13, color: C.steel, marginTop: 6, maxWidth: 420, marginLeft: 'auto', marginRight: 'auto' }}>
-                  Curated sticks, skates, and gear from Pure Hockey. We're finalizing the partnership now.
+                  RINKD merch + Curated sticks, skates, and gear from Pure Hockey. We're finalizing the partnership now.
                 </div>
               </div>
             )}
