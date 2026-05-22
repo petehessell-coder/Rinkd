@@ -39,14 +39,6 @@
     <!-- Cloudflare Turnstile (bot protection for signup form).
          Activated when REACT_APP_TURNSTILE_SITE_KEY is set in the bundle. -->
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
-
-    <!-- TEMPORARY: AvantLink (Pure Hockey) affiliate-application verification.
-         REMOVE once verification confirms — AvantLink instructions step 4.
-         Kept as their EXACT snippet (http) because their verifier does a
-         literal source match for this tag — it must match verbatim. Browsers
-         block the http script as mixed content for real users, but that's
-         harmless + temporary and doesn't affect AvantLink's source check. -->
-    <script type="text/javascript" src="http://classic.avantlink.com/affiliate_app_confirm.php?mode=js&authResponse=f9a3b7e140d18532ab9a9e2f93427dfea024198a"></script>
     <style>
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
       html, body, #root { height: 100%; min-height: 100vh; }
