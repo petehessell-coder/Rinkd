@@ -41,9 +41,9 @@ export default function MoreDrawer({ open, onClose, userId, onSignOut }) {
     { path: '/discover',    icon: '🔍',  label: 'Discover',    sub: 'Search players, teams, leagues, articles' },
     { path: '/rinkside',    iconImg: '/rinkside-logo.png', label: 'Rinkside', sub: 'Daily hockey reporting' },
     { path: '/crease',      iconImg: '/crease-logo.png',   label: 'Crease',   sub: 'Original premium shows', badge: 'Early Access' },
-    { path: '/store',       icon: '🛒', label: 'Store',       sub: 'Hockey gear + Rinkd merch' },
+    { path: '/store',       IconNode: 'duffle', label: 'Store',       sub: 'Hockey gear + Rinkd merch' },
     { path: '/leagues',     IconNode: 'leagues', label: 'Leagues',     sub: 'Find or create a league' },
-    { path: '/tournaments', IconNode: 'tournaments', label: 'Tournaments', sub: 'Browse + manage events' },
+    { path: '/tournaments', IconNode: 'bracket', label: 'Tournaments', sub: 'Browse + manage events' },
     { path: '/pricing',     icon: '💲', label: 'Pricing',     sub: 'Plans for leagues + tournaments' },
   ];
 
@@ -149,7 +149,9 @@ function DrawerRow({ item, onClose }) {
       }}
       onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(46,91,140,0.15)'}
       onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
-      {item.iconImg ? (
+      {item.IconNode ? (
+        <span style={{ width: 28, display: 'inline-flex', justifyContent: 'center', flexShrink: 0 }}><DrawerIcon node={item.IconNode} /></span>
+      ) : item.iconImg ? (
         <img src={item.iconImg} alt="" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />
       ) : (
         <span style={{ fontSize: 22, width: 28, textAlign: 'center', flexShrink: 0 }}>{item.icon}</span>
@@ -166,4 +168,41 @@ function DrawerRow({ item, onClose }) {
       <span style={{ color: B.steel, fontSize: 18 }}>›</span>
     </Link>
   );
+}
+
+// Inline line-icons for drawer rows that use IconNode — no good emoji exists
+// for a tournament bracket or a hockey duffle. Monochrome to match the UI.
+function DrawerIcon({ node }) {
+  const svg = {
+    width: 24, height: 24, viewBox: '0 0 24 24', fill: 'none',
+    stroke: B.ice, strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round',
+  };
+  if (node === 'duffle') {
+    return (
+      <svg {...svg}>
+        <rect x="2.5" y="8.5" width="19" height="10.5" rx="3" />
+        <path d="M8.5 8.5 C 8.5 5, 15.5 5, 15.5 8.5" />
+        <line x1="2.5" y1="12" x2="21.5" y2="12" />
+      </svg>
+    );
+  }
+  if (node === 'bracket') {
+    return (
+      <svg {...svg}>
+        <path d="M4 5 h4 a2 2 0 0 1 2 2 v3 a2 2 0 0 0 2 2 h2" />
+        <path d="M4 19 h4 a2 2 0 0 0 2 -2 v-3 a2 2 0 0 1 2 -2 h2" />
+        <path d="M14 12 h6" />
+      </svg>
+    );
+  }
+  if (node === 'leagues') {
+    return (
+      <svg {...svg}>
+        <line x1="5" y1="20" x2="5" y2="13" />
+        <line x1="12" y1="20" x2="12" y2="7" />
+        <line x1="19" y1="20" x2="19" y2="11" />
+      </svg>
+    );
+  }
+  return null;
 }
