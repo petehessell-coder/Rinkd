@@ -45,7 +45,7 @@ BUILD_PATH=/tmp/rinkd-build npx react-scripts build
 
 ## 4. Current state — verified May 20, 2026 evening
 
-`origin/main` HEAD is **`587ec7e9`** (`feat: native Store (gear shop)` — May 21). Vercel auto-deploys `main` to production. **The entire league engine (Phase 1+2+3 + Phase 3b), the activation gate, and ~13 May-20 fixes/features are all MERGED + live.** The league-parity worktree (`claude/laughing-nightingale-10d576`) was merged to main May 19 evening (`5eedabd0` + `83ebfab3`); everything since has gone straight to main.
+`origin/main` HEAD is **`8f70aa31`** (`docs: AvantLink denied Pure Hockey` — May 22; + a few small store/icon commits since) — May 21). Vercel auto-deploys `main` to production. **The entire league engine (Phase 1+2+3 + Phase 3b), the activation gate, and ~13 May-20 fixes/features are all MERGED + live.** The league-parity worktree (`claude/laughing-nightingale-10d576`) was merged to main May 19 evening (`5eedabd0` + `83ebfab3`); everything since has gone straight to main.
 
 What's live, newest first:
 - **Store → native gear shop + Pure Hockey affiliate** (`607bd94e`+`587ec7e9`, May 21) — Store back in the More drawer; `/store` rebuilt on a new `products` table (rinkd_merch + pure_hockey sources), affiliate click-out + FTC disclosure, "Pro Shop dropping soon" state. Pure Hockey side **DENIED by AvantLink May 22** (App 1601413) — paths back: merchant-vouch or reapply once Rinkd has traction; feed-sync fn scaffolded (not deployed). See §5 + memory `store-pure-hockey-affiliate`.
@@ -1186,6 +1186,28 @@ Spec'd by Pete May 17 + **pricing model locked May 20 via `docs/Rinkd_Pricing_Gu
 - Sales tax + 1099-K reporting via Stripe Tax + Stripe Connect — required when crossing $X/year per state; not blocking pilot
 - International / multi-currency — defer until non-US tournament interest
 
+#### Entitlements + usage tracking (design — build alongside BIZ-INFRA-1 / TOURN-REG-1 / BIZ-TIER-2)
+
+How we track which package an org bought, the "free tournament with a league plan" cross-sell (so nobody gets a *second* free one), and tier/cap usage once Stripe is live. **`is_activated` stays the RLS gate — it just becomes the OUTPUT of this ledger instead of a manual flip.** Designed May 22 with Pete.
+
+**Three tables:**
+- **`purchases`** — immutable record of every Stripe payment (source of truth, written by the webhook): buyer `profile_id`, kind (`league_season` | `tournament_event`), tier, amount, `stripe_payment_intent`/checkout_session, parent (league/tournament id), season, created_at. Only ever mutated to mark refunds.
+- **`plans`** — the active grant per league/tournament: owner, parent_type+parent_id, **tier**, **team_cap**, **season**, status (active/expired/refunded), period_start/end, `source_purchase_id`. Drives `is_activated` + the BIZ-TIER-2 team-cap enforcement.
+- **`entitlement_credits`** — cross-sell freebies + redemption: owner, type (`free_tournament`), `granted_at`, `expires_at`, **`redeemed_at`** (null until used), `redeemed_on` (tournament id). The "no extra free" guarantee.
+
+**Free-tournament flow:** buy a league season → webhook writes `purchases` + `plans` (league active) + grants **one** `entitlement_credits` row. Creating/activating a tournament checks for an unredeemed, unexpired credit the buyer owns → activate free + stamp `redeemed_at`/`redeemed_on`; else normal paid checkout. A second free tournament is structurally impossible without another qualifying league purchase (redemption flips a single row — not a counter that can be gamed).
+
+**Answers the questions:** *what did they order?* → `plans.tier`/`team_cap`/`season` traced to `purchases`; *free tournament used?* → `entitlement_credits.redeemed_at`; *over team cap?* → team count vs `plans.team_cap`; *Year-2 15% off?* → checkout-time eligibility (active league plan?) → Stripe coupon (an eligibility lookup, not stored usage).
+
+**Two correctness must-dos:**
+1. **Webhook idempotency** — process each Stripe event id exactly once (`processed_stripe_events` table / unique constraint on payment_intent). A re-delivered "payment succeeded" would otherwise double-grant the free credit — the #1 "they got more free" bug.
+2. **Activation is derived, not manual** — the webhook + credit redemption set `is_activated`; a refund flips it back + expires the plan. Keep the existing RLS gate; just stop flipping it by hand.
+
+**Open decisions (lock before building):**
+1. Free tournament **per league plan** or **per customer per year**? (Org runs 2 leagues = 2 free tournaments, or 1?) — drives per-plan vs per-customer credit granting.
+2. **Season boundary** — does a season plan auto-expire on a date, or stay active until the season is marked complete? (affects renewals + when Year-2 pricing kicks in).
+3. **Credit expiry** — does an unused free tournament expire at season/year end, or carry forever?
+
 ### Still gated on populating `players`
 - The canonical `game_events` table backfill.
 - Audit High #12's real leaderboard (`get_top_scorers` RPC is correct but returns nothing because `game_lineups` is empty and imported league goals belong to ghost-roster players with no accounts).
@@ -1286,7 +1308,7 @@ After Pete updates Site URL + Redirect URLs in the Supabase dashboard:
 
 1. Read this doc top to bottom — **especially §13 (operational artifacts) which tells you what files/tools exist outside this doc**, then §5 (recent shipped work — most recent entries first), §7 (forward roadmap), §12 (pilot-readiness audit), and §9 (working notes — invariants you'll regret missing).
 2. Run `cd ~/Downloads/rinkd_live && git log --oneline -10 && git status` to confirm state matches §4.
-   - Expected `origin/main` HEAD: **`587ec7e9`** (`feat: native Store (gear shop)`). If later, read the new commits. Working tree should be clean except the two long-standing strays (`scripts/chiller/data/seed-leagues.json`, `supabase/functions/send-onboarding-emails/index.ts`) — leave them.
+   - Expected `origin/main` HEAD: **`8f70aa31`** or later (`docs: AvantLink denied Pure Hockey` + small store/icon/copy commits since). If later, read the new commits. Working tree should be clean except the two long-standing strays (`scripts/chiller/data/seed-leagues.json`, `supabase/functions/send-onboarding-emails/index.ts`) — leave them.
    - Confirm BLPA Cleveland is seeded + active: `select name, start_date, end_date, status, is_activated, settings->>'venue_name' from public.tournaments where id = 'b2789d66-1d77-4a62-862d-00b550da6a98'` → `BLPA Cleveland · 2026-06-13 · 2026-06-14 · active · is_activated=true · Brunswick Auto Mart Arena (BAM)`. 8 teams, 12 pool games.
    - Confirm the league engine is live: `select proname from pg_proc where proname in ('is_league_commissioner','is_league_commissioner_of_team','create_league_team','assign_league_team_manager','admin_set_activation','accept_team_manager_invite')` should return all 6. `select count(*) from information_schema.columns where table_name in ('leagues','tournaments') and column_name='is_activated'` should return 2.
    - Confirm KOHA (first real external league): `select name, is_activated from public.leagues where name ilike '%kanata%'` → activated; its 8 teams now have real `public.teams` rows (`select count(*) from public.league_teams lt join public.teams t on t.id=lt.team_id where lt.league_id=(select id from leagues where name ilike '%kanata%')` = 8).
