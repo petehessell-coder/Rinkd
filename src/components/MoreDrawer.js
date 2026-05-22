@@ -41,6 +41,7 @@ export default function MoreDrawer({ open, onClose, userId, onSignOut }) {
     { path: '/discover',    icon: '🔍',  label: 'Discover',    sub: 'Search players, teams, leagues, articles' },
     { path: '/rinkside',    iconImg: '/rinkside-logo.png', label: 'Rinkside', sub: 'Daily hockey reporting' },
     { path: '/crease',      iconImg: '/crease-logo.png',   label: 'Crease',   sub: 'Original premium shows', badge: 'Early Access' },
+    { path: '/store',       icon: '🛒', label: 'Store',       sub: 'Hockey gear + Rinkd merch' },
     { path: '/leagues',     IconNode: 'leagues', label: 'Leagues',     sub: 'Find or create a league' },
     { path: '/tournaments', IconNode: 'tournaments', label: 'Tournaments', sub: 'Browse + manage events' },
     { path: '/pricing',     icon: '💲', label: 'Pricing',     sub: 'Plans for leagues + tournaments' },
