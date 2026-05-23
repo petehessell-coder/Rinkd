@@ -1151,6 +1151,22 @@ Spec'd in **`rinkd_v4/LEAGUEAPPS_PARITY_GAPS.md`** (May 17). 8 gaps for the leag
 | LA-7 | **Commissioner analytics** — scoring/penalty leaderboards per league; RSVP fill rate; volunteer fill rate over the season | **P3** | 2-3 days | No schema changes — pure query work. New `getLeagueAnalytics()` helper. New `LeaderboardTable` reusable component. New Analytics tab in `LeagueManage`. |
 | LA-8 | **League embed widgets** — `/embed/league/:id/{standings,schedule,leaders}` iframe routes for club websites | **P3** | 2-3 days | Shares architecture with GS-6 above — **build together**. Optional `?theme=&accent=` query params for white-label. |
 
+### Crossbar parity — registration + financial tools (post-pilot; tie-in with Stripe/registrations)
+
+**Captured May 23, 2026 (Pete).** Crossbar (crossbarapp.com) is a youth-sports club/league management platform — a third named parity target alongside GameSheet (tournament side) and LeagueApps (league side). **Pete's directive: when we tie in registrations, get parity with Crossbar's league + tournament tools AND specifically their registration/financial tools.** Their registration money surface is the bar to clear.
+
+**What their "Powerful Financial Tools" screen shows (the spec to hit):**
+- **Three at-a-glance cash tiles:** Today / Yesterday / Past Due (e.g. $26,250 / $44,755 / $12,510) — daily collected + outstanding AR at a glance.
+- **Revenue-by-month bar chart, stacked Paid (green) / Pending (gray) / Past Due (red)**, spanning past *actuals* AND future *projected* months (the pending bars run forward to 1/2023) — i.e. a forward revenue + accounts-receivable view, not just historical.
+- **Feature bullets:** "Full control over current registrations" · "Ability to modify payment plans" · "Detailed reporting, giving you easy access to financial information."
+
+**How this maps to / extends the existing roadmap:** this is the commercial layer that sits on **LA-1 (Stripe registration + payments)** + **TOURN-REG-1** (the shared polymorphic `registrations` build) + **LA-4 (financial reporting)** + **BIZ-INFRA-1 (Stripe Connect)** in the Revenue section below. Crossbar adds three things beyond what LA-4 currently scopes (which was just total collected / outstanding / refunds / Stripe net):
+1. **Payment-plan engine** — installment schedules per registration, and the ability to *modify* a plan after the fact (the hard part: proration, re-amortization, dunning on a missed installment).
+2. **Projected/pending revenue + AR aging** — "Pending" (scheduled future installments) and "Past Due" (missed) as first-class states, charted forward, with the daily cash tiles.
+3. **Registration management surface** — full edit/refund/transfer control over active registrations.
+
+**Action when registrations get scoped:** do a proper Crossbar walkthrough and write **`rinkd_v4/CROSSBAR_PARITY_GAPS.md`** (mirror the GameSheet/LeagueApps gap docs) before building, so LA-1/LA-4/TOURN-REG-1 are designed with the payment-plan + AR-aging + financial-dashboard requirements baked in from the start (retrofitting installments/projections onto a flat one-time-charge schema is painful). Not pilot-relevant; gated on Stripe. (Screenshot lives in this session's transcript.)
+
 ### KOHA stats parity (hockeypage replacement) — prioritized May 22, 2026
 
 KOHA's implicit first ask: don't make them lose stats vs their old system (hockeypage.com). Pete sent 8 season exports (standings, scoring, goalies, scoring-by-division, penalty frequency, raw penalty log, playoff scoring + goalies — analyzed this session). **Verdict: full parity is achievable with little-to-no schema change — Rinkd already CAPTURES everything; the gaps are reporting surfaces.** Captured today: `game_goals` (scorer + `assist1_number` + `assist2_number`), `game_penalties` (`penalty_type` + duration + period), `game_shots`, `game_goalie_changes`, `league_games.phase` (reg vs playoff).
