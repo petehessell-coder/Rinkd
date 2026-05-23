@@ -12,7 +12,7 @@ import { getTournamentPosts, createPost, uploadMedia, timeAgo } from '../lib/pos
 import { isExtraDirector as isDirectorRole } from '../lib/tournamentDirectors';
 import { track } from '../lib/analytics';
 import PostActionMenu from '../components/PostActionMenu';
-import TournamentStats from '../components/TournamentStats';
+import StatLeaderboards from '../components/StatLeaderboards';
 
 
 const TABS = ['Standings','Schedule','Bracket','Stats','Feed','Info'];
@@ -564,7 +564,7 @@ export default function TournamentPage({ currentUser }) {
         )}
 
         {activeTab === 'Stats' && (
-          <TournamentStats tournamentId={id} accent={accent} />
+          <StatLeaderboards source="tournament" id={id} accent={accent} />
         )}
 
         {activeTab === 'Feed' && (
