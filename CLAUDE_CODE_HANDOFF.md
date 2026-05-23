@@ -1151,6 +1151,19 @@ Spec'd in **`rinkd_v4/LEAGUEAPPS_PARITY_GAPS.md`** (May 17). 8 gaps for the leag
 | LA-7 | **Commissioner analytics** — scoring/penalty leaderboards per league; RSVP fill rate; volunteer fill rate over the season | **P3** | 2-3 days | No schema changes — pure query work. New `getLeagueAnalytics()` helper. New `LeaderboardTable` reusable component. New Analytics tab in `LeagueManage`. |
 | LA-8 | **League embed widgets** — `/embed/league/:id/{standings,schedule,leaders}` iframe routes for club websites | **P3** | 2-3 days | Shares architecture with GS-6 above — **build together**. Optional `?theme=&accent=` query params for white-label. |
 
+### ⭐ Registration & unified-platform design mandate (Pete, May 23 — READ BEFORE building any registration/payment/household work)
+
+**This is the hard part, and it's the whole bet. Treat it accordingly.** The thesis: every competitor makes you stitch together a scoring tool + a registration tool + a payments tool + a comms tool. Rinkd's bet is **everything in one social-media-style app** — and the *only* reason that's defensible is if it stays **intuitive, simple, and easy for literally anyone** (a hockey parent, a beer-league captain, a volunteer commissioner). **Pete's read on why no one has unified this before: because the moment you combine registration + payments + households + scheduling + scoring + social, it gets messy and chaotic — so the deliberate, clean design IS the moat.** If it's confusing, we've built nothing better than the incumbents.
+
+**Approach this like a product/eng lead at Google / Amazon / Facebook. The architecture and the flow have to be perfect — not "good enough."** Concretely, that means:
+- **Data model + information architecture FIRST, UI second.** Households, guardians, minor-participants-without-logins, roles (parent vs player vs captain vs commissioner vs director), registrations, payment plans, invoices — get the entities and relationships right before a single screen is drawn. Retrofitting households/installments onto a flat schema is how it becomes chaotic.
+- **One mental model, ruthless progressive disclosure.** A user only ever sees what's relevant to their role and their context. Hide complexity behind clean defaults; never make a parent reason about the commissioner's view or vice versa.
+- **Make it feel native to the social app, not bolted-on.** Reuse the patterns that already work (feed, follow, notifications, the existing role-gating) so "register my kid" and "pay my invoice" feel like the same product as "chirp" and "follow my team," not a separate portal grafted on.
+- **Every flow must be self-evident on a phone, first try, no manual.** If a step needs explaining, redesign the step.
+- **Design the schema once, surface it from every side.** Org-admin money view (Crossbar), family payment view (LeagueApps), player/parent self-service — all the same underlying `registrations`/payment-plan data, never duplicated.
+
+When this workstream is picked up: start with a written IA + data-model design (the `rinkd_v4/CROSSBAR_PARITY_GAPS.md` / `REGISTRATION_PARITY.md` doc), get Pete's sign-off on the *flow and model* before building, and hold the bar at "a first-time user gets it instantly." See memory `unified-platform-design-mandate`.
+
 ### Crossbar parity — registration + financial tools (post-pilot; tie-in with Stripe/registrations)
 
 **Captured May 23, 2026 (Pete).** Crossbar (crossbarapp.com) is a youth-sports club/league management platform — a third named parity target alongside GameSheet (tournament side) and LeagueApps (league side). **Pete's directive: when we tie in registrations, get parity with Crossbar's league + tournament tools AND specifically their registration/financial tools.** Their registration money surface is the bar to clear.
