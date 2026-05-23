@@ -1164,6 +1164,31 @@ Spec'd in **`rinkd_v4/LEAGUEAPPS_PARITY_GAPS.md`** (May 17). 8 gaps for the leag
 
 When this workstream is picked up: start with a written IA + data-model design (the `rinkd_v4/CROSSBAR_PARITY_GAPS.md` / `REGISTRATION_PARITY.md` doc), get Pete's sign-off on the *flow and model* before building, and hold the bar at "a first-time user gets it instantly." See memory `unified-platform-design-mandate`.
 
+### Household & registration — IA seed (first design pass, May 23, 2026)
+
+The mandate above says "write the IA + data-model before building." **This is the seed** — flesh it into the `REGISTRATION_PARITY.md` doc when scoped. Distilled from a SportsEngine / LeagueApps / Crossbar walkthrough (Pete's own SportsEngine account; screenshots in this session's transcript).
+
+**The core inversion (the moat, made concrete):** every incumbent is a *stack of separate destinations* — Home, Household, Schedule, Teams, Bills, Registrations, Memberships, Credentials, Video (SportsEngine's 11-item nav). That portal/admin model is why they feel heavy. Rinkd inverts it:
+- **The Feed IS home.** No separate dashboard. The living stream of chirps + recaps from the people/teams you follow is the landing surface. **Never** greet a user with empty "Nothing scheduled / No teams / No payments" cards (SportsEngine's dead first impression) — for new users, Home onboards (follow your team, here's what's happening).
+- **Identity is a switcher, not a console.** "Acting as me / Henry / Audrey" via an avatar switcher (Instagram/Netflix "who's watching" pattern), not a Household page you navigate to. The household is plumbing.
+- **Money + registrations are woven in, not destinations.** Collapse Bills + Registrations + Memberships into one per-person money/registration view; surface "you owe $X, due Friday" as a gentle up-next item atop the feed (the one genuinely useful widget on SportsEngine's home). Credentials/eligibility docs (USAH#, SafeSport) surface only when a registration needs one — never standing nav.
+- **One person = one card that's everything.** Tap Henry → his teams, schedule, balance, registration status, docs — one role-scoped screen in the social-app design language.
+
+**Data-model spine:** extend `profiles` (don't invent a parallel "family" system). Add a `guardianships` / household relationship (`guardian_profile → managed/linked_profile`, role: `owner` / `co_guardian` / `adult_member`). Generalizes the existing [[cshl-personal-tracker]] pattern (Henry #17 = login-less profile via `invite_name`) into a first-class household. The same `registrations` + payment-plan schema is surfaced from every side (org-admin = Crossbar money dashboard, family = LeagueApps payment portal, player self-service) — designed once, never duplicated.
+
+**v1 decisions (Pete, May 23):**
+- **Under-13 = no login.** Minors are managed profiles the guardian operates on their behalf (cleanest COPPA posture). Teen/independent access is a later, deliberate add — not v1.
+- **Co-parent = shared household.** Multiple adults manage the same kids + see the same bills/schedule (families expect it; retrofitting later is a painful migration).
+
+**Consent / anti-fraud — REQUIRED (Pete: "so people don't just sign up for other people's kids"):** linking to a person is **never unilateral**.
+- **Adult ↔ adult (add a co-guardian, e.g. Audrey):** invite-by-email → invited adult must **accept**. Mutual consent. Reuse the existing `team_manager_invites` magic-link pattern.
+- **Adult → minor (claim/manage a kid):** creator becomes the kid's **owning guardian**. Any *additional* guardian link, or claiming an existing kid, requires approval from **(a) an existing guardian, OR (b) the org admin (team manager / league commissioner) who rosters the child** — a human vouch. Existing guardians are **notified** on any claim attempt; nothing takes effect until approved.
+- **Duplicate guard:** creating a kid that matches an existing rostered minor (name + DOB) in that team/org routes to a **claim request**, not a silent duplicate (handles divorced-parents-both-add-Henry).
+- **Org roster is the anchor of truth:** a kid only attaches to teams/registrations when a real team admin rosters them (human-in-the-loop) — a fabricated child can't insert itself onto a team.
+- **Audit + escalation:** every guardianship link is audit-logged (who added whom, who approved, when) and reversible; custody disputes escalate to the org admin / Rinkd support — **software never adjudicates custody**.
+
+**What to cut vs the incumbents:** the 11-item left nav. Rinkd keeps the feed + a switcher + per-person cards; payments/registrations/docs are woven in or one tap away. Bar: "a first-time parent registers a kid and pays, on a phone, first try, no manual."
+
 ### Crossbar parity — registration + financial tools (post-pilot; tie-in with Stripe/registrations)
 
 **Captured May 23, 2026 (Pete).** Crossbar (crossbarapp.com) is a youth-sports club/league management platform — a third named parity target alongside GameSheet (tournament side) and LeagueApps (league side). **Pete's directive: when we tie in registrations, get parity with Crossbar's league + tournament tools AND specifically their registration/financial tools.** Their registration money surface is the bar to clear.
