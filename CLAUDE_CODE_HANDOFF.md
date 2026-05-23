@@ -1500,17 +1500,19 @@ After secrets + deploy, smoke-test:
 
 **P0 backlog is empty.** Remaining items are operations + content (team names from Nick) + smoke testing — but everything shipped May 20–22 is **build-verified only**; see the verification punch-list below before relying on any of it.
 
-### 🔎 Verify-before-pilot punch-list (shipped May 20–22, NOT tested on real screens/devices/data from Claude Code)
+### 🔎 Verify-before-pilot punch-list (shipped May 20–22) — **Pete review pass May 22 evening**
 
-A lot landed straight to main over May 20–22 (auth default→signup, the `submit-scoresheet` security rewrite, GS-7 iOS install banner, the full tape-job font rollout + wordmark, event-page view tracking, `/pricing`, the native Store, drawer icons, the in-app-browser nudge). All compile clean, but several couldn't be exercised from Claude Code (no real device / no real director session / iOS-only UI). Run these before trusting them — **the first two are pilot-critical:**
+A lot landed straight to main over May 20–22 (auth default→signup, the `submit-scoresheet` security rewrite, GS-7 iOS install banner, the full tape-job font rollout + wordmark, event-page view tracking, `/pricing`, the native Store, drawer icons, the in-app-browser nudge). All compile clean. **Pete reviewed the visual/UX items May 22 evening — only the two below remain open; both are non-blocking-to-review-from-here (need a real director JWT / a real iPhone):**
 
-- 🔴 **Scoresheet submission, end-to-end** — the `submit-scoresheet` security rewrite (v8). Open a BLPA game's scoresheet as the director / assigned scorekeeper, submit, and confirm BOTH the storage upload AND the email to team contacts succeed. A `forbidden` (403) for a legit director, or `email: skipped` when teams have contact emails, means the role check or the server-side recipient lookup needs a look. Couldn't be run from here (no real director JWT). (= checklist item 7 above.)
-- 🔴 **BLPA Cleveland `is_activated` is FALSE** — scoring is RLS-hard-blocked until it's flipped true, and the scoresheet path above can't be fully tested until then. Custom deal, so activation is a deliberate manual flip at `/admin/activations` — **must be ON before game day (Sat Jun 13).** Confirm: `select is_activated from tournaments where id='b2789d66-1d77-4a62-862d-00b550da6a98'`.
-- 🟡 **iOS install banner (GS-7)** — iPhone Safari → tap Follow on a tournament → confirm the banner slides up above the nav. (iOS-only; never renders on desktop.)
-- 🟡 **Tape-job font** — eyeball the section headers (Chirps / Teams / Notifications / Tournaments / Leagues / Store) + the RINKD wordmark, desktop + mobile. The Auth-page **140px hero wordmark** is the one that may look soft (source tape art is only ~200px tall).
-- 🟡 **Native Store page** (`/store`) — desktop + mobile layout check.
-- 🟡 **In-app-browser nudge** — post a rinkd.app link to Instagram, tap it (opens IG's in-app browser) → confirm the amber "open in your browser" nudge appears. This is the exact path the ~0%-converting social cohort takes.
-- 🟡 **Drawer icons** — open the More drawer; confirm the duffle (Store), bracket (Tournaments), and standings-bars (Leagues) icons read right.
+- 🔴 **Scoresheet submission, end-to-end** — the `submit-scoresheet` security rewrite (v8). **Pete testing May 23.** Open a BLPA game's scoresheet as the director / assigned scorekeeper, submit, and confirm BOTH the storage upload AND the email to team contacts succeed. A `forbidden` (403) for a legit director, or `email: skipped` when teams have contact emails, means the role check or the server-side recipient lookup needs a look. Couldn't be run from Claude Code (no real director JWT). (= checklist item 7 above.)
+- 🟡 **iOS install banner (GS-7)** — **gating logic code-verified May 22** ([src/components/IOSInstallBanner.js](src/components/IOSInstallBanner.js) + [src/lib/platform.js](src/lib/platform.js)): renders only on iOS Safari, not-yet-installed; auto-shows on 3rd session OR immediately on Follow-tap (Tournament.js dispatches `IOS_INSTALL_EVENT` when push-subscribe fails, which it always does on non-installed iOS Safari). **Real-iPhone eyeball still pending.** Deterministic test: open a tournament in **Safari** (not the installed PWA) → tap 🔔 Follow → banner should slide up ~92px above the nav. **Gotcha:** if the PWA is already installed to the home screen, `detectStandalone()` is true and the banner correctly never shows — must test in a fresh Safari tab.
+
+**✅ Reviewed + cleared by Pete (May 22 evening):**
+- ✅ **BLPA Cleveland `is_activated`** — confirmed **TRUE** via Supabase MCP May 22 (`select is_activated from tournaments where id='b2789d66-1d77-4a62-862d-00b550da6a98'` → `true`). The earlier "is FALSE / must flip" note was stale. Scoring is unblocked; the scoresheet e2e test above can now run. (Activation is still a deliberate manual flip at `/admin/activations` if it ever needs re-toggling.)
+- ✅ **Tape-job font** — section headers + RINKD wordmark reviewed, desktop + mobile.
+- ✅ **Native Store page** (`/store`) — layout reviewed.
+- ✅ **In-app-browser nudge** — reviewed. Confirmed live in analytics (May 22 evening pull): `inapp_nudge_shown` firing; the in-app cohort is ~26 sessions / 31 `landing_continue_in_browser` events — proportionally large vs ~35 total external-social sessions, so the nudge targets a real chunk of traffic.
+- ✅ **Drawer icons** — duffle (Store) / bracket (Tournaments) / standings-bars (Leagues) reviewed.
 
 ---
 
