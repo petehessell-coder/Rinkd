@@ -12,9 +12,10 @@ import { getTournamentPosts, createPost, uploadMedia, timeAgo } from '../lib/pos
 import { isExtraDirector as isDirectorRole } from '../lib/tournamentDirectors';
 import { track } from '../lib/analytics';
 import PostActionMenu from '../components/PostActionMenu';
+import TournamentStats from '../components/TournamentStats';
 
 
-const TABS = ['Standings','Schedule','Bracket','Feed','Info'];
+const TABS = ['Standings','Schedule','Bracket','Stats','Feed','Info'];
 
 // Bracket rounds get visual weight on the schedule and a championship hero on
 // the bracket tab. Pool play is the catch-all everything else.
@@ -346,6 +347,9 @@ export default function TournamentPage({ currentUser }) {
   const showGQ = tiebreakers.includes('goal_quotient');
   const showPIM = tiebreakers.includes('lowest_pim') || tiebreakers.includes('penalty_minutes');
   const showPeriodPts = tiebreakers.includes('period_points');
+  // Points percentage = earned / max possible (GP × points-per-win). Mirrors
+  // GameSheet's P% column; cheap derived value, no extra data fetch.
+  const pointsWin = tournament?.settings?.points_win ?? 2;
   // Champion = the team that won the championship/final game when it's
   // marked final. Used by the Bracket tab to show a podium banner for
   // small brackets (1-per-pool advancement = single final).
@@ -470,6 +474,12 @@ export default function TournamentPage({ currentUser }) {
                 { key: 'gf',  label: 'GF',  render: (r) => r.gf,     color: 'rgba(244,247,250,0.65)' },
                 { key: 'ga',  label: 'GA',  render: (r) => r.ga,     color: 'rgba(244,247,250,0.65)' },
                 ...tbCols,
+                { key: 'ppct', label: 'P%', color: 'rgba(244,247,250,0.5)', render: (r) => {
+                  const d = (r.gp || 0) * pointsWin;
+                  if (!d) return '—';
+                  const s = (r.pts / d).toFixed(3);
+                  return s.startsWith('0') ? s.slice(1) : s;
+                } },
               ];
               // Sticky column visuals: solid bg color matching the card so
               // scrolled middle content doesn't bleed through. Subtle shadow
@@ -551,6 +561,10 @@ export default function TournamentPage({ currentUser }) {
                 )}
                 {bracketGames.map(g => <GameCard key={g.id} game={g} navigate={navigate} canScore={canScore} />)}
               </>
+        )}
+
+        {activeTab === 'Stats' && (
+          <TournamentStats tournamentId={id} accent={accent} />
         )}
 
         {activeTab === 'Feed' && (
