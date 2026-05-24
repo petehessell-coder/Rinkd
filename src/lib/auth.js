@@ -140,22 +140,11 @@ export async function ensureProfileForUser(user) {
     console.warn('[ensureProfileForUser] linkPendingInvitesForUser threw:', e?.message || e);
   }
 
-  try {
-    const { data: topUsers } = await supabase
-      .from('profiles')
-      .select('id')
-      .neq('id', user.id)
-      .order('points', { ascending: false, nullsFirst: false })
-      .limit(3);
-    if (topUsers?.length) {
-      await supabase.from('follows').insert(
-        topUsers.map((u) => ({ follower_id: user.id, following_id: u.id }))
-      );
-    }
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.warn('[ensureProfileForUser] auto-follow seeded users failed:', e?.message || e);
-  }
+  // Seed follows (Pete + The BLPA + Howie Miller) are handled server-side by
+  // the `tr_auto_follow_seed_accounts` trigger on profiles INSERT — one source
+  // of truth, fires regardless of onboarding. The old client-side
+  // "follow top 3 by points" block was removed (May 23) because it seeded
+  // whatever demo accounts ranked highest, not the intended real accounts.
 
   return { data: { id: user.id }, error: null };
 }
