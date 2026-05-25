@@ -116,8 +116,15 @@ export default function Pricing({ currentUser }) {
 
         {/* Tournaments */}
         <SectionLabel sub="Per event · live scores · bracket · push notifications">Tournament pricing</SectionLabel>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginBottom: 40 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginBottom: 12 }}>
           {TOURNAMENT_TIERS.map((t) => <PlanCard key={t.tier} {...t} />)}
+        </div>
+        <div style={{ fontSize: 13, color: C.steel, marginBottom: 40 }}>
+          <strong style={{ color: C.ice }}>Division add-on · +$99</strong> per additional division in the same event.{' '}
+          Running 5+ divisions?{' '}
+          <a href="mailto:hello@rinkd.app?subject=Multi-division tournament — custom package" style={{ color: C.ice }}>
+            Custom package pricing available — get in touch.
+          </a>
         </div>
 
         {/* Cross-sell + registration */}
