@@ -1444,7 +1444,7 @@ After Pete updates Site URL + Redirect URLs in the Supabase dashboard:
    - Monsters Foundation / Rockin' Wildcats partnership outreach status (drafts were written this session — see conversation; not saved to disk).
    - Anything broken since the `01894320` push?
    - What next — §7 GameSheet/LeagueApps parity, tier-enforcement build (BIZ-TIER-2, gates pricing), iOS PWA banner (GS-7), or fresh requests?
-4. **Pull up the operational spreadsheet** at `~/Downloads/rinkd-sprints.xlsx` (or Pete's Google Sheet version if uploaded). The **Sprint plan** tab shows the next ~12 weeks of work in sequence (S0 pre-pilot + S1 post-pilot revenue cluster); the **Per-day checklist** tab tracks Pete's pre-pilot operations status; the **Cleveland day-of** tab is the live run sheet for Jun 12-14. See §13.2 for tab-by-tab notes. **Note (May 18):** the spreadsheet was last regenerated May 17 evening — items marked complete since then in this handoff are not reflected in the xlsx until someone re-runs the build scripts (`/tmp/build_rinkd_sprints.py` etc., which may have been cleared on reboot).
+4. **Pull up the operational spreadsheet** at `~/Downloads/rinkd-sprints.xlsx` (or Pete's Google Sheet version if uploaded). The **Sprint plan** tab shows the next ~12 weeks of work in sequence (S0 pre-pilot + S1 post-pilot revenue cluster); the **Per-day checklist** tab tracks Pete's pre-pilot operations status; the **Cleveland day-of** tab is the live run sheet for Jun 13-14 at BAM. See §13.2 for tab-by-tab notes. **Note (May 25):** the xlsx is current as of May 25 (rebuilt + kept in sync this session). Durable generator at `~/Downloads/rinkd_sprints_build.py`; sync by patching the xlsx directly (openpyxl) or editing its `SHEETS` data + re-running.
 5. Then proceed from there.
 
 ---
@@ -1662,7 +1662,7 @@ The `rinkd_v4` folder is **strategy only** — its app code does not deploy, so 
 
 ### 13.2 Roadmap spreadsheet (`~/Downloads/rinkd-sprints.xlsx`)
 
-A four-tab xlsx that's the operational view of the roadmap. Pete uploads to Google Drive → Google Sheets for live editing. Built by Claude via the anthropic-skills:xlsx skill; if a new session needs to regenerate it, the build scripts live at `/tmp/build_rinkd_sprints.py` + `/tmp/add_pilot_sheets.py` + `/tmp/add_sprint_column.py` (will be lost on machine reboot — re-derive from this doc's §7 if needed).
+A four-tab xlsx that's the operational view of the roadmap. Pete uploads to Google Drive → Google Sheets for live editing. Built + maintained by Claude. **Durable generator: `~/Downloads/rinkd_sprints_build.py`** — self-contained (all 4 tabs embedded in a `SHEETS` list + the navy-header/status-green/sprint-color styling); `python3 ~/Downloads/rinkd_sprints_build.py` rebuilds the xlsx. Moved out of `/tmp` May 25 (kept getting wiped between turns). **Sync by patching `~/Downloads/rinkd-sprints.xlsx` directly with openpyxl** (find row by ID in col A → set status col F + fill, or append a row) **or edit the `SHEETS` data + re-run the generator.**
 
 | Tab | Rows | What it shows |
 |---|---|---|
@@ -1671,7 +1671,7 @@ A four-tab xlsx that's the operational view of the roadmap. Pete uploads to Goog
 | **Per-day checklist** | 26 | Milestone-based pre-pilot checklist (T-26 → T+4). Pete checks off as you go; footer COUNTIFs show "X of Y complete". **STALE since May 19:** the Friday-start label is wrong (pilot is now Sat 6/13 start at BAM). The xlsx needs regenerating from the current §7 to reflect the 2-day + BAM venue. |
 | **Cleveland day-of** | 38 | Hour-by-hour run sheet. **STALE since May 19:** built for the 3-day RMU plan that was superseded. The current Saturday schedule (12 pool games, 08:00-14:15 EDT at BAM) and 1-day Sunday championship are NOT reflected. Re-derive from §5 May 19 entry when xlsx is regenerated. |
 
-**When to update the spreadsheet:** any time §7 changes (new roadmap item, item completion, sprint re-ordering). Re-run the build scripts in `/tmp/` or re-derive. **Critical:** the spreadsheet is downstream of this handoff doc — handoff doc is source of truth, spreadsheet is its operational projection.
+**When to update the spreadsheet:** any time §7 changes (new roadmap item, item completion, sprint re-ordering). Patch `~/Downloads/rinkd-sprints.xlsx` directly (openpyxl) or edit the `SHEETS` data in `~/Downloads/rinkd_sprints_build.py` and re-run it. (A `PostToolUse` hook on `.claude/hooks/handoff-sync-reminder.sh` fires this reminder whenever the handoff is edited.) **Critical:** the spreadsheet is downstream of this handoff doc — handoff doc is source of truth, spreadsheet is its operational projection.
 
 ### 13.3 Live operational state (databases + dashboards)
 
