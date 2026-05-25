@@ -15,6 +15,22 @@ import { supabase } from './supabase';
 
 const SESSION_KEY = 'rinkd_anon_session_v1';
 
+// Crawlers, link-unfurlers, headless browsers, and uptime/SEO bots inflate the
+// top of the funnel (auth_view / landing_view) but never convert — they made
+// ~7% of sessions in our pre-pilot sample and skew every conversion rate. Drop
+// their events at write time so analytics_events stays a clean human-funnel.
+// Conservative list: only well-known non-human agents, to avoid false positives
+// on real mobile/desktop browsers.
+const BOT_UA = /bot\b|crawl|spider|slurp|bingpreview|facebookexternalhit|embedly|quora link preview|outbrain|pinterest|slackbot|telegrambot|whatsapp|vkshare|w3c_validator|headlesschrome|phantomjs|lighthouse|gtmetrix|pingdom|uptimerobot|datadog|statuscake|semrush|ahrefs|mj12bot|dotbot|petalbot|bytespider|python-requests|axios\/|node-fetch|okhttp|java\/|curl\/|wget\//i;
+
+function isLikelyBot() {
+  if (typeof navigator === 'undefined') return false;
+  try {
+    if (navigator.webdriver) return true; // automated browser (Selenium/Playwright/etc.)
+    return BOT_UA.test(navigator.userAgent || '');
+  } catch { return false; }
+}
+
 function sessionId() {
   if (typeof window === 'undefined') return null;
   try {
@@ -72,6 +88,8 @@ export async function track(event, properties = {}) {
   if (typeof window === 'undefined') return;
   // Don't track on localhost so dev work doesn't pollute prod data.
   if (window.location?.hostname === 'localhost') return;
+  // Drop bot/crawler/headless traffic so it doesn't skew the conversion funnel.
+  if (isLikelyBot()) return;
 
   try {
     const user_id = await resolveCachedUserId();
