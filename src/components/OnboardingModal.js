@@ -50,16 +50,29 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
   useEffect(() => { track('onboarding_started'); }, []);
 
   useEffect(() => {
-    // Step 2 needs suggestions — load 6 random-ish players that aren't the user.
+    // Step 2 suggestions. Two rules: (1) lead with the community/seed accounts
+    // (Pete, The BLPA, Howie) — same set the auto-follow trigger uses; (2) NEVER
+    // suggest demo accounts (`@demo.rinkd.app`, seeded with points=50 so they used
+    // to dominate the old order-by-points query — the thing real pilot signups saw).
+    // We filter on `email` without selecting it, so no addresses reach the client.
     if (step !== 1 || suggested.length) return;
+    const SEED_EMAILS = ['pete@rinkd.app', 'nick@blpa.com', 'howard@cemented.ca'];
+    const COLS = 'id, name, handle, position, avatar_color, avatar_initials, tier';
+    const self = currentUser?.id || '';
     (async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, name, handle, position, avatar_color, avatar_initials, tier')
-        .neq('id', currentUser?.id || '')
-        .order('points', { ascending: false, nullsFirst: false })
-        .limit(6);
-      setSuggested(data || []);
+      const [seedRes, fillRes] = await Promise.all([
+        supabase.from('profiles').select(COLS).in('email', SEED_EMAILS).neq('id', self),
+        supabase.from('profiles').select(COLS).neq('id', self)
+          .not('email', 'ilike', '%@demo.rinkd.app')
+          .order('points', { ascending: false, nullsFirst: false })
+          .limit(8),
+      ]);
+      const seen = new Set();
+      const merged = [];
+      for (const p of [...(seedRes.data || []), ...(fillRes.data || [])]) {
+        if (p && !seen.has(p.id)) { seen.add(p.id); merged.push(p); }
+      }
+      setSuggested(merged.slice(0, 6));
     })();
   }, [step, suggested.length, currentUser]);
 
