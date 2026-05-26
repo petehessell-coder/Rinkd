@@ -790,13 +790,13 @@ function PublicTournamentLanding({ tournament, games, navigate }) {
       <div style={{padding:'20px 18px',maxWidth:560,margin:'0 auto'}}>
         {/* Sign-up hero — the main conversion surface */}
         <div style={{background:`linear-gradient(135deg,${accent}33 0%,#0f2847 100%)`,border:`1px solid ${accent}66`,borderRadius:14,padding:'20px 18px',marginBottom:18,textAlign:'center'}}>
-          <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:20,marginBottom:6,textTransform:'uppercase'}}>Follow live</div>
+          <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:20,marginBottom:6,textTransform:'uppercase'}}>Follow every game</div>
           <div style={{fontSize:13,color:'rgba(244,247,250,0.75)',marginBottom:16,lineHeight:1.55}}>
-            Sign up free to see live scores, standings, full schedule, bracket, and game recaps as they happen.
+            Live scores, standings, and the bracket — plus a recap the moment each game ends. Sign up free to follow along all weekend.
           </div>
           <div style={{display:'flex',gap:10,justifyContent:'center',flexWrap:'wrap'}}>
             <button onClick={() => navigate(`/login?returnTo=${returnTo}`)} style={{background:accent,color:'#fff',border:'none',borderRadius:999,padding:'12px 28px',fontFamily:'Barlow,sans-serif',fontSize:14,fontWeight:700,cursor:'pointer'}}>
-              Sign up to view live →
+              Sign up free →
             </button>
             <button onClick={() => navigate(`/login?returnTo=${returnTo}`)} style={{background:'transparent',color:'#F4F7FA',border:'1px solid rgba(244,247,250,0.3)',borderRadius:999,padding:'12px 22px',fontFamily:'Barlow,sans-serif',fontSize:13,cursor:'pointer'}}>
               Sign in
@@ -843,7 +843,7 @@ function PublicTournamentLanding({ tournament, games, navigate }) {
         {/* Secondary CTA at the bottom for scrollers */}
         <div style={{background:'#0f2847',border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,padding:'18px 16px',textAlign:'center'}}>
           <div style={{fontSize:13,color:'rgba(244,247,250,0.65)',marginBottom:12,lineHeight:1.5}}>
-            Live standings · real-time scores · bracket automation · game recaps. Free to join.
+            Live scores, standings, the full bracket, and a recap of every game — as it happens. Free to follow.
           </div>
           <button onClick={() => navigate(`/login?returnTo=${returnTo}`)} style={{background:accent,color:'#fff',border:'none',borderRadius:999,padding:'10px 24px',fontFamily:'Barlow,sans-serif',fontSize:13,fontWeight:700,cursor:'pointer'}}>
             Sign up to follow →
