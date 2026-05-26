@@ -101,10 +101,11 @@ export default function TeamPage({ currentUser, profile }) {
     </Layout>
   );
 
-  // Manager = founding manager (teams.manager_id) OR has team_members.role='manager'.
-  // Both paths are honored server-side via the is_team_manager() helper used in
-  // RLS; client-side we OR the two checks so the UI matches what the server will allow.
-  const isManager = userRole?.role === 'manager' || (currentUser && team && team.manager_id === currentUser.id);
+  // Manager = founding manager (teams.manager_id) OR team_members.role in (manager, coach).
+  // Coaches get manager-equivalent access for now (interim — see ROLE-COACH-1 on the
+  // roadmap). Honored server-side too: is_team_manager() treats manager + coach alike.
+  // We OR the checks client-side so the UI matches what the server will allow.
+  const isManager = userRole?.role === 'manager' || userRole?.role === 'coach' || (currentUser && team && team.manager_id === currentUser.id);
   const isMember = !!userRole;
   const goalies = members.filter(m => m.role === 'goalie' || m.position?.toLowerCase().includes('goalie'));
   const defense = members.filter(m => m.position?.toLowerCase().includes('defense') || m.position?.toLowerCase().includes('d'));
