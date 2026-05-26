@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import DateTimePicker from '../components/DateTimePicker';
-import { getLeague, getLeagueTeams, getLeagueGames, getLeagueStandings, updateLeague, addLeagueTeam, removeLeagueTeam, addLeagueGame, linkLeagueTeam } from '../lib/leagues';
+import { getLeague, getLeagueTeams, getLeagueGames, getLeagueStandings, updateLeague, addLeagueTeam, removeLeagueTeam, addLeagueGame, linkLeagueTeam, getUserLeagueRole } from '../lib/leagues';
+import { getLeagueRegistrations, updateRegistrationStatus, approveRegistration } from '../lib/registrations';
 import { generatePlayoffRoundOne, generatePlayoffNextRound, SUPPORTED_BRACKET_SIZES } from '../lib/leaguePlayoffGenerator';
 import { listRinks } from '../lib/rinks';
 import { supabase } from '../lib/supabase';
@@ -76,6 +77,8 @@ function ManageLeague({ id, navigate }) {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('Teams');
   const [error, setError] = useState(null);
+  const [isCommissioner, setIsCommissioner] = useState(false);
+  const [registrations, setRegistrations] = useState([]);
   const [showScheduleBuilder, setShowScheduleBuilder] = useState(false);
   const [teamSearch, setTeamSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -131,12 +134,16 @@ function ManageLeague({ id, navigate }) {
       // Fetch rinks alongside league/teams/games so the single-game form can
       // attach a real rink_id (and the rink shows up on the game cards via the
       // rinks join in getLeagueGames). listRinks() is small and cheap.
-      const [l, t, g, r, s] = await Promise.all([
+      const [l, t, g, r, s, role, regs] = await Promise.all([
         getLeague(id), getLeagueTeams(id), getLeagueGames(id),
         listRinks().catch(() => []),
         getLeagueStandings(id).catch(() => []),
+        getUserLeagueRole(id).catch(() => null),
+        getLeagueRegistrations(id).catch(() => []),
       ]);
       setLeague(l); setTeams(t); setGames(g); setRinks(r || []); setStandings(s || []);
+      setIsCommissioner(role === 'commissioner');
+      setRegistrations(regs || []);
       if (t.length >= 2) setGameForm(p => ({ ...p, home_team_id: t[0].id, away_team_id: t[1].id }));
     } catch(e) { console.error(e); }
     finally { setLoading(false); }
@@ -235,7 +242,7 @@ function ManageLeague({ id, navigate }) {
     } catch(e) { setError(e.message); }
   };
 
-  const MANAGE_TABS = ['Teams', 'Schedule', 'Playoffs', 'Settings'];
+  const MANAGE_TABS = ['Teams', 'Schedule', 'Playoffs', ...(isCommissioner ? ['Registrations'] : []), 'Settings'];
 
   if (loading) return <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Loading...</div>;
 
@@ -548,6 +555,10 @@ function ManageLeague({ id, navigate }) {
         )}
 
         {/* SETTINGS */}
+        {activeTab === 'Registrations' && league && isCommissioner && (
+          <RegistrationsTab leagueId={id} league={league} registrations={registrations} onChanged={load} />
+        )}
+
         {activeTab === 'Settings' && league && (
           <LeagueSettings league={league} onSave={async (updates) => { await updateLeague(id, updates); await load(); }} />
         )}
@@ -1138,6 +1149,191 @@ function SmartScheduleGenerator({ leagueId, teams, rinks, onPublished }) {
         </button>
       )}
     </div>
+  );
+}
+
+// --- Registrations tab: config (open/fee/deadline/cap/link) + submissions list ---
+const REG_STATUS = {
+  pending:     { label: 'Pending',     color: '#F59E0B', bg: 'rgba(245,158,11,0.15)' },
+  approved:    { label: 'Approved',    color: '#22C55E', bg: 'rgba(34,197,94,0.15)' },
+  waitlisted:  { label: 'Waitlisted',  color: '#8BA3BE', bg: 'rgba(139,163,190,0.15)' },
+  rejected:    { label: 'Rejected',    color: '#D72638', bg: 'rgba(215,38,56,0.15)' },
+};
+const REG_GROUPS = [['pending', 'Pending'], ['approved', 'Approved'], ['waitlisted', 'Waitlisted'], ['rejected', 'Rejected']];
+
+function RegistrationsTab({ leagueId, league, registrations, onChanged }) {
+  const [open, setOpen] = useState(!!league.registration_open);
+  const [feeDollars, setFeeDollars] = useState(league.registration_fee_cents ? String(league.registration_fee_cents / 100) : '');
+  const [deadline, setDeadline] = useState(league.registration_deadline || '');
+  const [maxTeams, setMaxTeams] = useState(league.max_teams != null ? String(league.max_teams) : '');
+  const [savingCfg, setSavingCfg] = useState(false);
+  const [cfgFlash, setCfgFlash] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+
+  const regLink = `${window.location.origin}/league/${leagueId}/register`;
+
+  const saveConfig = async () => {
+    setSavingCfg(true); setCfgFlash(null);
+    try {
+      await updateLeague(leagueId, {
+        registration_open: open,
+        registration_fee_cents: Math.max(0, Math.round((parseFloat(feeDollars) || 0) * 100)),
+        registration_deadline: deadline || null,
+        max_teams: maxTeams.trim() === '' ? null : Math.max(0, parseInt(maxTeams, 10) || 0),
+      });
+      setCfgFlash({ kind: 'ok', text: 'Saved.' });
+      await onChanged();
+    } catch (e) {
+      setCfgFlash({ kind: 'err', text: e.message || 'Could not save settings.' });
+    } finally { setSavingCfg(false); }
+  };
+
+  const copyLink = async () => {
+    try { await navigator.clipboard.writeText(regLink); setCopied(true); setTimeout(() => setCopied(false), 1800); }
+    catch { /* clipboard blocked — link is shown below for manual copy */ }
+  };
+
+  const act = async (reg, action) => {
+    setBusyId(reg.id);
+    try {
+      if (action === 'approve') await approveRegistration(reg.id);
+      else await updateRegistrationStatus(reg.id, action); // 'rejected' | 'waitlisted'
+      await onChanged();
+    } catch (e) { alert(e.message || 'Action failed.'); }
+    finally { setBusyId(null); }
+  };
+
+  const exportCsv = () => {
+    const head = ['Team', 'Contact', 'Email', 'Status', 'Fee ($)', 'Paid At', 'Registered'];
+    const rows = registrations.map(r => [
+      r.team_name, r.contact_name, r.contact_email, r.status,
+      r.fee_cents != null ? (r.fee_cents / 100).toFixed(2) : '',
+      r.paid_at ? new Date(r.paid_at).toISOString() : '',
+      r.created_at ? new Date(r.created_at).toISOString() : '',
+    ]);
+    const csv = [head, ...rows]
+      .map(row => row.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(league.name || 'league').replace(/[^a-z0-9]+/gi, '_').toLowerCase()}_registrations.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const actionsFor = (status) => {
+    if (status === 'pending') return [['approve', 'Approve'], ['waitlisted', 'Waitlist'], ['rejected', 'Reject']];
+    if (status === 'waitlisted') return [['approve', 'Approve'], ['rejected', 'Reject']];
+    if (status === 'rejected') return [['approve', 'Approve']];
+    return []; // approved is terminal here (team already created)
+  };
+
+  const btn = (kind) => ({
+    fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 999, cursor: 'pointer',
+    fontFamily: 'Barlow, sans-serif', border: '0.5px solid',
+    ...(kind === 'approve'
+      ? { background: 'rgba(34,197,94,0.15)', borderColor: 'rgba(34,197,94,0.5)', color: '#22C55E' }
+      : kind === 'rejected'
+        ? { background: 'transparent', borderColor: 'rgba(215,38,56,0.45)', color: '#E26B6B' }
+        : { background: 'transparent', borderColor: C.border, color: C.steel }),
+  });
+
+  return (
+    <>
+      {/* --- Registration settings --- */}
+      <SecLabel>Registration Settings</SecLabel>
+      <Card>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.ice }}>Registration {open ? 'Open' : 'Closed'}</div>
+            <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.5)', marginTop: 2 }}>Teams can submit via your link only while open.</div>
+          </div>
+          <button onClick={() => setOpen(o => !o)} aria-label="Toggle registration open"
+            style={{ width: 48, height: 28, borderRadius: 999, border: 'none', cursor: 'pointer', position: 'relative', background: open ? '#22C55E' : 'rgba(139,163,190,0.35)', transition: 'background 0.15s', flexShrink: 0 }}>
+            <span style={{ position: 'absolute', top: 3, left: open ? 23 : 3, width: 22, height: 22, borderRadius: '50%', background: '#fff', transition: 'left 0.15s' }} />
+          </button>
+        </div>
+        <Row2>
+          <Field label="Entry Fee (USD)">
+            <input style={inputStyle} type="number" min={0} step="0.01" value={feeDollars}
+              onChange={e => setFeeDollars(e.target.value)} placeholder="0.00 (free)" />
+          </Field>
+          <Field label="Max Teams (optional)">
+            <input style={inputStyle} type="number" min={0} value={maxTeams}
+              onChange={e => setMaxTeams(e.target.value)} placeholder="No cap" />
+          </Field>
+        </Row2>
+        <Field label="Registration Deadline (optional)">
+          <DateTimePicker value={deadline} onChange={setDeadline} placeholder="No deadline" />
+        </Field>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button onClick={saveConfig} disabled={savingCfg}
+            style={{ flex: 1, minWidth: 120, padding: 11, background: savingCfg ? 'rgba(215,38,56,0.5)' : C.red, border: 'none', borderRadius: 999, color: '#fff', fontSize: 14, fontWeight: 700, cursor: savingCfg ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif' }}>
+            {savingCfg ? 'Saving…' : 'Save Settings'}
+          </button>
+          <button onClick={copyLink}
+            style={{ padding: '11px 16px', background: 'transparent', border: `0.5px solid ${C.border}`, borderRadius: 999, color: copied ? '#22C55E' : C.ice, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>
+            {copied ? '✓ Copied' : '🔗 Copy Link'}
+          </button>
+        </div>
+        {cfgFlash && <div style={{ marginTop: 10, fontSize: 12, color: cfgFlash.kind === 'ok' ? '#22C55E' : C.red }}>{cfgFlash.text}</div>}
+        <div style={{ marginTop: 10, fontSize: 11, color: 'rgba(244,247,250,0.4)', wordBreak: 'break-all' }}>{regLink}</div>
+      </Card>
+
+      {/* --- Submissions --- */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+        <SecLabel>Registrations ({registrations.length})</SecLabel>
+        {registrations.length > 0 && (
+          <button onClick={exportCsv}
+            style={{ fontSize: 12, fontWeight: 700, color: C.steel, background: 'transparent', border: `0.5px solid ${C.border}`, borderRadius: 999, padding: '5px 12px', cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>
+            ⬇ Export CSV
+          </button>
+        )}
+      </div>
+
+      {registrations.length === 0 && (
+        <Card><div style={{ fontSize: 13, color: 'rgba(244,247,250,0.4)', textAlign: 'center', padding: '8px 0' }}>No registrations yet. Share your link to start collecting teams.</div></Card>
+      )}
+
+      {REG_GROUPS.map(([status, title]) => {
+        const rows = registrations.filter(r => r.status === status);
+        if (rows.length === 0) return null;
+        const meta = REG_STATUS[status];
+        return (
+          <div key={status} style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: meta.color, margin: '6px 0 6px' }}>{title} · {rows.length}</div>
+            {rows.map(r => (
+              <div key={r.id} style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', marginBottom: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: C.ice }}>{r.team_name}</div>
+                    <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.55)', marginTop: 2 }}>{r.contact_name} · {r.contact_email}</div>
+                    <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.45)', marginTop: 4 }}>
+                      {r.paid_at
+                        ? <span style={{ color: '#22C55E' }}>✓ Paid {new Date(r.paid_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                        : (r.fee_cents > 0 ? <span>Unpaid</span> : <span>No fee</span>)}
+                      {r.fee_cents != null && r.fee_cents > 0 && <span> · ${(r.fee_cents / 100).toFixed(2)}</span>}
+                    </div>
+                  </div>
+                  <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 999, background: meta.bg, color: meta.color, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{meta.label}</span>
+                </div>
+                {actionsFor(r.status).length > 0 && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                    {actionsFor(r.status).map(([action, lbl]) => (
+                      <button key={action} disabled={busyId === r.id} onClick={() => act(r, action)} style={btn(action)}>
+                        {busyId === r.id ? '…' : lbl}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </>
   );
 }
 

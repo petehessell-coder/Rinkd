@@ -1,0 +1,138 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import Stripe from "https://esm.sh/stripe@16.12.0?target=deno"
+
+// Creates a Stripe Checkout session for a public league-registration submission.
+// PUBLIC endpoint: a team contact who has the registration link (and may not have
+// a Rinkd account) calls this via supabase.functions.invoke — the anon JWT passes
+// the gateway. We NEVER trust the body for the fee or league state: the league is
+// read server-side with the service role, and the registration row is INSERTED
+// here (service role) after validating open/deadline/capacity. There is no public
+// INSERT policy on league_registrations, so this is the only write path in.
+
+const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY")
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")
+const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
+
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+}
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json", ...CORS },
+  })
+}
+
+// Only allow our own origins as Stripe success/cancel redirect targets.
+function safeBase(appUrl: unknown): string {
+  const fallback = "https://rinkd.app"
+  if (typeof appUrl !== "string") return fallback
+  const ok = /^https?:\/\/(localhost(:\d+)?|([a-z0-9-]+\.)?rinkd\.app)(\/|$)/i.test(appUrl)
+  return ok ? appUrl.replace(/\/+$/, "") : fallback
+}
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS })
+  if (req.method !== "POST") return json({ error: "method not allowed" }, 405)
+  try {
+    if (!STRIPE_SECRET_KEY) return json({ error: "stripe not configured" }, 500)
+
+    const { leagueId, teamName, contactName, contactEmail, appUrl } = await req.json()
+    const team = (teamName || "").trim()
+    const name = (contactName || "").trim()
+    const email = (contactEmail || "").trim()
+    if (!leagueId || !team || !name || !email) {
+      return json({ error: "missing required fields" }, 400)
+    }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      return json({ error: "invalid email" }, 400)
+    }
+
+    const svc = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+
+    const { data: league, error: lErr } = await svc
+      .from("leagues")
+      .select("id, name, registration_open, registration_fee_cents, registration_deadline, max_teams")
+      .eq("id", leagueId)
+      .single()
+    if (lErr || !league) return json({ error: "league not found" }, 404)
+
+    // Gate: registration must be open and within the deadline.
+    if (!league.registration_open) return json({ error: "closed", reason: "closed" }, 409)
+    if (league.registration_deadline && new Date(league.registration_deadline).getTime() < Date.now()) {
+      return json({ error: "closed", reason: "deadline_passed" }, 409)
+    }
+
+    // Capacity: count real teams already in the league against max_teams.
+    if (league.max_teams != null) {
+      const { count } = await svc
+        .from("league_teams")
+        .select("id", { count: "exact", head: true })
+        .eq("league_id", leagueId)
+      if ((count || 0) >= league.max_teams) {
+        return json({ error: "full", reason: "full" }, 409)
+      }
+    }
+
+    const feeCents = Number(league.registration_fee_cents) || 0
+
+    // Insert the pending registration (service role — the only write path).
+    const { data: reg, error: rErr } = await svc
+      .from("league_registrations")
+      .insert({
+        league_id: leagueId,
+        team_name: team,
+        contact_name: name,
+        contact_email: email,
+        fee_cents: feeCents,
+        status: "pending",
+      })
+      .select("id")
+      .single()
+    if (rErr || !reg) return json({ error: "could not create registration" }, 500)
+
+    // Free league (no fee): nothing to charge — the commissioner approves manually.
+    if (feeCents <= 0) {
+      return json({ free: true, registrationId: reg.id })
+    }
+
+    const base = safeBase(appUrl)
+    const stripe = new Stripe(STRIPE_SECRET_KEY, {
+      httpClient: Stripe.createFetchHttpClient(),
+      apiVersion: "2024-06-20",
+    })
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      payment_method_types: ["card"],
+      customer_email: email,
+      line_items: [{
+        quantity: 1,
+        price_data: {
+          currency: "usd",
+          unit_amount: feeCents,
+          product_data: {
+            name: `${league.name} — Team Registration`,
+            description: `${team} · ${name}`,
+          },
+        },
+      }],
+      // metadata is the durable link back to our row — the webhook reads it.
+      metadata: { registration_id: reg.id, league_id: leagueId },
+      success_url: `${base}/league/${leagueId}/register?success=1`,
+      cancel_url: `${base}/league/${leagueId}/register?canceled=1`,
+    })
+
+    await svc.from("league_registrations")
+      .update({ stripe_session_id: session.id })
+      .eq("id", reg.id)
+
+    return json({ url: session.url })
+  } catch (err) {
+    console.error("[stripe-checkout] error", { error: err?.message })
+    return json({ error: err?.message || "unexpected error" }, 500)
+  }
+})
