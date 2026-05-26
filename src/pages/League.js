@@ -827,14 +827,14 @@ function PublicLeagueLanding({ league, teams, games, navigate }) {
       <div style={{ padding: '20px 18px', maxWidth: 560, margin: '0 auto' }}>
         {/* Sign-up hero */}
         <div style={{ background: `linear-gradient(135deg,${accent}33 0%,#0f2847 100%)`, border: `1px solid ${accent}66`, borderRadius: 14, padding: '20px 18px', marginBottom: 18, textAlign: 'center' }}>
-          <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, marginBottom: 6, textTransform: 'uppercase' }}>Follow live</div>
+          <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, marginBottom: 6, textTransform: 'uppercase' }}>Follow every game</div>
           <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.75)', marginBottom: 16, lineHeight: 1.55 }}>
-            Sign up free to see live standings, full schedule, team pages, and game recaps as they happen.
+            Live scores, standings, and the schedule — plus a recap the moment each game ends. Sign up free to follow the season.
           </div>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button onClick={() => navigate(`/login?returnTo=${returnTo}`)}
               style={{ background: accent, color: '#fff', border: 'none', borderRadius: 999, padding: '12px 28px', fontFamily: 'Barlow, sans-serif', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-              Sign up to view live →
+              Sign up free →
             </button>
             <button onClick={() => navigate(`/login?returnTo=${returnTo}`)}
               style={{ background: 'transparent', color: C.ice, border: '1px solid rgba(244,247,250,0.3)', borderRadius: 999, padding: '12px 22px', fontFamily: 'Barlow, sans-serif', fontSize: 13, cursor: 'pointer' }}>
@@ -885,7 +885,7 @@ function PublicLeagueLanding({ league, teams, games, navigate }) {
         {/* Secondary CTA for scrollers */}
         <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: '18px 16px', textAlign: 'center' }}>
           <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.65)', marginBottom: 12, lineHeight: 1.55 }}>
-            Live standings · real-time scoring · team pages · game recaps. Free to join.
+            Live scores, standings, the full schedule, and a recap of every game — as it happens. Free to follow.
           </div>
           <button onClick={() => navigate(`/login?returnTo=${returnTo}`)}
             style={{ background: accent, color: '#fff', border: 'none', borderRadius: 999, padding: '11px 24px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
