@@ -17,6 +17,10 @@ import { listDirectors, addDirectorByInput, removeDirector, isExtraDirector as i
 import { teamInitials } from '../lib/teamInitials';
 import { uploadMedia } from '../lib/posts';
 import { classifyImage } from '../lib/imageModeration';
+import DateTimePicker from '../components/DateTimePicker';
+import { supabase } from '../lib/supabase';
+import { getTournamentRegistrations, updateTournamentRegistrationStatus, approveTournamentRegistration } from '../lib/registrations';
+import { tournamentPayoutsReady, startConnectOnboarding } from '../lib/stripeConnect';
 
 const C = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
@@ -24,7 +28,15 @@ const C = {
   green: '#22C55E', amber: '#F59E0B',
 };
 
-const TABS = ['Teams', 'Schedule', 'Bracket', 'Scorers', 'Settings'];
+const TABS = ['Teams', 'Schedule', 'Bracket', 'Registrations', 'Scorers', 'Settings'];
+
+const REG_STATUS = {
+  pending:    { label: 'Pending',    color: '#F59E0B', bg: 'rgba(245,158,11,0.15)' },
+  approved:   { label: 'Approved',   color: '#22C55E', bg: 'rgba(34,197,94,0.15)' },
+  waitlisted: { label: 'Waitlisted', color: '#8BA3BE', bg: 'rgba(139,163,190,0.15)' },
+  rejected:   { label: 'Rejected',   color: '#D72638', bg: 'rgba(215,38,56,0.15)' },
+};
+const REG_GROUPS = [['pending', 'Pending'], ['approved', 'Approved'], ['waitlisted', 'Waitlisted'], ['rejected', 'Rejected']];
 
 const inputStyle = {
   width: '100%', boxSizing: 'border-box',
@@ -216,6 +228,7 @@ export default function TournamentManagePage({ currentUser, profile }) {
           {tab === 'Teams' && <TeamsTab tournamentId={id} teams={teams} standingsByTeam={standingsByTeam} reload={load} flash={showFlash} />}
           {tab === 'Schedule' && <ScheduleTab tournamentId={id} tournament={tournament} teams={teams} games={games} rinks={rinks} reload={load} flash={showFlash} />}
           {tab === 'Bracket' && <BracketTab tournamentId={id} tournament={tournament} teams={teams} games={games} rinks={rinks} reload={load} flash={showFlash} />}
+          {tab === 'Registrations' && <RegistrationsTab tournamentId={id} tournament={tournament} reload={load} flash={showFlash} />}
           {tab === 'Scorers' && <ScorersTab tournamentId={id} tournamentName={tournament.name} originalDirectorId={tournament.director_id} profile={profile} flash={showFlash} />}
           {tab === 'Settings' && <SettingsTab tournament={tournament} currentUser={currentUser} reload={load} flash={showFlash} />}
         </div>
@@ -829,6 +842,217 @@ function ChampionshipBracketGenerator({ tournamentId, teams, bracketGames, reloa
 }
 
 // ====================== SETTINGS TAB ======================
+// --- Registrations tab: payouts (optional Connect) + config + submissions list.
+//     Mirrors the league RegistrationsTab; same Stripe checkout/webhook back it. ---
+function RegistrationsTab({ tournamentId, tournament, reload, flash }) {
+  const [regs, setRegs] = useState([]);
+  const [open, setOpen] = useState(!!tournament.registration_open);
+  const [feeDollars, setFeeDollars] = useState(tournament.registration_fee_cents ? String(tournament.registration_fee_cents / 100) : '');
+  const [deadline, setDeadline] = useState(tournament.registration_deadline || '');
+  const [maxTeams, setMaxTeams] = useState(tournament.max_teams != null ? String(tournament.max_teams) : '');
+  const [savingCfg, setSavingCfg] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+  const [payoutsReady, setPayoutsReady] = useState(null);
+  const [isFounder, setIsFounder] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const connectReturn = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('connect') === 'done';
+  const regLink = `${window.location.origin}/tournament/${tournamentId}/register`;
+
+  const loadRegs = useCallback(async () => {
+    try { setRegs(await getTournamentRegistrations(tournamentId)); } catch { /* RLS → empty */ }
+  }, [tournamentId]);
+
+  useEffect(() => {
+    loadRegs();
+    let cancelled = false;
+    (async () => {
+      const [ready, { data: { user } }] = await Promise.all([
+        tournamentPayoutsReady(tournamentId),
+        supabase.auth.getUser(),
+      ]);
+      if (cancelled) return;
+      setPayoutsReady(ready);
+      setIsFounder(!!user && user.id === tournament.director_id);
+    })();
+    return () => { cancelled = true; };
+  }, [loadRegs, tournamentId, tournament.director_id]);
+
+  const saveConfig = async () => {
+    setSavingCfg(true);
+    const { error } = await updateTournament(tournamentId, {
+      registrationOpen: open,
+      registrationFeeCents: Math.max(0, Math.round((parseFloat(feeDollars) || 0) * 100)),
+      registrationDeadline: deadline || null,
+      maxTeams: maxTeams.trim() === '' ? null : Math.max(0, parseInt(maxTeams, 10) || 0),
+    });
+    setSavingCfg(false);
+    if (error) { flash('err', error.message || 'Could not save settings.'); return; }
+    flash('ok', 'Registration settings saved.');
+    reload();
+  };
+
+  const copyLink = async () => {
+    try { await navigator.clipboard.writeText(regLink); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch { /* link shown below */ }
+  };
+
+  const handleConnect = async () => {
+    setConnecting(true);
+    try { await startConnectOnboarding(`/tournament/${tournamentId}/manage`); } // redirects away on success
+    catch (e) { flash('err', e.message || 'Could not start payout setup.'); setConnecting(false); }
+  };
+
+  const act = async (reg, action) => {
+    setBusyId(reg.id);
+    try {
+      if (action === 'approve') await approveTournamentRegistration(reg.id);
+      else await updateTournamentRegistrationStatus(reg.id, action);
+      await loadRegs();
+    } catch (e) { flash('err', e.message || 'Action failed.'); }
+    finally { setBusyId(null); }
+  };
+
+  const exportCsv = () => {
+    const head = ['Team', 'Contact', 'Email', 'Status', 'Fee ($)', 'Paid At', 'Registered'];
+    const rows = regs.map(r => [
+      r.team_name, r.contact_name, r.contact_email, r.status,
+      r.fee_cents != null ? (r.fee_cents / 100).toFixed(2) : '',
+      r.paid_at ? new Date(r.paid_at).toISOString() : '',
+      r.created_at ? new Date(r.created_at).toISOString() : '',
+    ]);
+    const csv = [head, ...rows].map(row => row.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(tournament.name || 'tournament').replace(/[^a-z0-9]+/gi, '_').toLowerCase()}_registrations.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const actionsFor = (status) => {
+    if (status === 'pending') return [['approve', 'Approve'], ['waitlisted', 'Waitlist'], ['rejected', 'Reject']];
+    if (status === 'waitlisted') return [['approve', 'Approve'], ['rejected', 'Reject']];
+    if (status === 'rejected') return [['approve', 'Approve']];
+    return [];
+  };
+  const actBtn = (kind) => ({
+    fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 999, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', border: '0.5px solid',
+    ...(kind === 'approve' ? { background: 'rgba(34,197,94,0.15)', borderColor: 'rgba(34,197,94,0.5)', color: '#22C55E' }
+      : kind === 'rejected' ? { background: 'transparent', borderColor: 'rgba(215,38,56,0.45)', color: '#E26B6B' }
+      : { background: 'transparent', borderColor: C.border, color: C.steel }),
+  });
+
+  const card = { background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14 };
+  const sec = { fontSize: 11, fontWeight: 700, color: C.steel, letterSpacing: '0.1em', textTransform: 'uppercase', margin: '4px 0 8px' };
+
+  return (
+    <div>
+      {/* Payouts (optional Stripe Connect) */}
+      <div style={sec}>Payouts</div>
+      <div style={card}>
+        {payoutsReady === null ? (
+          <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.5)' }}>Checking payout status…</div>
+        ) : payoutsReady ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 18 }}>✅</span>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.ice }}>Payouts connected</div>
+              <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.5)', marginTop: 2 }}>Entry fees deposit straight to your account — you keep 99% (Rinkd keeps 1%).</div>
+            </div>
+          </div>
+        ) : isFounder ? (
+          <>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.ice }}>Get paid directly <span style={{ color: 'rgba(244,247,250,0.4)', fontWeight: 600 }}>(optional)</span></div>
+            <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.55)', marginTop: 4, marginBottom: 12, lineHeight: 1.5 }}>
+              Paid registration works right now — fees collect through Rinkd and we settle up with you. Want entry fees deposited straight to your bank automatically? Connect a Stripe account (you keep 99%). You can do this anytime.
+            </div>
+            <button onClick={handleConnect} disabled={connecting} style={{ ...btnGhost, opacity: connecting ? 0.6 : 1 }}>
+              {connecting ? 'Opening Stripe…' : '💳 Connect payouts'}
+            </button>
+            {connectReturn && <div style={{ fontSize: 12, color: C.amber, marginTop: 10 }}>Just finished on Stripe? Verification can take a moment — reload to see it as connected.</div>}
+          </>
+        ) : (
+          <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.5)' }}>Entry fees for this tournament are handled through Rinkd.</div>
+        )}
+      </div>
+
+      {/* Registration settings */}
+      <div style={sec}>Registration Settings</div>
+      <div style={card}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.ice }}>Registration {open ? 'Open' : 'Closed'}</div>
+            <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.5)', marginTop: 2 }}>Teams can submit via your link only while open.</div>
+          </div>
+          <button onClick={() => setOpen(o => !o)} aria-label="Toggle registration open"
+            style={{ width: 48, height: 28, borderRadius: 999, border: 'none', cursor: 'pointer', position: 'relative', background: open ? C.green : 'rgba(139,163,190,0.35)', flexShrink: 0 }}>
+            <span style={{ position: 'absolute', top: 3, left: open ? 23 : 3, width: 22, height: 22, borderRadius: '50%', background: '#fff', transition: 'left 0.15s' }} />
+          </button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+          <div>
+            <label style={labelStyle}>Entry Fee (USD)</label>
+            <input style={inputStyle} type="number" min={0} step="0.01" value={feeDollars} onChange={e => setFeeDollars(e.target.value)} placeholder="0.00 (free)" />
+          </div>
+          <div>
+            <label style={labelStyle}>Max Teams (optional)</label>
+            <input style={inputStyle} type="number" min={0} value={maxTeams} onChange={e => setMaxTeams(e.target.value)} placeholder="No cap" />
+          </div>
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStyle}>Registration Deadline (optional)</label>
+          <DateTimePicker value={deadline} onChange={setDeadline} placeholder="No deadline" />
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button onClick={saveConfig} disabled={savingCfg} style={{ ...btnPrimary, flex: 1, minWidth: 120, opacity: savingCfg ? 0.6 : 1 }}>{savingCfg ? 'Saving…' : 'Save Settings'}</button>
+          <button onClick={copyLink} style={{ ...btnGhost, color: copied ? C.green : C.ice }}>{copied ? '✓ Copied' : '🔗 Copy Link'}</button>
+        </div>
+        <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.35)', marginTop: 10, wordBreak: 'break-all' }}>{regLink}</div>
+      </div>
+
+      {/* Submissions */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={sec}>Registrations ({regs.length})</div>
+        {regs.length > 0 && <button onClick={exportCsv} style={{ ...btnGhost, fontSize: 12 }}>⬇ Export CSV</button>}
+      </div>
+      {regs.length === 0 ? (
+        <div style={{ ...card, color: 'rgba(244,247,250,0.4)', fontSize: 13, textAlign: 'center' }}>No registrations yet. Share your link to start collecting teams.</div>
+      ) : (
+        REG_GROUPS.map(([status, gLabel]) => {
+          const group = regs.filter(r => r.status === status);
+          if (!group.length) return null;
+          return (
+            <div key={status} style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: REG_STATUS[status].color, marginBottom: 6 }}>{gLabel} · {group.length}</div>
+              {group.map(r => (
+                <div key={r.id} style={{ ...card, marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: C.ice }}>{r.team_name}</div>
+                      <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.5)', marginTop: 2 }}>{r.contact_name} · {r.contact_email}</div>
+                      <div style={{ fontSize: 12, color: r.paid_at ? C.green : 'rgba(244,247,250,0.45)', marginTop: 4 }}>
+                        {r.paid_at ? 'Paid' : 'Unpaid'} · ${((r.fee_cents || 0) / 100).toFixed(2)}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 20, background: REG_STATUS[status].bg, color: REG_STATUS[status].color, textTransform: 'uppercase', flexShrink: 0 }}>{REG_STATUS[status].label}</span>
+                  </div>
+                  {actionsFor(status).length > 0 && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                      {actionsFor(status).map(([action, lbl]) => (
+                        <button key={action} disabled={busyId === r.id} onClick={() => act(r, action)} style={actBtn(action)}>{lbl}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
 function SettingsTab({ tournament, currentUser, reload, flash }) {
   const [name, setName] = useState(tournament.name || '');
   const [division, setDivision] = useState(tournament.division || '');

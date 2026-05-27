@@ -437,6 +437,10 @@ export async function updateTournament(tournamentId, fields) {
   if (fields.settings !== undefined) payload.settings = fields.settings;
   if (fields.logoUrl !== undefined) payload.logo_url = fields.logoUrl || null;
   if (fields.accentColor !== undefined) payload.accent_color = fields.accentColor || null;
+  if (fields.registrationOpen !== undefined) payload.registration_open = !!fields.registrationOpen;
+  if (fields.registrationFeeCents !== undefined) payload.registration_fee_cents = fields.registrationFeeCents;
+  if (fields.registrationDeadline !== undefined) payload.registration_deadline = fields.registrationDeadline || null;
+  if (fields.maxTeams !== undefined) payload.max_teams = fields.maxTeams;
   const { data, error } = await supabase
     .from('tournaments')
     .update(payload)

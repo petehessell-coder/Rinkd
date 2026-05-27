@@ -35,6 +35,13 @@ export async function leaguePayoutsReady(leagueId) {
   return data === true;
 }
 
+/** Can THIS tournament accept card payments directly? (founder/director connected) */
+export async function tournamentPayoutsReady(tournamentId) {
+  const { data, error } = await supabase.rpc('tournament_payouts_ready', { p_tournament_id: tournamentId });
+  if (error) return false;
+  return data === true;
+}
+
 /**
  * Start (or resume) Express onboarding for the current user and redirect the
  * browser to Stripe's hosted flow. `returnPath` is a same-origin path Stripe

@@ -38,6 +38,7 @@ import League from './pages/League';
 import LeagueManage from './pages/LeagueManage';
 import LeagueCreate from './pages/LeagueCreate';
 import LeagueRegister from './pages/LeagueRegister';
+import TournamentRegister from './pages/TournamentRegister';
 import AcceptTeamInvite from './pages/AcceptTeamInvite';
 import Team from './pages/Team';
 import TeamManage from './pages/TeamManage';
@@ -192,6 +193,7 @@ function AppRoutes() {
       {/* Public, unauthenticated team registration — opened by team contacts who
           may have no Rinkd account. Must stay outside ProtectedRoute. */}
       <Route path="/league/:id/register" element={<LeagueRegister />} />
+      <Route path="/tournament/:id/register" element={<TournamentRegister />} />
       <Route path="/league/:id" element={<League currentUser={user} profile={profile} />} />
       <Route path="/team/create" element={<ProtectedRoute><TeamManage profile={profile} /></ProtectedRoute>} />
       <Route path="/team/:id/manage" element={<ProtectedRoute><TeamManage profile={profile} /></ProtectedRoute>} />
