@@ -37,6 +37,12 @@ function safeBase(appUrl: unknown): string {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS })
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405)
+
+  const svc = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+  // If we INSERT a pending row but then fail before handing the user to Stripe
+  // (e.g. a bad key or Stripe outage), roll it back — a failed checkout must never
+  // leave an orphan "pending / unpaid" registration cluttering the commissioner's list.
+  let createdRegId: string | null = null
   try {
     if (!STRIPE_SECRET_KEY) return json({ error: "stripe not configured" }, 500)
 
@@ -50,8 +56,6 @@ serve(async (req) => {
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
       return json({ error: "invalid email" }, 400)
     }
-
-    const svc = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
     const { data: league, error: lErr } = await svc
       .from("leagues")
@@ -93,6 +97,7 @@ serve(async (req) => {
       .select("id")
       .single()
     if (rErr || !reg) return json({ error: "could not create registration" }, 500)
+    createdRegId = reg.id
 
     // Free league (no fee): nothing to charge — the commissioner approves manually.
     if (feeCents <= 0) {
@@ -132,6 +137,11 @@ serve(async (req) => {
 
     return json({ url: session.url })
   } catch (err) {
+    // Roll back the pending row if one was created but checkout never started, so a
+    // failed attempt (bad key, Stripe down) doesn't orphan a "pending / unpaid" row.
+    if (createdRegId) {
+      try { await svc.from("league_registrations").delete().eq("id", createdRegId) } catch (_e) { /* best-effort cleanup */ }
+    }
     console.error("[stripe-checkout] error", { error: err?.message })
     return json({ error: err?.message || "unexpected error" }, 500)
   }
