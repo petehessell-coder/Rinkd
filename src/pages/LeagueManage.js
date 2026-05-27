@@ -1200,12 +1200,6 @@ function RegistrationsTab({ leagueId, league, registrations, onChanged }) {
 
   const saveConfig = async () => {
     const feeCentsVal = Math.max(0, Math.round((parseFloat(feeDollars) || 0) * 100));
-    // Can't open a PAID league for registration until payouts are connected —
-    // otherwise checkout would 409 and no team could ever pay. (Free leagues OK.)
-    if (open && feeCentsVal > 0 && !payoutsReady) {
-      setCfgFlash({ kind: 'err', text: 'Connect payouts (above) before opening paid registration.' });
-      return;
-    }
     setSavingCfg(true); setCfgFlash(null);
     try {
       await updateLeague(leagueId, {
@@ -1291,23 +1285,23 @@ function RegistrationsTab({ leagueId, league, registrations, onChanged }) {
           </div>
         ) : isFounder ? (
           <>
-            <div style={{ fontSize: 14, fontWeight: 700, color: C.ice }}>Connect payouts to accept paid registrations</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.ice }}>Get paid directly <span style={{ color: 'rgba(244,247,250,0.4)', fontWeight: 600 }}>(optional)</span></div>
             <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.55)', marginTop: 4, marginBottom: 12, lineHeight: 1.5 }}>
-              Teams can only pay an entry fee once you've linked a Stripe account. You keep 99% of each fee — Rinkd's 1% and Stripe's processing are handled automatically. Takes about 2 minutes.
+              Paid registration works right now — fees collect through Rinkd and we settle up with you. Want entry fees deposited straight to your bank automatically instead? Connect a Stripe account (you keep 99%). You can do this anytime.
             </div>
             <button onClick={handleConnect} disabled={connecting}
-              style={{ padding: '11px 18px', background: connecting ? 'rgba(34,197,94,0.5)' : '#22C55E', border: 'none', borderRadius: 999, color: '#fff', fontSize: 14, fontWeight: 700, cursor: connecting ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif' }}>
+              style={{ padding: '11px 18px', background: 'transparent', border: `0.5px solid ${C.border}`, borderRadius: 999, color: C.ice, fontSize: 14, fontWeight: 700, cursor: connecting ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif', opacity: connecting ? 0.6 : 1 }}>
               {connecting ? 'Opening Stripe…' : '💳 Connect payouts'}
             </button>
             {connectReturn && (
               <div style={{ fontSize: 12, color: '#F59E0B', marginTop: 10 }}>
-                Just finished on Stripe? Verification can take a moment — reload this page if it doesn't show as connected yet.
+                Just finished on Stripe? Verification can take a moment — reload this page to see it as connected.
               </div>
             )}
           </>
         ) : (
-          <div style={{ fontSize: 13, color: '#F59E0B' }}>
-            ⚠️ The league founder needs to connect payouts before paid registration can open.
+          <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.5)' }}>
+            Entry fees for this league are handled through Rinkd.
           </div>
         )}
       </Card>

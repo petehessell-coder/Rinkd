@@ -83,10 +83,10 @@ serve(async (req) => {
 
     const feeCents = Number(league.registration_fee_cents) || 0
 
-    // Paid league: the organizer (founding commissioner) must have a Connect
-    // account that can accept charges BEFORE we take any money or create a row.
-    // Free leagues skip this — there's nothing to route. Checked pre-insert so a
-    // not-yet-connected league never leaves an orphan pending row.
+    // Connect is OPTIONAL. If the organizer has connected payouts, we route 99% to
+    // their account with Rinkd's 1% (a destination charge). If NOT, the fee simply
+    // collects into the Rinkd platform account and is settled manually — so paid
+    // registration works without any Connect setup. (Free leagues skip this.)
     let connectedAccountId: string | null = null
     if (feeCents > 0) {
       const { data: acct } = await svc
@@ -94,10 +94,7 @@ serve(async (req) => {
         .select("stripe_account_id, charges_enabled")
         .eq("owner_profile_id", league.commissioner_id)
         .maybeSingle()
-      if (!acct?.stripe_account_id || !acct.charges_enabled) {
-        return json({ error: "payouts_not_connected", reason: "payouts_not_connected" }, 409)
-      }
-      connectedAccountId = acct.stripe_account_id
+      if (acct?.stripe_account_id && acct.charges_enabled) connectedAccountId = acct.stripe_account_id
     }
 
     // Insert the pending registration (service role — the only write path).
@@ -127,54 +124,50 @@ serve(async (req) => {
       apiVersion: "2024-06-20",
     })
 
-    // Fee model (per the locked pricing guide): organizer keeps 99% of the entry
-    // fee, Rinkd takes 1%, and Stripe's processing (2.9% + $0.30) is passed through
-    // to the registrant via a gross-up — so neither organizer nor Rinkd eats it.
-    //   total T   = round((F + 30) / 0.971)      ← registrant pays this
-    //   processing = T - F                        ← shown as a separate line item
-    //   app fee    = T - round(0.99 * F)          ← Rinkd's slice (nets ~1% of F after Stripe)
-    //   organizer  = T - app_fee = round(0.99*F)  ← via transfer_data.destination
-    // e.g. F=$100 → T=$103.30, processing=$3.30, app fee=$4.30, organizer=$99.00, Rinkd≈$1.00.
-    const total = Math.round((feeCents + 30) / 0.971)
-    const processingCents = total - feeCents
-    const applicationFeeCents = total - Math.round(feeCents * 0.99)
+    const lineItems: Record<string, any>[] = [{
+      quantity: 1,
+      price_data: {
+        currency: "usd",
+        unit_amount: feeCents,
+        product_data: {
+          name: `${league.name} — Team Registration`,
+          description: `${team} · ${name}`,
+        },
+      },
+    }]
 
-    const session = await stripe.checkout.sessions.create({
+    const sessionParams: Record<string, any> = {
       mode: "payment",
       payment_method_types: ["card"],
       customer_email: email,
-      line_items: [
-        {
-          quantity: 1,
-          price_data: {
-            currency: "usd",
-            unit_amount: feeCents,
-            product_data: {
-              name: `${league.name} — Team Registration`,
-              description: `${team} · ${name}`,
-            },
-          },
-        },
-        {
-          quantity: 1,
-          price_data: {
-            currency: "usd",
-            unit_amount: processingCents,
-            product_data: { name: "Processing fee" },
-          },
-        },
-      ],
-      // Destination charge: 99% routes to the organizer's connected account; Rinkd
-      // keeps the 1% application fee. Platform is liable for refunds/disputes (v1).
-      payment_intent_data: {
-        application_fee_amount: applicationFeeCents,
-        transfer_data: { destination: connectedAccountId! },
-      },
+      line_items: lineItems,
       // metadata is the durable link back to our row — the webhook reads it.
       metadata: { registration_id: reg.id, league_id: leagueId },
       success_url: `${base}/league/${leagueId}/register?success=1`,
       cancel_url: `${base}/league/${leagueId}/register?canceled=1`,
-    })
+    }
+
+    if (connectedAccountId) {
+      // Organizer connected → destination charge. Per the locked pricing guide:
+      // organizer keeps 99% of the entry fee, Rinkd takes 1%, and Stripe's processing
+      // (2.9% + $0.30) is passed through to the registrant via a gross-up.
+      //   total T    = round((F + 30) / 0.971)      ← registrant pays this
+      //   processing = T - F (separate line item); app fee = T - round(0.99*F)
+      // e.g. F=$100 → T=$103.30, processing=$3.30, app fee=$4.30, org=$99.00, Rinkd≈$1.00.
+      const total = Math.round((feeCents + 30) / 0.971)
+      lineItems.push({
+        quantity: 1,
+        price_data: { currency: "usd", unit_amount: total - feeCents, product_data: { name: "Processing fee" } },
+      })
+      sessionParams.payment_intent_data = {
+        application_fee_amount: total - Math.round(feeCents * 0.99),
+        transfer_data: { destination: connectedAccountId },
+      }
+    }
+    // Not connected → plain charge: the entry fee collects into the Rinkd platform
+    // account (settled with the organizer manually). No split, no gross-up.
+
+    const session = await stripe.checkout.sessions.create(sessionParams)
 
     await svc.from("league_registrations")
       .update({ stripe_session_id: session.id })
