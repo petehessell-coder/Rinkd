@@ -1173,6 +1173,27 @@ Spec'd in **`rinkd_v4/LEAGUEAPPS_PARITY_GAPS.md`** (May 17). 8 gaps for the leag
 | LA-9 | **Free agent pool / player marketplace** — players without a team register as free agents for a league; commissioner places them on teams, or team managers claim them | **P2** | 2-3 days | Gemini competitive analysis (May 26) — LeagueApps parity; not in the original `LEAGUEAPPS_PARITY_GAPS.md`. Beer/pickup leagues constantly need to fill roster spots. New `league_free_agents` table (profile or `invite_name` + position + availability); commissioner placement UI + manager claim flow reuses the existing roster-invite / join-request plumbing ([[team-roster-management]]). |
 | LA-10 | **Background checks for coaches/volunteers** — commissioner triggers a check at coach/volunteer onboarding; result stored on profile; account not activated until cleared | **P1 for youth launch**, **N/A** for adult rec | 2-3 days + per-check API cost | Gemini competitive analysis (May 26). Crossbar (built-in), SportsEngine (NCSI), PlayMetrics (built-in clearance) all have this — a **deal-breaker** for any sanctioned-youth / school-affiliated partner. **Partner integration (Checkr or NCSI API), NOT in-house.** New `clearance_status` on the coach/volunteer profile + a compliance gate on activation. Same youth/sanctioned-only scope as LA-3; pairs with the coach/volunteer onboarding + household/registration work. **Skip unless Rinkd pursues youth/sanctioned leagues.** |
 
+### 💳 Payments & Registration — state of play (May 26, 2026)
+
+Consolidated map after the May 26 payments build, so the next decision is made from one place. Pete **paused** further payments work here pending a direction call.
+
+**✅ LIVE (built + deployed + verified):**
+- **Team-level registration + one-time payment** — leagues (`LA-1`) + tournaments (`TOURN-REG-1`). Public `/league/:id/register` + `/tournament/:id/register` pages; commissioner/director **Registrations tab** (open toggle / fee / deadline / max-teams / copy-link, approve·waitlist·reject, CSV export). Free *and* paid. Auto-creates the team row on payment (webhook, idempotent). `stripe-checkout` + `stripe-webhook` are **polymorphic by `kind`**.
+- **Stripe Connect (Express) — OPTIONAL** (`BIZ-INFRA-1`). When an organizer connects payouts → destination charge, **99% to them / 1% to Rinkd**, Stripe processing grossed up to the registrant. When NOT connected → the fee collects into Rinkd's platform account (settle manually). Enabling Connect needs the org's Stripe ID/KYC + a one-time platform enable — deferred, not blocking.
+- **The 1% platform fee** — applies on the Connect/destination-charge path only (no Connect = full amount to Rinkd's account).
+
+**📝 SPEC'D, model signed off (`REGISTRATION_PARITY.md`), NOT built — the big "registration + household + payments" rock (design-first; get Pete sign-off on model+flow before code):**
+- **Per-player / participant charging** (vs today's team-level). Needs first-class participants → households (`REG-2`).
+- **Payer/participant portal** — "what you owe / pay / receipts / autopay" (`FAMILY-1`). ⚠️ today's **"Dues Tracker" is an empty `ComingSoon` placeholder** — this is its intended home.
+- **Installments / split payments / payment plans + AR aging** — Crossbar parity (`CROSSBAR-1`).
+- **Households / guardians / login-less minors** (`REG-2`).
+
+**🔜 NOT built — smaller, independent items:**
+- **Subscriptions / recurring** — season dues (recurring) + Crease premium $4.99/mo (`MONEY-1`, consumer track). Different Stripe mode; can coexist but each is its own build. Season-dues recurring should ride the same registrations/payment-plan schema.
+- **Native store checkout** — store is **affiliate link-outs + a "Rinkd Merch coming soon" placeholder** today. Native checkout is feasible (reuses the Checkout pattern, no Connect — Rinkd sells its own gear) but needs **fulfillment (Printful) + shipping + tax**. Small, self-contained build.
+
+**Sequencing note:** items 1–4 above are facets of ONE workstream (the unified registration/household/payment-plan system) — multi-week, design-first. The store + Crease subscription are independent smaller builds.
+
 ### ⭐ Registration & unified-platform design mandate (Pete, May 23 — READ BEFORE building any registration/payment/household work)
 
 **→ DESIGN DOC (May 25): [`rinkd_v4/REGISTRATION_PARITY.md`](../rinkd_v4/REGISTRATION_PARITY.md) — the model is signed off (4 forks). This section + the IA seed below are the rationale; the doc is the spec. §6 of the doc lists the remaining open questions for a final pre-build pass.**
