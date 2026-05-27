@@ -4,6 +4,7 @@ import Layout from '../components/Layout';
 import DateTimePicker from '../components/DateTimePicker';
 import { getLeague, getLeagueTeams, getLeagueGames, getLeagueStandings, updateLeague, addLeagueTeam, removeLeagueTeam, addLeagueGame, linkLeagueTeam, getUserLeagueRole } from '../lib/leagues';
 import { getLeagueRegistrations, updateRegistrationStatus, approveRegistration } from '../lib/registrations';
+import { leaguePayoutsReady, startConnectOnboarding } from '../lib/stripeConnect';
 import { generatePlayoffRoundOne, generatePlayoffNextRound, SUPPORTED_BRACKET_SIZES } from '../lib/leaguePlayoffGenerator';
 import { listRinks } from '../lib/rinks';
 import { supabase } from '../lib/supabase';
@@ -1170,15 +1171,46 @@ function RegistrationsTab({ leagueId, league, registrations, onChanged }) {
   const [cfgFlash, setCfgFlash] = useState(null);
   const [copied, setCopied] = useState(false);
   const [busyId, setBusyId] = useState(null);
+  const [payoutsReady, setPayoutsReady] = useState(null); // null = checking
+  const [isFounder, setIsFounder] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const connectReturn = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('connect') === 'done';
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [ready, { data: { user } }] = await Promise.all([
+        leaguePayoutsReady(leagueId),
+        supabase.auth.getUser(),
+      ]);
+      if (cancelled) return;
+      setPayoutsReady(ready);
+      setIsFounder(!!user && user.id === league.commissioner_id);
+    })();
+    return () => { cancelled = true; };
+  }, [leagueId, league.commissioner_id]);
+
+  const handleConnect = async () => {
+    setConnecting(true);
+    try { await startConnectOnboarding(`/league/${leagueId}/manage`); } // redirects away on success
+    catch (e) { setCfgFlash({ kind: 'err', text: e.message || 'Could not start payout setup.' }); setConnecting(false); }
+  };
 
   const regLink = `${window.location.origin}/league/${leagueId}/register`;
 
   const saveConfig = async () => {
+    const feeCentsVal = Math.max(0, Math.round((parseFloat(feeDollars) || 0) * 100));
+    // Can't open a PAID league for registration until payouts are connected —
+    // otherwise checkout would 409 and no team could ever pay. (Free leagues OK.)
+    if (open && feeCentsVal > 0 && !payoutsReady) {
+      setCfgFlash({ kind: 'err', text: 'Connect payouts (above) before opening paid registration.' });
+      return;
+    }
     setSavingCfg(true); setCfgFlash(null);
     try {
       await updateLeague(leagueId, {
         registration_open: open,
-        registration_fee_cents: Math.max(0, Math.round((parseFloat(feeDollars) || 0) * 100)),
+        registration_fee_cents: feeCentsVal,
         registration_deadline: deadline || null,
         max_teams: maxTeams.trim() === '' ? null : Math.max(0, parseInt(maxTeams, 10) || 0),
       });
@@ -1242,6 +1274,44 @@ function RegistrationsTab({ leagueId, league, registrations, onChanged }) {
 
   return (
     <>
+      {/* --- Payouts (Stripe Connect) --- */}
+      <SecLabel>Payouts</SecLabel>
+      <Card>
+        {payoutsReady === null ? (
+          <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.5)' }}>Checking payout status…</div>
+        ) : payoutsReady ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 18 }}>✅</span>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.ice }}>Payouts connected</div>
+              <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.5)', marginTop: 2 }}>
+                You receive 99% of every entry fee (Rinkd keeps 1%); Stripe handles the deposit + processing.
+              </div>
+            </div>
+          </div>
+        ) : isFounder ? (
+          <>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.ice }}>Connect payouts to accept paid registrations</div>
+            <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.55)', marginTop: 4, marginBottom: 12, lineHeight: 1.5 }}>
+              Teams can only pay an entry fee once you've linked a Stripe account. You keep 99% of each fee — Rinkd's 1% and Stripe's processing are handled automatically. Takes about 2 minutes.
+            </div>
+            <button onClick={handleConnect} disabled={connecting}
+              style={{ padding: '11px 18px', background: connecting ? 'rgba(34,197,94,0.5)' : '#22C55E', border: 'none', borderRadius: 999, color: '#fff', fontSize: 14, fontWeight: 700, cursor: connecting ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif' }}>
+              {connecting ? 'Opening Stripe…' : '💳 Connect payouts'}
+            </button>
+            {connectReturn && (
+              <div style={{ fontSize: 12, color: '#F59E0B', marginTop: 10 }}>
+                Just finished on Stripe? Verification can take a moment — reload this page if it doesn't show as connected yet.
+              </div>
+            )}
+          </>
+        ) : (
+          <div style={{ fontSize: 13, color: '#F59E0B' }}>
+            ⚠️ The league founder needs to connect payouts before paid registration can open.
+          </div>
+        )}
+      </Card>
+
       {/* --- Registration settings --- */}
       <SecLabel>Registration Settings</SecLabel>
       <Card>

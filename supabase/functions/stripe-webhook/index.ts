@@ -105,6 +105,20 @@ serve(async (req) => {
         .eq("id", reg.id)
 
       console.log("[stripe-webhook] registration approved + team created", { reg_id: reg.id, league_team_id: lt.id })
+    } else if (event.type === "account.updated") {
+      // Connect (Express) onboarding progress — flip the organizer's readiness
+      // flags so league_payouts_ready() + the checkout gate see them as live.
+      const account = event.data.object as Record<string, any>
+      const svc = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+      await svc.from("stripe_connect_accounts")
+        .update({
+          charges_enabled: !!account.charges_enabled,
+          payouts_enabled: !!account.payouts_enabled,
+          details_submitted: !!account.details_submitted,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("stripe_account_id", account.id)
+      console.log("[stripe-webhook] connect account.updated", { account_id: account.id, charges_enabled: !!account.charges_enabled })
     }
 
     // Ack all other event types.
