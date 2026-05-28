@@ -7,10 +7,16 @@ function pickInitials(name) {
   return (name || '').split(/\s+/).filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?';
 }
 
-export async function signUp({ email, password, name, handle, position, level, dob, captchaToken }) {
-  // COPPA check — also guards against an invalid `dob` that would produce NaN
-  // and silently bypass the under-13 block.
-  const birthDate = new Date(dob);
+export async function signUp({ email, password, dateOfBirth, marketingOptIn = false, captchaToken }) {
+  // ONBOARD-1 (May 28, 2026): single-step signup. The auth gate collects only
+  // email + password + DOB (+ Turnstile + marketing opt-in checkbox). Name,
+  // handle, persona, position, etc. are filled in progressively via the
+  // OnboardingModal + dismissible Feed banner — the lowest-friction path
+  // that still satisfies the COPPA hard-block + Supabase CAPTCHA Protection.
+
+  // COPPA check — also guards against an invalid `dateOfBirth` that would
+  // produce NaN and silently bypass the under-13 block.
+  const birthDate = new Date(dateOfBirth);
   const today = new Date();
   let age = today.getFullYear() - birthDate.getFullYear();
   const m = today.getMonth() - birthDate.getMonth();
@@ -19,24 +25,13 @@ export async function signUp({ email, password, name, handle, position, level, d
     return { error: { message: 'You must be 13 or older to create a Rinkd account.' } };
   }
 
-  // Pre-check handle availability BEFORE creating the auth user. A duplicate
-  // handle is the most common cause of the profile insert failing — catching
-  // it here avoids leaving an orphaned auth.users row with no profile.
-  const cleanHandle = handle.replace('@', '');
-  const { data: handleTaken } = await supabase
-    .from('profiles').select('id').eq('handle', cleanHandle).maybeSingle();
-  if (handleTaken) {
-    return { error: { message: 'That handle is already taken — please pick another.' } };
-  }
-
   const color = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
-  const initials = pickInitials(name);
 
-  // Pass profile fields to Supabase as user_metadata so we can rebuild the
-  // profile row whenever the user first arrives with a real session —
-  // whether that's immediately (auto-confirm on) or later via the email
-  // confirmation link (auto-confirm off, data.session is null on signUp
-  // and the profile INSERT would otherwise run anonymously and fail).
+  // Pass enrichment fields to Supabase as user_metadata so we can rebuild the
+  // profile row whenever the user first arrives with a real session — whether
+  // that's immediately (auto-confirm on) or later via the email confirmation
+  // link (auto-confirm off, data.session is null on signUp and the profile
+  // INSERT would otherwise run anonymously and fail).
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -47,12 +42,10 @@ export async function signUp({ email, password, name, handle, position, level, d
       // for the build — Supabase accepts undefined as "no challenge."
       captchaToken: captchaToken || undefined,
       data: {
-        name,
-        handle: cleanHandle,
-        position: position || 'Fan',
-        level: level || 'Beer League',
+        // ENRICH-1: only the minimum at the gate.
+        date_of_birth: dateOfBirth, // YYYY-MM-DD from <input type="date">
+        marketing_opt_in: !!marketingOptIn,
         avatar_color: color,
-        avatar_initials: initials,
       },
     },
   });
@@ -100,7 +93,12 @@ export async function ensureProfileForUser(user) {
   const meta = user.user_metadata || {};
   const emailLocal = (user.email || '').split('@')[0] || 'player';
   const name = meta.name || emailLocal;
-  const handle = meta.handle || emailLocal.replace(/[^a-zA-Z0-9_]/g, '') || `user_${user.id.slice(0, 8)}`;
+  // ONBOARD-1: auto-generated placeholder handle — uniqueness guaranteed by
+  // the UUID prefix. The user picks a real handle later from the Profile
+  // page (no friction at the auth gate). The visible "user-..." prefix
+  // signals "this is a default" so people are nudged to change it.
+  const handle = meta.handle
+    || `user-${user.id.slice(0, 8)}`.replace(/[^a-zA-Z0-9_-]/g, '');
   const color = meta.avatar_color || AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
   const initials = meta.avatar_initials || pickInitials(name);
 
@@ -111,8 +109,18 @@ export async function ensureProfileForUser(user) {
     handle,
     avatar_color: color,
     avatar_initials: initials,
-    position: meta.position || 'Fan',
-    level: meta.level || 'Beer League',
+    // ENRICH-1 fields piped from user_metadata (set in signUp). Persona,
+    // gender, and profile_complete intentionally left at their column defaults
+    // (NULL / NULL / FALSE) so the OnboardingModal + dismissible Feed banner
+    // surface as the progressive-disclosure nudge.
+    date_of_birth: meta.date_of_birth || null,
+    notification_email_marketing: !!meta.marketing_opt_in,
+    // Legacy position/level: cleared so they don't render as defaulted values
+    // (the old code wrote "Fan" / "Beer League" — making it look like the
+    // user self-identified that way). Persona is the new segmentation field
+    // and stays NULL until they pick one in the OnboardingModal.
+    position: '',
+    level: '',
     points: 0,
     tier: 'Mite',
     bio: '',
@@ -177,6 +185,29 @@ export async function getProfile(userId) {
   return { data, error };
 }
 
+/**
+ * ENRICH-1 (May 28, 2026) — bounded `last_seen_at` update. Called from
+ * App.js's onAuthStateChange handler on SIGNED_IN; the PostgREST WHERE
+ * clause caps writes to one every 5 minutes per user so token refreshes
+ * (≈hourly while active) don't slam the table.
+ *
+ * Fire-and-forget — we don't surface errors. RLS already permits a user
+ * to update their own row; the guard trigger doesn't touch this column.
+ */
+export async function touchLastSeen(userId) {
+  if (!userId) return;
+  const cutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  try {
+    await supabase
+      .from('profiles')
+      .update({ last_seen_at: new Date().toISOString() })
+      .eq('id', userId)
+      .or(`last_seen_at.is.null,last_seen_at.lt.${cutoff}`);
+  } catch (_) {
+    /* best-effort */
+  }
+}
+
 export async function updateProfile(userId, updates) {
   // Whitelist of fields a user may write to their own profile. Adding to this
   // list is how we enable new editable surfaces (avatar, cover, etc.).
@@ -186,6 +217,13 @@ export async function updateProfile(userId, updates) {
   const allowed = [
     'name', 'bio', 'position', 'level', 'home_rink', 'handle',
     'avatar_url', 'avatar_color', 'avatar_initials', 'cover_image_url',
+    // ENRICH-1 (May 28, 2026) — user-writable additions.
+    // `date_of_birth` is included but the `guard_profile_privileged_columns`
+    // BEFORE-UPDATE trigger silently freezes it after the first set for
+    // non-admins (anti-age-fraud). Admins can correct it from the admin
+    // surface; service-role migrations bypass the trigger entirely.
+    'persona', 'gender', 'date_of_birth', 'profile_complete',
+    'notification_email_transactional', 'notification_email_marketing', 'notification_push',
   ];
   const filtered = {};
   for (const key of allowed) {
