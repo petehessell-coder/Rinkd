@@ -309,6 +309,47 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
             </div>
           </div>
           <div style={{ padding: '36px 20px 20px' }}>
+            {/* ONBOARD-1 follow-on (May 28, 2026): nudge users to replace the
+                auto-generated `user-<UUID-prefix>` placeholder handle.
+                Self-removes the moment they set a real one. Only renders on
+                your own profile, in read mode. */}
+            {isOwnProfile && !editing && profile.handle?.startsWith('user-') && (
+              <div style={{
+                background: 'rgba(245,158,11,0.10)',
+                border: '1px solid rgba(245,158,11,0.45)',
+                borderRadius: 10,
+                padding: '12px 14px',
+                marginBottom: 14,
+                color: C.ice,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                fontSize: 13,
+                lineHeight: 1.45,
+                flexWrap: 'wrap',
+              }}>
+                <span style={{ fontSize: 20, flexShrink: 0 }}>👋</span>
+                <div style={{ flex: 1, minWidth: 160 }}>
+                  <strong style={{ color: '#F59E0B' }}>Pick your username.</strong>{' '}
+                  Right now you're{' '}
+                  <code style={{
+                    background: 'rgba(0,0,0,0.3)', padding: '1px 6px', borderRadius: 4,
+                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12,
+                  }}>@{profile.handle}</code>{' '}
+                  — an auto-generated placeholder. Others see this on your posts and chirps.
+                </div>
+                <button onClick={openEdit} style={{
+                  background: '#F59E0B', color: '#0B1F3A', border: 'none',
+                  padding: '8px 16px', borderRadius: 999, cursor: 'pointer',
+                  fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic',
+                  fontSize: 13, letterSpacing: '0.05em', textTransform: 'uppercase',
+                  whiteSpace: 'nowrap', flexShrink: 0,
+                }}>
+                  Set Username
+                </button>
+              </div>
+            )}
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
               <div>
                 <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 26, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.02em' }}>{profile.name}</div>
@@ -375,7 +416,17 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
               <form onSubmit={saveEdit} style={{ marginTop: 12 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
                   <div><label style={labelStyle}>Name</label><input value={editName} onChange={e => setEditName(e.target.value)} required maxLength={80} style={inputStyle}/></div>
-                  <div><label style={labelStyle}>Username</label><input value={editHandle} onChange={e => setEditHandle(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))} required maxLength={40} style={inputStyle}/></div>
+                  <div>
+                    <label style={labelStyle}>Username</label>
+                    <input value={editHandle} onChange={e => setEditHandle(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))} required maxLength={40} style={inputStyle}/>
+                    {/* Inline hint while the field still holds the auto-
+                        generated `user-<UUID-prefix>` placeholder. */}
+                    {editHandle.startsWith('user-') && (
+                      <div style={{ fontSize: 11, color: '#F59E0B', marginTop: 4, lineHeight: 1.4 }}>
+                        That&apos;s an auto-generated placeholder — pick something you&apos;ll be known by.
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div style={{ marginBottom: 12 }}><label style={labelStyle}>Bio</label><textarea value={editBio} onChange={e => setEditBio(e.target.value)} maxLength={200} rows={3} style={{ ...inputStyle, resize: 'vertical' }}/></div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
