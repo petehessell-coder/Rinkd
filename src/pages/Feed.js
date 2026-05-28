@@ -8,7 +8,6 @@ import PushPrompt from '../components/PushPrompt';
 import { track } from '../lib/analytics';
 import { FeedSkeleton, EmptyState } from '../components/Skeletons';
 import { classifyImage } from '../lib/imageModeration';
-import RinksideFeaturedCard from '../components/RinksideFeaturedCard';
 import PostActionMenu from '../components/PostActionMenu';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/authContext';
@@ -629,10 +628,6 @@ export default function Feed({ currentUser, profile }) {
             )}
           </div>
         )}
-
-        {/* Rinkside Featured Story — surfaces the content brand without forcing
-            it into the primary nav. Dismissable per-session. */}
-        <RinksideFeaturedCard />
 
         {loading ? (
           <FeedSkeleton count={4} />
