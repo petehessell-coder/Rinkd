@@ -3,6 +3,25 @@ import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { loadDailyRollup, loadDAU, loadRecentEvents } from '../lib/analytics';
 import { useIsRinkdAdmin } from '../lib/userRole';
+import { supabase } from '../lib/supabase';
+
+// ENRICH-1 follow-on (May 28, 2026): admin dormancy cohorting + recently-active
+// table. Reads profiles.last_seen_at (stamped by App.js touchLastSeen with a
+// >=5min PostgREST gate). Inline supabase query keeps this self-contained;
+// if profiles row count crosses ~10k consider swapping to a SECURITY DEFINER
+// RPC that returns the cohort tallies + top-N pre-aggregated.
+function humanAgo(ts) {
+  if (!ts) return 'Never';
+  const ms = Date.now() - new Date(ts).getTime();
+  if (ms < 60_000) return 'just now';
+  const mins = ms / 60_000;
+  if (mins < 60) return `${Math.floor(mins)}m ago`;
+  const hrs = mins / 60;
+  if (hrs < 24) return `${Math.floor(hrs)}h ago`;
+  const days = hrs / 24;
+  if (days < 30) return `${Math.floor(days)}d ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+}
 
 const C = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
@@ -44,6 +63,10 @@ export default function AdminAnalytics({ currentUser, profile }) {
   const [daily, setDaily] = useState([]);
   const [dau, setDau] = useState([]);
   const [recent, setRecent] = useState([]);
+  // ENRICH-1: snapshot of every profile's last_seen_at + handle/name/persona
+  // for the cohort tiles + recently-active table below. Sorted server-side
+  // so we can also use .slice(0, N) for the visible table without resorting.
+  const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -51,8 +74,17 @@ export default function AdminAnalytics({ currentUser, profile }) {
     setLoading(true);
     setError(null);
     try {
-      const [d, u, r] = await Promise.all([loadDailyRollup(30), loadDAU(30), loadRecentEvents(80)]);
+      const [d, u, r, a] = await Promise.all([
+        loadDailyRollup(30),
+        loadDAU(30),
+        loadRecentEvents(80),
+        supabase
+          .from('profiles')
+          .select('id, handle, name, persona, last_seen_at')
+          .order('last_seen_at', { ascending: false, nullsFirst: false }),
+      ]);
       setDaily(d); setDau(u); setRecent(r);
+      setActivity(a?.data || []);
     } catch (e) {
       // Without this catch, the entire useEffect's promise rejects unhandled
       // and `loading` stays true forever — the page hangs on "Loading
@@ -90,6 +122,25 @@ export default function AdminAnalytics({ currentUser, profile }) {
     () => [...dau].sort((a, b) => a.day.localeCompare(b.day)).map((d) => ({ day: d.day, v: d.dau })),
     [dau]
   );
+
+  // ENRICH-1: dormancy cohorts. Buckets cap at 14d for the visible tiles —
+  // anything older rolls into "Cold". `never` = profile_complete signups
+  // that haven't been touched by App.js touchLastSeen yet (so either they
+  // existed pre-deploy, OR they signed up + never came back).
+  const cohorts = useMemo(() => {
+    const now = Date.now();
+    const HR = 3_600_000;
+    let active24h = 0, active7d = 0, dormant7to14d = 0, cold = 0, never = 0;
+    for (const p of activity) {
+      if (!p.last_seen_at) { never++; continue; }
+      const ageH = (now - new Date(p.last_seen_at).getTime()) / HR;
+      if (ageH < 24) active24h++;
+      else if (ageH < 24 * 7) active7d++;
+      else if (ageH < 24 * 14) dormant7to14d++;
+      else cold++;
+    }
+    return { active24h, active7d, dormant7to14d, cold, never, total: activity.length };
+  }, [activity]);
 
   const totalSignups7d = summary.find((s) => s.event === 'signup_success')?.v ?? 0;
   const postsCreated7d = summary.find((s) => s.event === 'post_created')?.v ?? 0;
@@ -153,6 +204,53 @@ export default function AdminAnalytics({ currentUser, profile }) {
               <div style={{ fontSize: 12, color: C.ice }}>{dauSeries[dauSeries.length - 1]?.v || 0} today</div>
             </div>
             <MiniBars data={dauSeries} height={70} />
+          </div>
+
+          {/* ENRICH-1 dormancy cohorts — sourced from profiles.last_seen_at,
+              stamped by App.js touchLastSeen (>=5min gate) on every auth
+              resolve. "Never" = profile exists but has never been stamped
+              (pre-deploy account OR signup that never returned). */}
+          <div style={{ fontSize: 11, color: C.steel, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 8 }}>
+            User activity · dormancy cohorts
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 14 }}>
+            <StatBox label="Active · <24h" value={cohorts.active24h} sub={`of ${cohorts.total} profiles`} />
+            <StatBox label="Active · 1–7d" value={cohorts.active7d} />
+            <StatBox label="Dormant · 7–14d" value={cohorts.dormant7to14d} sub="re-engagement window" />
+            <StatBox label="Cold · 14d+" value={cohorts.cold} />
+            <StatBox label="Never seen" value={cohorts.never} sub="signed up, no return" />
+          </div>
+
+          {/* Recently active — top 25 by last_seen_at desc. */}
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 22 }}>
+            <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.border}`, fontSize: 11, color: C.steel, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>Recently active</span>
+              <span style={{ fontSize: 11, color: C.steel, textTransform: 'none', letterSpacing: 0 }}>top 25</span>
+            </div>
+            {activity.length === 0 ? (
+              <div style={{ padding: 18, color: C.steel, fontSize: 13, textAlign: 'center' }}>No profiles loaded.</div>
+            ) : activity.slice(0, 25).map((p, i) => {
+              // Color the "ago" cell by bucket so dormancy is glanceable.
+              let agoColor = C.steel;
+              if (p.last_seen_at) {
+                const ageH = (Date.now() - new Date(p.last_seen_at).getTime()) / 3_600_000;
+                if (ageH < 24) agoColor = C.green;
+                else if (ageH < 24 * 7) agoColor = C.ice;
+                else if (ageH < 24 * 14) agoColor = '#F59E0B';
+                else agoColor = C.red;
+              }
+              return (
+                <div key={p.id} style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', borderTop: i ? '1px solid rgba(46,91,140,0.2)' : 'none', gap: 10, fontSize: 13 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ color: C.ice, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name || '—'}</div>
+                    <div style={{ color: C.steel, fontSize: 11 }}>@{p.handle}{p.persona ? ` · ${p.persona}` : ''}</div>
+                  </div>
+                  <div style={{ color: agoColor, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0, width: 90, textAlign: 'right', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
+                    {humanAgo(p.last_seen_at)}
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           {/* Event breakdown */}
