@@ -11,11 +11,17 @@ const C = {
   steel: '#8BA3BE', dark: '#07111F', card: '#0f2847', border: 'rgba(46,91,140,0.4)',
 };
 
+// ONBOARD-1 (May 28, 2026): the role chooser writes to `profiles.persona`
+// — the new segmentation column added in ENRICH-1. IDs MUST match the
+// persona CHECK constraint: ('player','parent','coach','commissioner',
+// 'official','fan'). Order matters — most-common picks first.
 const ROLES = [
-  { id: 'player',         icon: '🏒', label: 'Player',         body: 'I play in a league or pickup' },
-  { id: 'coach',          icon: '🎯', label: 'Coach / Manager', body: 'I run a team or bench' },
-  { id: 'parent',         icon: '👨‍👧', label: 'Hockey Parent',  body: 'I follow my kid\'s team' },
-  { id: 'fan',            icon: '📺', label: 'Fan',            body: 'I follow the game' },
+  { id: 'player',       icon: '🏒', label: 'Player',          body: 'I play in a league or pickup' },
+  { id: 'coach',        icon: '🎯', label: 'Coach / Manager',  body: 'I run a team or bench' },
+  { id: 'parent',       icon: '👨‍👧', label: 'Hockey Parent', body: "I follow my kid's team" },
+  { id: 'commissioner', icon: '🏆', label: 'Commissioner',     body: 'I run a league or tournament' },
+  { id: 'official',     icon: '🦓', label: 'Official',         body: 'I officiate games' },
+  { id: 'fan',          icon: '📺', label: 'Fan',              body: 'I follow the game' },
 ];
 
 const btnPrimary = {
@@ -86,14 +92,27 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
     setClosing(true);
     clearPendingFlag();
     try {
+      // ENRICH-1 + ONBOARD-1 (May 28, 2026): flip profile_complete = true if
+      // the user actually picked a persona (the segmentation field). If they
+      // skipped the role step entirely, leave profile_complete = false so the
+      // dismissible Feed banner (added in this build) keeps nudging them.
+      const updates = {
+        welcome_seen: true,
+        onboarding_completed_at: new Date().toISOString(),
+      };
+      if (chosenRole) updates.profile_complete = true;
       await supabase
         .from('profiles')
-        .update({ welcome_seen: true, onboarding_completed_at: new Date().toISOString() })
+        .update(updates)
         .eq('id', currentUser.id);
       // profile may still be null if we mounted via the race-fix path before
       // the profile fetch returned — spread-of-null is fine.
-      onProfileUpdate?.({ ...(profile || {}), welcome_seen: true });
-      track('onboarding_completed', { role: chosenRole });
+      onProfileUpdate?.({
+        ...(profile || {}),
+        welcome_seen: true,
+        ...(chosenRole ? { profile_complete: true, persona: chosenRole } : {}),
+      });
+      track('onboarding_completed', { role: chosenRole, profile_complete: !!chosenRole });
     } catch { /* don't block close */ }
     onClose?.();
   };
@@ -106,19 +125,19 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
 
   const handleRoleNext = async () => {
     if (chosenRole) {
-      // Map onboarding role onto profiles.position when it lines up. Otherwise
-      // we still record it in analytics — that's enough for now.
-      const positionMap = { player: 'Forward', coach: 'Coach', parent: 'Parent', fan: 'Fan' };
-      const pos = positionMap[chosenRole];
-      if (pos) {
-        await supabase.from('profiles').update({ position: pos }).eq('id', currentUser.id);
-        // Only do the optimistic state update if profile is already loaded —
-        // otherwise spreading null overwrites the full profile with just
-        // { position }, losing every other field. The next profile fetch
-        // will pick up the new position regardless.
-        if (profile) {
-          onProfileUpdate?.({ ...profile, position: pos });
-        }
+      // ENRICH-1 + ONBOARD-1 (May 28, 2026): write the chosen role to the
+      // new `profiles.persona` segmentation column — NOT to `profiles.position`.
+      // Position is reserved for on-ice (Forward / Defense / Goalie); persona
+      // is who-am-I-in-hockey (player / parent / coach / commissioner /
+      // official / fan). Both columns coexist. The chosenRole id values are
+      // exactly the persona CHECK constraint set.
+      await supabase.from('profiles').update({ persona: chosenRole }).eq('id', currentUser.id);
+      // Only do the optimistic state update if profile is already loaded —
+      // otherwise spreading null overwrites the full profile with just
+      // { persona }, losing every other field. The next profile fetch
+      // will pick up the new persona regardless.
+      if (profile) {
+        onProfileUpdate?.({ ...profile, persona: chosenRole });
       }
       track('onboarding_role_chosen', { role: chosenRole });
     }

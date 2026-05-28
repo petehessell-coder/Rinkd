@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AuthContext, useAuth } from './lib/authContext';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
-import { getProfile, ensureProfileForUser } from './lib/auth';
+import { getProfile, ensureProfileForUser, touchLastSeen } from './lib/auth';
 import Auth from './pages/Auth';
 import Feed from './pages/Feed';
 import Profile from './pages/Profile';
@@ -296,6 +296,11 @@ export default function App() {
           setProfile(data);
           setProfileError(!data); // null after retries = the fetch failed
           setSentryUser(u, data);
+          // ENRICH-1 (May 28, 2026): bounded last_seen_at update — gated to
+          // ≥5min by the helper's PostgREST WHERE clause so a fast reload
+          // followed by a slow profile fetch can't double-write. Fire-and-
+          // forget; never blocks render.
+          touchLastSeen(u.id);
         } else {
           setProfileError(false);
           setSentryUser(null);
@@ -318,6 +323,8 @@ export default function App() {
           setProfile(data);
           setProfileError(!data); // null after retries = the fetch failed
           setSentryUser(u, data);
+          // ENRICH-1: bounded last_seen_at update (≥5min gate in helper).
+          touchLastSeen(u.id);
           // If we'd previously timed out and dropped to logged-out, flip
           // loading back to false here too in case it wasn't already.
           setLoading(false);

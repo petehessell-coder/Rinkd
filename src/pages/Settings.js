@@ -4,7 +4,7 @@ import Layout from '../components/Layout';
 import SEO from '../components/SEO';
 import { Avatar } from '../components/Logos';
 import { supabase } from '../lib/supabase';
-import { signOut } from '../lib/auth';
+import { signOut, updateProfile } from '../lib/auth';
 import { track } from '../lib/analytics';
 import { listMyBlocks, unblockUser } from '../lib/blocks';
 
@@ -37,6 +37,43 @@ export default function SettingsPage({ currentUser, profile }) {
   const [blocks, setBlocks] = useState([]);
   const [blocksLoading, setBlocksLoading] = useState(true);
   const [unblockingId, setUnblockingId] = useState(null);
+
+  // ENRICH-1 (May 28, 2026): notification prefs. Initialized from the profile;
+  // optimistic-flip + DB persist on toggle. Transactional default TRUE (always-on
+  // for receipts/password-reset), marketing default FALSE (CAN-SPAM / GDPR
+  // explicit opt-in), push default TRUE.
+  const [notifs, setNotifs] = useState({
+    notification_email_transactional: profile?.notification_email_transactional ?? true,
+    notification_email_marketing: profile?.notification_email_marketing ?? false,
+    notification_push: profile?.notification_push ?? true,
+  });
+  const [notifBusy, setNotifBusy] = useState(null); // key currently saving, or null
+  const [notifError, setNotifError] = useState('');
+
+  // Re-hydrate when profile arrives after the page has mounted.
+  useEffect(() => {
+    if (!profile) return;
+    setNotifs({
+      notification_email_transactional: profile.notification_email_transactional ?? true,
+      notification_email_marketing: profile.notification_email_marketing ?? false,
+      notification_push: profile.notification_push ?? true,
+    });
+  }, [profile?.id, profile?.notification_email_transactional, profile?.notification_email_marketing, profile?.notification_push]);
+
+  const flipNotif = async (key) => {
+    if (notifBusy) return;
+    const next = !notifs[key];
+    setNotifs(prev => ({ ...prev, [key]: next })); // optimistic
+    setNotifBusy(key); setNotifError('');
+    const { error } = await updateProfile(currentUser.id, { [key]: next });
+    setNotifBusy(null);
+    if (error) {
+      setNotifs(prev => ({ ...prev, [key]: !next })); // revert
+      setNotifError(error.message || "Couldn't save that change.");
+      return;
+    }
+    track('notification_preference_changed', { key, value: next });
+  };
 
   const loadBlocks = useCallback(async () => {
     setBlocksLoading(true);
@@ -235,13 +272,74 @@ export default function SettingsPage({ currentUser, profile }) {
             </button>
           </div>
 
-          {/* NOTIFICATION PREFERENCES — link to Profile (where the existing toggle lives) */}
+          {/* NOTIFICATION PREFERENCES — ENRICH-1 (May 28, 2026). Three toggles
+              persisted to profiles.notification_*. Transactional = receipts +
+              password reset (default ON); marketing = re-engagement (default
+              OFF, explicit opt-in); push = browser/PWA push (default ON, but
+              actual delivery still needs a push_subscriptions row). */}
           <div style={section}>
             <h2 style={h2}>🔔 Notification Preferences</h2>
-            <p style={p}>
-              Push notifications are managed from your profile — the 🔔 toggle next to "Edit".
-            </p>
-            <button onClick={() => navigate('/profile')} style={btnGhost}>Open Profile</button>
+            {(() => {
+              const Toggle = ({ k, title, body, warn }) => {
+                const on = notifs[k];
+                const busy = notifBusy === k;
+                return (
+                  <div style={{
+                    display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+                    gap: 14, padding: '12px 0',
+                    borderTop: `1px solid ${C.border}`,
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, color: C.ice, fontWeight: 600, marginBottom: 2 }}>{title}</div>
+                      <div style={{ fontSize: 12, color: C.steel, lineHeight: 1.5 }}>{body}</div>
+                      {warn && !on && (
+                        <div style={{ fontSize: 12, color: C.amber, marginTop: 6, lineHeight: 1.5 }}>{warn}</div>
+                      )}
+                    </div>
+                    <button onClick={() => flipNotif(k)} disabled={busy}
+                      aria-pressed={on}
+                      style={{
+                        flexShrink: 0,
+                        width: 46, height: 26, borderRadius: 999,
+                        background: on ? '#22C55E' : C.border,
+                        border: 'none', cursor: busy ? 'wait' : 'pointer',
+                        position: 'relative', transition: 'background 0.15s',
+                        opacity: busy ? 0.6 : 1,
+                      }}>
+                      <span style={{
+                        position: 'absolute', top: 3, left: on ? 23 : 3,
+                        width: 20, height: 20, borderRadius: '50%',
+                        background: '#fff', transition: 'left 0.15s',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                      }} />
+                    </button>
+                  </div>
+                );
+              };
+              return (
+                <>
+                  <Toggle
+                    k="notification_email_transactional"
+                    title="Account email (receipts, password resets)"
+                    body="One-off emails tied to actions you take — payment receipts, password reset links, registration confirmations. Default on."
+                    warn="Off means we can't email you receipts or password-reset links. We'll still create the account, you just won't get the confirmation email."
+                  />
+                  <Toggle
+                    k="notification_email_marketing"
+                    title="Marketing email (news, product updates)"
+                    body="Occasional roundups, feature launches, and rink-community highlights. Default off — opt in only."
+                  />
+                  <Toggle
+                    k="notification_push"
+                    title="Push notifications"
+                    body="In-app pushes for game reminders, replies, and roster requests. Browser/PWA push also needs a permission grant — Profile has the Enable button."
+                  />
+                  {notifError && (
+                    <div style={{ fontSize: 12, color: C.red, marginTop: 8 }}>{notifError}</div>
+                  )}
+                </>
+              );
+            })()}
           </div>
 
           {/* BLOCKED USERS */}

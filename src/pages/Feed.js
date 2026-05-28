@@ -10,6 +10,8 @@ import { FeedSkeleton, EmptyState } from '../components/Skeletons';
 import { classifyImage } from '../lib/imageModeration';
 import RinksideFeaturedCard from '../components/RinksideFeaturedCard';
 import PostActionMenu from '../components/PostActionMenu';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/authContext';
 
 // Feed page size — keyset pagination pulls this many chirps per request.
 const PAGE_SIZE = 20;
@@ -239,6 +241,108 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, onLik
   );
 }
 
+// ONBOARD-1 (May 28, 2026) — dismissible top-of-feed nudge for users who
+// skipped the OnboardingModal (welcome_seen=true, profile_complete=false).
+// Single-tap conversion: pick a persona chip → writes profiles.persona +
+// profile_complete=true + add_points(50) → banner fades. No modal, no route
+// change — friction floor for the segmentation prompt.
+//
+// Hidden when: profile_complete=true, no profile yet, OR the user has
+// already dismissed it this session (sessionStorage flag).
+const PERSONAS = [
+  { id: 'player',       icon: '🏒', label: 'Player' },
+  { id: 'coach',        icon: '🎯', label: 'Coach' },
+  { id: 'parent',       icon: '👨‍👧', label: 'Parent' },
+  { id: 'commissioner', icon: '🏆', label: 'Commissioner' },
+  { id: 'official',     icon: '🦓', label: 'Official' },
+  { id: 'fan',          icon: '📺', label: 'Fan' },
+];
+
+function ProfileNudgeBanner() {
+  const { profile, setProfile } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const [hidden, setHidden] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem('rinkd_persona_nudge_dismissed') === '1') setHidden(true);
+    } catch (_) { /* private mode */ }
+  }, []);
+
+  if (hidden) return null;
+  if (!profile || profile.profile_complete) return null;
+
+  const pick = async (personaId) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ persona: personaId, profile_complete: true })
+        .eq('id', profile.id);
+      if (error) throw error;
+      // +50 points via the existing SECURITY DEFINER RPC. Best-effort —
+      // if it errors the persona still landed and the banner still hides.
+      try { await supabase.rpc('add_points', { user_id: profile.id, pts: 50 }); } catch (_) {}
+      setProfile?.((p) => ({ ...(p || {}), persona: personaId, profile_complete: true }));
+      track('profile_nudge_persona_picked', { persona: personaId });
+      setHidden(true);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[ProfileNudgeBanner] persona update failed:', e?.message || e);
+      setBusy(false);
+    }
+  };
+
+  const dismiss = () => {
+    try { sessionStorage.setItem('rinkd_persona_nudge_dismissed', '1'); } catch (_) { /* private mode */ }
+    setHidden(true);
+    track('profile_nudge_dismissed');
+  };
+
+  return (
+    <div style={{
+      background: 'rgba(46,91,140,0.12)',
+      border: '1px solid rgba(46,91,140,0.35)',
+      borderRadius: 10,
+      padding: '12px 14px',
+      marginBottom: 14,
+      color: C.ice,
+      fontFamily: 'Barlow, sans-serif',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 10 }}>
+        <span style={{ fontSize: 13, lineHeight: 1.4 }}>
+          Quick — who are you? <span style={{ color: '#D72638', fontWeight: 700 }}>+50 pts</span> for one tap.
+        </span>
+        <button onClick={dismiss} aria-label="Dismiss"
+          style={{ background: 'transparent', color: C.steel, border: 'none', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: '0 4px' }}>
+          ×
+        </button>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {PERSONAS.map(p => (
+          <button key={p.id} onClick={() => pick(p.id)} disabled={busy}
+            style={{
+              background: '#0B1F3A',
+              color: C.ice,
+              border: '1px solid rgba(46,91,140,0.4)',
+              borderRadius: 999,
+              padding: '6px 12px',
+              fontSize: 12,
+              fontWeight: 600,
+              fontFamily: 'Barlow, sans-serif',
+              cursor: busy ? 'wait' : 'pointer',
+              opacity: busy ? 0.5 : 1,
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+            }}>
+            <span aria-hidden="true">{p.icon}</span>{p.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Feed({ currentUser, profile }) {
   const navigate = useNavigate();
   const [posts, setPosts] = useState([]);
@@ -430,6 +534,10 @@ export default function Feed({ currentUser, profile }) {
     <Layout profile={profile}>
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '24px 16px' }}>
         <h1 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 32, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.02em', marginBottom: 20 }}><TapeText height={32}>Chirps</TapeText></h1>
+
+        {/* ONBOARD-1 progressive-disclosure nudge — only renders for users who
+            skipped the OnboardingModal (welcome_seen=true, profile_complete=false). */}
+        <ProfileNudgeBanner />
 
         {/* Beta banner — sets expectations for new public testers. Disable later
             via REACT_APP_BETA_BANNER=0 once we exit beta. */}

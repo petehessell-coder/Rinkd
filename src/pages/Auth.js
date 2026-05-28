@@ -13,8 +13,10 @@ const C = {
   steel: '#8BA3BE', dark: '#07111F', card: '#112236', border: '#1E3A5C',
 };
 
-const POSITIONS = ['Forward', 'Defense', 'Goalie', 'Coach', 'Parent', 'Official', 'Fan'];
-const LEVELS = ['Youth (Mite-Bantam)', 'Youth (Midget)', 'High School', 'Junior (Tier I)', 'Junior (Tier II/III)', 'College', 'Minor Pro', 'Beer League', 'Adult Rec', 'Fan'];
+// ONBOARD-1 (May 28, 2026): POSITIONS / LEVELS removed from the signup gate —
+// the wizard collapsed to a single step (email + password + DOB + Turnstile +
+// marketing opt-in). Position / level / persona / handle / full name are
+// filled in progressively via the OnboardingModal + dismissible Feed banner.
 
 function Input({ label, ...props }) {
   const [focused, setFocused] = useState(false);
@@ -82,7 +84,7 @@ export default function Auth({ defaultMode = 'login' }) {
   const [forgotBusy, setForgotBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [step, setStep] = useState(1); // signup steps 1,2,3
+  // ONBOARD-1: signup is single-step now — `step` state removed.
   const [confirmEmail, setConfirmEmail] = useState(''); // remembered for the "Check your email" screen
   // Cloudflare Turnstile token — captured by the widget on step 3 and forwarded
   // to supabase.auth.signUp. Stays null until Turnstile validates. When the
@@ -124,9 +126,12 @@ export default function Auth({ defaultMode = 'login' }) {
   const firstInputFiredRef = useRef(null);
   useEffect(() => { firstInputFiredRef.current = null; }, [mode]);
 
+  // ONBOARD-1: signup form collects only what's needed at the auth gate.
+  // `dob` is the YYYY-MM-DD string from <input type="date"> (forwarded to
+  // signUp as `dateOfBirth`). `marketingOptIn` defaults FALSE (CAN-SPAM /
+  // GDPR — explicit opt-in for marketing email).
   const [form, setForm] = useState({
-    email: '', password: '', name: '', handle: '',
-    position: 'Fan', level: 'Beer League', dob: '',
+    email: '', password: '', dob: '', marketingOptIn: false,
   });
 
   const set = (key, val) => {
@@ -189,24 +194,21 @@ export default function Auth({ defaultMode = 'login' }) {
 
   const handleSignup = async (e) => {
     e.preventDefault();
-    if (step < 3) {
-      // Track step advance so we can see where in the 3-step signup flow
-      // people drop off. Together with signup_failed + signup_success this
-      // pins down whether the form, the Turnstile, or post-Supabase auth
-      // is the conversion-killer.
-      track('signup_step_advanced', { from: step, to: step + 1 });
-      setStep(s => s + 1);
-      return;
-    }
-    // Turnstile gate — only enforced when the site key is configured. Without
-    // a token, Supabase's CAPTCHA Protection (when enabled in dashboard) would
-    // reject the signup anyway; failing early gives a clearer error.
+    // ONBOARD-1 (May 28, 2026): single-step signup. No step-advance branch —
+    // submit fires once, hits Supabase, and either lands on /feed (auto-confirm)
+    // or the "check email" screen (email confirmation ON).
     if (isTurnstileEnabled && !captchaToken) {
       setError('Please complete the verification challenge below.');
       return;
     }
     setLoading(true); setError('');
-    const result = await signUp({ ...form, captchaToken });
+    const result = await signUp({
+      email: form.email,
+      password: form.password,
+      dateOfBirth: form.dob,
+      marketingOptIn: form.marketingOptIn,
+      captchaToken,
+    });
     setLoading(false);
     if (result.error) {
       track('signup_failed', { reason: result.error.message?.slice(0, 80) });
@@ -218,12 +220,12 @@ export default function Auth({ defaultMode = 'login' }) {
       // Supabase has email confirmation turned on — we have a user row but no
       // session yet. Show the "Check your email" state instead of pushing to
       // /feed (which would just bounce back through ProtectedRoute).
-      track('signup_needs_confirmation', { position: form.position, level: form.level });
+      track('signup_needs_confirmation', { marketing_opt_in: form.marketingOptIn });
       setConfirmEmail(form.email);
       setMode('check-email');
       return;
     }
-    track('signup_success', { position: form.position, level: form.level });
+    track('signup_success', { marketing_opt_in: form.marketingOptIn });
     // 4E race-fix: set a sessionStorage flag so App.js can render the
     // onboarding modal BEFORE the Supabase profile fetch completes. Without
     // this, ~43% of recent signups were bouncing during the few-hundred-ms
@@ -458,7 +460,7 @@ export default function Auth({ defaultMode = 'login' }) {
             <DownloadCTA />
             <p style={{ textAlign: 'center', marginTop: 24, color: C.steel, fontSize: 14 }}>
               New to Rinkd?{' '}
-              <button onClick={() => { setMode('signup'); setStep(1); setError(''); }}
+              <button onClick={() => { setMode('signup'); setError(''); }}
                 style={{ color: C.ice, background: 'none', border: 'none', cursor: 'pointer',
                   fontWeight: 600, textDecoration: 'underline', fontSize: 14 }}>
                 Create Account
@@ -466,118 +468,89 @@ export default function Auth({ defaultMode = 'login' }) {
             </p>
           </>
         ) : (
-          // Signup
+          // Signup — single step (ONBOARD-1, May 28, 2026).
+          // Three required inputs (email / password / DOB) + Turnstile + a
+          // single marketing-opt-in checkbox (default UNCHECKED, CAN-SPAM /
+          // GDPR safe). Everything else (handle, name, persona, position,
+          // level, gender, avatar) is collected progressively in the
+          // OnboardingModal + the dismissible Feed banner after sign-in.
           <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
-              {[1,2,3].map(s => (
-                <React.Fragment key={s}>
-                  <div style={{
-                    width: 28, height: 28, borderRadius: '50%',
-                    background: step >= s ? C.red : C.border,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 12, fontWeight: 700, color: 'white',
-                    transition: 'all 0.2s',
-                  }}>{s}</div>
-                  {s < 3 && <div style={{ flex: 1, height: 2, background: step > s ? C.red : C.border, transition: 'all 0.2s' }}/>}
-                </React.Fragment>
-              ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 8 }}>
+              <RinkdLogo size={72} />
+              <div>
+                <h2 style={{
+                  fontFamily: "'Barlow Condensed', sans-serif",
+                  fontWeight: 900, fontStyle: 'italic',
+                  fontSize: 32, color: C.ice, textTransform: 'uppercase',
+                  margin: 0, lineHeight: 1,
+                }}>Lace &apos;Em Up</h2>
+                <p style={{ color: C.steel, fontSize: 14, margin: '6px 0 0' }}>
+                  Create your account — 30 seconds, then you&apos;re in.
+                </p>
+              </div>
             </div>
-
-            <h2 style={{
-              fontFamily: "'Barlow Condensed', sans-serif",
-              fontWeight: 900, fontStyle: 'italic',
-              fontSize: 32, color: C.ice, marginBottom: 6, textTransform: 'uppercase',
-            }}>
-              {step === 1 ? 'Lace \'Em Up' : step === 2 ? 'Your Identity' : 'Your Hockey'}
-            </h2>
-            <p style={{ color: C.steel, marginBottom: 24, fontSize: 13 }}>
-              {step === 1 ? 'Create your account' : step === 2 ? 'How you\'ll appear on Rinkd' : 'Tell us about your game'}
-            </p>
+            <div style={{ marginBottom: 24 }} />
 
             <form onSubmit={handleSignup}>
-              {step === 1 && (
-                <>
-                  <Input label="Email" type="email" value={form.email}
-                    onChange={e => set('email', e.target.value)} required placeholder="you@example.com" />
-                  <Input label="Password" type="password" value={form.password}
-                    onChange={e => set('password', e.target.value)} required placeholder="Min 8 characters" minLength={8} />
-                  <Input label="Date of Birth" type="date" value={form.dob}
-                    onChange={e => set('dob', e.target.value)} required />
-                  <p style={{ fontSize: 11, color: C.steel, marginTop: -8, marginBottom: 16 }}>
-                    Must be 13+ to create an account (COPPA compliance)
-                  </p>
-                </>
-              )}
-              {step === 2 && (
-                <>
-                  <Input label="Full Name" type="text" value={form.name}
-                    onChange={e => set('name', e.target.value)} required placeholder="Connor McDavid" />
-                  <Input label="Username" type="text" value={form.handle}
-                    onChange={e => set('handle', e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
-                    required placeholder="@yourusername" />
-                </>
-              )}
-              {step === 3 && (
-                <>
-                  <div style={{ marginBottom: 16 }}>
-                    <label style={{
-                      display: 'block', fontSize: 12, fontWeight: 600, color: C.steel,
-                      marginBottom: 6, letterSpacing: '0.06em', textTransform: 'uppercase',
-                      fontFamily: "'Barlow Condensed', sans-serif",
-                    }}>Position / Role</label>
-                    <select value={form.position} onChange={e => set('position', e.target.value)}
-                      style={{
-                        width: '100%', padding: '12px 14px', borderRadius: 10,
-                        background: '#080F1C', border: `1.5px solid ${C.border}`,
-                        color: C.ice, fontSize: 15, outline: 'none',
-                        fontFamily: "'Barlow', sans-serif",
-                      }}>
-                      {POSITIONS.map(p => <option key={p} value={p}>{p}</option>)}
-                    </select>
-                  </div>
-                  <div style={{ marginBottom: 16 }}>
-                    <label style={{
-                      display: 'block', fontSize: 12, fontWeight: 600, color: C.steel,
-                      marginBottom: 6, letterSpacing: '0.06em', textTransform: 'uppercase',
-                      fontFamily: "'Barlow Condensed', sans-serif",
-                    }}>Level</label>
-                    <select value={form.level} onChange={e => set('level', e.target.value)}
-                      style={{
-                        width: '100%', padding: '12px 14px', borderRadius: 10,
-                        background: '#080F1C', border: `1.5px solid ${C.border}`,
-                        color: C.ice, fontSize: 15, outline: 'none',
-                        fontFamily: "'Barlow', sans-serif",
-                      }}>
-                      {LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
-                    </select>
-                  </div>
-                  {/* Turnstile bot check — renders nothing unless
-                      REACT_APP_TURNSTILE_SITE_KEY is set. */}
-                  <TurnstileWidget onToken={setCaptchaToken} />
-                </>
-              )}
+              <Input label="Email" type="email" value={form.email}
+                onChange={e => set('email', e.target.value)} required placeholder="you@example.com" />
+              <Input label="Password" type="password" value={form.password}
+                onChange={e => set('password', e.target.value)} required placeholder="Min 8 characters" minLength={8} />
+              <Input label="Date of Birth" type="date" value={form.dob}
+                onChange={e => set('dob', e.target.value)} required
+                max={new Date().toISOString().slice(0, 10)} />
+              <p style={{ fontSize: 11, color: C.steel, marginTop: -8, marginBottom: 16 }}>
+                Must be 13+ to create an account (COPPA). You can&apos;t change this later.
+              </p>
 
-              {error && <p style={{ color: C.red, fontSize: 13, marginBottom: 12 }}>{error}</p>}
+              {/* Turnstile bot check — renders nothing unless
+                  REACT_APP_TURNSTILE_SITE_KEY is set. */}
+              <TurnstileWidget
+                key={`signup-${turnstileResetKey}`}
+                onToken={(t) => { setCaptchaToken(t); if (error?.startsWith('Please complete')) setError(''); }}
+                onError={() => setCaptchaToken(null)}
+              />
 
-              <div style={{ display: 'flex', gap: 10 }}>
-                {step > 1 && (
-                  <button type="button" onClick={() => setStep(s => s - 1)} style={{
-                    padding: '14px 24px', borderRadius: 10,
-                    background: 'transparent', color: C.steel,
-                    border: `1.5px solid ${C.border}`,
-                    fontFamily: "'Barlow', sans-serif", fontSize: 15, cursor: 'pointer',
-                  }}>← Back</button>
-                )}
-                <button type="submit" disabled={loading} style={{
-                  flex: 1, padding: '14px', borderRadius: 10,
-                  background: loading ? C.border : C.red, color: 'white', border: 'none',
-                  fontFamily: "'Barlow Condensed', sans-serif",
-                  fontWeight: 700, fontStyle: 'italic', fontSize: 18, textTransform: 'uppercase',
-                  cursor: loading ? 'not-allowed' : 'pointer', letterSpacing: '0.05em',
-                }}>
-                  {loading ? 'Creating...' : step < 3 ? 'Next →' : 'Hit the Ice →'}
-                </button>
-              </div>
+              {/* Marketing opt-in — default UNCHECKED (explicit opt-in for
+                  promo email per CAN-SPAM / GDPR). Transactional email
+                  (receipts, password reset, registration confirmations) is
+                  always sent regardless of this checkbox. */}
+              <label style={{
+                display: 'flex', alignItems: 'flex-start', gap: 10,
+                padding: '10px 0', cursor: 'pointer', userSelect: 'none',
+              }}>
+                <input
+                  type="checkbox"
+                  checked={form.marketingOptIn}
+                  onChange={e => set('marketingOptIn', e.target.checked)}
+                  style={{ marginTop: 3, accentColor: C.red, width: 16, height: 16, cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: 12, color: C.steel, lineHeight: 1.5 }}>
+                  Send me Rinkd news + product updates. You can change this
+                  anytime in Settings. (Receipts and account emails always
+                  send regardless.)
+                </span>
+              </label>
+
+              {error && <p style={{ color: C.red, fontSize: 13, margin: '8px 0 12px' }}>{error}</p>}
+
+              <button type="submit" disabled={loading} style={{
+                width: '100%', padding: '14px', borderRadius: 10,
+                background: loading ? C.border : C.red, color: 'white', border: 'none',
+                fontFamily: "'Barlow Condensed', sans-serif",
+                fontWeight: 700, fontStyle: 'italic', fontSize: 18, textTransform: 'uppercase',
+                cursor: loading ? 'not-allowed' : 'pointer', letterSpacing: '0.05em',
+                marginTop: 8,
+              }}>
+                {loading ? 'Creating…' : 'Hit the Ice →'}
+              </button>
+
+              <p style={{ fontSize: 11, color: C.steel, marginTop: 12, textAlign: 'center', lineHeight: 1.5 }}>
+                By creating an account you agree to our{' '}
+                <a href="/terms" style={{ color: C.steel, textDecoration: 'underline' }}>Terms</a>
+                {' '}and{' '}
+                <a href="/privacy" style={{ color: C.steel, textDecoration: 'underline' }}>Privacy Policy</a>.
+              </p>
             </form>
 
             <p style={{ textAlign: 'center', marginTop: 24, color: C.steel, fontSize: 14 }}>
