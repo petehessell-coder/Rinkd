@@ -24,7 +24,7 @@ from reportlab.platypus import (
 ROOT = pathlib.Path("/Users/petehessel/Downloads/rinkd_live")
 MD_PATH = ROOT / "docs/Rinkd_x_NickelCity_Partnership_Proposal.md"
 PDF_PATH = ROOT / "docs/Rinkd_x_NickelCity_Partnership_Proposal.pdf"
-WORDMARK = ROOT / "public/rinkd-wordmark.png"
+WORDMARK = ROOT / "public/rinkd-wordmark-tape.png"  # in-app tape-job variant (RGBA on transparent)
 FONT_CACHE = pathlib.Path.home() / ".cache" / "rinkd_pdf_fonts"
 FONT_CACHE.mkdir(parents=True, exist_ok=True)
 
@@ -201,7 +201,7 @@ FOOTER_H = 0.85 * inch
 def draw_footer(canv, page_num):
     canv.setFillColor(STEEL)
     canv.setFont(F["body"], 8)
-    canv.drawString(MX, 0.45*inch, "Rinkd LLC  ·  hello@rinkd.app  ·  rinkd.app")
+    canv.drawString(MX, 0.45*inch, "Rinkd LLC  ·  pete@rinkd.app  ·  rinkd.app")
     canv.drawRightString(PAGE_W - MX, 0.45*inch, f"Page {page_num}")
 
 def on_first(canv, doc):

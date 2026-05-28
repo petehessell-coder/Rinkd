@@ -91,4 +91,4 @@ In exchange for the Section 3 marketing commitments, Rinkd waives software fees 
 
 If these terms align with Nickel City's goals for the upcoming season, we'll finalize the one-page MOU and begin data integration for your next scheduled tournament. **We'd welcome the chance to prove the model on a single tournament before discussing anything broader.**
 
-Rinkd LLC · hello@rinkd.app · rinkd.app
+Rinkd LLC · pete@rinkd.app · rinkd.app
