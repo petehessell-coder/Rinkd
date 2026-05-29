@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useWakeLock } from '../lib/useWakeLock';
 import { createGameRecapPost } from '../lib/posts';
 import { resolveBracketSlotsFromSemis } from '../lib/tournamentManage';
+import { createSuspension } from '../lib/suspensions';
 import { triggerTournamentRecapPush, triggerLeagueRecapPush } from '../lib/push';
 
 const C = {
@@ -485,7 +486,21 @@ export default function ScorerView() {
     if (error || !data) { setErrorMsg('Could not save the penalty — check your connection and try again. It was NOT recorded.'); return; }
     setPenalties(prev => [data, ...prev]);
     setPenaltyModal(false);
+    const sev = penaltyForm.severity;
+    const penaltyTeam = penaltyForm.team_id, penaltyNum = penaltyForm.player_number;
     setPenaltyForm(prev => ({ ...prev, player_number: '', time_in_period: '' }));
+    // MULTIDIV-1 Phase 3 — a game misconduct / match penalty prompts a
+    // suspension (advisory; games_remaining=1). Tournament games only.
+    if (!isLeague && game?.tournament_id && (sev === 'Game Misconduct' || sev === 'Match Penalty')) {
+      const who = penaltyNum ? `#${penaltyNum} (${teamName(penaltyTeam)})` : teamName(penaltyTeam);
+      if (window.confirm(`Create a suspension for ${who}? They're ejected from this game and sit their next scheduled game (you can adjust it in Manage → Suspensions).`)) {
+        const { error: se } = await createSuspension({
+          tournamentId: game.tournament_id, divisionId: game.division_id || null, teamId: penaltyTeam,
+          playerJersey: penaltyNum, reason: sev === 'Match Penalty' ? 'match_penalty' : 'game_misconduct', gamesRemaining: 1,
+        });
+        if (se) setErrorMsg(`Penalty saved, but the suspension could not be created: ${se.message}`);
+      }
+    }
   };
 
   const saveGoalie = async () => {

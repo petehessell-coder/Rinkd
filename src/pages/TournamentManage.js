@@ -16,6 +16,7 @@ import {
   listDivisions, createDivision, updateDivision, deleteDivision, reorderDivisions,
 } from '../lib/tournamentDivisions';
 import { computeEligibilityFlags, setRosterFreeze } from '../lib/eligibility';
+import { listSuspensions, createSuspension, updateSuspension, deleteSuspension } from '../lib/suspensions';
 import { listRinks } from '../lib/rinks';
 import { listScorers, addScorerByInput, removeScorer } from '../lib/tournamentScorers';
 import { listDirectors, addDirectorByInput, removeDirector, isExtraDirector as isDirectorRole } from '../lib/tournamentDirectors';
@@ -33,11 +34,11 @@ const C = {
   green: '#22C55E', amber: '#F59E0B',
 };
 
-const TABS = ['Divisions', 'Teams', 'Schedule', 'Bracket', 'Eligibility', 'Registrations', 'Scorers', 'Settings'];
+const TABS = ['Divisions', 'Teams', 'Schedule', 'Bracket', 'Eligibility', 'Suspensions', 'Registrations', 'Scorers', 'Settings'];
 
 // Tabs whose panels operate on a single selected division. The scope selector
 // (chips) renders above these tabs when the event has >1 division.
-const DIVISION_SCOPED_TABS = new Set(['Teams', 'Schedule', 'Bracket', 'Eligibility']);
+const DIVISION_SCOPED_TABS = new Set(['Teams', 'Schedule', 'Bracket', 'Eligibility', 'Suspensions']);
 
 // Per-division format presets for the Divisions tab. "Inherit" = empty settings
 // so the division falls back to the tournament's settings (the M3/public-page
@@ -304,6 +305,7 @@ export default function TournamentManagePage({ currentUser, profile }) {
           {tab === 'Schedule' && <ScheduleTab tournamentId={id} tournament={tournament} teams={divisionTeams} games={divisionGames} divisionId={selectedDivisionId} rinks={rinks} reload={load} flash={showFlash} />}
           {tab === 'Bracket' && <BracketTab tournamentId={id} tournament={tournament} divSettings={divSettings} teams={divisionTeams} games={divisionGames} divisionId={selectedDivisionId} rinks={rinks} reload={load} flash={showFlash} />}
           {tab === 'Eligibility' && <EligibilityTab tournamentId={id} division={selectedDivision} reload={load} flash={showFlash} />}
+          {tab === 'Suspensions' && <SuspensionsTab tournamentId={id} division={selectedDivision} teams={divisionTeams} flash={showFlash} />}
           {tab === 'Registrations' && <RegistrationsTab tournamentId={id} tournament={tournament} reload={load} flash={showFlash} />}
           {tab === 'Scorers' && <ScorersTab tournamentId={id} tournamentName={tournament.name} originalDirectorId={tournament.director_id} profile={profile} flash={showFlash} />}
           {tab === 'Settings' && <SettingsTab tournament={tournament} currentUser={currentUser} reload={load} flash={showFlash} />}
@@ -1187,6 +1189,134 @@ function EligibilityTab({ tournamentId, division, reload, flash }) {
             </div>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ====================== SUSPENSIONS TAB (MULTIDIV-1 Phase 3) ======================
+// Advisory. A game-misconduct in ScorerView auto-creates a row here; the
+// director can also add one manually, mark it served, or remove it.
+const SUSP_REASONS = {
+  game_misconduct: 'Game misconduct',
+  match_penalty: 'Match penalty',
+  other: 'Other',
+};
+function SuspensionsTab({ tournamentId, division, teams = [], flash }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [form, setForm] = useState({ teamId: '', jersey: '', name: '', reason: 'game_misconduct', games: 1 });
+  const [busyId, setBusyId] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data } = await listSuspensions(tournamentId, division?.id || null);
+    setRows(data || []); setLoading(false);
+  }, [tournamentId, division]);
+  useEffect(() => { load(); }, [load]);
+
+  const teamName = useMemo(() => { const m = {}; for (const t of teams) m[t.id] = t.team_name; return m; }, [teams]);
+
+  const add = async () => {
+    if (!form.teamId) { flash?.('error', 'Pick the team.'); return; }
+    setBusyId('new');
+    const { error } = await createSuspension({
+      tournamentId, divisionId: division?.id || null, teamId: form.teamId,
+      playerJersey: form.jersey, playerName: form.name, reason: form.reason,
+      gamesRemaining: parseInt(form.games, 10) || 1,
+    });
+    setBusyId(null);
+    if (error) { flash?.('error', error.message); return; }
+    flash?.('success', 'Suspension added.');
+    setAdding(false); setForm({ teamId: '', jersey: '', name: '', reason: 'game_misconduct', games: 1 }); load();
+  };
+  const setStatus = async (s, status) => {
+    setBusyId(s.id);
+    const { error } = await updateSuspension(s.id, { status, gamesRemaining: status === 'served' ? 0 : s.games_remaining });
+    setBusyId(null);
+    if (error) { flash?.('error', error.message); return; }
+    load();
+  };
+  const remove = async (s) => {
+    if (!window.confirm('Remove this suspension?')) return;
+    setBusyId(s.id);
+    const { error } = await deleteSuspension(s.id);
+    setBusyId(null);
+    if (error) { flash?.('error', error.message); return; }
+    load();
+  };
+
+  if (!division) return <div style={{ color: C.steel, fontSize: 13, padding: '24px 0', textAlign: 'center' }}>Add a division first.</div>;
+  const active = rows.filter(r => r.status === 'active');
+  const past = rows.filter(r => r.status !== 'active');
+
+  const Row = ({ s }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, borderTop: '1px solid rgba(46,91,140,0.25)' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>
+          {s.player_name ? s.player_name + ' ' : ''}{s.player_jersey != null ? `#${s.player_jersey}` : ''} · {teamName[s.team_id] || 'Team'}
+        </div>
+        <div style={{ fontSize: 11, color: C.steel, marginTop: 2 }}>
+          {SUSP_REASONS[s.reason] || s.reason} · {s.status === 'active' ? `${s.games_remaining} game${s.games_remaining === 1 ? '' : 's'} remaining` : (s.status === 'served' ? 'served' : 'cleared')}
+        </div>
+      </div>
+      {s.status === 'active' && <button onClick={() => setStatus(s, 'served')} disabled={busyId === s.id} style={btnGhost}>Mark served</button>}
+      <button onClick={() => remove(s)} disabled={busyId === s.id} style={{ ...btnGhost, color: C.red, borderColor: C.red }}>Remove</button>
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ fontSize: 13, color: C.steel }}>Suspensions in <b style={{ color: C.ice }}>{division.name}</b> · advisory</div>
+        <button onClick={() => setAdding(v => !v)} style={btnPrimary}>+ Add</button>
+      </div>
+
+      {adding && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 10 }}>
+            <div><label style={labelStyle}>Team</label>
+              <select value={form.teamId} onChange={e => setForm(f => ({ ...f, teamId: e.target.value }))} style={inputStyle}>
+                <option value="">—</option>
+                {teams.map(t => <option key={t.id} value={t.id}>{t.team_name}</option>)}
+              </select></div>
+            <div><label style={labelStyle}>Jersey #</label><input value={form.jersey} onChange={e => setForm(f => ({ ...f, jersey: e.target.value }))} type="number" style={inputStyle} /></div>
+            <div><label style={labelStyle}>Player name</label><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="optional" style={inputStyle} /></div>
+            <div><label style={labelStyle}>Reason</label>
+              <select value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} style={inputStyle}>
+                {Object.entries(SUSP_REASONS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select></div>
+            <div><label style={labelStyle}>Games</label><input value={form.games} onChange={e => setForm(f => ({ ...f, games: e.target.value }))} type="number" min="1" style={inputStyle} /></div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <button onClick={() => setAdding(false)} style={btnGhost}>Cancel</button>
+            <button onClick={add} disabled={busyId === 'new'} style={btnPrimary}>{busyId === 'new' ? 'Saving…' : 'Add suspension'}</button>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{ textAlign: 'center', color: C.steel, padding: '24px 0', fontSize: 13 }}>Loading…</div>
+      ) : rows.length === 0 ? (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, textAlign: 'center', color: C.steel, fontSize: 13 }}>
+          No suspensions. A game-misconduct logged in the scorer view will appear here for review.
+        </div>
+      ) : (
+        <>
+          {active.length > 0 && (
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
+              <div style={{ padding: '8px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.amber, textTransform: 'uppercase' }}>Active ({active.length})</div>
+              {active.map(s => <Row key={s.id} s={s} />)}
+            </div>
+          )}
+          {past.length > 0 && (
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+              <div style={{ padding: '8px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase' }}>Served / cleared ({past.length})</div>
+              {past.map(s => <Row key={s.id} s={s} />)}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
