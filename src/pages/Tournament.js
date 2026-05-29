@@ -17,6 +17,12 @@ import StatLeaderboards from '../components/StatLeaderboards';
 
 const TABS = ['Standings','Schedule','Bracket','Stats','Feed','Info'];
 
+// MULTIDIV-1 (May 28, 2026): the feature branch reads the STAGED division-scoped
+// standings view so the live `tournament_standings` (BLPA's pilot read path)
+// stays untouched until the post-Jun-14 cutover (M7). At cutover, flip this back
+// to 'tournament_standings' — a one-line change.
+const STANDINGS_VIEW = 'tournament_standings_md';
+
 // Bracket rounds get visual weight on the schedule and a championship hero on
 // the bracket tab. Pool play is the catch-all everything else.
 const ROUND_LABEL = {
@@ -78,7 +84,12 @@ export default function TournamentPage({ currentUser }) {
   const [activeTab, setActiveTab] = useState('Standings');
   const [tournament, setTournament] = useState(null);
   const [games, setGames] = useState([]);
-  const [standings, setStandings] = useState({});
+  // MULTIDIV-1: raw standings rows for ALL divisions; the grouped, division-
+  // filtered `standings` is derived below. Loading all divisions once keeps
+  // `load` [id]-bound so a division switch doesn't tear down the realtime sub.
+  const [standingsRaw, setStandingsRaw] = useState([]);
+  const [divisions, setDivisions] = useState([]);
+  const [selectedDivisionId, setSelectedDivisionId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   // Whether the current user has a 'scorer' role on this tournament. Assigned
@@ -122,21 +133,32 @@ export default function TournamentPage({ currentUser }) {
       if (ge) { setError(ge.message); setLoading(false); return; }
       setGames(g || []);
 
-      // Load standings — same treatment so a failed query doesn't masquerade
-      // as "no games played yet."
+      // Load divisions (MULTIDIV-1). Single-division events have exactly one
+      // ("Main", from the backfill); multi-division events drive the switcher.
+      const { data: divs } = await supabase
+        .from('tournament_divisions')
+        .select('id, name, age_group, tier, sort_order, settings')
+        .eq('tournament_id', id)
+        .order('sort_order', { ascending: true });
+      const divList = divs || [];
+      setDivisions(divList);
+      // Default to the first division; preserve the user's pick across realtime
+      // reloads (don't snap back to division 1 when a score lands elsewhere).
+      setSelectedDivisionId((cur) =>
+        cur && divList.some((d) => d.id === cur) ? cur : (divList[0]?.id ?? null));
+
+      // Load standings for ALL divisions from the STAGED view — same error
+      // treatment so a failed query doesn't masquerade as "no games played yet."
+      // Grouping/filtering by the selected division happens in the derived
+      // `standings` memo below.
       const { data: s, error: se } = await supabase
-        .from('tournament_standings')
+        .from(STANDINGS_VIEW)
         .select('*')
         .eq('tournament_id', id)
         .order('pool', { ascending: true })
         .order('pool_rank', { ascending: true });
       if (se) { setError(se.message); setLoading(false); return; }
-      const grouped = (s || []).reduce((acc, row) => {
-        if (!acc[row.pool]) acc[row.pool] = [];
-        acc[row.pool].push(row);
-        return acc;
-      }, {});
-      setStandings(grouped);
+      setStandingsRaw(s || []);
 
     } catch(e) {
       setError(e.message);
@@ -288,6 +310,28 @@ export default function TournamentPage({ currentUser }) {
     if (!error) setIsFollowing(true);
   };
 
+  // MULTIDIV-1: the selected division's settings override the tournament's
+  // (points, tiebreakers, advancement). Falls back to tournament.settings, so
+  // single-division events behave exactly as before the multi-division build.
+  const selectedDivision = useMemo(
+    () => divisions.find((d) => d.id === selectedDivisionId) || null,
+    [divisions, selectedDivisionId]
+  );
+  const divSettings = useMemo(
+    () => ({ ...(tournament?.settings || {}), ...(selectedDivision?.settings || {}) }),
+    [tournament?.settings, selectedDivision]
+  );
+  // Standings for the selected division, grouped by pool — same shape the
+  // render code already expects, so nothing downstream changes.
+  const standings = useMemo(() => {
+    return (standingsRaw || [])
+      .filter((r) => !selectedDivisionId || r.division_id === selectedDivisionId)
+      .reduce((acc, row) => {
+        (acc[row.pool] = acc[row.pool] || []).push(row);
+        return acc;
+      }, {});
+  }, [standingsRaw, selectedDivisionId]);
+
   if (loading) return (
     <div style={{background:'#07111F',minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:'#F4F7FA',fontFamily:'Barlow,sans-serif',fontSize:14}}>
       Loading tournament...
@@ -335,21 +379,28 @@ export default function TournamentPage({ currentUser }) {
     return <PublicTournamentLanding tournament={tournament} games={games} navigate={navigate} />;
   }
 
-  const liveGames = games.filter(g => g.status === 'live');
-  const finalGames = games.filter(g => g.status === 'final');
-  const scheduledGames = games.filter(g => g.status === 'scheduled');
-  const bracketGames = games.filter(g => g.round && g.round !== 'pool');
-  const adv = tournament?.settings?.advancement_per_pool ?? 2;
+  // MULTIDIV-1: scope the games-derived views to the selected division.
+  // Single-division events: divisionGames === games (every game is in "Main"),
+  // so behavior is byte-identical to before.
+  const divisionGames = selectedDivisionId
+    ? games.filter(g => g.division_id === selectedDivisionId)
+    : games;
+  const liveGames = games.filter(g => g.status === 'live'); // header badge stays event-wide
+  const finalGames = divisionGames.filter(g => g.status === 'final');
+  const scheduledGames = divisionGames.filter(g => g.status === 'scheduled');
+  const bracketGames = divisionGames.filter(g => g.round && g.round !== 'pool');
+  const adv = divSettings?.advancement_per_pool ?? 2;
   // Tiebreaker config drives which standings columns to show. Default to
   // BLPA Bash order so older tournaments without an explicit list render
   // the same way; DEX puts lowest_pim second instead of goal_quotient.
-  const tiebreakers = tournament?.settings?.tiebreakers || ['points', 'goal_quotient', 'period_points'];
+  // Reads the selected division's settings (falls back to the tournament's).
+  const tiebreakers = divSettings?.tiebreakers || ['points', 'goal_quotient', 'period_points'];
   const showGQ = tiebreakers.includes('goal_quotient');
   const showPIM = tiebreakers.includes('lowest_pim') || tiebreakers.includes('penalty_minutes');
   const showPeriodPts = tiebreakers.includes('period_points');
   // Points percentage = earned / max possible (GP × points-per-win). Mirrors
   // GameSheet's P% column; cheap derived value, no extra data fetch.
-  const pointsWin = tournament?.settings?.points_win ?? 2;
+  const pointsWin = divSettings?.points_win ?? 2;
   // Champion = the team that won the championship/final game when it's
   // marked final. Used by the Bracket tab to show a podium banner for
   // small brackets (1-per-pool advancement = single final).
@@ -427,6 +478,26 @@ export default function TournamentPage({ currentUser }) {
         <div style={{fontSize:12,color:'rgba(244,247,250,0.4)',margin:'3px 0 12px'}}>
           {tournament?.start_date} – {tournament?.end_date}
         </div>
+        {/* MULTIDIV-1: division switcher — only when the event has >1 division.
+            Single-division events (incl. BLPA) render nothing here, unchanged. */}
+        {divisions.length > 1 && (
+          <div style={{display:'flex',gap:6,overflowX:'auto',paddingBottom:12}}>
+            {divisions.map(d => (
+              <button key={d.id} onClick={() => setSelectedDivisionId(d.id)}
+                style={{
+                  flexShrink:0, padding:'5px 12px', borderRadius:999,
+                  fontSize:12, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap',
+                  fontFamily:"'Barlow Condensed', sans-serif", fontStyle:'italic',
+                  letterSpacing:'0.04em', textTransform:'uppercase',
+                  border: selectedDivisionId===d.id ? 'none' : '1px solid rgba(46,91,140,0.5)',
+                  background: selectedDivisionId===d.id ? accent : 'transparent',
+                  color: selectedDivisionId===d.id ? '#fff' : 'rgba(244,247,250,0.7)',
+                }}>
+                {d.name}
+              </button>
+            ))}
+          </div>
+        )}
         <div style={{display:'flex',overflowX:'auto',borderBottom:'2px solid rgba(46,91,140,0.3)'}}>
           {TABS.map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)}
@@ -543,9 +614,9 @@ export default function TournamentPage({ currentUser }) {
         )}
 
         {activeTab === 'Schedule' && (
-          games.length === 0
+          divisionGames.length === 0
             ? <div style={{textAlign:'center',color:'rgba(244,247,250,0.3)',fontSize:13,paddingTop:40}}>No games scheduled yet</div>
-            : <ScheduleByDay games={games} navigate={navigate} canScore={canScore} />
+            : <ScheduleByDay games={divisionGames} navigate={navigate} canScore={canScore} />
         )}
 
         {activeTab === 'Bracket' && (
