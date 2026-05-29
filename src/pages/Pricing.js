@@ -24,7 +24,7 @@ const TOURNAMENT_TIERS = [
   { tier: 'Premier', teams: '25+ teams', price: '$799', unit: '/ event' },
 ];
 // Rinkd Social — community/engagement layer for operators who keep their own
-// scoring (GameSheet, etc.); results sync in. Model D pricing.
+// scoring platform; results sync in. Model D pricing.
 const SOCIAL_TIERS = [
   { tier: 'Grassroots', teams: 'Under 8 teams', price: 'Free', unit: '' },
   { tier: 'Small', teams: 'Up to 16 teams', price: '$99', unit: '/ event' },
@@ -136,9 +136,9 @@ export default function Pricing({ currentUser }) {
         </div>
 
         {/* Rinkd Social — engagement layer for operators who keep their own scoring */}
-        <SectionLabel sub="Community + engagement layer · keep your own scoring (GameSheet, etc.) · results sync in automatically">Rinkd Social</SectionLabel>
+        <SectionLabel sub="Community + engagement layer · keep your own scoring platform · results sync in automatically">Rinkd Social</SectionLabel>
         <div style={{ fontSize: 13, color: C.steel, marginBottom: 12, maxWidth: 680, lineHeight: 1.55 }}>
-          Already run your scoring elsewhere? Add the live community layer GameSheet can&rsquo;t — standings, stats, the feed, and game-recap push — flowing off your imported results, alongside your existing setup.
+          Already run your scoring elsewhere? Add the live community layer your scoring platform can&rsquo;t — standings, stats, the feed, and game-recap push — flowing off your imported results, alongside your existing setup.
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginBottom: 12 }}>
           {SOCIAL_TIERS.map((t) => <PlanCard key={t.tier} {...t} />)}
