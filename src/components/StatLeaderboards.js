@@ -71,7 +71,7 @@ function StatTable({ rows, accent, idLabel, renderId, cols }) {
   );
 }
 
-export default function StatLeaderboards({ source = 'tournament', id, accent = '#D72638' }) {
+export default function StatLeaderboards({ source = 'tournament', id, divisionId = null, accent = '#D72638' }) {
   const cfg = RPC[source] || RPC.tournament;
   const [view, setView] = useState('skaters');
   const [skaters, setSkaters] = useState(null);
@@ -82,9 +82,14 @@ export default function StatLeaderboards({ source = 'tournament', id, accent = '
   const load = useCallback(async () => {
     setLoading(true);
     setError(false);
+    // MULTIDIV-1: tournament stat RPCs accept an optional p_division_id (default
+    // null = event-wide). Only tournaments have divisions; the league RPCs don't
+    // take the arg, so only thread it when scoping a tournament to a division.
+    const args = { [cfg.arg]: id };
+    if (source === 'tournament' && divisionId) args.p_division_id = divisionId;
     const [sk, go] = await Promise.all([
-      supabase.rpc(cfg.skater, { [cfg.arg]: id }),
-      supabase.rpc(cfg.goalie, { [cfg.arg]: id }),
+      supabase.rpc(cfg.skater, args),
+      supabase.rpc(cfg.goalie, args),
     ]);
     if (sk.error || go.error) {
       setError(true);
@@ -95,7 +100,7 @@ export default function StatLeaderboards({ source = 'tournament', id, accent = '
     setSkaters((sk.data || []).filter(r => !r.is_goalie));
     setGoalies(go.data || []);
     setLoading(false);
-  }, [cfg.skater, cfg.goalie, cfg.arg, id]);
+  }, [cfg.skater, cfg.goalie, cfg.arg, id, source, divisionId]);
 
   useEffect(() => {
     let alive = true;

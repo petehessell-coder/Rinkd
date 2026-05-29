@@ -635,7 +635,7 @@ export default function TournamentPage({ currentUser }) {
         )}
 
         {activeTab === 'Stats' && (
-          <StatLeaderboards source="tournament" id={id} accent={accent} />
+          <StatLeaderboards source="tournament" id={id} divisionId={selectedDivisionId} accent={accent} />
         )}
 
         {activeTab === 'Feed' && (
