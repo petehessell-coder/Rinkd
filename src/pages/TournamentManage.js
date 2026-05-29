@@ -15,6 +15,7 @@ import {
 import {
   listDivisions, createDivision, updateDivision, deleteDivision, reorderDivisions,
 } from '../lib/tournamentDivisions';
+import { computeEligibilityFlags, setRosterFreeze } from '../lib/eligibility';
 import { listRinks } from '../lib/rinks';
 import { listScorers, addScorerByInput, removeScorer } from '../lib/tournamentScorers';
 import { listDirectors, addDirectorByInput, removeDirector, isExtraDirector as isDirectorRole } from '../lib/tournamentDirectors';
@@ -32,11 +33,11 @@ const C = {
   green: '#22C55E', amber: '#F59E0B',
 };
 
-const TABS = ['Divisions', 'Teams', 'Schedule', 'Bracket', 'Registrations', 'Scorers', 'Settings'];
+const TABS = ['Divisions', 'Teams', 'Schedule', 'Bracket', 'Eligibility', 'Registrations', 'Scorers', 'Settings'];
 
 // Tabs whose panels operate on a single selected division. The scope selector
 // (chips) renders above these tabs when the event has >1 division.
-const DIVISION_SCOPED_TABS = new Set(['Teams', 'Schedule', 'Bracket']);
+const DIVISION_SCOPED_TABS = new Set(['Teams', 'Schedule', 'Bracket', 'Eligibility']);
 
 // Per-division format presets for the Divisions tab. "Inherit" = empty settings
 // so the division falls back to the tournament's settings (the M3/public-page
@@ -302,6 +303,7 @@ export default function TournamentManagePage({ currentUser, profile }) {
           {tab === 'Teams' && <TeamsTab tournamentId={id} teams={divisionTeams} divisionId={selectedDivisionId} standingsByTeam={standingsByTeam} reload={load} flash={showFlash} />}
           {tab === 'Schedule' && <ScheduleTab tournamentId={id} tournament={tournament} teams={divisionTeams} games={divisionGames} divisionId={selectedDivisionId} rinks={rinks} reload={load} flash={showFlash} />}
           {tab === 'Bracket' && <BracketTab tournamentId={id} tournament={tournament} divSettings={divSettings} teams={divisionTeams} games={divisionGames} divisionId={selectedDivisionId} rinks={rinks} reload={load} flash={showFlash} />}
+          {tab === 'Eligibility' && <EligibilityTab tournamentId={id} division={selectedDivision} reload={load} flash={showFlash} />}
           {tab === 'Registrations' && <RegistrationsTab tournamentId={id} tournament={tournament} reload={load} flash={showFlash} />}
           {tab === 'Scorers' && <ScorersTab tournamentId={id} tournamentName={tournament.name} originalDirectorId={tournament.director_id} profile={profile} flash={showFlash} />}
           {tab === 'Settings' && <SettingsTab tournament={tournament} currentUser={currentUser} reload={load} flash={showFlash} />}
@@ -1113,6 +1115,77 @@ function ChampionshipBracketGenerator({ tournamentId, divisionId = null, teams, 
             <button onClick={() => setOpen(false)} style={btnGhost}>Cancel</button>
             <button onClick={handleGenerate} disabled={busy} style={btnPrimary}>{busy ? 'Generating…' : 'Generate'}</button>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ====================== ELIGIBILITY TAB (MULTIDIV-1 Phase 2) ======================
+// Advisory only — flags (never blocks) players with no prelim game, anyone added
+// after a roster freeze, and (once any USAH# is entered) missing USA Hockey #s.
+// Scoped to the selected division via the page's scope selector.
+function EligibilityTab({ tournamentId, division, reload, flash }) {
+  const [flags, setFlags] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const rosterFrozenAt = division?.roster_frozen_at || null;
+
+  const load = useCallback(async () => {
+    if (!division) { setFlags([]); setLoading(false); return; }
+    setLoading(true);
+    const { flags: f } = await computeEligibilityFlags(tournamentId, division.id, division.roster_frozen_at || null);
+    setFlags(f || []); setLoading(false);
+  }, [tournamentId, division]);
+  useEffect(() => { load(); }, [load]);
+
+  const toggleFreeze = async () => {
+    if (!division) return;
+    const freezing = !rosterFrozenAt;
+    if (freezing && !window.confirm('Freeze the roster now? Players who first appear in a lineup after this point get an advisory flag (it never blocks anyone).')) return;
+    setBusy(true);
+    const { error } = await setRosterFreeze(division.id, freezing);
+    setBusy(false);
+    if (error) { flash?.('error', error.message); return; }
+    flash?.('success', freezing ? 'Roster frozen.' : 'Roster unfrozen.');
+    reload?.(); load();
+  };
+
+  if (!division) return <div style={{ color: C.steel, fontSize: 13, padding: '24px 0', textAlign: 'center' }}>Add a division first.</div>;
+
+  return (
+    <div>
+      <div style={{ fontSize: 13, color: C.steel, marginBottom: 14, lineHeight: 1.5 }}>
+        Advisory checks for <b style={{ color: C.ice }}>{division.name}</b>. These flag potential issues for your review — they never block scoring or puck drop. Nickel City has final say on all matters.
+      </div>
+
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: C.ice }}>Roster freeze</div>
+          <div style={{ fontSize: 12, color: C.steel, marginTop: 3 }}>
+            {rosterFrozenAt ? `Frozen ${fmtDateTime(rosterFrozenAt)} — later lineup additions are flagged below.` : 'Not frozen. Freeze once rosters are set to catch late additions.'}
+          </div>
+        </div>
+        <button onClick={toggleFreeze} disabled={busy} style={rosterFrozenAt ? btnGhost : btnPrimary}>{rosterFrozenAt ? 'Unfreeze' : 'Freeze rosters'}</button>
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: 'center', color: C.steel, padding: '24px 0', fontSize: 13 }}>Checking eligibility…</div>
+      ) : flags.length === 0 ? (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, textAlign: 'center', color: C.steel, fontSize: 13 }}>
+          <div style={{ fontSize: 28, marginBottom: 8 }}>✅</div>
+          No eligibility flags in this division.
+        </div>
+      ) : (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+          {flags.map((f, i) => (
+            <div key={f.kind + i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none' }}>
+              <span style={{ fontSize: 16 }}>⚠️</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, color: C.ice }}>{f.message}</div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

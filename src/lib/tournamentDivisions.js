@@ -14,7 +14,7 @@ import { supabase } from './supabase';
 export async function listDivisions(tournamentId) {
   const { data, error } = await supabase
     .from('tournament_divisions')
-    .select('id, tournament_id, name, age_group, tier, sort_order, settings, created_at')
+    .select('id, tournament_id, name, age_group, tier, sort_order, settings, roster_frozen_at, created_at')
     .eq('tournament_id', tournamentId)
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true });
