@@ -399,7 +399,7 @@ export default function ScorerView() {
       // finalize itself.
       if (game.round === 'semifinal' && game.pool) {
         try {
-          const { error: resolveErr } = await resolveBracketSlotsFromSemis(game.tournament_id, game.pool);
+          const { error: resolveErr } = await resolveBracketSlotsFromSemis(game.tournament_id, game.pool, game.division_id);
           if (resolveErr) console.warn('[scorer] bracket auto-fill failed:', resolveErr.message);
         } catch (e) {
           // eslint-disable-next-line no-console

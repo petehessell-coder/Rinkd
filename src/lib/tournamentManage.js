@@ -6,6 +6,12 @@ import { supabase } from './supabase';
  * tournaments.director_id = auth.uid().
  */
 
+// MULTIDIV-1 (M4): the feature branch reads the STAGED division-scoped
+// standings view (has a `division_id` column); the live `tournament_standings`
+// is left untouched for pilot safety. The M7 cutover flips this back to
+// 'tournament_standings' after Jun 14 (see CLAUDE_CODE_HANDOFF.md §7).
+const STANDINGS_VIEW = 'tournament_standings_md';
+
 // ------------------------------ Teams ------------------------------
 
 export async function listTeams(tournamentId) {
@@ -24,6 +30,7 @@ export async function createTeam(tournamentId, fields) {
     .from('tournament_teams')
     .insert({
       tournament_id: tournamentId,
+      division_id: fields.divisionId || null,
       team_name: (fields.teamName || '').trim(),
       pool: fields.pool?.trim() || null,
       seed: fields.seed ? parseInt(fields.seed, 10) : null,
@@ -141,14 +148,18 @@ export function roundRobinPairs(teamIds) {
  */
 export async function generatePoolSchedule(tournamentId, opts) {
   const {
-    startDate,        // ISO date string e.g. '2026-06-12T08:00'
-    gameMinutes = 60, // game length incl. flood
-    rinkId = null,    // optional default rink
+    startDate,         // ISO date string e.g. '2026-06-12T08:00'
+    gameMinutes = 60,  // game length incl. flood
+    rinkId = null,     // optional default rink
     replaceExisting = false,
+    divisionId = null, // MULTIDIV-1: scope the round-robin to one division
   } = opts;
 
-  const { data: teams } = await listTeams(tournamentId);
-  if (!teams.length) return { error: { message: 'No teams found in tournament' }, inserted: 0 };
+  const { data: allTeams } = await listTeams(tournamentId);
+  // MULTIDIV-1: only pair teams within the target division. Single-division
+  // events pass divisionId = the "Main" division, so this is a no-op filter.
+  const teams = divisionId ? allTeams.filter((t) => t.division_id === divisionId) : allTeams;
+  if (!teams.length) return { error: { message: 'No teams found in this division' }, inserted: 0 };
 
   // Group by pool. Teams with no pool go into '_' bucket together.
   const byPool = {};
@@ -166,11 +177,15 @@ export async function generatePoolSchedule(tournamentId, opts) {
   // `generate_pool_schedule(tournament_id, rows)` RPC so the swap is atomic.
   let oldIds = [];
   if (replaceExisting) {
-    const { data: olds } = await supabase
+    let q = supabase
       .from('games')
       .select('id')
       .eq('tournament_id', tournamentId)
       .eq('round', 'pool');
+    // MULTIDIV-1: only replace THIS division's pool games — leave sibling
+    // divisions' schedules intact when regenerating one division.
+    if (divisionId) q = q.eq('division_id', divisionId);
+    const { data: olds } = await q;
     oldIds = (olds || []).map(o => o.id);
   }
 
@@ -181,6 +196,7 @@ export async function generatePoolSchedule(tournamentId, opts) {
     for (const p of pairs) {
       rows.push({
         tournament_id: tournamentId,
+        division_id: divisionId,
         home_team_id: p.homeId,
         away_team_id: p.awayId,
         rink_id: rinkId,
@@ -222,9 +238,11 @@ export async function generatePoolSchedule(tournamentId, opts) {
 // tab so the director can see records at a glance during a live event.
 // Tiny columns set; full standings view is heavier than we need here.
 export async function listStandingsSummary(tournamentId) {
+  // MULTIDIV-1: read the staged division-scoped view + carry division_id so the
+  // manage page can key the W/L/T lookup per (team, division).
   const { data, error } = await supabase
-    .from('tournament_standings')
-    .select('team_id, gp, wins, losses, ties, pts')
+    .from(STANDINGS_VIEW)
+    .select('team_id, division_id, gp, wins, losses, ties, pts')
     .eq('tournament_id', tournamentId);
   return { data: data || [], error };
 }
@@ -233,12 +251,14 @@ export async function listStandingsSummary(tournamentId) {
  * Top-N-per-pool seeding. Returns an ordered list of qualifying teams with
  * their pool + pool rank derived from the standings view.
  */
-export async function loadPoolQualifiers(tournamentId, advancePerPool) {
-  const { data } = await supabase
-    .from('tournament_standings')
+export async function loadPoolQualifiers(tournamentId, advancePerPool, divisionId = null) {
+  let q = supabase
+    .from(STANDINGS_VIEW)
     .select('*')
     .eq('tournament_id', tournamentId)
-    .lte('pool_rank', advancePerPool)
+    .lte('pool_rank', advancePerPool);
+  if (divisionId) q = q.eq('division_id', divisionId);
+  const { data } = await q
     .order('pool', { ascending: true })
     .order('pool_rank', { ascending: true });
   return data || [];
@@ -248,11 +268,12 @@ export async function loadPoolQualifiers(tournamentId, advancePerPool) {
  * Create a bracket matchup. Two team IDs, a round label ('quarterfinal' |
  * 'semifinal' | 'final' | 'consolation'), and a start time.
  */
-export async function createBracketGame(tournamentId, { homeTeamId, awayTeamId, round, startTime, rinkId = null }) {
+export async function createBracketGame(tournamentId, { homeTeamId, awayTeamId, round, startTime, rinkId = null, divisionId = null }) {
   const { data, error } = await supabase
     .from('games')
     .insert({
       tournament_id: tournamentId,
+      division_id: divisionId,
       home_team_id: homeTeamId,
       away_team_id: awayTeamId,
       round,
@@ -293,13 +314,17 @@ export async function createBracketGame(tournamentId, { homeTeamId, awayTeamId, 
 // ============================================================================
 
 export async function generateChampionshipBracket(tournamentId, opts = {}) {
-  const { startTime = null, rinkId = null, gameMinutes = 60 } = opts;
+  const { startTime = null, rinkId = null, gameMinutes = 60, divisionId = null } = opts;
   // 1. Pull standings to determine seeds per pool. Caller is expected to
   //    only run this once all pool games are final.
-  const { data: standings, error: stdErr } = await supabase
-    .from('tournament_standings')
+  // MULTIDIV-1: read the staged division-scoped view; scope the seeds to the
+  //    target division so a multi-division event brackets one division at a time.
+  let stdQ = supabase
+    .from(STANDINGS_VIEW)
     .select('team_id, pool, pool_rank')
-    .eq('tournament_id', tournamentId)
+    .eq('tournament_id', tournamentId);
+  if (divisionId) stdQ = stdQ.eq('division_id', divisionId);
+  const { data: standings, error: stdErr } = await stdQ
     .order('pool', { ascending: true })
     .order('pool_rank', { ascending: true });
   if (stdErr) return { inserted: 0, error: stdErr };
@@ -320,11 +345,15 @@ export async function generateChampionshipBracket(tournamentId, opts = {}) {
   // 3. Refuse to re-run when bracket games already exist for this tournament
   //    — avoids double-creation if the button is double-clicked. Director can
   //    delete bracket games manually before re-generating.
-  const { data: existing } = await supabase
+  let existingQ = supabase
     .from('games')
     .select('id, round')
     .eq('tournament_id', tournamentId)
     .neq('round', 'pool');
+  // MULTIDIV-1: scope the "already has a bracket" guard to this division so
+  // generating division B's bracket isn't blocked by division A's bracket.
+  if (divisionId) existingQ = existingQ.eq('division_id', divisionId);
+  const { data: existing } = await existingQ;
   if (existing && existing.length > 0) {
     return { inserted: 0, error: new Error(`Bracket already has ${existing.length} game${existing.length === 1 ? '' : 's'}. Delete them first if you want to regenerate.`) };
   }
@@ -344,10 +373,10 @@ export async function generateChampionshipBracket(tournamentId, opts = {}) {
     // unless caller assigns different rinks (which they should).
     const slotFor = (idx) => baseStart ? new Date(baseStart.getTime() + (poolIdx * 4 + idx) * slotMinutes * 60_000).toISOString() : null;
     rows.push(
-      { tournament_id: tournamentId, round: 'semifinal',   pool, home_team_id: seed(2), away_team_id: seed(3), status: 'scheduled', start_time: slotFor(0), rink_id: rinkId },
-      { tournament_id: tournamentId, round: 'semifinal',   pool, home_team_id: seed(1), away_team_id: seed(4), status: 'scheduled', start_time: slotFor(1), rink_id: rinkId },
-      { tournament_id: tournamentId, round: 'consolation', pool, home_team_id: null,    away_team_id: null,    status: 'scheduled', start_time: slotFor(2), rink_id: rinkId },
-      { tournament_id: tournamentId, round: 'final',       pool, home_team_id: null,    away_team_id: null,    status: 'scheduled', start_time: slotFor(3), rink_id: rinkId },
+      { tournament_id: tournamentId, division_id: divisionId, round: 'semifinal',   pool, home_team_id: seed(2), away_team_id: seed(3), status: 'scheduled', start_time: slotFor(0), rink_id: rinkId },
+      { tournament_id: tournamentId, division_id: divisionId, round: 'semifinal',   pool, home_team_id: seed(1), away_team_id: seed(4), status: 'scheduled', start_time: slotFor(1), rink_id: rinkId },
+      { tournament_id: tournamentId, division_id: divisionId, round: 'consolation', pool, home_team_id: null,    away_team_id: null,    status: 'scheduled', start_time: slotFor(2), rink_id: rinkId },
+      { tournament_id: tournamentId, division_id: divisionId, round: 'final',       pool, home_team_id: null,    away_team_id: null,    status: 'scheduled', start_time: slotFor(3), rink_id: rinkId },
     );
   });
 
@@ -371,18 +400,22 @@ export function bracketWinnerSide(game) {
 // at all semis in this game's pool; if both are final, fills the gold and
 // bronze games' empty home/away slots with the winners/losers. Idempotent:
 // if the slots are already filled (from a previous run), it skips.
-export async function resolveBracketSlotsFromSemis(tournamentId, pool) {
+export async function resolveBracketSlotsFromSemis(tournamentId, pool, divisionId = null) {
   if (!tournamentId || !pool) return { updated: 0, error: null };
   // Pull all bracket games for the pool ordered by start_time so semi 1 is
   // the earlier (seed 2 v 3) and semi 2 is the later (seed 1 v 4) per the
   // ordering generateChampionshipBracket uses.
-  const { data: bracketGames, error: ge } = await supabase
+  // MULTIDIV-1: scope to the division too — two divisions can share a pool
+  // name ("Pool A"), and without this the resolver would pair semis across
+  // divisions by start_time and wire the wrong teams into gold/bronze.
+  let bq = supabase
     .from('games')
-    .select('id, round, pool, home_team_id, away_team_id, home_score, away_score, status, shootout_winner, start_time')
+    .select('id, round, pool, division_id, home_team_id, away_team_id, home_score, away_score, status, shootout_winner, start_time')
     .eq('tournament_id', tournamentId)
     .eq('pool', pool)
-    .neq('round', 'pool')
-    .order('start_time', { ascending: true });
+    .neq('round', 'pool');
+  if (divisionId) bq = bq.eq('division_id', divisionId);
+  const { data: bracketGames, error: ge } = await bq.order('start_time', { ascending: true });
   if (ge) return { updated: 0, error: ge };
 
   const semis = (bracketGames || []).filter(g => g.round === 'semifinal');
