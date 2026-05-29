@@ -170,6 +170,12 @@ export default function TournamentManagePage({ currentUser, profile }) {
     </Layout>
   );
 
+  // SOCIAL-2: GameSheet-synced events don't use Rinkd for registration or
+  // manual scoring, so the Registrations tab is hidden (scores flow from the
+  // poller; the GameSheet tab manages the link).
+  const isExternal = tournament?.scoring_source === 'external';
+  const visibleTabs = isExternal ? TABS.filter((t) => t !== 'Registrations') : TABS;
+
   return (
     <Layout profile={profile}>
       <div style={{ background: C.dark, minHeight: '100vh', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>
@@ -198,7 +204,7 @@ export default function TournamentManagePage({ currentUser, profile }) {
               clips off-screen. Without the mask, mobile users miss the last tab. */}
           <div style={{ position: 'relative', marginBottom: 18 }}>
             <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${C.border}`, overflowX: 'auto', scrollbarWidth: 'none' }}>
-              {TABS.map((t) => (
+              {visibleTabs.map((t) => (
                 <button key={t} onClick={() => setTab(t)}
                   style={{ background: 'transparent', color: tab === t ? C.ice : C.steel, border: 'none', padding: '10px 16px', cursor: 'pointer', fontSize: 13, fontWeight: tab === t ? 700 : 500, borderBottom: tab === t ? `3px solid ${C.red}` : '3px solid transparent', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap', flexShrink: 0 }}>
                   {t}
