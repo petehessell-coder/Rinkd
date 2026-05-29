@@ -23,6 +23,14 @@ const TOURNAMENT_TIERS = [
   { tier: 'Large', teams: 'Up to 24 teams', price: '$499', unit: '/ event' },
   { tier: 'Premier', teams: '25+ teams', price: '$799', unit: '/ event' },
 ];
+// Rinkd Social — community/engagement layer for operators who keep their own
+// scoring (GameSheet, etc.); results sync in. Model D pricing.
+const SOCIAL_TIERS = [
+  { tier: 'Grassroots', teams: 'Under 8 teams', price: 'Free', unit: '' },
+  { tier: 'Small', teams: 'Up to 16 teams', price: '$99', unit: '/ event' },
+  { tier: 'Mid', teams: 'Up to 24 teams', price: '$249', unit: '/ event', popular: true },
+  { tier: 'Large', teams: '25+ teams', price: '$499', unit: '/ event' },
+];
 
 function PlanCard({ tier, teams, price, unit, popular }) {
   return (
@@ -125,6 +133,19 @@ export default function Pricing({ currentUser }) {
           <a href="mailto:hello@rinkd.app?subject=Multi-division tournament — custom package" style={{ color: C.ice }}>
             Custom package pricing available — get in touch.
           </a>
+        </div>
+
+        {/* Rinkd Social — engagement layer for operators who keep their own scoring */}
+        <SectionLabel sub="Community + engagement layer · keep your own scoring (GameSheet, etc.) · results sync in automatically">Rinkd Social</SectionLabel>
+        <div style={{ fontSize: 13, color: C.steel, marginBottom: 12, maxWidth: 680, lineHeight: 1.55 }}>
+          Already run your scoring elsewhere? Add the live community layer GameSheet can&rsquo;t — standings, stats, the feed, and game-recap push — flowing off your imported results, alongside your existing setup.
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginBottom: 12 }}>
+          {SOCIAL_TIERS.map((t) => <PlanCard key={t.tier} {...t} />)}
+        </div>
+        <div style={{ fontSize: 13, color: C.steel, marginBottom: 40 }}>
+          <strong style={{ color: C.ice }}>Operator Annual · $1,500 / year</strong> — unlimited tournaments + leagues + the off-season feed. Best value for busy operators.{' '}
+          <a href="mailto:hello@rinkd.app?subject=Rinkd Social" style={{ color: C.ice }}>Get in touch.</a>
         </div>
 
         {/* Cross-sell + registration */}
