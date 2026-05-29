@@ -31,9 +31,12 @@ export async function createLink(tournamentId, { seasonId, divisionId = null, au
     .select()
     .single();
   if (error) return { data: null, error };
-  // Best-effort: mark the tournament external-scored. RLS already gates this to
-  // the director (guard_is_activated doesn't touch scoring_source).
-  await supabase.from('tournaments').update({ scoring_source: 'external' }).eq('id', tournamentId);
+  // Mark the tournament external-scored AND stash the season id in the public
+  // settings JSONB — the public Stats tab reads it to embed GameSheet's stats
+  // widget (gamesheet_links is director-only RLS, so it can't read it directly).
+  const { data: tRow } = await supabase.from('tournaments').select('settings').eq('id', tournamentId).single();
+  const mergedSettings = { ...(tRow?.settings || {}), gamesheet_season_id: sid };
+  await supabase.from('tournaments').update({ scoring_source: 'external', settings: mergedSettings }).eq('id', tournamentId);
   return { data, error: null };
 }
 
@@ -50,7 +53,10 @@ export async function removeLink(linkId, tournamentId) {
   const { data: remaining } = await supabase
     .from('gamesheet_links').select('id').eq('tournament_id', tournamentId).limit(1);
   if (!remaining || remaining.length === 0) {
-    await supabase.from('tournaments').update({ scoring_source: 'rinkd' }).eq('id', tournamentId);
+    const { data: tRow } = await supabase.from('tournaments').select('settings').eq('id', tournamentId).single();
+    const s = { ...(tRow?.settings || {}) };
+    delete s.gamesheet_season_id;
+    await supabase.from('tournaments').update({ scoring_source: 'rinkd', settings: s }).eq('id', tournamentId);
   }
   return { error: null };
 }

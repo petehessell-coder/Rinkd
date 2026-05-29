@@ -72,13 +72,33 @@ async function fetchSeasonScores(seasonId: string): Promise<any[]> {
 }
 
 // Build the recap headline, mirroring ScorerView's buildRecapContent shape.
-function recapContent(homeName: string, homeGoals: number, awayName: string, awayGoals: number, type: string | null): string {
+function titleCase(s: string): string {
+  return String(s || '').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+// Goal scorers from the GameSheet recap[] (both teams), tallied "Name ×N".
+// recap exposes scorer names only (no jersey/assists) — enough for a recap line.
+function scorerSummary(g: any): string {
+  const names: string[] = [];
+  for (const team of [g?.homeTeam, g?.visitorTeam]) {
+    for (const p of (team?.recap ?? [])) for (const e of (p?.events ?? [])) {
+      if (e?.playerName) names.push(titleCase(e.playerName));
+    }
+  }
+  if (!names.length) return '';
+  const counts = new Map<string, number>(); const order: string[] = [];
+  for (const n of names) { if (!counts.has(n)) order.push(n); counts.set(n, (counts.get(n) || 0) + 1); }
+  const parts = order.map((n) => counts.get(n)! > 1 ? `${n} ×${counts.get(n)}` : n);
+  return 'Goals: ' + parts.join(', ');
+}
+
+function recapContent(homeName: string, homeGoals: number, awayName: string, awayGoals: number, type: string | null, scorers = ''): string {
   const headline = `🏒 FINAL · ${homeName} ${homeGoals}, ${awayName} ${awayGoals}`;
   const isPlayoff = (type || '').toLowerCase().includes('playoff');
   const winner = homeGoals > awayGoals ? homeName : awayGoals > homeGoals ? awayName : null;
   const ctx = isPlayoff ? '🏆 Playoff' : 'Pool play';
   const winnerLine = isPlayoff && winner ? `\n${winner} advance.` : '';
-  return `${headline}\n${ctx}${winnerLine}`;
+  const scorerLine = scorers ? `\n${scorers}` : '';
+  return `${headline}\n${ctx}${winnerLine}${scorerLine}`;
 }
 
 async function postRecapAndPush(supabase: Sb, opts: {
@@ -199,7 +219,7 @@ async function syncLink(supabase: Sb, link: any): Promise<Record<string, number>
           const awayName = sameOrientation ? gAway : gHome;
           await postRecapAndPush(supabase, {
             rinkdGameId: rg.id, tournamentId: link.tournament_id, directorId: link.director_id,
-            content: recapContent(homeName, home, awayName, away, g.type),
+            content: recapContent(homeName, home, awayName, away, g.type, scorerSummary(g)),
           });
           stats.recaps++;
         }
@@ -244,7 +264,7 @@ async function syncLink(supabase: Sb, link: any): Promise<Record<string, number>
           });
           await postRecapAndPush(supabase, {
             rinkdGameId: ng.id, tournamentId: link.tournament_id, directorId: link.director_id,
-            content: recapContent(gHome, gHomeGoals, gAway, gAwayGoals, g.type),
+            content: recapContent(gHome, gHomeGoals, gAway, gAwayGoals, g.type, scorerSummary(g)),
           });
           stats.imported++; stats.recaps++;
           continue;

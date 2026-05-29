@@ -564,7 +564,8 @@ export default function TournamentPage({ currentUser }) {
         )}
 
         {activeTab === 'Stats' && (
-          <StatLeaderboards source="tournament" id={id} accent={accent} />
+          <StatLeaderboards source="tournament" id={id} accent={accent}
+            gamesheetSeasonId={tournament?.scoring_source === 'external' ? (tournament?.settings?.gamesheet_season_id || null) : null} />
         )}
 
         {activeTab === 'Feed' && (
