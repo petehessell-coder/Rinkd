@@ -137,15 +137,51 @@ async function postRecapAndPush(supabase: Sb, opts: {
   }
 }
 
+// Map a GameSheet game's free-text label/type to an allowed Rinkd round
+// (games_round_check = pool|semifinal|final|consolation). Returns null for an
+// ambiguous playoff game (quarterfinal / generic "Playoff") so the caller does
+// NOT auto-import it with a bogus round — it queues as pending for the director.
+// Order matters: "Semi-Final" must hit semi before final; "Quarterfinal" must
+// not be read as a "final".
+function mapGsRound(g: any): string | null {
+  const label = `${g?.number ?? ''} ${g?.type ?? ''}`.toLowerCase();
+  if (/bronze|consolation|3rd|third/.test(label)) return 'consolation';
+  if (/semi/.test(label)) return 'semifinal';
+  if (/quarter/.test(label)) return null;
+  if (/final|championship|gold|cup/.test(label)) return 'final';
+  if (label.includes('playoff')) return null;
+  return 'pool';
+}
+
+// After a semifinal is written final from ANY source, advance the bracket:
+// resolve_tournament_bracket fills the final + consolation slots from the two
+// semis (idempotent, shootout-aware). On the turn it actually resolves, post a
+// "Final set" recap so followers get the matchup. No-op for non-semis / no pool.
+async function maybeAdvanceBracket(supabase: Sb, link: any,
+  g: { round: string | null; pool: string | null; division_id: string | null }): Promise<number> {
+  if (g.round !== 'semifinal' || !g.pool) return 0;
+  const { data, error } = await supabase.rpc('resolve_tournament_bracket', {
+    p_tournament_id: link.tournament_id, p_pool: g.pool, p_division_id: g.division_id ?? null,
+  });
+  if (error) { console.error('[gamesheet] bracket advance fail', error); return 0; }
+  if (!data || !data.resolved || !data.final?.game_id) return 0;
+  await postRecapAndPush(supabase, {
+    rinkdGameId: data.final.game_id, tournamentId: link.tournament_id, directorId: link.director_id,
+    content: `🏒 FINAL SET · ${data.final.home} vs ${data.final.away}\nThe championship matchup is locked.`,
+  });
+  return 1;
+}
+
 type RinkdGame = {
   id: string; division_id: string | null; status: string;
   home_score: number | null; away_score: number | null; start_time: string | null;
   home_name: string; away_name: string;
+  round: string | null; pool: string | null;
 };
 
 async function loadRinkdGames(supabase: Sb, tournamentId: string, divisionId: string | null): Promise<RinkdGame[]> {
   let q = supabase.from('games')
-    .select('id, division_id, status, home_score, away_score, start_time, home_team:tournament_teams!home_team_id(team_name), away_team:tournament_teams!away_team_id(team_name)')
+    .select('id, division_id, status, home_score, away_score, start_time, round, pool, home_team:tournament_teams!home_team_id(team_name), away_team:tournament_teams!away_team_id(team_name)')
     .eq('tournament_id', tournamentId);
   if (divisionId) q = q.eq('division_id', divisionId);
   const { data, error } = await q;
@@ -154,6 +190,7 @@ async function loadRinkdGames(supabase: Sb, tournamentId: string, divisionId: st
     id: g.id, division_id: g.division_id, status: g.status,
     home_score: g.home_score, away_score: g.away_score, start_time: g.start_time,
     home_name: g.home_team?.team_name ?? '', away_name: g.away_team?.team_name ?? '',
+    round: g.round ?? null, pool: g.pool ?? null,
   }));
 }
 
@@ -223,6 +260,11 @@ async function syncLink(supabase: Sb, link: any): Promise<Record<string, number>
           });
           stats.recaps++;
         }
+        // Bracket advance: if this matched game is a semifinal now final, fill
+        // the final + consolation slots (director pre-built the bracket). Works
+        // even though ScorerView's client-side resolver never runs in external mode.
+        stats.recaps += await maybeAdvanceBracket(supabase, link,
+          { round: rg.round, pool: rg.pool, division_id: rg.division_id });
       }
       await supabase.from('gamesheet_game_map')
         .update({ gs_home_goals: gHomeGoals, gs_visitor_goals: gAwayGoals, updated_at: new Date().toISOString() })
@@ -245,12 +287,16 @@ async function syncLink(supabase: Sb, link: any): Promise<Record<string, number>
     // automatically (nothing to mis-match against), so it skips the confirm-once
     // step. Gated by the link's auto_import flag (off = leave as an unmatched
     // pending row for the director to resolve against a pre-built schedule). ---
-    if (!matched && link.auto_import) {
+    // mapGsRound returns null for an ambiguous playoff (quarterfinal / generic) —
+    // don't fabricate a round (would violate games_round_check); fall through to a
+    // pending row so the director can place it against a pre-built bracket.
+    const importRound = (!matched && link.auto_import) ? mapGsRound(g) : null;
+    if (!matched && link.auto_import && importRound !== null) {
       const homeId = await findOrCreateTeam(gHome);
       const awayId = await findOrCreateTeam(gAway);
       if (homeId && awayId) {
         const startIso = (() => { const t = Date.parse(`${g.date ?? ''} ${g.time ?? ''}`.trim()); return Number.isNaN(t) ? new Date().toISOString() : new Date(t).toISOString(); })();
-        const round = String(g.type ?? '').toLowerCase().includes('playoff') ? 'playoff' : 'pool';
+        const round = importRound;
         const { data: ng, error: ge } = await supabase.from('games').insert({
           tournament_id: link.tournament_id, division_id: link.division_id || null,
           home_team_id: homeId, away_team_id: awayId, pool: null, round,
