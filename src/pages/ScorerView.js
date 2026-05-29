@@ -166,7 +166,7 @@ export default function ScorerView() {
           // when the format says they're not allowed (e.g., BLPA Bash is
           // regulation → shootout, no OT). is_activated drives the monetization
           // gate — show the activation-pending wall instead of the scorer UI.
-          .select('*, home_team:tournament_teams!home_team_id(id,team_name), away_team:tournament_teams!away_team_id(id,team_name), rink:rinks(name,sub_rink), tournament:tournaments(name,director_id,settings,is_activated)')
+          .select('*, home_team:tournament_teams!home_team_id(id,team_name), away_team:tournament_teams!away_team_id(id,team_name), rink:rinks(name,sub_rink), tournament:tournaments(name,director_id,settings,is_activated,scoring_source)')
           .eq('id', gameId).single();
     if (!g) { navigate(-1); return; }
 
@@ -551,6 +551,24 @@ export default function ScorerView() {
         <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.65)', marginBottom: 18, lineHeight: 1.6 }}>
           Live scoring is locked until Rinkd activates this {isLeague ? 'league' : 'tournament'}.
           Email <a href={`mailto:hello@rinkd.app?subject=${encodeURIComponent((isLeague ? 'League' : 'Tournament') + ' Activation Request')}`} style={{ color: '#F59E0B' }}>hello@rinkd.app</a> to activate.
+        </div>
+        <button onClick={() => navigate(-1)} style={{ background: C.blue, border: 'none', borderRadius: 999, color: '#fff', padding: '10px 22px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>← Back</button>
+      </div>
+    </div>
+  );
+
+  // SOCIAL-2 external-scoring gate. When a tournament is GameSheet-synced
+  // (scoring_source='external'), scores are mirrored in by the poller — manual
+  // scoring would create a conflicting second source, so the scorer UI is
+  // replaced with a read-only notice. (League games are never external.)
+  const isExternal = !isLeague && game?.tournament?.scoring_source === 'external';
+  if (isExternal) return (
+    <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', padding: 24 }}>
+      <div style={{ textAlign: 'center', maxWidth: 380 }}>
+        <div style={{ fontSize: 32, marginBottom: 12 }}>🔄</div>
+        <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, marginBottom: 8 }}>Scores synced from GameSheet</div>
+        <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.65)', marginBottom: 18, lineHeight: 1.6 }}>
+          This event is in GameSheet-synced mode, so results flow in automatically and manual scoring is turned off. Manage the link from the tournament's GameSheet tab.
         </div>
         <button onClick={() => navigate(-1)} style={{ background: C.blue, border: 'none', borderRadius: 999, color: '#fff', padding: '10px 22px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>← Back</button>
       </div>
