@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { useIsRinkdAdmin } from '../lib/userRole';
+import { deleteTournamentAsAdmin, deleteLeagueAsAdmin, deleteTeamAsAdmin } from '../lib/adminDelete';
 
 // Admin activation console. Rinkd staff only.
 //
@@ -58,13 +59,19 @@ function StatusPill({ value }) {
   );
 }
 
-function Row({ kind, item, onToggle, busyId }) {
+const KIND_LABEL = { tournament: 'TOURNAMENT', league: 'LEAGUE', team: 'TEAM' };
+
+function Row({ kind, item, onToggle, onDelete, busyId }) {
   const isActivated = !!item.is_activated;
   const navigate = useNavigate();
-  const detailUrl = kind === 'tournament' ? `/tournament/${item.id}` : `/league/${item.id}`;
+  const detailUrl = kind === 'tournament' ? `/tournament/${item.id}` : kind === 'league' ? `/league/${item.id}` : `/team/${item.id}`;
   const subtitle = useMemo(() => {
     if (kind === 'tournament') {
       const parts = [item.division, item.start_date, item.end_date].filter(Boolean);
+      return parts.join(' · ');
+    }
+    if (kind === 'team') {
+      const parts = [item.level, item.location].filter(Boolean);
       return parts.join(' · ');
     }
     const parts = [item.division, item.season, item.start_date, item.end_date].filter(Boolean);
@@ -94,13 +101,52 @@ function Row({ kind, item, onToggle, busyId }) {
             {item.name}
           </div>
           <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, background: 'rgba(46,91,140,0.3)', color: C.steel, letterSpacing: '0.06em' }}>
-            {kind === 'tournament' ? 'TOURNAMENT' : 'LEAGUE'}
+            {KIND_LABEL[kind]}
           </span>
         </div>
         {subtitle && <div style={{ fontSize: 11, color: C.steel, marginTop: 2 }}>{subtitle}</div>}
-        <div style={{ marginTop: 4 }}><StatusPill value={isActivated} /></div>
+        {kind !== 'team' && <div style={{ marginTop: 4 }}><StatusPill value={isActivated} /></div>}
       </div>
-      <Toggle value={isActivated} busy={busyId === item.id} onChange={(v) => onToggle(kind, item.id, v)} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+        {kind !== 'team' && <Toggle value={isActivated} busy={busyId === item.id} onChange={(v) => onToggle(kind, item.id, v)} />}
+        <button title="Delete permanently" onClick={() => onDelete(kind, item)}
+          style={{ background: 'transparent', border: '0.5px solid rgba(215,38,56,0.5)', color: C.red, borderRadius: 8, padding: '5px 9px', cursor: 'pointer', fontSize: 13, lineHeight: 1 }}>
+          🗑
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Typed-name confirmation for an irreversible cascade delete.
+function DeleteModal({ target, onCancel, onConfirm, busy, error }) {
+  const [text, setText] = useState('');
+  useEffect(() => { setText(''); }, [target]);
+  if (!target) return null;
+  const { kind, item } = target;
+  const match = text.trim() === (item.name || '').trim();
+  return (
+    <div onClick={busy ? undefined : onCancel}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()}
+        style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 14, padding: 22, maxWidth: 440, width: '100%', fontFamily: 'Barlow, sans-serif', color: C.ice }}>
+        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 22, color: C.red }}>Delete {kind}?</div>
+        <div style={{ fontSize: 13, color: C.steel, marginTop: 10, lineHeight: 1.55 }}>
+          This permanently deletes <strong style={{ color: C.ice }}>{item.name}</strong> and ALL of its data — games, scores, stats, rosters, recaps, and feed posts. <strong style={{ color: C.ice }}>This cannot be undone.</strong>
+        </div>
+        <div style={{ fontSize: 12, color: C.steel, marginTop: 14, marginBottom: 6 }}>Type the exact name to confirm:</div>
+        <input autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder={item.name} disabled={busy}
+          style={{ width: '100%', background: '#07111F', border: `0.5px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+        {error && <div style={{ color: C.red, fontSize: 12, marginTop: 10 }}>{error}</div>}
+        <div style={{ display: 'flex', gap: 10, marginTop: 18, justifyContent: 'flex-end' }}>
+          <button onClick={onCancel} disabled={busy}
+            style={{ background: 'transparent', border: `0.5px solid ${C.border}`, color: C.steel, borderRadius: 999, padding: '8px 16px', cursor: busy ? 'wait' : 'pointer', fontFamily: 'Barlow, sans-serif', fontSize: 13 }}>Cancel</button>
+          <button onClick={onConfirm} disabled={!match || busy}
+            style={{ background: match && !busy ? C.red : 'rgba(215,38,56,0.35)', border: 'none', color: '#fff', borderRadius: 999, padding: '8px 18px', cursor: match && !busy ? 'pointer' : 'not-allowed', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700 }}>
+            {busy ? 'Deleting…' : 'Delete permanently'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -110,9 +156,13 @@ export default function AdminActivations({ currentUser, profile }) {
   const isAdmin = useIsRinkdAdmin(currentUser?.id);
   const [tournaments, setTournaments] = useState([]);
   const [leagues, setLeagues] = useState([]);
+  const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null); // { kind, item }
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
   const [filter, setFilter] = useState('pending'); // 'pending' | 'activated' | 'all'
   const [search, setSearch] = useState('');
 
@@ -123,7 +173,7 @@ export default function AdminActivations({ currentUser, profile }) {
       // tournaments don't carry logo_color / logo_initials (only accent_color
       // + logo_url); leagues have all four. Select what each table actually
       // exposes and normalize at render time via the Row component.
-      const [t, l] = await Promise.all([
+      const [t, l, tm] = await Promise.all([
         supabase.from('tournaments')
           .select('id, name, division, start_date, end_date, is_activated, accent_color, logo_url, created_at')
           .order('created_at', { ascending: false })
@@ -132,11 +182,17 @@ export default function AdminActivations({ currentUser, profile }) {
           .select('id, name, division, season, start_date, end_date, is_activated, logo_color, logo_initials, logo_url, created_at')
           .order('created_at', { ascending: false })
           .limit(200),
+        supabase.from('teams')
+          .select('id, name, level, location, logo_color, logo_initials, logo_url, created_at')
+          .order('created_at', { ascending: false })
+          .limit(200),
       ]);
       if (t.error) throw t.error;
       if (l.error) throw l.error;
+      if (tm.error) throw tm.error;
       setTournaments(t.data || []);
       setLeagues(l.data || []);
+      setTeams(tm.data || []);
     } catch (e) {
       setError(e?.message || 'Failed to load activations');
     } finally {
@@ -167,6 +223,27 @@ export default function AdminActivations({ currentUser, profile }) {
     setter((prev) => prev.map((x) => (x.id === id ? { ...x, is_activated: nextValue } : x)));
   };
 
+  const onDelete = (kind, item) => { setDeleteError(null); setDeleteTarget({ kind, item }); };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    const { kind, item } = deleteTarget;
+    setDeleteBusy(true);
+    setDeleteError(null);
+    try {
+      if (kind === 'tournament') await deleteTournamentAsAdmin(item.id);
+      else if (kind === 'league') await deleteLeagueAsAdmin(item.id);
+      else await deleteTeamAsAdmin(item.id);
+      const setter = kind === 'tournament' ? setTournaments : kind === 'league' ? setLeagues : setTeams;
+      setter((prev) => prev.filter((x) => x.id !== item.id));
+      setDeleteTarget(null);
+    } catch (e) {
+      setDeleteError(e?.message === 'admin_only' ? 'Admins only.' : (e?.message || 'Delete failed.'));
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
   const filtered = useMemo(() => {
     const norm = (s) => (s || '').toLowerCase();
     const q = norm(search);
@@ -176,11 +253,14 @@ export default function AdminActivations({ currentUser, profile }) {
       if (q && !norm(x.name).includes(q) && !norm(x.division).includes(q)) return false;
       return true;
     };
+    // Teams have no activation state — they only respond to the search box.
+    const keepTeam = (x) => !q || norm(x.name).includes(q) || norm(x.location).includes(q);
     return {
       tournaments: tournaments.filter(keep),
       leagues: leagues.filter(keep),
+      teams: teams.filter(keepTeam),
     };
-  }, [tournaments, leagues, filter, search]);
+  }, [tournaments, leagues, teams, filter, search]);
 
   if (loading || isAdmin === null) return (
     <Layout profile={profile}>
@@ -257,7 +337,7 @@ export default function AdminActivations({ currentUser, profile }) {
             <div style={{ padding: 16, fontSize: 13, color: C.steel, textAlign: 'center' }}>None match this filter.</div>
           ) : (
             filtered.tournaments.map((t) => (
-              <Row key={t.id} kind="tournament" item={t} onToggle={onToggle} busyId={busyId} />
+              <Row key={t.id} kind="tournament" item={t} onToggle={onToggle} onDelete={onDelete} busyId={busyId} />
             ))
           )}
         </div>
@@ -266,20 +346,37 @@ export default function AdminActivations({ currentUser, profile }) {
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'rgba(244,247,250,0.5)', textTransform: 'uppercase', marginBottom: 8 }}>
           Leagues ({filtered.leagues.length})
         </div>
-        <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 18 }}>
           {filtered.leagues.length === 0 ? (
             <div style={{ padding: 16, fontSize: 13, color: C.steel, textAlign: 'center' }}>None match this filter.</div>
           ) : (
             filtered.leagues.map((l) => (
-              <Row key={l.id} kind="league" item={l} onToggle={onToggle} busyId={busyId} />
+              <Row key={l.id} kind="league" item={l} onToggle={onToggle} onDelete={onDelete} busyId={busyId} />
+            ))
+          )}
+        </div>
+
+        {/* Teams — no activation toggle; delete only. Filtered by search, not the pending/activated tabs. */}
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'rgba(244,247,250,0.5)', textTransform: 'uppercase', marginBottom: 8 }}>
+          Teams ({filtered.teams.length}{teams.length >= 200 ? '+, search to narrow' : ''})
+        </div>
+        <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+          {filtered.teams.length === 0 ? (
+            <div style={{ padding: 16, fontSize: 13, color: C.steel, textAlign: 'center' }}>{search ? 'No teams match.' : 'No teams.'}</div>
+          ) : (
+            filtered.teams.map((tm) => (
+              <Row key={tm.id} kind="team" item={tm} onToggle={onToggle} onDelete={onDelete} busyId={busyId} />
             ))
           )}
         </div>
 
         <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 18, lineHeight: 1.6 }}>
-          <strong>How it works:</strong> non-activated events can be configured (teams, schedule, bracket) and have visible public pages, but live scoring + auto-recap pushes are blocked at the RLS layer. Flip activated only after billing is complete.
+          <strong>How it works:</strong> non-activated events can be configured (teams, schedule, bracket) and have visible public pages, but live scoring + auto-recap pushes are blocked at the RLS layer. Flip activated only after billing is complete. <strong style={{ color: C.red }}>🗑 Delete</strong> permanently removes an event/team and all its data (games, stats, recaps, rosters) — admins only, irreversible.
         </div>
       </div>
+      <DeleteModal target={deleteTarget} busy={deleteBusy} error={deleteError}
+        onCancel={() => { if (!deleteBusy) { setDeleteTarget(null); setDeleteError(null); } }}
+        onConfirm={confirmDelete} />
     </Layout>
   );
 }
