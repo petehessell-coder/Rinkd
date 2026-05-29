@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 
 // Phase-1 review-only stat leaderboards (skaters + goalies), jersey-keyed.
@@ -11,6 +11,13 @@ import { supabase } from '../lib/supabase';
 //       goalie when a team has exactly one.
 // All backing RPCs are SECURITY INVOKER + anon-granted, reading public-select
 // tables, so this renders for any signed-in viewer without special perms.
+//
+// `archived` (optional) holds a prior season's *pre-aggregated* totals imported
+// from the league's old stats system (stored on leagues.settings.archived_stats).
+// There's no game-by-game data behind it, so it's shown as a labeled read-only
+// season — a [This Season] / [<label>] toggle. Skaters: G/A/PTS/PIM; goalies:
+// GP/GA/GAA/SV%; plus a final Standings table. Tournament usage passes no
+// `archived` prop, so its UI is unchanged.
 
 const RPC = {
   tournament: { skater: 'get_tournament_skater_stats', goalie: 'get_tournament_goalie_stats', arg: 'p_tournament_id' },
@@ -34,7 +41,7 @@ function fmtNum(v, dp) {
   return Number(v).toFixed(dp);
 }
 
-function StatTable({ rows, accent, idLabel, renderId, cols }) {
+function StatTable({ rows, accent, idLabel, renderId, cols, rowKey, showRank = true }) {
   const midCellW = 40;
   return (
     <div style={{ background: C.card, border: '0.5px solid rgba(46,91,140,0.4)', borderRadius: 12, overflow: 'hidden' }}>
@@ -50,10 +57,10 @@ function StatTable({ rows, accent, idLabel, renderId, cols }) {
           </thead>
           <tbody>
             {rows.map((row, i) => (
-              <tr key={row.team_id + ':' + row.jersey_number} style={{ borderTop: '0.5px solid ' + C.line }}>
+              <tr key={rowKey ? rowKey(row, i) : (row.team_id + ':' + row.jersey_number)} style={{ borderTop: '0.5px solid ' + C.line }}>
                 <td style={{ position: 'sticky', left: 0, zIndex: 1, background: C.card, boxShadow: '4px 0 6px -4px rgba(0,0,0,0.4)', padding: '9px 10px', minWidth: 150, maxWidth: 190 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
-                    <span style={{ width: 18, height: 18, borderRadius: '50%', background: i === 0 ? accent : 'rgba(244,247,250,0.1)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>
+                    {showRank && <span style={{ width: 18, height: 18, borderRadius: '50%', background: i === 0 ? accent : 'rgba(244,247,250,0.1)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>}
                     <div style={{ minWidth: 0 }}>{renderId(row)}</div>
                   </div>
                 </td>
@@ -71,13 +78,108 @@ function StatTable({ rows, accent, idLabel, renderId, cols }) {
   );
 }
 
-export default function StatLeaderboards({ source = 'tournament', id, accent = '#D72638' }) {
+const Toggle = ({ active, onClick, label, n, accent }) => (
+  <button onClick={onClick}
+    style={{
+      flex: 1, padding: '8px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+      fontFamily: 'Barlow, sans-serif', borderRadius: 9, border: 'none',
+      background: active ? accent : 'rgba(46,91,140,0.18)',
+      color: active ? '#fff' : 'rgba(244,247,250,0.6)',
+    }}>
+    {label}{typeof n === 'number' ? ` (${n})` : ''}
+  </button>
+);
+
+// ── Archived (prior-season) board ─────────────────────────────────────────
+function ArchivedStats({ archived, accent }) {
+  const [view, setView] = useState('skaters');
+
+  const skaters = useMemo(
+    () => [...(archived.skaters || [])].sort((a, b) => (b.pts - a.pts) || (b.g - a.g)),
+    [archived.skaters]);
+  const goalies = useMemo(
+    () => [...(archived.goalies || [])].sort((a, b) => (b.sv_pct ?? -1) - (a.sv_pct ?? -1)),
+    [archived.goalies]);
+  const standings = useMemo(
+    () => [...(archived.standings || [])].sort((a, b) => (b.pts - a.pts) || ((b.gf - b.ga) - (a.gf - a.ga))),
+    [archived.standings]);
+
+  const renderPlayerId = (r) => (
+    <>
+      <div style={{ fontSize: 12, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
+      <div style={{ fontSize: 10, color: C.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {r.number != null && r.number !== '' ? `#${r.number} · ${r.team}` : r.team}
+      </div>
+    </>
+  );
+  const renderTeamId = (r) => (
+    <div style={{ fontSize: 12, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.team}</div>
+  );
+
+  const skaterCols = [
+    { key: 'g', label: 'G', render: r => r.g },
+    { key: 'a', label: 'A', render: r => r.a },
+    { key: 'pts', label: 'PTS', render: r => r.pts, strong: true },
+    { key: 'pim', label: 'PIM', render: r => r.pim },
+  ];
+  const goalieCols = [
+    { key: 'gp', label: 'GP', render: r => r.gp },
+    { key: 'ga', label: 'GA', render: r => r.ga },
+    { key: 'gaa', label: 'GAA', render: r => fmtNum(r.gaa, 2), strong: true },
+    { key: 'svp', label: 'SV%', render: r => fmtPct(r.sv_pct), strong: true },
+  ];
+  const standingsCols = [
+    { key: 'gp', label: 'GP', render: r => r.w + r.l + r.t },
+    { key: 'rec', label: 'W-L-T', render: r => `${r.w}-${r.l}-${r.t}` },
+    { key: 'gf', label: 'GF', render: r => r.gf },
+    { key: 'ga', label: 'GA', render: r => r.ga },
+    { key: 'pim', label: 'PIM', render: r => r.pim },
+    { key: 'pts', label: 'PTS', render: r => r.pts, strong: true },
+  ];
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        <Toggle active={view === 'skaters'} onClick={() => setView('skaters')} label="Skaters" n={skaters.length} accent={accent} />
+        <Toggle active={view === 'goalies'} onClick={() => setView('goalies')} label="Goalies" n={goalies.length} accent={accent} />
+        <Toggle active={view === 'standings'} onClick={() => setView('standings')} label="Standings" n={standings.length} accent={accent} />
+      </div>
+
+      {view === 'skaters' && (
+        <StatTable rows={skaters} accent={accent} idLabel="Player" renderId={renderPlayerId} cols={skaterCols}
+          rowKey={(r, i) => `${i}:${r.name}:${r.number}`} />
+      )}
+      {view === 'goalies' && (
+        <StatTable rows={goalies} accent={accent} idLabel="Goalie" renderId={renderPlayerId} cols={goalieCols}
+          rowKey={(r, i) => `${i}:${r.name}`} />
+      )}
+      {view === 'standings' && (
+        <StatTable rows={standings} accent={accent} idLabel="Team" renderId={renderTeamId} cols={standingsCols}
+          rowKey={(r) => r.team} />
+      )}
+
+      <div style={{ fontSize: 10.5, color: C.faint, marginTop: 10, lineHeight: 1.5 }}>
+        Final {archived.label} season totals, imported from the league’s prior stats system{archived.source ? ` (${archived.source})` : ''}{archived.as_of ? `, as of ${archived.as_of}` : ''}.
+      </div>
+    </div>
+  );
+}
+
+export default function StatLeaderboards({ source = 'tournament', id, accent = '#D72638', archived = null }) {
   const cfg = RPC[source] || RPC.tournament;
   const [view, setView] = useState('skaters');
+  const [season, setSeason] = useState('current'); // 'current' | 'archive'
+  const [seasonPicked, setSeasonPicked] = useState(false);
   const [skaters, setSkaters] = useState(null);
   const [goalies, setGoalies] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+
+  const hasArchive = !!(archived && (
+    (archived.skaters && archived.skaters.length) ||
+    (archived.goalies && archived.goalies.length) ||
+    (archived.standings && archived.standings.length)
+  ));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -103,22 +205,60 @@ export default function StatLeaderboards({ source = 'tournament', id, accent = '
     return () => { alive = false; };
   }, [load]);
 
+  const hasSkaters = skaters && skaters.length > 0;
+  const hasGoalies = goalies && goalies.length > 0;
+  const hasLive = hasSkaters || hasGoalies;
+
+  // Once the live load settles, default to the archived season if there's
+  // nothing live to show yet (e.g. a brand-new season). Only auto-pick once so
+  // a deliberate toggle isn't overridden on re-render.
+  useEffect(() => {
+    if (loading || seasonPicked || !hasArchive) return;
+    if (!hasLive) setSeason('archive');
+    setSeasonPicked(true);
+  }, [loading, seasonPicked, hasArchive, hasLive]);
+
   if (loading) {
     return <div style={{ textAlign: 'center', color: C.faint, fontSize: 13, paddingTop: 40 }}>Loading stats…</div>;
   }
-  if (error) {
+
+  const SeasonBar = hasArchive ? (
+    <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+      <Toggle active={season === 'current'} onClick={() => { setSeason('current'); if (view === 'standings') setView('skaters'); }} label="This Season" accent={accent} />
+      <Toggle active={season === 'archive'} onClick={() => setSeason('archive')} label={`${archived.label} Season`} accent={accent} />
+    </div>
+  ) : null;
+
+  // Archived season selected — render the imported board.
+  if (season === 'archive' && hasArchive) {
     return (
-      <div style={{ textAlign: 'center', color: C.faint, fontSize: 13, paddingTop: 40 }}>
-        Couldn't load stats.{' '}
-        <button onClick={load} style={{ background: 'transparent', border: 'none', color: accent, fontWeight: 700, cursor: 'pointer' }}>Retry</button>
+      <div>
+        {SeasonBar}
+        <ArchivedStats archived={archived} accent={accent} />
       </div>
     );
   }
 
-  const hasSkaters = skaters && skaters.length > 0;
-  const hasGoalies = goalies && goalies.length > 0;
-  if (!hasSkaters && !hasGoalies) {
-    return <div style={{ textAlign: 'center', color: C.faint, fontSize: 13, paddingTop: 40 }}>Player and goalie stats appear here as games go final.</div>;
+  // Live ("this season") board.
+  if (error) {
+    return (
+      <div>
+        {SeasonBar}
+        <div style={{ textAlign: 'center', color: C.faint, fontSize: 13, paddingTop: 40 }}>
+          Couldn't load stats.{' '}
+          <button onClick={load} style={{ background: 'transparent', border: 'none', color: accent, fontWeight: 700, cursor: 'pointer' }}>Retry</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!hasLive) {
+    return (
+      <div>
+        {SeasonBar}
+        <div style={{ textAlign: 'center', color: C.faint, fontSize: 13, paddingTop: 40 }}>Player and goalie stats appear here as games go final.</div>
+      </div>
+    );
   }
 
   const skaterCols = [
@@ -154,23 +294,12 @@ export default function StatLeaderboards({ source = 'tournament', id, accent = '
     ? 'League games don’t record which goalie was in net, so this is team goaltending — attributed to the roster goalie when a team has exactly one. SV% needs logged shots; GAA is per game played.'
     : 'SV% & GAA are computed from logged shots and goals. GAA is shown per game played. When goalies split a game, shots-against is attributed to the starter — exact for single-goalie games.';
 
-  const Toggle = ({ tid, label, n }) => (
-    <button onClick={() => setView(tid)}
-      style={{
-        flex: 1, padding: '8px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-        fontFamily: 'Barlow, sans-serif', borderRadius: 9, border: 'none',
-        background: view === tid ? accent : 'rgba(46,91,140,0.18)',
-        color: view === tid ? '#fff' : 'rgba(244,247,250,0.6)',
-      }}>
-      {label}{typeof n === 'number' ? ` (${n})` : ''}
-    </button>
-  );
-
   return (
     <div>
+      {SeasonBar}
       <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-        <Toggle tid="skaters" label="Skaters" n={skaters ? skaters.length : 0} />
-        <Toggle tid="goalies" label="Goalies" n={goalies ? goalies.length : 0} />
+        <Toggle active={view === 'skaters'} onClick={() => setView('skaters')} label="Skaters" n={skaters ? skaters.length : 0} accent={accent} />
+        <Toggle active={view === 'goalies'} onClick={() => setView('goalies')} label="Goalies" n={goalies ? goalies.length : 0} accent={accent} />
       </div>
 
       {view === 'skaters' && (

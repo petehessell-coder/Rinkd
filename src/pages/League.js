@@ -558,7 +558,7 @@ export default function LeaguePage({ currentUser, profile }) {
 
           {/* STATS TAB — skater + goalie leaderboards (jersey-keyed, roster names) */}
           {activeTab === 'Stats' && (
-            <StatLeaderboards source="league" id={id} accent={league.accent_color || C.red} />
+            <StatLeaderboards source="league" id={id} accent={league.accent_color || C.red} archived={league.settings?.archived_stats || null} />
           )}
 
           {/* TEAMS TAB */}
