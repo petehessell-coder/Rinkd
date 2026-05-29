@@ -138,7 +138,7 @@ async function loadRinkdGames(supabase: Sb, tournamentId: string, divisionId: st
 }
 
 async function syncLink(supabase: Sb, link: any): Promise<Record<string, number>> {
-  const stats = { scored: 0, updated: 0, recaps: 0, pending: 0, unmatched: 0, skipped: 0 };
+  const stats = { scored: 0, updated: 0, recaps: 0, pending: 0, unmatched: 0, imported: 0, skipped: 0 };
   const gsGames = await fetchSeasonScores(String(link.gamesheet_season_id));
   const rinkdGames = await loadRinkdGames(supabase, link.tournament_id, link.division_id);
 
@@ -149,6 +149,26 @@ async function syncLink(supabase: Sb, link: any): Promise<Record<string, number>
   // Rinkd game ids already spoken for (any non-ignored map) → not re-matchable.
   const taken = new Set<string>();
   for (const m of (maps ?? [])) if (m.rinkd_game_id && m.status !== 'ignored') taken.add(m.rinkd_game_id);
+
+  // For auto-import: find-or-create tournament_teams by normalized name so two
+  // GameSheet games for the same team don't spawn duplicate Rinkd teams.
+  const { data: teamRows } = await supabase
+    .from('tournament_teams').select('id, team_name').eq('tournament_id', link.tournament_id);
+  const teamByName = new Map<string, string>();
+  for (const t of (teamRows ?? [])) teamByName.set(norm(t.team_name), t.id);
+  async function findOrCreateTeam(name: string): Promise<string | null> {
+    const key = norm(name);
+    if (!key) return null;
+    if (teamByName.has(key)) return teamByName.get(key)!;
+    // NB: tournament_teams.pool is NOT NULL (default 'A') — omit it so the
+    // default applies (GameSheet doesn't expose a pool).
+    const { data, error } = await supabase.from('tournament_teams')
+      .insert({ tournament_id: link.tournament_id, division_id: link.division_id || null, team_name: name })
+      .select('id').single();
+    if (error || !data) { console.error('[gamesheet] team create fail', name, error); return null; }
+    teamByName.set(key, data.id);
+    return data.id as string;
+  }
 
   for (const entry of gsGames) {
     const g = entry?.game;
@@ -200,6 +220,40 @@ async function syncLink(supabase: Sb, link: any): Promise<Record<string, number>
       return namesMatch && within1Day(gDate, isoDateKey(r.start_time));
     });
     const matched = candidates.length === 1 ? candidates[0] : null;
+
+    // --- AUTO-IMPORT: no existing Rinkd game to match → create one. Safe to do
+    // automatically (nothing to mis-match against), so it skips the confirm-once
+    // step. Gated by the link's auto_import flag (off = leave as an unmatched
+    // pending row for the director to resolve against a pre-built schedule). ---
+    if (!matched && link.auto_import) {
+      const homeId = await findOrCreateTeam(gHome);
+      const awayId = await findOrCreateTeam(gAway);
+      if (homeId && awayId) {
+        const startIso = (() => { const t = Date.parse(`${g.date ?? ''} ${g.time ?? ''}`.trim()); return Number.isNaN(t) ? new Date().toISOString() : new Date(t).toISOString(); })();
+        const round = String(g.type ?? '').toLowerCase().includes('playoff') ? 'playoff' : 'pool';
+        const { data: ng, error: ge } = await supabase.from('games').insert({
+          tournament_id: link.tournament_id, division_id: link.division_id || null,
+          home_team_id: homeId, away_team_id: awayId, pool: null, round,
+          status: 'final', start_time: startIso, home_score: gHomeGoals, away_score: gAwayGoals,
+        }).select('id').single();
+        if (!ge && ng) {
+          await supabase.from('gamesheet_game_map').insert({
+            link_id: link.id, rinkd_game_id: ng.id, gamesheet_game_id: gsId, status: 'confirmed',
+            gs_home_name: gHome, gs_visitor_name: gAway, gs_division: g.homeTeam?.division ?? null,
+            gs_date: g.date ?? null, gs_time: g.time ?? null, gs_home_goals: gHomeGoals, gs_visitor_goals: gAwayGoals,
+          });
+          await postRecapAndPush(supabase, {
+            rinkdGameId: ng.id, tournamentId: link.tournament_id, directorId: link.director_id,
+            content: recapContent(gHome, gHomeGoals, gAway, gAwayGoals, g.type),
+          });
+          stats.imported++; stats.recaps++;
+          continue;
+        }
+        console.error('[gamesheet] auto-import game create fail', ge);
+      }
+      // fell through (team/game create failed) → record as unmatched pending below
+    }
+
     if (matched) { taken.add(matched.id); stats.pending++; } else { stats.unmatched++; }
     await supabase.from('gamesheet_game_map').insert({
       link_id: link.id, rinkd_game_id: matched?.id ?? null, gamesheet_game_id: gsId, status: 'pending',
@@ -209,7 +263,7 @@ async function syncLink(supabase: Sb, link: any): Promise<Record<string, number>
     });
   }
 
-  const note = `scored=${stats.scored} updated=${stats.updated} recaps=${stats.recaps} pending=${stats.pending} unmatched=${stats.unmatched}`;
+  const note = `scored=${stats.scored} updated=${stats.updated} imported=${stats.imported} recaps=${stats.recaps} pending=${stats.pending} unmatched=${stats.unmatched}`;
   await supabase.from('gamesheet_links')
     .update({ last_synced_at: new Date().toISOString(), last_sync_note: note }).eq('id', link.id);
   return stats;
@@ -231,18 +285,18 @@ serve(async (req) => {
     // director_id alongside so recap posts have an author.
     const { data: links, error } = await supabase
       .from('gamesheet_links')
-      .select('id, tournament_id, division_id, gamesheet_season_id, tournaments!inner(director_id, is_activated)')
+      .select('id, tournament_id, division_id, gamesheet_season_id, auto_import, tournaments!inner(director_id, is_activated)')
       .eq('status', 'active')
       .eq('tournaments.is_activated', true);
     if (error) throw error;
 
-    const totals = { links: 0, scored: 0, updated: 0, recaps: 0, pending: 0, unmatched: 0, errors: 0 };
+    const totals = { links: 0, scored: 0, updated: 0, imported: 0, recaps: 0, pending: 0, unmatched: 0, errors: 0 };
     for (const raw of (links ?? [])) {
       const link = { ...raw, director_id: (raw as any).tournaments?.director_id ?? null };
       totals.links++;
       try {
         const s = await syncLink(supabase, link);
-        totals.scored += s.scored; totals.updated += s.updated; totals.recaps += s.recaps;
+        totals.scored += s.scored; totals.updated += s.updated; totals.imported += s.imported; totals.recaps += s.recaps;
         totals.pending += s.pending; totals.unmatched += s.unmatched;
       } catch (e) {
         totals.errors++;

@@ -11,7 +11,7 @@ import { supabase } from './supabase';
 export async function listLinks(tournamentId) {
   const { data, error } = await supabase
     .from('gamesheet_links')
-    .select('id, tournament_id, division_id, gamesheet_season_id, status, last_synced_at, last_sync_note, created_at')
+    .select('id, tournament_id, division_id, gamesheet_season_id, status, auto_import, last_synced_at, last_sync_note, created_at')
     .eq('tournament_id', tournamentId)
     .order('created_at', { ascending: true });
   return { data: data || [], error };
@@ -19,12 +19,15 @@ export async function listLinks(tournamentId) {
 
 // Create a link AND flip the event into external-scoring mode (poller-fed →
 // the manual ScorerView is gated off, so there's no dual scoring path).
-export async function createLink(tournamentId, { seasonId, divisionId = null }) {
+// autoImport (default true): the poller creates teams + games from GameSheet
+// for anything it can't match to an existing Rinkd game — so the operator
+// doesn't have to rebuild their schedule first.
+export async function createLink(tournamentId, { seasonId, divisionId = null, autoImport = true }) {
   const sid = String(seasonId || '').trim();
   if (!sid) return { data: null, error: new Error('A GameSheet season id is required') };
   const { data, error } = await supabase
     .from('gamesheet_links')
-    .insert({ tournament_id: tournamentId, division_id: divisionId || null, gamesheet_season_id: sid, status: 'active' })
+    .insert({ tournament_id: tournamentId, division_id: divisionId || null, gamesheet_season_id: sid, status: 'active', auto_import: !!autoImport })
     .select()
     .single();
   if (error) return { data: null, error };

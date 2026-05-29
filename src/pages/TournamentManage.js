@@ -864,6 +864,7 @@ function GameSheetTab({ tournamentId, tournament, games = [], reload, flash }) {
   const [maps, setMaps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [seasonId, setSeasonId] = useState('');
+  const [autoImport, setAutoImport] = useState(true);
   const [busy, setBusy] = useState(false);
   const [busyMapId, setBusyMapId] = useState(null);
   // Per-unmatched-row manual game pick (mapId → rinkd_game_id).
@@ -894,10 +895,10 @@ function GameSheetTab({ tournamentId, tournament, games = [], reload, flash }) {
   const addLink = async () => {
     if (!seasonId.trim()) { flash?.('error', 'Paste the GameSheet season id first.'); return; }
     setBusy(true);
-    const { error } = await createLink(tournamentId, { seasonId });
+    const { error } = await createLink(tournamentId, { seasonId, autoImport });
     setBusy(false);
     if (error) { flash?.('error', `Couldn't link: ${error.message}`); return; }
-    flash?.('success', 'Linked — scores will sync automatically every few minutes.');
+    flash?.('success', autoImport ? 'Linked — teams, games + scores will sync in automatically.' : 'Linked — scores sync onto your existing schedule (you confirm matches).');
     setSeasonId(''); reload?.(); load();
   };
   const toggleLink = async (lk) => {
@@ -948,6 +949,7 @@ function GameSheetTab({ tournamentId, tournament, games = [], reload, flash }) {
               <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>
                 Season {lk.gamesheet_season_id}
                 <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 6, color: lk.status === 'active' ? C.green : C.steel, background: lk.status === 'active' ? 'rgba(34,197,94,0.15)' : 'rgba(139,163,190,0.15)' }}>{lk.status === 'active' ? 'ACTIVE' : 'PAUSED'}</span>
+                <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 6, color: C.steel, background: 'rgba(139,163,190,0.12)' }}>{lk.auto_import ? 'AUTO-IMPORT' : 'MATCH-ONLY'}</span>
               </div>
               <div style={{ fontSize: 11, color: C.steel, marginTop: 3 }}>
                 {lk.last_synced_at ? `Last sync ${fmtDateTime(lk.last_synced_at)}${lk.last_sync_note ? ` · ${lk.last_sync_note}` : ''}` : 'Waiting for first sync…'}
@@ -961,6 +963,10 @@ function GameSheetTab({ tournamentId, tournament, games = [], reload, flash }) {
           <input value={seasonId} onChange={(e) => setSeasonId(e.target.value)} placeholder="GameSheet season id (e.g. 6416)" style={{ ...inputStyle, flex: 1 }} />
           <button onClick={addLink} disabled={busy} style={btnPrimary}>{busy ? 'Linking…' : '+ Link season'}</button>
         </div>
+        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 10, fontSize: 12, color: C.ice, cursor: 'pointer' }}>
+          <input type="checkbox" checked={autoImport} onChange={(e) => setAutoImport(e.target.checked)} style={{ marginTop: 2 }} />
+          <span><b>Auto-create teams &amp; games from GameSheet</b> <span style={{ color: C.steel }}>— recommended. Leave on if you haven&rsquo;t built your schedule in Rinkd; the poller creates the teams + games (with scores) for you. Turn off to match incoming results onto a schedule you&rsquo;ve already set up.</span></span>
+        </label>
         <div style={{ fontSize: 11, color: C.steel, marginTop: 8, lineHeight: 1.5 }}>
           Find the id in your GameSheet stats URL: <code style={{ color: C.ice }}>gamesheetstats.com/seasons/<b>6416</b>/scores</code>.
         </div>
