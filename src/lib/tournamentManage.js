@@ -101,6 +101,21 @@ export async function deleteGame(gameId) {
   return { error };
 }
 
+// MULTIDIV-1 Phase 4 — record a forfeit. Sets the winner 3-0 (loser 0-3),
+// status='final', forfeit=true. No goal log is written; the standings view
+// counts it off the score. `winner` is 'home' | 'away'.
+export async function recordForfeit(gameId, winner) {
+  const home = winner === 'home' ? 3 : 0;
+  const away = winner === 'home' ? 0 : 3;
+  const { data, error } = await supabase
+    .from('games')
+    .update({ home_score: home, away_score: away, status: 'final', forfeit: true })
+    .eq('id', gameId)
+    .select()
+    .single();
+  return { data, error };
+}
+
 // ------------------------------ Round-robin generator ------------------------------
 
 /**

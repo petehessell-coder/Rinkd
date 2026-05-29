@@ -10,6 +10,7 @@ import {
   updateTournament,
   listStandingsSummary,
   generateChampionshipBracket,
+  recordForfeit,
 } from '../lib/tournamentManage';
 import {
   listDivisions, createDivision, updateDivision, deleteDivision, reorderDivisions,
@@ -769,6 +770,17 @@ function GameEditRow({ game, rinks, teams, flash, onDone, onCancel }) {
     flash?.('success', 'Game deleted.');
     onDone();
   };
+  // MULTIDIV-1 Phase 4 — record a forfeit (3-0 to the side that showed up).
+  const forfeit = async (winner) => {
+    const winName = teams.find(t => t.id === (winner === 'home' ? homeId : awayId))?.team_name || (winner === 'home' ? 'Home' : 'Away');
+    if (!window.confirm(`Record a forfeit win for ${winName} (3–0)? This finalizes the game with no goal log.`)) return;
+    setBusy(true);
+    const { error } = await recordForfeit(game.id, winner);
+    setBusy(false);
+    if (error) { flash?.('error', `Forfeit failed: ${error.message}`); return; }
+    flash?.('success', `Recorded forfeit — ${winName} wins 3–0.`);
+    onDone();
+  };
 
   return (
     <div style={{ padding: 12, borderTop: '1px solid rgba(46,91,140,0.25)' }}>
@@ -797,6 +809,14 @@ function GameEditRow({ game, rinks, teams, flash, onDone, onCancel }) {
           </select>
         </div>
       </div>
+      {/* Forfeit — only meaningful before the game is final */}
+      {game.status !== 'final' && homeId && awayId && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10, paddingTop: 8, borderTop: '1px solid rgba(46,91,140,0.2)' }}>
+          <span style={{ fontSize: 11, color: C.steel, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Forfeit:</span>
+          <button onClick={() => forfeit('home')} disabled={busy} style={{ ...btnGhost, fontSize: 11 }}>{teams.find(t => t.id === homeId)?.team_name || 'Home'} wins 3–0</button>
+          <button onClick={() => forfeit('away')} disabled={busy} style={{ ...btnGhost, fontSize: 11 }}>{teams.find(t => t.id === awayId)?.team_name || 'Away'} wins 3–0</button>
+        </div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <button onClick={remove} style={{ ...btnGhost, color: C.red, borderColor: C.red }}>Delete</button>
         <div style={{ display: 'flex', gap: 8 }}>

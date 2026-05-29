@@ -643,6 +643,16 @@ export default function ScorerView() {
         </div>
       )}
 
+      {/* MULTIDIV-1 Phase 4 — advisory mercy / running-time banner. Display
+          ONLY (no app clock — GS-3 stays held); the arena clock is the truth.
+          Fires at a goal differential >= the format's max in the 3rd period. */}
+      {!isLeague && !isLocked && Number(settings.max_goal_differential) > 0 && period === 3
+        && Math.abs(homeScore - awayScore) >= Number(settings.max_goal_differential) && (
+        <div style={{ background: 'rgba(245,158,11,0.14)', borderBottom: '0.5px solid rgba(245,158,11,0.45)', color: '#F4F7FA', padding: '10px 16px', fontSize: 13, lineHeight: 1.45, textAlign: 'center', fontWeight: 600 }}>
+          🕐 Running time in effect — {settings.max_goal_differential}-goal differential reached. (Advisory; follow the arena clock.)
+        </div>
+      )}
+
       <div style={{ padding: 16 }}>
 
         {/* SCORE + GOAL LOG — combined card */}

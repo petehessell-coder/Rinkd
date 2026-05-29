@@ -529,7 +529,18 @@ export default function TournamentPage({ currentUser }) {
               // the right-frozen column. GQ/PIM/PeriodPts each appear only when
               // listed in settings.tiebreakers.
               const tbCols = [];
-              if (showGQ)        tbCols.push({ key: 'gq',  label: 'GQ',   render: (r) => (Number(r.goal_quotient) || 0).toFixed(2) });
+              // MULTIDIV-1 Phase 4 — configurable goal-quotient DISPLAY. The
+              // view's goal_quotient (GF/GA) still drives the tiebreaker sort;
+              // this only changes the shown value. 'gf_over_gf_plus_ga' (Nickel
+              // City) = GF/(GF+GA) with a GF+GA=0 guard → 1.0. Ordering is
+              // identical to GF/GA, so the tiebreaker is unaffected.
+              if (showGQ) tbCols.push({ key: 'gq', label: 'GQ', render: (r) => {
+                if ((divSettings?.gq_formula) === 'gf_over_gf_plus_ga') {
+                  const gf = Number(r.gf) || 0, ga = Number(r.ga) || 0;
+                  return (gf + ga === 0 ? 1 : gf / (gf + ga)).toFixed(3);
+                }
+                return (Number(r.goal_quotient) || 0).toFixed(2);
+              } });
               if (showPeriodPts) tbCols.push({ key: 'pp',  label: 'P.PT', render: (r) => r.period_pts ?? 0 });
               if (showPIM)       tbCols.push({ key: 'pim', label: 'PIM',  render: (r) => r.pim ?? 0 });
               // Always show DIFF as the final fallback column when no GQ is
