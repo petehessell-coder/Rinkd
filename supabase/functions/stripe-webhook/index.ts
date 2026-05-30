@@ -16,6 +16,49 @@ const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY")
 const STRIPE_WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET")
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
+const PRINTFUL_API_KEY = Deno.env.get("PRINTFUL_API_KEY")
+const PRINTFUL_STORE_ID = Deno.env.get("PRINTFUL_STORE_ID")
+
+function pfHeaders(): Record<string, string> {
+  const h: Record<string, string> = {
+    Authorization: `Bearer ${PRINTFUL_API_KEY}`,
+    "Content-Type": "application/json",
+  }
+  if (PRINTFUL_STORE_ID) h["X-PF-Store-Id"] = PRINTFUL_STORE_ID
+  return h
+}
+
+// Paid store order -> submit a confirmed fulfillment order to Printful. Returns
+// the Printful order id. Throws on failure so the caller can flag the order for
+// a manual retry (the buyer has already paid).
+async function submitPrintfulOrder(order: any, items: any[]): Promise<number> {
+  const res = await fetch("https://api.printful.com/orders?confirm=true", {
+    method: "POST",
+    headers: pfHeaders(),
+    body: JSON.stringify({
+      external_id: order.id, // our order id — reconciliation + Printful-side dedupe
+      recipient: {
+        name: order.ship_name,
+        address1: order.ship_address1,
+        address2: order.ship_address2 || undefined,
+        city: order.ship_city,
+        state_code: order.ship_state || undefined,
+        country_code: order.ship_country,
+        zip: order.ship_zip,
+        email: order.email,
+      },
+      items: items.map((i: any) => ({
+        sync_variant_id: i.printful_variant_id,
+        quantity: i.quantity,
+      })),
+    }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok || !data?.result?.id) {
+    throw new Error(`Printful order create ${res.status}: ${data?.error?.message || res.statusText}`)
+  }
+  return data.result.id as number
+}
 
 function initials(teamName: string): string {
   const words = (teamName || "").split(/\s+/).filter(Boolean)
@@ -81,6 +124,62 @@ serve(async (req) => {
       const session = event.data.object as Record<string, any>
       const svc = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
+      // ---- Store (native merch) orders ----------------------------------
+      if (session?.metadata?.kind === "store") {
+        const orderId = session?.metadata?.order_id || null
+        let oq = svc.from("orders").select("*")
+        oq = orderId ? oq.eq("id", orderId) : oq.eq("stripe_session_id", session.id)
+        const { data: order } = await oq.maybeSingle()
+
+        if (!order) {
+          console.warn("[stripe-webhook] no order for store session", { session_id: session.id, orderId })
+          return new Response(JSON.stringify({ received: true, matched: false }), {
+            status: 200, headers: { "Content-Type": "application/json" },
+          })
+        }
+        // Idempotent: already submitted to Printful.
+        if (order.printful_order_id) {
+          return new Response(JSON.stringify({ received: true, alreadyProcessed: true }), {
+            status: 200, headers: { "Content-Type": "application/json" },
+          })
+        }
+
+        // Record payment totals (tax + final total come from Stripe).
+        await svc.from("orders").update({
+          status: "paid",
+          paid_at: order.paid_at || new Date().toISOString(),
+          stripe_payment_intent: typeof session.payment_intent === "string" ? session.payment_intent : null,
+          tax_cents: session.total_details?.amount_tax ?? 0,
+          total_cents: session.amount_total ?? order.total_cents,
+        }).eq("id", order.id)
+
+        const { data: items } = await svc
+          .from("order_items").select("printful_variant_id, quantity").eq("order_id", order.id)
+
+        try {
+          const printfulOrderId = await submitPrintfulOrder(order, items || [])
+          await svc.from("orders").update({
+            status: "submitted",
+            submitted_at: new Date().toISOString(),
+            printful_order_id: printfulOrderId,
+            fulfillment_error: null,
+          }).eq("id", order.id)
+          console.log("[stripe-webhook] store order submitted to Printful", { order_id: order.id, printful_order_id: printfulOrderId })
+        } catch (subErr) {
+          // Buyer already paid — keep status 'paid', flag the error for manual
+          // retry. Ack (200) so Stripe doesn't redeliver and re-charge logic.
+          await svc.from("orders").update({
+            fulfillment_error: (subErr as Error)?.message?.slice(0, 500) || "submit failed",
+          }).eq("id", order.id)
+          console.error("[stripe-webhook] Printful submit failed", { order_id: order.id, error: (subErr as Error)?.message })
+        }
+
+        return new Response(JSON.stringify({ received: true }), {
+          status: 200, headers: { "Content-Type": "application/json" },
+        })
+      }
+
+      // ---- Registrations (league / tournament) --------------------------
       const kind = session?.metadata?.kind === "tournament" ? "tournament" : "league"
       const cfg = KINDS[kind]
       const regId = session?.metadata?.registration_id || null
