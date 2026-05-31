@@ -11,6 +11,9 @@ export async function getPosts(limit = 30, before = null) {
     .is('tournament_id', null)
     .is('league_id', null)
     .is('team_id', null)
+    // Hide moderated content from the feed too, so it stays consistent with the
+    // gallery — a blocklist-flagged post can't leak into the global timeline.
+    .eq('is_hidden', false)
     .order('created_at', { ascending: false })
     .limit(limit);
   // Keyset pagination — fetch the page of posts older than the last one we hold.
@@ -51,6 +54,8 @@ export async function getFollowingPosts(userId, limit = 30, before = null) {
     .is('tournament_id', null)
     .is('league_id', null)
     .is('team_id', null)
+    // Mirror the global feed: keep moderated content out of the Following feed.
+    .eq('is_hidden', false)
     .order('created_at', { ascending: false })
     .limit(limit);
   // Keyset pagination — fetch the page of posts older than the last one we hold.
@@ -69,6 +74,7 @@ export async function getTournamentPosts(tournamentId, limit = 50) {
     .from('posts')
     .select(`*, profiles(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position), ${POST_MENTIONS_EMBED}`)
     .eq('tournament_id', tournamentId)
+    .eq('is_hidden', false)
     .order('created_at', { ascending: false })
     .limit(limit);
   query = await excludeBlocked(query, 'author_id');
@@ -86,6 +92,7 @@ export async function getLeaguePosts(leagueId, limit = 50) {
     .from('posts')
     .select(`*, profiles(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position), ${POST_MENTIONS_EMBED}`)
     .eq('league_id', leagueId)
+    .eq('is_hidden', false)
     .order('created_at', { ascending: false })
     .limit(limit);
   query = await excludeBlocked(query, 'author_id');
@@ -192,6 +199,7 @@ export async function getTeamPosts(teamId, limit = 50) {
     .from('posts')
     .select(`*, profiles(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position), ${POST_MENTIONS_EMBED}`)
     .eq('team_id', teamId)
+    .eq('is_hidden', false)
     .order('created_at', { ascending: false })
     .limit(limit);
   query = await excludeBlocked(query, 'author_id');
