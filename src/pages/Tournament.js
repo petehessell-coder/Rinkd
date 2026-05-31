@@ -602,26 +602,37 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
   const likeInFlightRef = useRef(new Set());
 
   // Load which of the visible posts the current user has already liked.
-  // Scoped to the loaded ids (same bounded pattern as TeamFeed/Feed).
+  // Scoped to the loaded ids (same bounded pattern as TeamFeed/Feed). Keyed on
+  // the id SET, not the posts objects — an optimistic like rewrites a post
+  // object (new `likes` count) without changing which posts are visible, and we
+  // must NOT refetch liked-state on every tap (it races the toggleLike write
+  // and flickers the heart back to its pre-tap value).
+  const likedFetchKeyRef = useRef('');
   useEffect(() => {
     let cancelled = false;
-    if (!currentUser?.id || !Array.isArray(posts) || posts.length === 0) { setLikedPosts([]); return; }
+    if (!currentUser?.id || !Array.isArray(posts) || posts.length === 0) { setLikedPosts([]); likedFetchKeyRef.current = ''; return; }
+    const key = posts.map((p) => p.id).join(',');
+    if (key === likedFetchKeyRef.current) return; // same visible posts — skip
+    likedFetchKeyRef.current = key;
     getLikedPosts(currentUser.id, posts.map((p) => p.id)).then((liked) => {
       if (!cancelled) setLikedPosts(liked);
     });
     return () => { cancelled = true; };
   }, [posts, currentUser]);
 
-  // Race-safe optimistic like — identical pattern to TeamFeed.onLike.
+  // Race-safe optimistic like. Compute the target state SYNCHRONOUSLY from the
+  // current render's liked set — do NOT mutate a shared var inside one updater
+  // and read it in another. `posts`/`setPosts` is a parent-owned prop here, so
+  // the parent's count updater can flush before the child's liked updater,
+  // which left the count reading a stale value and never incrementing.
   const onLike = (postId) => {
     if (!currentUser?.id) return;
-    let nextLiked = null;
-    setLikedPosts((prev) => {
-      nextLiked = !prev.includes(postId);
-      return nextLiked ? [...prev, postId] : prev.filter((id) => id !== postId);
-    });
+    const willLike = !likedPosts.includes(postId);
+    setLikedPosts((prev) => willLike
+      ? (prev.includes(postId) ? prev : [...prev, postId])
+      : prev.filter((id) => id !== postId));
     setPosts((prev) => (prev || []).map((p) => p.id === postId
-      ? { ...p, likes: nextLiked ? (p.likes || 0) + 1 : Math.max(0, (p.likes || 0) - 1) }
+      ? { ...p, likes: willLike ? (p.likes || 0) + 1 : Math.max(0, (p.likes || 0) - 1) }
       : p));
 
     if (likeInFlightRef.current.has(postId)) return;
@@ -636,9 +647,9 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
           return liked ? [...prev, postId] : prev.filter((id) => id !== postId);
         });
       } catch (_e) {
-        setLikedPosts((prev) => nextLiked ? prev.filter((id) => id !== postId) : [...prev, postId]);
+        setLikedPosts((prev) => willLike ? prev.filter((id) => id !== postId) : [...prev, postId]);
         setPosts((prev) => (prev || []).map((p) => p.id === postId
-          ? { ...p, likes: nextLiked ? Math.max(0, (p.likes || 0) - 1) : (p.likes || 0) + 1 }
+          ? { ...p, likes: willLike ? Math.max(0, (p.likes || 0) - 1) : (p.likes || 0) + 1 }
           : p));
       } finally {
         likeInFlightRef.current.delete(postId);
