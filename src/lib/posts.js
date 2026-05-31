@@ -6,10 +6,11 @@ export async function getPosts(limit = 30, before = null) {
   let query = supabase
     .from('posts')
     .select(`*, profiles(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position), ${POST_MENTIONS_EMBED}`)
-    // Tournament- and league-scoped posts live on their own Feed tabs. Keep
-    // the global feed clean for users who haven't opted into those contexts.
+    // Tournament-, league- and team-scoped posts live on their own Feed tabs.
+    // Keep the global feed clean for users who haven't opted into those contexts.
     .is('tournament_id', null)
     .is('league_id', null)
+    .is('team_id', null)
     .order('created_at', { ascending: false })
     .limit(limit);
   // Keyset pagination — fetch the page of posts older than the last one we hold.
@@ -46,9 +47,10 @@ export async function getFollowingPosts(userId, limit = 30, before = null) {
     .from('posts')
     .select(`*, profiles(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position), ${POST_MENTIONS_EMBED}`)
     .in('author_id', ids)
-    // Tournament- and league-scoped posts live on their own Feed tabs.
+    // Tournament-, league- and team-scoped posts live on their own Feed tabs.
     .is('tournament_id', null)
     .is('league_id', null)
+    .is('team_id', null)
     .order('created_at', { ascending: false })
     .limit(limit);
   // Keyset pagination — fetch the page of posts older than the last one we hold.
