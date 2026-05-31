@@ -12,6 +12,8 @@ import { getTournamentPosts, createPost, uploadMedia, timeAgo, toggleLike, getLi
 import { isExtraDirector as isDirectorRole } from '../lib/tournamentDirectors';
 import { track } from '../lib/analytics';
 import PostActionMenu from '../components/PostActionMenu';
+import PostReactions from '../components/PostReactions';
+import { getReactions } from '../lib/reactions';
 import StatLeaderboards from '../components/StatLeaderboards';
 import { MentionInput, MentionText } from '../components/Mentions';
 import { savePostMentions, mentionMapFromRows } from '../lib/mentions';
@@ -599,6 +601,7 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
   const [submitting, setSubmitting] = useState(false);
   const [composerError, setComposerError] = useState(null);
   const [likedPosts, setLikedPosts] = useState([]);
+  const [reactionMap, setReactionMap] = useState({});
   const likeInFlightRef = useRef(new Set());
 
   // Load which of the visible posts the current user has already liked.
@@ -617,6 +620,20 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
     getLikedPosts(currentUser.id, posts.map((p) => p.id)).then((liked) => {
       if (!cancelled) setLikedPosts(liked);
     });
+    return () => { cancelled = true; };
+  }, [posts, currentUser]);
+
+  // Reaction counts are public — load them whenever the visible post set
+  // changes (keyed on the id SET, same as the liked-state effect), regardless
+  // of sign-in. PostReactions owns its own optimistic state from here.
+  const reactionFetchKeyRef = useRef('');
+  useEffect(() => {
+    let cancelled = false;
+    if (!Array.isArray(posts) || posts.length === 0) { setReactionMap({}); reactionFetchKeyRef.current = ''; return undefined; }
+    const key = posts.map((p) => p.id).join(',');
+    if (key === reactionFetchKeyRef.current) return undefined;
+    reactionFetchKeyRef.current = key;
+    getReactions(currentUser?.id, posts.map((p) => p.id)).then((m) => { if (!cancelled) setReactionMap(m); });
     return () => { cancelled = true; };
   }, [posts, currentUser]);
 
@@ -786,6 +803,9 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
                   )}
                 </div>
               )}
+              <div style={{marginTop:8}}>
+                <PostReactions postId={p.id} currentUserId={currentUser?.id} initial={reactionMap[p.id]} />
+              </div>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:11,color:'#7C8B9F',marginTop:6}}>
                 <div style={{display:'flex',alignItems:'center',gap:12,minWidth:0}}>
                   <button

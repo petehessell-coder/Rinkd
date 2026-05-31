@@ -9,6 +9,8 @@ import { track } from '../lib/analytics';
 import { FeedSkeleton, EmptyState } from '../components/Skeletons';
 import { classifyImage } from '../lib/imageModeration';
 import PostActionMenu from '../components/PostActionMenu';
+import PostReactions from '../components/PostReactions';
+import { getReactions } from '../lib/reactions';
 import { MentionInput, MentionText } from '../components/Mentions';
 import { savePostMentions, saveCommentMentions, mentionMapFromRows } from '../lib/mentions';
 import { supabase } from '../lib/supabase';
@@ -77,7 +79,7 @@ function MediaDisplay({ url, type }) {
   );
 }
 
-function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, onLike, onComment, onCommentRemoved, onPostHidden, onUserBlocked }) {
+function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, reactions, onLike, onComment, onCommentRemoved, onPostHidden, onUserBlocked }) {
   const navigate = useNavigate();
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState([]);
@@ -206,6 +208,7 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, onLik
           <button onClick={loadComments} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: showComments ? C.ice : C.steel, fontSize: 13, fontFamily: "'Barlow', sans-serif", padding: 0 }}>
             <span style={{ fontSize: 16 }}>💬</span><span>{post.comment_count || 0}</span>
           </button>
+          <PostReactions postId={post.id} currentUserId={currentUser?.id} initial={reactions} />
         </div>
         {showComments && (
           <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
@@ -367,6 +370,7 @@ export default function Feed({ currentUser, profile }) {
   const navigate = useNavigate();
   const [posts, setPosts] = useState([]);
   const [likedPosts, setLikedPosts] = useState([]);
+  const [reactionMap, setReactionMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -398,6 +402,8 @@ export default function Feed({ currentUser, profile }) {
       const liked = await getLikedPosts(currentUser.id, page.map(p => p.id));
       setLikedPosts(liked);
     }
+    // Reaction counts are public — load them whether or not we're signed in.
+    setReactionMap(await getReactions(currentUser?.id, page.map(p => p.id)));
     setLoading(false);
   }, [currentUser, tab]);
 
@@ -422,6 +428,10 @@ export default function Feed({ currentUser, profile }) {
     if (currentUser && page.length > 0) {
       const newLiked = await getLikedPosts(currentUser.id, page.map(p => p.id));
       if (newLiked.length > 0) setLikedPosts(prev => Array.from(new Set([...prev, ...newLiked])));
+    }
+    if (page.length > 0) {
+      const newReactions = await getReactions(currentUser?.id, page.map(p => p.id));
+      setReactionMap(prev => ({ ...prev, ...newReactions }));
     }
     setLoadingMore(false);
   }, [loadingMore, hasMore, posts, tab, currentUser]);
@@ -658,6 +668,7 @@ export default function Feed({ currentUser, profile }) {
                 currentUser={currentUser}
                 profile={profile}
                 likedPosts={likedPosts}
+                reactions={reactionMap[post.id]}
                 onLike={handleLike}
                 onComment={handleCommentAdded}
                 onCommentRemoved={handleCommentRemoved}

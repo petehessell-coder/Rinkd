@@ -9,6 +9,8 @@ import { track } from '../lib/analytics';
 import { FeedSkeleton, EmptyState } from './Skeletons';
 import { classifyImage } from '../lib/imageModeration';
 import PostActionMenu from './PostActionMenu';
+import PostReactions from './PostReactions';
+import { getReactions } from '../lib/reactions';
 import { MentionInput, MentionText } from './Mentions';
 import { savePostMentions, saveCommentMentions, mentionMapFromRows } from '../lib/mentions';
 
@@ -70,7 +72,7 @@ function MediaDisplay({ url, type }) {
   );
 }
 
-function PostCard({ post, currentUser, isLiked, onLike, onCommentChange, onPostHidden, onUserBlocked }) {
+function PostCard({ post, currentUser, isLiked, reactions, onLike, onCommentChange, onPostHidden, onUserBlocked }) {
   const navigate = useNavigate();
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState([]);
@@ -139,6 +141,7 @@ function PostCard({ post, currentUser, isLiked, onLike, onCommentChange, onPostH
           <button onClick={loadAndToggle} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: showComments ? C.ice : C.steel, fontSize: 13, fontFamily: "'Barlow', sans-serif", padding: 0 }}>
             <span style={{ fontSize: 16 }}>💬</span><span>{post.comment_count || 0}</span>
           </button>
+          <PostReactions postId={post.id} currentUserId={currentUser?.id} initial={reactions} />
         </div>
         {showComments && (
           <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
@@ -196,6 +199,7 @@ function PostCard({ post, currentUser, isLiked, onLike, onCommentChange, onPostH
 export default function TeamFeed({ teamId, currentUser, isMember }) {
   const [posts, setPosts] = useState([]);
   const [likedPosts, setLikedPosts] = useState([]);
+  const [reactionMap, setReactionMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [composerOpen, setComposerOpen] = useState(false);
   const [content, setContent] = useState('');
@@ -215,6 +219,7 @@ export default function TeamFeed({ teamId, currentUser, isMember }) {
       const liked = await getLikedPosts(currentUser.id, page.map(p => p.id));
       setLikedPosts(liked);
     }
+    setReactionMap(await getReactions(currentUser?.id, page.map(p => p.id)));
     setLoading(false);
   }, [teamId, currentUser]);
 
@@ -382,7 +387,7 @@ export default function TeamFeed({ teamId, currentUser, isMember }) {
         />
       ) : posts.map(post => (
         <PostCard key={post.id} post={post} currentUser={currentUser}
-          isLiked={likedPosts.includes(post.id)} onLike={onLike}
+          isLiked={likedPosts.includes(post.id)} reactions={reactionMap[post.id]} onLike={onLike}
           onCommentChange={load}
           onPostHidden={(id) => setPosts(prev => prev.filter(p => p.id !== id))}
           onUserBlocked={(uid) => setPosts(prev => prev.filter(p => p.author_id !== uid))}
