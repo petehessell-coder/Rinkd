@@ -126,6 +126,7 @@ function PostCard({ post, currentUser, isLiked, onLike, onCommentChange, onPostH
             currentUserId={currentUser?.id}
             onReported={() => onPostHidden?.(post.id)}
             onBlocked={() => onUserBlocked?.(post.author_id)}
+            onDeleted={() => onPostHidden?.(post.id)}
           />
         </div>
         {post.content && <p style={{ fontSize: 15, color: C.ice, lineHeight: 1.55, marginBottom: 10, wordBreak: 'break-word' }}><MentionText text={post.content} mentions={postMentionMap} /></p>}
@@ -160,6 +161,10 @@ function PostCard({ post, currentUser, isLiked, onLike, onCommentChange, onPostH
                       onBlocked={() => {
                         setComments(prev => prev.filter(x => x.author_id !== c.author_id));
                         onUserBlocked?.(c.author_id);
+                      }}
+                      onDeleted={() => {
+                        setComments(prev => prev.filter(x => x.id !== c.id));
+                        onCommentChange?.();
                       }}
                     />
                   </div>

@@ -176,6 +176,15 @@ export async function createPost(authorId, { content, tag, tagColor, mediaUrl, m
   return { data, error };
 }
 
+// Hard delete a post the caller authored. RLS (posts_delete_own) enforces
+// author-only — a non-author delete simply affects zero rows, never another
+// user's post. All children cascade via ON DELETE CASCADE: comments, likes,
+// post_mentions, and post-referencing notifications. No soft delete / recovery.
+export async function deletePost(postId) {
+  const { error } = await supabase.from('posts').delete().eq('id', postId);
+  return { error };
+}
+
 export async function getTeamPosts(teamId, limit = 50) {
   let query = supabase
     .from('posts')
@@ -272,6 +281,15 @@ export async function createComment(postId, authorId, content) {
     .insert({ post_id: postId, author_id: authorId, content, created_at: new Date().toISOString() })
     .select().single();
   return { data, error };
+}
+
+// Hard delete a comment the caller authored. RLS (comments_delete_own) enforces
+// author-only. posts.comment_count stays correct via the
+// trg_bump_post_comment_count AFTER DELETE trigger — callers only adjust their
+// own local count for the optimistic UI. comment_mentions cascade.
+export async function deleteComment(commentId) {
+  const { error } = await supabase.from('comments').delete().eq('id', commentId);
+  return { error };
 }
 
 // Follow system

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { reportPost, reportComment, REPORT_REASONS } from '../lib/moderation';
 import { blockUser } from '../lib/blocks';
+import { deletePost, deleteComment } from '../lib/posts';
 
 const C = {
   navy: '#0B1F3A', ice: '#F4F7FA', steel: '#8BA3BE', card: '#0f2847',
@@ -8,9 +9,10 @@ const C = {
 };
 
 /**
- * ⋯ menu for an individual post or comment. Renders nothing if the viewer is
- * the author (you can't report or block yourself). Closes on outside click,
- * Esc, or after a successful action.
+ * ⋯ menu for an individual post or comment. For your OWN content it offers
+ * Delete; for someone else's it offers Report + Block. Renders nothing only
+ * when logged out or the author is unknown. Closes on outside click, Esc, or
+ * after a successful action.
  *
  *   <PostActionMenu
  *     kind="post"             // 'post' | 'comment'
@@ -20,11 +22,12 @@ const C = {
  *     currentUserId={currentUser?.id}
  *     onReported={() => ...}  // parent typically removes the row from local state
  *     onBlocked={() => ...}   // parent typically filters all rows from this user
+ *     onDeleted={() => ...}   // own content: parent removes the row (+ adjusts counts)
  *   />
  */
 export default function PostActionMenu({
   kind, targetId, authorId, authorHandle,
-  currentUserId, onReported, onBlocked,
+  currentUserId, onReported, onBlocked, onDeleted,
 }) {
   const [open, setOpen] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -32,6 +35,7 @@ export default function PostActionMenu({
   const [details, setDetails] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [deleting, setDeleting] = useState(false);
   const rootRef = useRef(null);
 
   // Close the menu on outside click / Escape. Declared before any conditional
@@ -56,8 +60,30 @@ export default function PostActionMenu({
     };
   }, [open, showReportModal]);
 
-  // Don't render at all for own content. Author has their own delete path.
-  if (!currentUserId || !authorId || currentUserId === authorId) return null;
+  // Only hide when we can't attribute the row to anyone (logged out / no
+  // author). Own content shows Delete; others' content shows Report + Block.
+  if (!currentUserId || !authorId) return null;
+  const isOwn = currentUserId === authorId;
+
+  const doDelete = async () => {
+    if (deleting) return;
+    const ok = window.confirm(
+      kind === 'comment'
+        ? "Delete this comment? This can't be undone."
+        : "Delete this post? Its comments, likes, and mentions are removed too. This can't be undone."
+    );
+    if (!ok) return;
+    setDeleting(true);
+    const fn = kind === 'comment' ? deleteComment : deletePost;
+    const { error: e } = await fn(targetId);
+    setDeleting(false);
+    if (e) {
+      window.alert(e.message || 'Could not delete. Try again.');
+      return;
+    }
+    setOpen(false);
+    onDeleted?.();
+  };
 
   const openReport = () => {
     setOpen(false);
@@ -111,10 +137,18 @@ export default function PostActionMenu({
           borderRadius: 8, padding: 4, zIndex: 50,
           boxShadow: '0 6px 18px rgba(0,0,0,0.35)',
         }}>
-          <button onClick={openReport} style={menuItemStyle}>🚩 Report</button>
-          <button onClick={doBlock} style={menuItemStyle}>
-            🚫 Block {authorHandle ? `@${authorHandle}` : 'user'}
-          </button>
+          {isOwn ? (
+            <button onClick={doDelete} disabled={deleting} style={{ ...menuItemStyle, color: C.red, opacity: deleting ? 0.6 : 1 }}>
+              🗑 {deleting ? 'Deleting…' : `Delete ${kind === 'comment' ? 'comment' : 'post'}`}
+            </button>
+          ) : (
+            <>
+              <button onClick={openReport} style={menuItemStyle}>🚩 Report</button>
+              <button onClick={doBlock} style={menuItemStyle}>
+                🚫 Block {authorHandle ? `@${authorHandle}` : 'user'}
+              </button>
+            </>
+          )}
         </div>
       )}
 

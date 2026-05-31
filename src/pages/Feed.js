@@ -77,7 +77,7 @@ function MediaDisplay({ url, type }) {
   );
 }
 
-function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, onLike, onComment, onPostHidden, onUserBlocked }) {
+function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, onLike, onComment, onCommentRemoved, onPostHidden, onUserBlocked }) {
   const navigate = useNavigate();
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState([]);
@@ -180,6 +180,7 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, onLik
             currentUserId={currentUser?.id}
             onReported={() => onPostHidden?.(post.id)}
             onBlocked={() => onUserBlocked?.(post.author_id)}
+            onDeleted={() => onPostHidden?.(post.id)}
           />
         </div>
         {post.content && <p style={{ fontSize: 15, color: C.ice, lineHeight: 1.55, marginBottom: 10, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}><MentionText text={post.content} mentions={postMentionMap} /></p>}
@@ -231,6 +232,10 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, onLik
                         onBlocked={() => {
                           setComments(prev => prev.filter(x => x.author_id !== c.author_id));
                           onUserBlocked?.(c.author_id);
+                        }}
+                        onDeleted={() => {
+                          setComments(prev => prev.filter(x => x.id !== c.id));
+                          onCommentRemoved?.(post.id);
                         }}
                       />
                     )}
@@ -426,6 +431,14 @@ export default function Feed({ currentUser, profile }) {
   const handleCommentAdded = useCallback((postId) => {
     setPosts(prev => prev.map(p =>
       p.id === postId ? { ...p, comment_count: (p.comment_count || 0) + 1 } : p
+    ));
+  }, []);
+
+  // Deleting a comment drops the count chip. The DB trigger keeps the stored
+  // count correct; this just mirrors it locally so the chip updates instantly.
+  const handleCommentRemoved = useCallback((postId) => {
+    setPosts(prev => prev.map(p =>
+      p.id === postId ? { ...p, comment_count: Math.max(0, (p.comment_count || 0) - 1) } : p
     ));
   }, []);
 
@@ -649,6 +662,7 @@ export default function Feed({ currentUser, profile }) {
                 likedPosts={likedPosts}
                 onLike={handleLike}
                 onComment={handleCommentAdded}
+                onCommentRemoved={handleCommentRemoved}
                 onPostHidden={(id) => setPosts(prev => prev.filter(p => p.id !== id))}
                 onUserBlocked={(uid) => setPosts(prev => prev.filter(p => p.author_id !== uid))}
               />

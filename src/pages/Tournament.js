@@ -764,7 +764,7 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
                   <div style={{fontWeight:p.recap_for_game_id?700:500,fontSize:p.recap_for_game_id?15:13,lineHeight:1.3,marginBottom:body?4:0}}><MentionText text={headline} mentions={mentionMap} /></div>
                   {body && <div style={{fontSize:13,color:'#C5D2E1',lineHeight:1.4,marginBottom:8}}><MentionText text={body} mentions={mentionMap} /></div>}
                 </div>
-                {currentUser && p.author_id !== currentUser.id && (
+                {currentUser && (
                   <PostActionMenu
                     kind="post"
                     targetId={p.id}
@@ -773,6 +773,7 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
                     currentUserId={currentUser.id}
                     onReported={() => handleHidden(p.id)}
                     onBlocked={() => handleAuthorBlocked(p.author_id)}
+                    onDeleted={() => handleHidden(p.id)}
                   />
                 )}
               </div>
