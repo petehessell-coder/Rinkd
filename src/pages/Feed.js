@@ -9,6 +9,8 @@ import { track } from '../lib/analytics';
 import { FeedSkeleton, EmptyState } from '../components/Skeletons';
 import { classifyImage } from '../lib/imageModeration';
 import PostActionMenu from '../components/PostActionMenu';
+import { MentionInput, MentionText } from '../components/Mentions';
+import { savePostMentions, saveCommentMentions, mentionMapFromRows } from '../lib/mentions';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/authContext';
 
@@ -80,9 +82,11 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, onLik
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState([]);
   const [commentText, setCommentText] = useState('');
+  const [commentMentionIds, setCommentMentionIds] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const isLiked = likedPosts.includes(post.id);
   const profile = post.profiles;
+  const postMentionMap = mentionMapFromRows(post.post_mentions);
 
   const loadComments = async () => {
     if (!showComments) { const c = await getComments(post.id); setComments(c); }
@@ -114,8 +118,10 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, onLik
       profiles: viewerProfile || null,
       __pending: true,
     };
+    const mentionIds = commentMentionIds;
     setComments(prev => [...prev, tempComment]);
     setCommentText('');
+    setCommentMentionIds([]);
 
     const { data, error } = await createComment(post.id, currentUser.id, trimmed);
     setSubmitting(false);
@@ -127,7 +133,15 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, onLik
       console.warn('[submitComment] insert failed, rolling back:', error?.message || error);
       setComments(prev => prev.filter(c => c.id !== tempId));
       setCommentText(trimmed);
+      setCommentMentionIds(mentionIds);
       return;
+    }
+
+    // Persist resolved @-mentions (best-effort — never unwind a landed comment).
+    if (data?.id && mentionIds.length) {
+      saveCommentMentions(data.id, mentionIds).then(({ error: mErr }) => {
+        if (mErr) console.warn('[submitComment] mention save failed:', mErr?.message || mErr);
+      });
     }
 
     // Swap the temp row for the real one. We preserve the profile join we
@@ -168,7 +182,7 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, onLik
             onBlocked={() => onUserBlocked?.(post.author_id)}
           />
         </div>
-        {post.content && <p style={{ fontSize: 15, color: C.ice, lineHeight: 1.55, marginBottom: 10, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{post.content}</p>}
+        {post.content && <p style={{ fontSize: 15, color: C.ice, lineHeight: 1.55, marginBottom: 10, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}><MentionText text={post.content} mentions={postMentionMap} /></p>}
         <MediaDisplay url={post.media_url} type={post.media_type} />
         {/* Auto-recap posts link straight to the game page — saves the
             spectator from copy/pasting the URL out of the content body. */}
@@ -204,7 +218,7 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, onLik
                         {c.profiles?.name || (c.__pending ? 'You' : '')}
                         <span style={{ fontWeight: 400, color: C.steel }}> · {c.__pending ? 'sending…' : timeAgo(c.created_at)}</span>
                       </div>
-                      <div style={{ fontSize: 13, color: C.ice }}>{c.content}</div>
+                      <div style={{ fontSize: 13, color: C.ice }}><MentionText text={c.content} mentions={mentionMapFromRows(c.comment_mentions)} /></div>
                     </div>
                     {!c.__pending && (
                       <PostActionMenu
@@ -227,8 +241,10 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, onLik
             {currentUser && (
               <form onSubmit={submitComment} style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                 <Avatar profile={viewerProfile || currentUser} size={28} />
-                <input value={commentText} onChange={e => setCommentText(e.target.value)} placeholder="Add a comment..." maxLength={280}
-                  style={{ flex: 1, padding: '8px 12px', borderRadius: 8, background: C.navy, border: `1px solid ${C.border}`, color: C.ice, fontSize: 13, outline: 'none', fontFamily: "'Barlow', sans-serif" }}/>
+                <MentionInput value={commentText} onChange={setCommentText} onMentionsChange={setCommentMentionIds}
+                  placeholder="Add a comment… use @ to tag" maxLength={280} rows={1}
+                  style={{ flex: 1 }}
+                  textareaStyle={{ padding: '8px 12px', borderRadius: 8, background: C.navy, border: `1px solid ${C.border}`, color: C.ice, fontSize: 13, fontFamily: "'Barlow', sans-serif", lineHeight: 1.4 }}/>
                 <button type="submit" disabled={!commentText.trim() || submitting}
                   style={{ padding: '8px 14px', borderRadius: 8, background: commentText.trim() ? C.red : C.border, color: 'white', border: 'none', cursor: 'pointer', fontSize: 13, fontFamily: "'Barlow', sans-serif" }}>Post</button>
               </form>
@@ -351,6 +367,7 @@ export default function Feed({ currentUser, profile }) {
   const [hasMore, setHasMore] = useState(true);
   const [composerOpen, setComposerOpen] = useState(false);
   const [content, setContent] = useState('');
+  const [postMentionIds, setPostMentionIds] = useState([]);
   const [selectedTag, setSelectedTag] = useState(null);
   const [posting, setPosting] = useState(false);
   // 4D.5-3: default to "following" so new users see signal, not noise.
@@ -453,7 +470,7 @@ export default function Feed({ currentUser, profile }) {
       if (error) { setPosting(false); alert('Upload failed. Please try again.'); return; }
       mediaUrl = url; mediaType = mt; setUploadProgress(80);
     }
-    const { error: postError } = await createPost(currentUser.id, { content: content.trim(), tag: selectedTag?.label || null, tagColor: selectedTag?.color || null, mediaUrl, mediaType, livebarnVenueId: livebarnId.trim() || null });
+    const { data: newPost, error: postError } = await createPost(currentUser.id, { content: content.trim(), tag: selectedTag?.label || null, tagColor: selectedTag?.color || null, mediaUrl, mediaType, livebarnVenueId: livebarnId.trim() || null });
     if (postError) {
       // The insert failed — don't clear the composer or fire analytics, or the
       // user loses their text and we log a chirp that never landed.
@@ -462,13 +479,18 @@ export default function Feed({ currentUser, profile }) {
       alert("Couldn't post that chirp. Check your connection and try again.");
       return;
     }
+    // Persist resolved @-mentions (best-effort — the post already landed).
+    if (newPost?.id && postMentionIds.length) {
+      const { error: mErr } = await savePostMentions(newPost.id, postMentionIds);
+      if (mErr) console.warn('[handlePost] mention save failed:', mErr?.message || mErr);
+    }
     // Fire both events during the rename window. `post_created` keeps historical
     // continuity in dashboards; `chirp_created` is the going-forward name and
     // will become canonical once we backfill old data and retire the legacy event.
     const eventProps = { has_media: !!mediaUrl, media_type: mediaType, tag: selectedTag?.label, scope: 'global', livebarn: !!livebarnId.trim() };
     track('post_created', eventProps);
     track('chirp_created', eventProps);
-    setContent(''); setSelectedTag(null); setLivebarnId(''); removeMedia(); setComposerOpen(false); setUploadProgress(0);
+    setContent(''); setPostMentionIds([]); setSelectedTag(null); setLivebarnId(''); removeMedia(); setComposerOpen(false); setUploadProgress(0);
     await load(); setPosting(false);
   };
 
@@ -562,8 +584,10 @@ export default function Feed({ currentUser, profile }) {
               <form onSubmit={handlePost} style={{ padding: '14px 16px' }}>
                 <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
                   <Avatar profile={profile} size={36} />
-                  <textarea value={content} onChange={e => setContent(e.target.value)} placeholder="What's the chirp?" maxLength={500} rows={3} autoFocus
-                    style={{ flex: 1, padding: '10px 12px', borderRadius: 10, background: C.navy, border: `1.5px solid ${C.blue}`, color: C.ice, fontSize: 15, outline: 'none', resize: 'none', fontFamily: "'Barlow', sans-serif", lineHeight: 1.5 }}/>
+                  <MentionInput value={content} onChange={setContent} onMentionsChange={setPostMentionIds}
+                    placeholder="What's the chirp? Tag players with @" maxLength={500} rows={3} autoFocus
+                    style={{ flex: 1 }}
+                    textareaStyle={{ padding: '10px 12px', borderRadius: 10, background: C.navy, border: `1.5px solid ${C.blue}`, color: C.ice, fontSize: 15, resize: 'none', fontFamily: "'Barlow', sans-serif", lineHeight: 1.5 }}/>
                 </div>
                 {mediaPreview && (
                   <div style={{ position: 'relative', marginBottom: 12, borderRadius: 10, overflow: 'hidden' }}>

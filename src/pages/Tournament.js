@@ -8,11 +8,13 @@ import { followTournament, unfollowTournament, isFollowingTournament } from '../
 import { subscribeToPush, isPushSubscribed } from '../lib/push';
 import { iosCanInstallButHasnt } from '../lib/platform';
 import { IOS_INSTALL_EVENT } from '../components/IOSInstallBanner';
-import { getTournamentPosts, createPost, uploadMedia, timeAgo } from '../lib/posts';
+import { getTournamentPosts, createPost, uploadMedia, timeAgo, toggleLike, getLikedPosts } from '../lib/posts';
 import { isExtraDirector as isDirectorRole } from '../lib/tournamentDirectors';
 import { track } from '../lib/analytics';
 import PostActionMenu from '../components/PostActionMenu';
 import StatLeaderboards from '../components/StatLeaderboards';
+import { MentionInput, MentionText } from '../components/Mentions';
+import { savePostMentions, mentionMapFromRows } from '../lib/mentions';
 
 
 const TABS = ['Standings','Schedule','Bracket','Stats','Feed','Info'];
@@ -592,9 +594,57 @@ export default function TournamentPage({ currentUser }) {
 // volume sane.
 function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId }) {
   const [draft, setDraft] = useState('');
+  const [postMentionIds, setPostMentionIds] = useState([]);
   const [mediaFile, setMediaFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [composerError, setComposerError] = useState(null);
+  const [likedPosts, setLikedPosts] = useState([]);
+  const likeInFlightRef = useRef(new Set());
+
+  // Load which of the visible posts the current user has already liked.
+  // Scoped to the loaded ids (same bounded pattern as TeamFeed/Feed).
+  useEffect(() => {
+    let cancelled = false;
+    if (!currentUser?.id || !Array.isArray(posts) || posts.length === 0) { setLikedPosts([]); return; }
+    getLikedPosts(currentUser.id, posts.map((p) => p.id)).then((liked) => {
+      if (!cancelled) setLikedPosts(liked);
+    });
+    return () => { cancelled = true; };
+  }, [posts, currentUser]);
+
+  // Race-safe optimistic like — identical pattern to TeamFeed.onLike.
+  const onLike = (postId) => {
+    if (!currentUser?.id) return;
+    let nextLiked = null;
+    setLikedPosts((prev) => {
+      nextLiked = !prev.includes(postId);
+      return nextLiked ? [...prev, postId] : prev.filter((id) => id !== postId);
+    });
+    setPosts((prev) => (prev || []).map((p) => p.id === postId
+      ? { ...p, likes: nextLiked ? (p.likes || 0) + 1 : Math.max(0, (p.likes || 0) - 1) }
+      : p));
+
+    if (likeInFlightRef.current.has(postId)) return;
+    likeInFlightRef.current.add(postId);
+    (async () => {
+      try {
+        const { liked, error } = await toggleLike(postId, currentUser.id);
+        if (error) throw error;
+        setLikedPosts((prev) => {
+          const currentlyLiked = prev.includes(postId);
+          if (currentlyLiked === liked) return prev;
+          return liked ? [...prev, postId] : prev.filter((id) => id !== postId);
+        });
+      } catch (_e) {
+        setLikedPosts((prev) => nextLiked ? prev.filter((id) => id !== postId) : [...prev, postId]);
+        setPosts((prev) => (prev || []).map((p) => p.id === postId
+          ? { ...p, likes: nextLiked ? Math.max(0, (p.likes || 0) - 1) : (p.likes || 0) + 1 }
+          : p));
+      } finally {
+        likeInFlightRef.current.delete(postId);
+      }
+    })();
+  };
 
   const handleSubmit = async () => {
     if (!currentUser?.id || !tournamentId || submitting) return;
@@ -616,10 +666,13 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
       // Optimistic: prepend the new post to the feed so the author sees it
       // immediately. The next refetch picks up the same row by id.
       if (data) {
+        // Persist resolved @-mentions (best-effort; failure shouldn't block the post).
+        if (postMentionIds.length) savePostMentions(data.id, postMentionIds);
         const newPost = { ...data, profiles: currentUser.profile || null };
         setPosts((prev) => [newPost, ...(prev || [])]);
       }
       setDraft('');
+      setPostMentionIds([]);
       setMediaFile(null);
     } catch (e) {
       setComposerError(e?.message || 'Post failed');
@@ -635,12 +688,14 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
     <div style={{display:'flex',flexDirection:'column',gap:12,padding:'0 12px'}}>
       {currentUser && (
         <div style={{background:'#11253E',borderRadius:10,padding:'10px 12px'}}>
-          <textarea
+          <MentionInput
             value={draft}
-            onChange={(e) => setDraft(e.target.value.slice(0, 500))}
+            onChange={setDraft}
+            onMentionsChange={setPostMentionIds}
             placeholder="Post to the tournament feed…"
             rows={2}
-            style={{width:'100%',background:'#07111F',color:'#F4F7FA',border:'1px solid #1F3553',borderRadius:6,padding:'8px 10px',fontFamily:'Barlow,sans-serif',fontSize:13,resize:'vertical',outline:'none'}}
+            maxLength={500}
+            textareaStyle={{background:'#07111F',color:'#F4F7FA',border:'1px solid #1F3553',borderRadius:6,padding:'8px 10px',fontFamily:'Barlow,sans-serif',fontSize:13}}
           />
           {mediaFile && (
             <div style={{display:'flex',alignItems:'center',gap:8,fontSize:11,color:'#9BB5D6',marginTop:6}}>
@@ -685,6 +740,7 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
           const headline = lines[0] || 'Update';
           const body = lines.slice(1).join(' · ');
           const author = p.profiles?.name || p.profiles?.handle || '';
+          const mentionMap = mentionMapFromRows(p.post_mentions);
           return (
             <div key={p.id} style={{background:'#11253E',borderRadius:10,padding:'12px 14px',color:'#F4F7FA',fontFamily:'Barlow,sans-serif'}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
@@ -694,8 +750,8 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
                       {p.tag}
                     </div>
                   )}
-                  <div style={{fontWeight:p.recap_for_game_id?700:500,fontSize:p.recap_for_game_id?15:13,lineHeight:1.3,marginBottom:body?4:0}}>{headline}</div>
-                  {body && <div style={{fontSize:13,color:'#C5D2E1',lineHeight:1.4,marginBottom:8}}>{body}</div>}
+                  <div style={{fontWeight:p.recap_for_game_id?700:500,fontSize:p.recap_for_game_id?15:13,lineHeight:1.3,marginBottom:body?4:0}}><MentionText text={headline} mentions={mentionMap} /></div>
+                  {body && <div style={{fontSize:13,color:'#C5D2E1',lineHeight:1.4,marginBottom:8}}><MentionText text={body} mentions={mentionMap} /></div>}
                 </div>
                 {currentUser && p.author_id !== currentUser.id && (
                   <PostActionMenu
@@ -719,7 +775,17 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
                 </div>
               )}
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:11,color:'#7C8B9F',marginTop:6}}>
-                <span>{author ? `${author} · ` : ''}{timeAgo(p.created_at)} ago</span>
+                <div style={{display:'flex',alignItems:'center',gap:12,minWidth:0}}>
+                  <button
+                    onClick={() => onLike(p.id)}
+                    disabled={!currentUser}
+                    style={{display:'flex',alignItems:'center',gap:4,background:'none',border:'none',padding:0,cursor:currentUser?'pointer':'default',color:likedPosts.includes(p.id)?'#D72638':'#7C8B9F',fontFamily:'Barlow,sans-serif',fontSize:12}}
+                  >
+                    <span style={{fontSize:14}}>{likedPosts.includes(p.id)?'❤️':'🤍'}</span>
+                    <span style={{fontWeight:likedPosts.includes(p.id)?700:400}}>{p.likes || 0}</span>
+                  </button>
+                  <span style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{author ? `${author} · ` : ''}{timeAgo(p.created_at)} ago</span>
+                </div>
                 {p.recap_for_game_id && (
                   <button
                     onClick={() => navigate(`/game/${p.recap_for_game_id}`)}

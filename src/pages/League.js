@@ -7,7 +7,7 @@ import { getLeague, getLeagueTeams, getLeagueGames, getLeagueStandings, getUserL
 import { isExtraCommissioner as isExtraCommissionerLookup } from '../lib/leagueCommissioners';
 import { followLeague, unfollowLeague, isFollowingLeague } from '../lib/leagueSubscriptions';
 import { subscribeToPush, isPushSubscribed } from '../lib/push';
-import { getLeaguePosts, createPost, uploadMedia, timeAgo } from '../lib/posts';
+import { getLeaguePosts, createPost, uploadMedia, timeAgo, toggleLike, getLikedPosts } from '../lib/posts';
 import PostActionMenu from '../components/PostActionMenu';
 import { LedR } from '../components/Logos';
 import { getLiveBarnUrl } from '../lib/livebarn';
@@ -16,6 +16,8 @@ import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
 import SubscribeCalendarSheet from '../components/SubscribeCalendarSheet';
 import StatLeaderboards from '../components/StatLeaderboards';
+import { MentionInput, MentionText } from '../components/Mentions';
+import { savePostMentions, mentionMapFromRows } from '../lib/mentions';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 const TABS = ['Schedule', 'Standings', 'Stats', 'Teams', 'Feed', 'Info'];
@@ -655,9 +657,56 @@ const card = { background: '#0f2847', border: '0.5px solid rgba(46,91,140,0.4)',
 // pushes — only recaps do — to keep notification volume sane.
 function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, leagueId }) {
   const [draft, setDraft] = useState('');
+  const [postMentionIds, setPostMentionIds] = useState([]);
   const [mediaFile, setMediaFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [composerError, setComposerError] = useState(null);
+  const [likedPosts, setLikedPosts] = useState([]);
+  const likeInFlightRef = useRef(new Set());
+
+  // Load which of the visible posts the current user has already liked.
+  useEffect(() => {
+    let cancelled = false;
+    if (!currentUser?.id || !Array.isArray(posts) || posts.length === 0) { setLikedPosts([]); return; }
+    getLikedPosts(currentUser.id, posts.map((p) => p.id)).then((liked) => {
+      if (!cancelled) setLikedPosts(liked);
+    });
+    return () => { cancelled = true; };
+  }, [posts, currentUser]);
+
+  // Race-safe optimistic like — identical pattern to TeamFeed.onLike.
+  const onLike = (postId) => {
+    if (!currentUser?.id) return;
+    let nextLiked = null;
+    setLikedPosts((prev) => {
+      nextLiked = !prev.includes(postId);
+      return nextLiked ? [...prev, postId] : prev.filter((id) => id !== postId);
+    });
+    setPosts((prev) => (prev || []).map((p) => p.id === postId
+      ? { ...p, likes: nextLiked ? (p.likes || 0) + 1 : Math.max(0, (p.likes || 0) - 1) }
+      : p));
+
+    if (likeInFlightRef.current.has(postId)) return;
+    likeInFlightRef.current.add(postId);
+    (async () => {
+      try {
+        const { liked, error } = await toggleLike(postId, currentUser.id);
+        if (error) throw error;
+        setLikedPosts((prev) => {
+          const currentlyLiked = prev.includes(postId);
+          if (currentlyLiked === liked) return prev;
+          return liked ? [...prev, postId] : prev.filter((id) => id !== postId);
+        });
+      } catch (_e) {
+        setLikedPosts((prev) => nextLiked ? prev.filter((id) => id !== postId) : [...prev, postId]);
+        setPosts((prev) => (prev || []).map((p) => p.id === postId
+          ? { ...p, likes: nextLiked ? Math.max(0, (p.likes || 0) - 1) : (p.likes || 0) + 1 }
+          : p));
+      } finally {
+        likeInFlightRef.current.delete(postId);
+      }
+    })();
+  };
 
   const handleSubmit = async () => {
     if (!currentUser?.id || !leagueId || submitting) return;
@@ -677,12 +726,15 @@ function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, league
       const { data, error } = await createPost(currentUser.id, { content, mediaUrl, mediaType, leagueId });
       if (error) { setComposerError(error.message || 'Post failed'); setSubmitting(false); return; }
       if (data) {
+        // Persist resolved @-mentions (best-effort; failure shouldn't block the post).
+        if (postMentionIds.length) savePostMentions(data.id, postMentionIds);
         // Optimistic prepend so the author sees their post immediately. The
         // next refetch picks up the same row by id.
         const newPost = { ...data, profiles: currentUser.profile || null };
         setPosts((prev) => [newPost, ...(prev || [])]);
       }
       setDraft('');
+      setPostMentionIds([]);
       setMediaFile(null);
     } catch (e) {
       setComposerError(e?.message || 'Post failed');
@@ -698,12 +750,14 @@ function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, league
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {currentUser && (
         <div style={{ background: '#11253E', borderRadius: 10, padding: '10px 12px' }}>
-          <textarea
+          <MentionInput
             value={draft}
-            onChange={(e) => setDraft(e.target.value.slice(0, 500))}
+            onChange={setDraft}
+            onMentionsChange={setPostMentionIds}
             placeholder="Post to the league feed…"
             rows={2}
-            style={{ width: '100%', background: '#07111F', color: C.ice, border: '1px solid #1F3553', borderRadius: 6, padding: '8px 10px', fontFamily: 'Barlow, sans-serif', fontSize: 13, resize: 'vertical', outline: 'none' }}
+            maxLength={500}
+            textareaStyle={{ background: '#07111F', color: C.ice, border: '1px solid #1F3553', borderRadius: 6, padding: '8px 10px', fontFamily: 'Barlow, sans-serif', fontSize: 13 }}
           />
           {mediaFile && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#9BB5D6', marginTop: 6 }}>
@@ -741,6 +795,7 @@ function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, league
           const headline = lines[0] || 'Update';
           const body = lines.slice(1).join(' · ');
           const author = p.profiles?.name || p.profiles?.handle || '';
+          const mentionMap = mentionMapFromRows(p.post_mentions);
           return (
             <div key={p.id} style={{ background: '#11253E', borderRadius: 10, padding: '12px 14px', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
@@ -750,8 +805,8 @@ function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, league
                       {p.tag}
                     </div>
                   )}
-                  <div style={{ fontWeight: p.recap_for_game_id ? 700 : 500, fontSize: p.recap_for_game_id ? 15 : 13, lineHeight: 1.3, marginBottom: body ? 4 : 0 }}>{headline}</div>
-                  {body && <div style={{ fontSize: 13, color: '#C5D2E1', lineHeight: 1.4, marginBottom: 8 }}>{body}</div>}
+                  <div style={{ fontWeight: p.recap_for_game_id ? 700 : 500, fontSize: p.recap_for_game_id ? 15 : 13, lineHeight: 1.3, marginBottom: body ? 4 : 0 }}><MentionText text={headline} mentions={mentionMap} /></div>
+                  {body && <div style={{ fontSize: 13, color: '#C5D2E1', lineHeight: 1.4, marginBottom: 8 }}><MentionText text={body} mentions={mentionMap} /></div>}
                 </div>
                 {currentUser && p.author_id !== currentUser.id && (
                   <PostActionMenu
@@ -773,7 +828,17 @@ function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, league
                 </div>
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: '#7C8B9F', marginTop: 6 }}>
-                <span>{author ? `${author} · ` : ''}{timeAgo(p.created_at)} ago</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                  <button
+                    onClick={() => onLike(p.id)}
+                    disabled={!currentUser}
+                    style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', padding: 0, cursor: currentUser ? 'pointer' : 'default', color: likedPosts.includes(p.id) ? '#D72638' : '#7C8B9F', fontFamily: 'Barlow, sans-serif', fontSize: 12 }}
+                  >
+                    <span style={{ fontSize: 14 }}>{likedPosts.includes(p.id) ? '❤️' : '🤍'}</span>
+                    <span style={{ fontWeight: likedPosts.includes(p.id) ? 700 : 400 }}>{p.likes || 0}</span>
+                  </button>
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{author ? `${author} · ` : ''}{timeAgo(p.created_at)} ago</span>
+                </div>
                 {p.recap_for_game_id && (
                   <button onClick={() => navigate(`/league-game/${p.recap_for_game_id}`)}
                     style={{ background: 'transparent', border: 'none', color: '#5B9FE2', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}>

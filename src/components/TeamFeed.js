@@ -9,6 +9,8 @@ import { track } from '../lib/analytics';
 import { FeedSkeleton, EmptyState } from './Skeletons';
 import { classifyImage } from '../lib/imageModeration';
 import PostActionMenu from './PostActionMenu';
+import { MentionInput, MentionText } from './Mentions';
+import { savePostMentions, saveCommentMentions, mentionMapFromRows } from '../lib/mentions';
 
 const C = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
@@ -73,8 +75,10 @@ function PostCard({ post, currentUser, isLiked, onLike, onCommentChange, onPostH
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState([]);
   const [commentText, setCommentText] = useState('');
+  const [commentMentionIds, setCommentMentionIds] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const profile = post.profiles;
+  const postMentionMap = mentionMapFromRows(post.post_mentions);
 
   const loadAndToggle = async () => {
     if (!showComments) { const c = await getComments(post.id); setComments(c); }
@@ -85,10 +89,16 @@ function PostCard({ post, currentUser, isLiked, onLike, onCommentChange, onPostH
     e.preventDefault();
     if (!commentText.trim() || !currentUser) return;
     setSubmitting(true);
-    const { error } = await createComment(post.id, currentUser.id, commentText);
+    const mentionIds = commentMentionIds;
+    const { data, error } = await createComment(post.id, currentUser.id, commentText);
     if (error) { setSubmitting(false); alert('Failed to post comment. Try again.'); return; }
+    if (data?.id && mentionIds.length) {
+      saveCommentMentions(data.id, mentionIds).then(({ error: mErr }) => {
+        if (mErr) console.warn('[TeamFeed comment] mention save failed:', mErr?.message || mErr);
+      });
+    }
     const c = await getComments(post.id);
-    setComments(c); setCommentText(''); setSubmitting(false);
+    setComments(c); setCommentText(''); setCommentMentionIds([]); setSubmitting(false);
     onCommentChange?.();
   };
 
@@ -118,7 +128,7 @@ function PostCard({ post, currentUser, isLiked, onLike, onCommentChange, onPostH
             onBlocked={() => onUserBlocked?.(post.author_id)}
           />
         </div>
-        {post.content && <p style={{ fontSize: 15, color: C.ice, lineHeight: 1.55, marginBottom: 10, wordBreak: 'break-word' }}>{post.content}</p>}
+        {post.content && <p style={{ fontSize: 15, color: C.ice, lineHeight: 1.55, marginBottom: 10, wordBreak: 'break-word' }}><MentionText text={post.content} mentions={postMentionMap} /></p>}
         <MediaDisplay url={post.media_url} type={post.media_type} />
         <div style={{ display: 'flex', gap: 16, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
           <button onClick={() => onLike(post.id)} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: isLiked ? C.red : C.steel, fontSize: 13, fontFamily: "'Barlow', sans-serif", padding: 0 }}>
@@ -138,7 +148,7 @@ function PostCard({ post, currentUser, isLiked, onLike, onCommentChange, onPostH
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12, fontWeight: 600, color: C.ice, marginBottom: 2 }}>{c.profiles?.name} <span style={{ fontWeight: 400, color: C.steel }}>· {timeAgo(c.created_at)}</span></div>
-                      <div style={{ fontSize: 13, color: C.ice }}>{c.content}</div>
+                      <div style={{ fontSize: 13, color: C.ice }}><MentionText text={c.content} mentions={mentionMapFromRows(c.comment_mentions)} /></div>
                     </div>
                     <PostActionMenu
                       kind="comment"
@@ -159,8 +169,10 @@ function PostCard({ post, currentUser, isLiked, onLike, onCommentChange, onPostH
             {currentUser && (
               <form onSubmit={submit} style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                 <Avatar profile={currentUser} size={28} />
-                <input value={commentText} onChange={e => setCommentText(e.target.value)} placeholder="Add a comment..." maxLength={280}
-                  style={{ flex: 1, padding: '8px 12px', borderRadius: 8, background: C.navy, border: `1px solid ${C.border}`, color: C.ice, fontSize: 13, outline: 'none', fontFamily: "'Barlow', sans-serif" }}/>
+                <MentionInput value={commentText} onChange={setCommentText} onMentionsChange={setCommentMentionIds}
+                  placeholder="Add a comment… use @ to tag" maxLength={280} rows={1}
+                  style={{ flex: 1 }}
+                  textareaStyle={{ padding: '8px 12px', borderRadius: 8, background: C.navy, border: `1px solid ${C.border}`, color: C.ice, fontSize: 13, fontFamily: "'Barlow', sans-serif", lineHeight: 1.4 }}/>
                 <button type="submit" disabled={!commentText.trim() || submitting}
                   style={{ padding: '8px 14px', borderRadius: 8, background: commentText.trim() ? C.red : C.border, color: 'white', border: 'none', cursor: 'pointer', fontSize: 13, fontFamily: "'Barlow', sans-serif" }}>Post</button>
               </form>
@@ -182,6 +194,7 @@ export default function TeamFeed({ teamId, currentUser, isMember }) {
   const [loading, setLoading] = useState(true);
   const [composerOpen, setComposerOpen] = useState(false);
   const [content, setContent] = useState('');
+  const [postMentionIds, setPostMentionIds] = useState([]);
   const [selectedTag, setSelectedTag] = useState(null);
   const [posting, setPosting] = useState(false);
   const [mediaFile, setMediaFile] = useState(null);
@@ -237,7 +250,7 @@ export default function TeamFeed({ teamId, currentUser, isMember }) {
       if (error) { setPosting(false); alert('Upload failed. Try again.'); return; }
       mediaUrl = url; mediaType = mt;
     }
-    const { error } = await createPost(currentUser.id, {
+    const { data, error } = await createPost(currentUser.id, {
       content: content.trim(),
       tag: selectedTag?.label || null,
       tagColor: selectedTag?.color || null,
@@ -245,8 +258,12 @@ export default function TeamFeed({ teamId, currentUser, isMember }) {
       teamId,
     });
     if (error) { setPosting(false); alert('Failed to post. Try again.'); return; }
+    if (data?.id && postMentionIds.length) {
+      const { error: mErr } = await savePostMentions(data.id, postMentionIds);
+      if (mErr) console.warn('[TeamFeed post] mention save failed:', mErr?.message || mErr);
+    }
     track('post_created', { has_media: !!mediaUrl, media_type: mediaType, tag: selectedTag?.label, scope: 'team', team_id: teamId });
-    setContent(''); setSelectedTag(null); removeMedia(); setComposerOpen(false);
+    setContent(''); setPostMentionIds([]); setSelectedTag(null); removeMedia(); setComposerOpen(false);
     await load(); setPosting(false);
   };
 
@@ -309,8 +326,10 @@ export default function TeamFeed({ teamId, currentUser, isMember }) {
             </div>
           ) : (
             <form onSubmit={onPost}>
-              <textarea value={content} onChange={e => setContent(e.target.value)} placeholder="What's happening with the team?" maxLength={500} rows={3} autoFocus
-                style={{ width: '100%', padding: 10, borderRadius: 8, background: C.navy, border: `1px solid ${C.border}`, color: C.ice, fontSize: 14, outline: 'none', fontFamily: "'Barlow', sans-serif", resize: 'vertical', marginBottom: 10, boxSizing: 'border-box' }}/>
+              <MentionInput value={content} onChange={setContent} onMentionsChange={setPostMentionIds}
+                placeholder="What's happening with the team? Tag with @" maxLength={500} rows={3} autoFocus
+                style={{ marginBottom: 10 }}
+                textareaStyle={{ padding: 10, borderRadius: 8, background: C.navy, border: `1px solid ${C.border}`, color: C.ice, fontSize: 14, fontFamily: "'Barlow', sans-serif", resize: 'vertical' }}/>
               {mediaPreview && (
                 <div style={{ position: 'relative', marginBottom: 10 }}>
                   {mediaPreview.type === 'video'

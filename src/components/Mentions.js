@@ -1,0 +1,194 @@
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Avatar } from './Logos';
+import { searchMentionable, HANDLE_RE } from '../lib/mentions';
+
+const C = {
+  card: '#0f2847', navy: '#07111F', ice: '#F4F7FA', steel: '#8BA3BE',
+  blue: '#5B9FE2', border: 'rgba(46,91,140,0.5)',
+};
+
+// Find the @token the caret is currently sitting inside (if any). Returns the
+// partial query (without '@') and the index of the '@' so we can splice a
+// resolved handle back in. Only triggers after a word boundary so emails and
+// mid-word @'s don't open the menu.
+function activeMentionQuery(text, caret) {
+  const upto = text.slice(0, caret);
+  const m = upto.match(/(?:^|\s)@([a-zA-Z0-9_]{0,30})$/);
+  if (!m) return null;
+  return { query: m[1], at: caret - m[1].length - 1 };
+}
+
+/**
+ * Textarea with @-mention autocomplete. Controlled on `value`. Tracks which
+ * @handles the user actually picked from the menu (resolvedRef) and emits the
+ * resolved user-id list via onMentionsChange whenever the set changes — so the
+ * parent stores exact ids (never a regex over display text). Handles that are
+ * deleted from the text are pruned automatically.
+ */
+export function MentionInput({
+  value, onChange, onMentionsChange, placeholder, rows = 2,
+  maxLength = 500, disabled = false, style, textareaStyle, autoFocus = false,
+}) {
+  const taRef = useRef(null);
+  const resolvedRef = useRef(new Map()); // handleLower -> userId
+  const caretRef = useRef(null);         // pending caret to restore after a splice
+  const [menu, setMenu] = useState(null); // { at } | null
+  const [results, setResults] = useState([]);
+  const [active, setActive] = useState(0);
+  const seq = useRef(0);
+
+  const emitMentions = useCallback((text) => {
+    const present = new Set();
+    const re = new RegExp(HANDLE_RE.source, 'g');
+    let m;
+    while ((m = re.exec(text))) present.add(m[1].toLowerCase());
+    for (const h of [...resolvedRef.current.keys()]) {
+      if (!present.has(h)) resolvedRef.current.delete(h);
+    }
+    onMentionsChange?.([...resolvedRef.current.values()]);
+  }, [onMentionsChange]);
+
+  const runSearch = useCallback(async (query) => {
+    const mySeq = ++seq.current;
+    const rows = await searchMentionable(query, 6);
+    if (mySeq !== seq.current) return; // a newer keystroke superseded this one
+    setResults(rows);
+    setActive(0);
+  }, []);
+
+  // Debounced search whenever the active @query changes.
+  const debounceRef = useRef(null);
+  const onTextChange = (raw) => {
+    const text = raw.slice(0, maxLength);
+    onChange?.(text);
+    emitMentions(text);
+    const caret = taRef.current?.selectionStart ?? text.length;
+    const q = activeMentionQuery(text, caret);
+    if (q && q.query.length >= 1) {
+      setMenu({ at: q.at });
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => runSearch(q.query), 160);
+    } else {
+      setMenu(null);
+      setResults([]);
+    }
+  };
+
+  const pick = (profile) => {
+    const ta = taRef.current;
+    const text = value || '';
+    const caret = ta?.selectionStart ?? text.length;
+    const q = activeMentionQuery(text, caret);
+    const at = q ? q.at : (menu?.at ?? caret);
+    const before = text.slice(0, at);
+    const after = text.slice(caret);
+    const insert = `@${profile.handle} `;
+    const next = (before + insert + after).slice(0, maxLength);
+    resolvedRef.current.set(String(profile.handle).toLowerCase(), profile.id);
+    caretRef.current = (before + insert).length;
+    onChange?.(next);
+    emitMentions(next);
+    setMenu(null);
+    setResults([]);
+  };
+
+  // Restore caret after a programmatic splice (controlled value re-render).
+  useLayoutEffect(() => {
+    if (caretRef.current != null && taRef.current) {
+      const pos = caretRef.current;
+      caretRef.current = null;
+      taRef.current.focus();
+      try { taRef.current.setSelectionRange(pos, pos); } catch { /* noop */ }
+    }
+  }, [value]);
+
+  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
+
+  const onKeyDown = (e) => {
+    if (!menu || results.length === 0) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive((i) => (i + 1) % results.length); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => (i - 1 + results.length) % results.length); }
+    else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pick(results[active]); }
+    else if (e.key === 'Escape') { setMenu(null); setResults([]); }
+  };
+
+  const showMenu = menu && results.length > 0;
+
+  return (
+    <div style={{ position: 'relative', ...style }}>
+      <textarea
+        ref={taRef}
+        value={value}
+        disabled={disabled}
+        autoFocus={autoFocus}
+        placeholder={placeholder}
+        rows={rows}
+        maxLength={maxLength}
+        onChange={(e) => onTextChange(e.target.value)}
+        onKeyDown={onKeyDown}
+        onBlur={() => setTimeout(() => { setMenu(null); setResults([]); }, 150)}
+        style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', outline: 'none', ...textareaStyle }}
+      />
+      {showMenu && (
+        <div style={{
+          position: 'absolute', left: 0, right: 0, top: '100%', zIndex: 40, marginTop: 4,
+          background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.4)', maxHeight: 240, overflowY: 'auto',
+        }}>
+          {results.map((p, i) => (
+            <button
+              key={p.id}
+              type="button"
+              // onMouseDown (not onClick) so the pick fires before the textarea's
+              // onBlur tears the menu down.
+              onMouseDown={(e) => { e.preventDefault(); pick(p); }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
+                padding: '8px 12px', border: 'none', cursor: 'pointer',
+                background: i === active ? 'rgba(91,159,226,0.18)' : 'transparent',
+                fontFamily: "'Barlow', sans-serif",
+              }}
+            >
+              <Avatar profile={p} size={28} />
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.ice, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name || p.handle}</span>
+                <span style={{ display: 'block', fontSize: 11, color: C.steel }}>@{p.handle}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Render plain post/comment text, linkifying only @handles that were actually
+ * resolved + stored (passed in `mentions`: handleLower -> userId). Stray
+ * "@text" stays plain. Returns inline nodes — caller owns the container.
+ */
+export function MentionText({ text, mentions, linkColor = '#5B9FE2' }) {
+  if (!text) return null;
+  const map = mentions || {};
+  if (Object.keys(map).length === 0) return <>{text}</>;
+  const out = [];
+  const re = new RegExp(HANDLE_RE.source, 'g');
+  let last = 0; let key = 0; let m;
+  while ((m = re.exec(text))) {
+    const id = map[m[1].toLowerCase()];
+    if (!id) continue; // unresolved — leave embedded in a later text slice
+    if (m.index > last) out.push(text.slice(last, m.index));
+    out.push(
+      <Link
+        key={key++}
+        to={`/profile/${id}`}
+        onClick={(e) => e.stopPropagation()}
+        style={{ color: linkColor, fontWeight: 600, textDecoration: 'none' }}
+      >@{m[1]}</Link>
+    );
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return <>{out}</>;
+}
