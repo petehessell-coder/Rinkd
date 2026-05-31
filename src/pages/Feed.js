@@ -378,7 +378,6 @@ export default function Feed({ currentUser, profile }) {
   // 4D.5-3: default to "following" so new users see signal, not noise.
   // "For You" is still available as a secondary tab for discovery.
   const [tab, setTab] = useState('following');
-  const [livebarnId, setLivebarnId] = useState('');
   const [mediaFile, setMediaFile] = useState(null);
   const [mediaPreview, setMediaPreview] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -483,7 +482,7 @@ export default function Feed({ currentUser, profile }) {
       if (error) { setPosting(false); alert('Upload failed. Please try again.'); return; }
       mediaUrl = url; mediaType = mt; setUploadProgress(80);
     }
-    const { data: newPost, error: postError } = await createPost(currentUser.id, { content: content.trim(), tag: selectedTag?.label || null, tagColor: selectedTag?.color || null, mediaUrl, mediaType, livebarnVenueId: livebarnId.trim() || null });
+    const { data: newPost, error: postError } = await createPost(currentUser.id, { content: content.trim(), tag: selectedTag?.label || null, tagColor: selectedTag?.color || null, mediaUrl, mediaType });
     if (postError) {
       // The insert failed — don't clear the composer or fire analytics, or the
       // user loses their text and we log a chirp that never landed.
@@ -500,10 +499,10 @@ export default function Feed({ currentUser, profile }) {
     // Fire both events during the rename window. `post_created` keeps historical
     // continuity in dashboards; `chirp_created` is the going-forward name and
     // will become canonical once we backfill old data and retire the legacy event.
-    const eventProps = { has_media: !!mediaUrl, media_type: mediaType, tag: selectedTag?.label, scope: 'global', livebarn: !!livebarnId.trim() };
+    const eventProps = { has_media: !!mediaUrl, media_type: mediaType, tag: selectedTag?.label, scope: 'global' };
     track('post_created', eventProps);
     track('chirp_created', eventProps);
-    setContent(''); setPostMentionIds([]); setSelectedTag(null); setLivebarnId(''); removeMedia(); setComposerOpen(false); setUploadProgress(0);
+    setContent(''); setPostMentionIds([]); setSelectedTag(null); removeMedia(); setComposerOpen(false); setUploadProgress(0);
     await load(); setPosting(false);
   };
 
@@ -622,7 +621,6 @@ export default function Feed({ currentUser, profile }) {
                       style={{ padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: selectedTag?.label === tag.label ? tag.color : tag.color + '22', color: selectedTag?.label === tag.label ? 'white' : tag.color, fontSize: 11, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '0.06em' }}>{tag.label}</button>
                   ))}
                 </div>
-                <input value={livebarnId} onChange={e => setLivebarnId(e.target.value)} placeholder="📺 LiveBarn Venue ID (optional)" style={{ width: '100%', padding: '8px 12px', borderRadius: 8, background: C.navy, border: '1px solid ' + C.border, color: C.ice, fontSize: 13, outline: 'none', fontFamily: "'Barlow', sans-serif", marginBottom: 10, boxSizing: 'border-box' }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <input ref={fileInputRef} type="file" accept="image/*,video/*" onChange={handleMediaSelect} style={{ display: 'none' }} id="media-upload"/>
