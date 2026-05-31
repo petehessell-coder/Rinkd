@@ -10,6 +10,7 @@ import { useParams } from 'react-router-dom';
 import { followUser, unfollowUser, isFollowing, getFollowCounts, timeAgo, uploadMedia } from '../lib/posts';
 import { blockUser, unblockUser, isBlockedByMe } from '../lib/blocks';
 import MapLink from '../components/MapLink';
+import { MentionText } from '../components/Mentions';
 import { track } from '../lib/analytics';
 import { classifyImage } from '../lib/imageModeration';
 
@@ -403,7 +404,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
               <span style={{ fontSize: 13, color: C.steel }}><strong style={{ color: C.ice }}>{followCounts.following}</strong> Following</span>
             </div>
 
-            {profile.bio && !editing && <p style={{ color: C.ice, fontSize: 14, lineHeight: 1.5, marginBottom: 10 }}>{profile.bio}</p>}
+            {profile.bio && !editing && <p style={{ color: C.ice, fontSize: 14, lineHeight: 1.5, marginBottom: 10, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}><MentionText text={profile.bio} mentions={{}} /></p>}
             {!editing && (
               <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
                 {profile.position && <span style={{ fontSize: 12, color: C.steel }}>🏒 {profile.position}</span>}

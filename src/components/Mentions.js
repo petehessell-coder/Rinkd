@@ -163,31 +163,73 @@ export function MentionInput({
   );
 }
 
+// Match http(s):// URLs and bare www. links up to the next whitespace. We only
+// autolink explicit web URLs (never bare "foo.com") so handles and prices don't
+// get swept up. Trailing sentence punctuation is trimmed off the link below.
+const URL_RE = /(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi;
+
 /**
- * Render plain post/comment text, linkifying only @handles that were actually
- * resolved + stored (passed in `mentions`: handleLower -> userId). Stray
- * "@text" stays plain. Returns inline nodes — caller owns the container.
+ * Render plain post/comment/bio text, linkifying (a) @handles that were
+ * actually resolved + stored (passed in `mentions`: handleLower -> userId) and
+ * (b) explicit web URLs. Stray "@text" and bare "foo.com" stay plain. URLs open
+ * in a new tab with rel="noopener noreferrer nofollow ugc" (user content — not
+ * an endorsement, no SEO juice). Returns inline nodes — caller owns container.
  */
 export function MentionText({ text, mentions, linkColor = '#5B9FE2' }) {
   if (!text) return null;
   const map = mentions || {};
-  if (Object.keys(map).length === 0) return <>{text}</>;
-  const out = [];
-  const re = new RegExp(HANDLE_RE.source, 'g');
-  let last = 0; let key = 0; let m;
-  while ((m = re.exec(text))) {
+
+  // Collect link tokens from both patterns, then walk the text left-to-right.
+  const tokens = [];
+  const urlRe = new RegExp(URL_RE.source, URL_RE.flags);
+  let u;
+  while ((u = urlRe.exec(text))) {
+    tokens.push({ start: u.index, end: u.index + u[0].length, type: 'url', raw: u[0] });
+  }
+  const handleRe = new RegExp(HANDLE_RE.source, 'g');
+  let m;
+  while ((m = handleRe.exec(text))) {
     const id = map[m[1].toLowerCase()];
     if (!id) continue; // unresolved — leave embedded in a later text slice
-    if (m.index > last) out.push(text.slice(last, m.index));
-    out.push(
-      <Link
-        key={key++}
-        to={`/profile/${id}`}
-        onClick={(e) => e.stopPropagation()}
-        style={{ color: linkColor, fontWeight: 600, textDecoration: 'none' }}
-      >@{m[1]}</Link>
-    );
-    last = m.index + m[0].length;
+    tokens.push({ start: m.index, end: m.index + m[0].length, type: 'mention', id, handle: m[1] });
+  }
+  if (tokens.length === 0) return <>{text}</>;
+  tokens.sort((a, b) => a.start - b.start);
+
+  const out = [];
+  let last = 0; let key = 0;
+  for (const t of tokens) {
+    if (t.start < last) continue; // overlap (e.g. an @ sitting inside a URL)
+    if (t.start > last) out.push(text.slice(last, t.start));
+    if (t.type === 'mention') {
+      out.push(
+        <Link
+          key={key++}
+          to={`/profile/${t.id}`}
+          onClick={(e) => e.stopPropagation()}
+          style={{ color: linkColor, fontWeight: 600, textDecoration: 'none' }}
+        >@{t.handle}</Link>
+      );
+    } else {
+      // Trailing punctuation is almost always sentence punctuation, not part of
+      // the URL — peel it off and render it as plain text after the link.
+      let raw = t.raw;
+      const trail = (raw.match(/[.,!?;:'")\]}]+$/) || [''])[0];
+      if (trail) raw = raw.slice(0, raw.length - trail.length);
+      const href = raw.startsWith('http') ? raw : `https://${raw}`;
+      out.push(
+        <a
+          key={key++}
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer nofollow ugc"
+          onClick={(e) => e.stopPropagation()}
+          style={{ color: linkColor, fontWeight: 600, textDecoration: 'underline', wordBreak: 'break-all' }}
+        >{raw}</a>
+      );
+      if (trail) out.push(trail);
+    }
+    last = t.end;
   }
   if (last < text.length) out.push(text.slice(last));
   return <>{out}</>;
