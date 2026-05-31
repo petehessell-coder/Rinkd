@@ -11,6 +11,7 @@ import { getLeaguePosts, createPost, uploadMedia, timeAgo, toggleLike, getLikedP
 import PostActionMenu from '../components/PostActionMenu';
 import PostReactions from '../components/PostReactions';
 import { getReactions } from '../lib/reactions';
+import Gallery from '../components/Gallery';
 import { LedR } from '../components/Logos';
 import { getLiveBarnUrl } from '../lib/livebarn';
 import { resolveStreamUrl, streamButtonLabel, detectStreamPlatform } from '../lib/streamUrl';
@@ -22,7 +23,7 @@ import { MentionInput, MentionText } from '../components/Mentions';
 import { savePostMentions, mentionMapFromRows } from '../lib/mentions';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
-const TABS = ['Schedule', 'Standings', 'Stats', 'Teams', 'Feed', 'Info'];
+const TABS = ['Schedule', 'Standings', 'Stats', 'Teams', 'Feed', 'Gallery', 'Info'];
 
 function TeamLogo({ team, size = 32 }) {
   return (
@@ -598,6 +599,12 @@ export default function LeaguePage({ currentUser, profile }) {
               currentUser={currentUser}
               leagueId={id}
             />
+          )}
+
+          {/* GALLERY TAB — media-only grid over league posts (inherits
+              reactions/comments/likes/moderation; no separate table) */}
+          {activeTab === 'Gallery' && (
+            <Gallery leagueId={id} currentUser={currentUser} />
           )}
 
           {/* INFO TAB */}

@@ -152,7 +152,7 @@ export async function createGameRecapPost({ scorerId, gameId, content, tournamen
   return { data, error };
 }
 
-export async function createPost(authorId, { content, tag, tagColor, mediaUrl, mediaType, livebarnVenueId, teamId, tournamentId, leagueId }) {
+export async function createPost(authorId, { content, tag, tagColor, mediaUrl, mediaType, livebarnVenueId, teamId, tournamentId, tournamentTeamId, leagueId, leagueTeamId }) {
   const { data, error } = await supabase
     .from('posts')
     .insert({
@@ -165,7 +165,9 @@ export async function createPost(authorId, { content, tag, tagColor, mediaUrl, m
       livebarn_venue_id: livebarnVenueId || null,
       team_id: teamId || null,
       tournament_id: tournamentId || null,
+      tournament_team_id: tournamentTeamId || null,
       league_id: leagueId || null,
+      league_team_id: leagueTeamId || null,
       likes: 0,
       comment_count: 0,
       repost_count: 0,
@@ -192,6 +194,35 @@ export async function getTeamPosts(teamId, limit = 50) {
     .eq('team_id', teamId)
     .order('created_at', { ascending: false })
     .limit(limit);
+  query = await excludeBlocked(query, 'author_id');
+  const { data, error } = await query;
+  return { data, error };
+}
+
+// Photo/video gallery (GALLERY-1) — a media-only view over scoped posts, so it
+// inherits reactions, comments, likes and moderation for free (no separate
+// gallery table). Scope is exactly one of tournament/league; an optional team
+// filter narrows to one competing team. Competing teams live in their own
+// per-scope tables (tournament_teams / league_teams), so the team tag uses the
+// matching scoped column (tournament_team_id / league_team_id) — not the global
+// posts.team_id, which is the team's own TeamFeed scope. Both scoped team names
+// are embedded so the lightbox can label a photo regardless of scope.
+// Hidden/flagged posts are excluded from the gallery just as they are from feeds.
+export async function getGalleryPosts({ tournamentId = null, leagueId = null, tournamentTeamId = null, leagueTeamId = null, limit = 60, before = null } = {}) {
+  if (!tournamentId && !leagueId) return { data: [], error: null };
+  let query = supabase
+    .from('posts')
+    .select(`*, profiles(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position), tournament_teams(id, team_name, logo_url), league_teams(id, team_name, logo_color, logo_initials), ${POST_MENTIONS_EMBED}`)
+    .not('media_url', 'is', null)
+    .eq('is_hidden', false)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (tournamentId) query = query.eq('tournament_id', tournamentId);
+  if (leagueId) query = query.eq('league_id', leagueId);
+  if (tournamentTeamId) query = query.eq('tournament_team_id', tournamentTeamId);
+  if (leagueTeamId) query = query.eq('league_team_id', leagueTeamId);
+  // Keyset pagination — fetch the page of posts older than the last one we hold.
+  if (before) query = query.lt('created_at', before);
   query = await excludeBlocked(query, 'author_id');
   const { data, error } = await query;
   return { data, error };

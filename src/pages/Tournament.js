@@ -14,12 +14,13 @@ import { track } from '../lib/analytics';
 import PostActionMenu from '../components/PostActionMenu';
 import PostReactions from '../components/PostReactions';
 import { getReactions } from '../lib/reactions';
+import Gallery from '../components/Gallery';
 import StatLeaderboards from '../components/StatLeaderboards';
 import { MentionInput, MentionText } from '../components/Mentions';
 import { savePostMentions, mentionMapFromRows } from '../lib/mentions';
 
 
-const TABS = ['Standings','Schedule','Bracket','Stats','Feed','Info'];
+const TABS = ['Standings','Schedule','Bracket','Stats','Feed','Gallery','Info'];
 
 // Bracket rounds get visual weight on the schedule and a championship hero on
 // the bracket tab. Pool play is the catch-all everything else.
@@ -580,6 +581,10 @@ export default function TournamentPage({ currentUser }) {
             currentUser={currentUser}
             tournamentId={id}
           />
+        )}
+
+        {activeTab === 'Gallery' && (
+          <Gallery tournamentId={id} currentUser={currentUser} />
         )}
 
         {activeTab === 'Info' && <InfoTab tournament={tournament} />}
