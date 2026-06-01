@@ -19,6 +19,7 @@ import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
 import SubscribeCalendarSheet from '../components/SubscribeCalendarSheet';
 import StatLeaderboards from '../components/StatLeaderboards';
+import SeasonGamePucks from '../components/SeasonGamePucks';
 import { MentionInput, MentionText } from '../components/Mentions';
 import { savePostMentions, mentionMapFromRows } from '../lib/mentions';
 
@@ -563,7 +564,10 @@ export default function LeaguePage({ currentUser, profile }) {
 
           {/* STATS TAB — skater + goalie leaderboards (jersey-keyed, roster names) */}
           {activeTab === 'Stats' && (
-            <StatLeaderboards source="league" id={id} accent={league.accent_color || C.red} archived={league.settings?.archived_stats || null} />
+            <>
+              <SeasonGamePucks scope="league" id={id} accent={league.accent_color || C.red} />
+              <StatLeaderboards source="league" id={id} accent={league.accent_color || C.red} archived={league.settings?.archived_stats || null} />
+            </>
           )}
 
           {/* TEAMS TAB */}
