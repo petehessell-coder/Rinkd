@@ -16,6 +16,7 @@ import PostReactions from '../components/PostReactions';
 import { getReactions } from '../lib/reactions';
 import Gallery from '../components/Gallery';
 import StatLeaderboards from '../components/StatLeaderboards';
+import SeasonGamePucks from '../components/SeasonGamePucks';
 import { MentionInput, MentionText } from '../components/Mentions';
 import { savePostMentions, mentionMapFromRows } from '../lib/mentions';
 
@@ -569,7 +570,10 @@ export default function TournamentPage({ currentUser }) {
         )}
 
         {activeTab === 'Stats' && (
-          <StatLeaderboards source="tournament" id={id} accent={accent} />
+          <>
+            <SeasonGamePucks scope="tournament" id={id} accent={accent} />
+            <StatLeaderboards source="tournament" id={id} accent={accent} />
+          </>
         )}
 
         {activeTab === 'Feed' && (

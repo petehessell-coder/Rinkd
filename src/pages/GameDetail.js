@@ -8,6 +8,7 @@ import CalendarButton from '../components/CalendarButton';
 import { LedR } from '../components/Logos';
 import { getLiveBarnUrl } from '../lib/livebarn';
 import { teamInitials } from '../lib/teamInitials';
+import GamePuckCard from '../components/GamePuckCard';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 
@@ -329,6 +330,20 @@ export default function GameDetail({ profile }) {
         </div>
 
         <div style={{ padding: 16 }}>
+
+          {/* GAME PUCK — fan vote, final league/tournament games only */}
+          {isFinal && !isTeamGame && (
+            <GamePuckCard
+              gameId={gameId}
+              kind={isLeague ? 'league' : 'tournament'}
+              homeTeam={homeTeam}
+              awayTeam={awayTeam}
+              lineupByTeam={lineupByTeam}
+              goals={goals}
+              canVote={!!profile}
+              accent={C.red}
+            />
+          )}
 
           {/* LIVEBARN */}
           {hasStream && (
