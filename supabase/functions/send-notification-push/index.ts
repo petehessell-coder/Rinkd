@@ -39,6 +39,7 @@ const KIND_TITLE: Record<string, string> = {
   reaction: '🔥 New reaction',
   like:     '❤️ New like',
   follow:   '👀 New follower',
+  message:  '💬 New message',
 };
 
 const cors = {

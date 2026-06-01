@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { RinkdLogo, Avatar, ProfileNavIcon, ChirpNavIcon } from './Logos';
 import { signOut } from '../lib/auth';
 import NotificationBell from './NotificationBell';
+import MessagesIcon from './MessagesIcon';
 import HelpButton from './HelpButton';
 import MoreDrawer from './MoreDrawer';
 import IOSInstallBanner from './IOSInstallBanner';
@@ -53,7 +54,7 @@ function NavIcon({ item, size }) {
 // to a previous detail page is confusing, not helpful. Everywhere else
 // gets a back button automatically.
 const TOP_LEVEL_PATHS = new Set([
-  '/', '/feed', '/teams', '/notifications', '/profile',
+  '/', '/feed', '/teams', '/notifications', '/messages', '/profile',
   '/login', '/landing',
 ]);
 
@@ -238,7 +239,12 @@ export default function Layout({ children, profile }) {
             <RinkdLogo size={32} showText />
           </Link>
         )}
-        {profile?.id && <NotificationBell userId={profile.id} size={22} />}
+        {profile?.id && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <MessagesIcon userId={profile.id} size={22} />
+            <NotificationBell userId={profile.id} size={22} />
+          </div>
+        )}
       </div>
 
       {/* ─── MOBILE BOTTOM NAV ─── */}

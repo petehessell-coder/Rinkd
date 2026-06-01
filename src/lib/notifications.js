@@ -11,6 +11,9 @@ export async function listNotifications({ limit = 50, unreadOnly = false } = {})
   let q = supabase
     .from('notifications')
     .select('*, actor:actor_id ( id, name, handle, avatar_color, avatar_initials )')
+    // DM notifications exist only to drive web push; they live in the Messages
+    // inbox, not the bell. Keep them out of the in-app notification list.
+    .neq('kind', 'message')
     .order('created_at', { ascending: false })
     .limit(limit);
   if (unreadOnly) q = q.is('read_at', null);
@@ -27,7 +30,9 @@ export async function getUnreadCount(userId) {
   let q = supabase
     .from('notifications')
     .select('id', { count: 'exact', head: true })
-    .is('read_at', null);
+    .is('read_at', null)
+    // Exclude DM notifications — those are counted by the Messages badge.
+    .neq('kind', 'message');
   // Scope the count to this user. RLS already restricts rows, but being
   // explicit means a future RLS change can't silently inflate the badge.
   if (userId) q = q.eq('recipient_id', userId);

@@ -30,6 +30,7 @@ import Landing from './pages/Landing';
 import Pricing from './pages/Pricing';
 import { setSentryUser } from './lib/sentry';
 import Notifications from './pages/Notifications';
+import Messages from './pages/Messages';
 import OnboardingModal from './components/OnboardingModal';
 import ErrorBoundary from './components/ErrorBoundary';
 import ResetPassword from './pages/ResetPassword';
@@ -206,6 +207,8 @@ function AppRoutes() {
       <Route path="/admin/moderation" element={<ProtectedRoute><AdminModeration currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/notifications" element={<ProtectedRoute><Notifications currentUser={user} profile={profile} /></ProtectedRoute>} />
+      <Route path="/messages" element={<ProtectedRoute><Messages currentUser={user} profile={profile} /></ProtectedRoute>} />
+      <Route path="/messages/:conversationId" element={<ProtectedRoute><Messages currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/tournament/:id" element={<Tournament currentUser={user} profile={profile} />} />
       <Route path="/scorer/:gameId" element={<ProtectedRoute><ScorerView /></ProtectedRoute>} />
       <Route path="/game/:gameId" element={<ProtectedRoute><GameDetail profile={profile} /></ProtectedRoute>} />

@@ -38,6 +38,7 @@ export default function MoreDrawer({ open, onClose, userId, onSignOut }) {
   if (!open) return null;
 
   const exploreItems = [
+    { path: '/messages',    icon: '💬',  label: 'Messages',    sub: 'Direct messages with players' },
     { path: '/discover',    icon: '🔍',  label: 'Discover',    sub: 'Search players, teams, leagues, articles' },
     { path: '/rinkside',    iconImg: '/rinkside-logo.png', label: 'Rinkside', sub: 'Daily hockey reporting' },
     { path: '/crease',      iconImg: '/crease-logo.png',   label: 'Crease',   sub: 'Original premium shows', badge: 'Early Access' },
