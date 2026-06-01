@@ -374,7 +374,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                 <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 26, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.02em' }}>{profile.name}</div>
                 <div style={{ fontSize: 13, color: C.steel }}>@{profile.handle}</div>
               </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 <TierBadge tier={tier.name} size="md" />
                 {isOwnProfile && !editing && (
                   <div style={{ display: 'flex', gap: 8 }}>
@@ -394,7 +394,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                   </div>
                 )}
                 {!isOwnProfile && (
-                  <div style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                     {!blocked && (
                       <button onClick={handleMessage} disabled={dmLoading} title="Send a direct message" style={{
                         padding: '8px 16px', borderRadius: 8, cursor: 'pointer',
