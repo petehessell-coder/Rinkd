@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/authContext';
 import { track } from '../lib/analytics';
@@ -66,6 +67,10 @@ export default function HelpButton() {
   // supabase.auth.getUser() on every mount — HelpButton is rendered by Layout
   // on every page, so the redundant network call was firing on every nav.
   const { user } = useAuth() || {};
+  const location = useLocation();
+  // Hide the floating trigger inside a DM thread — the thread pins its composer
+  // and Send button to the bottom edge, and the "?" button would overlap them.
+  const hideTrigger = /^\/messages\/.+/.test(location.pathname);
   const userId = user?.id || null;
   const knownEmail = user?.email || '';
   const [open, setOpen] = useState(false);
@@ -118,6 +123,7 @@ export default function HelpButton() {
           Smaller (40px) and lower opacity than the prior 48px to reduce
           collision with right-edge content (live-stream pills, action menus).
           z-index sits below the bottom nav so the nav always wins. */}
+      {!hideTrigger && (
       <button onClick={() => setOpen(true)} aria-label="Help & feedback"
         style={{
           position: 'fixed',
@@ -135,6 +141,7 @@ export default function HelpButton() {
         onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.88'; }}>
         ?
       </button>
+      )}
 
       {open && (
         <div onClick={() => setOpen(false)}

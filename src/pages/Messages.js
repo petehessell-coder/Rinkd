@@ -242,10 +242,40 @@ function Thread({ conversationId, currentUser, profile }) {
   return (
     <Layout profile={profile}>
       <SEO title={other ? `Chat with ${other.name}` : 'Messages'} noIndex />
-      <div style={{ background: C.dark, minHeight: '100vh', color: C.ice, fontFamily: 'Barlow, sans-serif', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ maxWidth: 680, margin: '0 auto', width: '100%', flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      {/* Fixed chat panel: sits between the mobile top bar (52px) and bottom nav
+          (88px + safe area) on phones, and fills the content column to the right
+          of the desktop sidebar (240px) on desktop. Messages scroll INTERNALLY
+          so the composer is always pinned and visible without scrolling. */}
+      <style>{`
+        .dm-thread {
+          position: fixed;
+          top: 0; bottom: 0; left: 240px; right: 0;
+          display: flex; flex-direction: column;
+          background: ${C.dark};
+        }
+        .dm-thread-inner {
+          max-width: 680px; margin: 0 auto; width: 100%;
+          flex: 1; min-height: 0;
+          display: flex; flex-direction: column;
+        }
+        .dm-back { display: inline-flex; }
+        @media (max-width: 768px) {
+          .dm-thread {
+            left: 0; right: 0;
+            top: 52px;
+            bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+          }
+          .dm-back { display: none !important; }
+        }
+      `}</style>
+      <div className="dm-thread" style={{ color: C.ice, fontFamily: 'Barlow, sans-serif' }}>
+        <div className="dm-thread-inner">
           {/* Header */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: `1px solid ${C.border}`, position: 'sticky', top: 0, background: C.dark, zIndex: 5 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '14px 16px', borderBottom: `1px solid ${C.border}`, background: C.dark, flexShrink: 0 }}>
+            <button className="dm-back" onClick={() => navigate(-1)} aria-label="Back"
+              style={{ background: 'transparent', border: 'none', color: C.ice, fontSize: 26, lineHeight: 1, cursor: 'pointer', padding: 0, marginRight: 4 }}>
+              ‹
+            </button>
             {other && (
               <div onClick={() => navigate(`/profile/${other.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
                 <Avatar profile={other} size={36} />
@@ -258,7 +288,7 @@ function Thread({ conversationId, currentUser, profile }) {
           </div>
 
           {/* Messages */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 16px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
             {loading ? (
               <ListRowSkeleton rows={5} />
             ) : msgs.length === 0 ? (
@@ -285,7 +315,7 @@ function Thread({ conversationId, currentUser, profile }) {
           </div>
 
           {/* Composer */}
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '10px 12px', borderTop: `1px solid ${C.border}`, background: C.dark, position: 'sticky', bottom: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '10px 12px', borderTop: `1px solid ${C.border}`, background: C.dark, flexShrink: 0 }}>
             <textarea value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={onKeyDown} rows={1} placeholder="Message…"
               style={{ flex: 1, resize: 'none', maxHeight: 120, background: C.card, border: `1px solid ${C.border}`, borderRadius: 18, color: C.ice, padding: '10px 14px', fontSize: 14, fontFamily: 'Barlow, sans-serif', outline: 'none', lineHeight: 1.4 }} />
             <button onClick={send} disabled={!draft.trim() || sending}
