@@ -33,6 +33,11 @@ const NAV = [
   { path: '__more',         icon: '⋯',  label: 'More', isMore: true },
 ];
 
+// Mobile bottom bar drops Notifications — on mobile it already lives in the
+// top-right bar next to Messages, so a second copy down here was redundant.
+// Desktop has no top bar, so the sidebar keeps the full NAV (incl. the bell).
+const MOBILE_NAV = NAV.filter(item => item.path !== '/notifications');
+
 function NavIcon({ item, size }) {
   if (item.iconImg) {
     return (
@@ -251,7 +256,7 @@ export default function Layout({ children, profile }) {
       {/* Same 5 items as desktop. No more hamburger — "More" drawer covers everything. */}
       <nav style={{ display: 'none', position: 'fixed', bottom: 0, left: 0, right: 0, background: B.navy, borderTop: `1px solid ${B.border}`, zIndex: 200, padding: '8px 0 max(8px, env(safe-area-inset-bottom))' }} className="mobile-nav">
         <div style={{ display: 'flex', justifyContent: 'space-around' }}>
-          {NAV.map(item => (
+          {MOBILE_NAV.map(item => (
             <div key={item.path}>
               {renderNavLink(item, { size: 22, isVertical: true, active: !item.isMore && isActive(item) })}
             </div>
