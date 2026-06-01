@@ -1676,6 +1676,44 @@ Stamped at activation time. Drives the activation gate logic (admin RPC).
 
 ---
 
+### `GROUPS-1` — Community groups (open social pages, no team/league required) — SPEC'd Jun 1, 2026
+
+**Why:** Today every Rinkd feed is anchored to a competition object — global, a `tournament`, or a `league` (see memories `tournament_scoped_feed`, `league_scoped_feed_and_push`). There's no home for the *unstructured* hockey community: a metro-area beer-league crowd, a pickup/drop-in crew, a rink's regulars, a "who's got a sub Thursday at 10:40?" group. **Groups** are user-created community pages — e.g. *"Metro Detroit Beer League"* — where people **talk, post, and ask for fill-ins/subs without standing up a team or a league.** Strategic value: (1) lowest-possible-barrier acquisition — anyone spins one up in 20 seconds, no roster/schedule/activation; (2) captures the enormous slice of beer-league hockey that will never be a *managed* Rinkd league but is exactly our user; (3) the **sub/fill-in request** is a genuine high-frequency pain point → recurring, real-utility engagement (not just chirps), which pulls people back daily. It's a network-effect/retention play, free by design.
+
+**Hard line vs. teams/leagues/tournaments (this is what keeps it simple):** a Group has **NO scoring, NO standings, NO stats, NO bracket, NO activation gate.** It is a *social-only* primitive — feed + members + sub board. If a group ever wants schedules/standings, that's the cue to spin up a real league (upsell path). Resisting scope-creep here is the whole design.
+
+**Reuse (most of this already exists — Groups is largely a 4th scope on the feed):**
+- **Feed/composer/comments/reactions/photos** — add `posts.group_id` exactly like `tournament_id` / `league_id` (NULL = not a group post; global/following queries already filter the scope cols to NULL). The entire composer + scoped-feed + `is_hidden` moderation filter (memory `image_moderation_gate_off`) works unchanged.
+- **Push** — reuse the `notifications` → AFTER-INSERT trigger → pg_net → `send-notification-push` pipeline (memory `social_push_and_live_strip`). New `kind`s: `group_sub` (a sub request posted to a group you're in), `group_join` (request to join, to owner/admin).
+- **Join-request flow** — mirror the team manager/join pattern (`team_members` + request → approve; memory `team_roster_management`).
+- **Sub respondents** — "I'll cover it" routes to a **DM** via `getOrCreateDm` (memory `direct_messages`), or a comment thread on the request.
+- **Blocks** — respect `user_blocks` everywhere (no notify, hide posts both directions).
+
+**Model (additive; SECURITY-INVOKER views per memory `security_definer_views`):**
+- `groups` — `id, slug (unique), name, description, location_text (e.g. "Metro Detroit, MI"), avatar_url, banner_url, visibility ('public'|'private'|'unlisted') default 'public', created_by → profiles, created_at`. (Geo lat/lng deferred — `location_text` is enough for v1 search.)
+- `group_members` — `group_id → groups, user_id → profiles, role ('owner'|'admin'|'member'), status ('active'|'pending'|'banned'), joined_at`. Creator inserted as `owner` on create (mirrors `createTeam`'s founder row). **`is_group_admin(group_id)`** helper (owner immutable), same shape as `is_team_manager` / `is_league_commissioner`.
+- `posts.group_id uuid null → groups` (FK SET NULL) + partial index `(group_id, created_at desc) where group_id is not null`.
+- `group_sub_requests` — `id, group_id, author_id → profiles, play_date timestamptz, location_text, position ('any'|'forward'|'defense'|'goalie'), skill_level text null, notes text, status ('open'|'filled'|'cancelled') default 'open', filled_by → profiles null, created_at`. Posting a sub request **auto-creates a group feed post** (reuse the recap-post pipeline) so it shows in-feed AND on a structured "Subs" board; flipping to `filled` updates both. **Goalie-needed is the killer case** — surface it.
+- **RLS:** public/unlisted groups → world-readable; private → active members only. Posting/sub-requesting → active member (insert-own). Moderation (delete post, ban member, approve join) → `is_group_admin`. Membership self-insert: public = direct `active`; private = `pending` until an admin flips it.
+
+**Surfaces / IA (phone-first, progressive disclosure per memory `unified_platform_design_mandate`):**
+- `/groups` — **directory**: search + filter by `location_text`, "Groups near you" / "Popular", a prominent **Create group** button. Lives in the **desktop sidebar + Discover**; **NOT a new mobile bottom-nav slot** (the bottom bar is intentionally capped at 4 — memory's June 1 nav-polish entry), so reach it from Discover/profile.
+- `/groups/:slug` — group page: **Feed** (default) · **Subs** (open requests, "Post a sub request" CTA) · **Members** · **About**. Join/Leave button top-right; private groups show "Request to join". Owner/admin see a lightweight Manage affordance (edit, approve requests, remove posts, ban).
+- **Create flow** — one screen: name → location → short description → visibility. That's it. No roster, no schedule, no payment. Dead-simple is the point.
+
+**Effort & phasing (~4–6 days for P1+P2 thanks to feed reuse):**
+- **Phase 1 — the place to talk (~2–3 d):** `groups` + `group_members` + `posts.group_id` + `is_group_admin` + create flow + `/groups` directory + `/groups/:slug` (Feed/Members/About) + public-join / private-request. Ships the core "community without a team/league."
+- **Phase 2 — the differentiated hook (~1.5–2 d):** `group_sub_requests` + Subs board + auto-post to group feed + `group_sub` push to members + "I'll cover it" → DM. This is the daily-active driver — don't skip it, it's the reason a group beats a Facebook group.
+- **Phase 3 (later):** geo discovery (lat/lng + distance sort), group categories, richer moderation, per-member notification granularity (a `group_subscriptions` opt-in like `league_subscriptions` if "notify me about this group" needs to be separate from membership).
+
+**Guardrails:** respect `user_blocks` end-to-end; suppress self-notify; cap sub-request spam (rate-limit per author/day); `is_hidden`/report infra applies to group posts; private-group content must never leak into global/following/Discover. Owner can't be removed/demoted (immutable, like founder).
+
+**Monetization:** **free** — this is an acquisition/retention/network-effect lever, not a SKU. (Possible *later*: a "verified/pro group" tier or sponsored-group placement, and groups feed the `SOCIAL` top-of-funnel by getting unaffiliated players onto the platform before any league/tournament relationship exists.)
+
+**Open design Qs for Pete (sign off before building, per `unified_platform_design_mandate`):** (1) Sub requests as a **structured table** (recommended — date/position/status, filterable, "goalie needed" surfacing) vs. just a post `kind`/tag? (2) **Default visibility** public vs. private? (3) Should groups be **discoverable by location** in v1 (`location_text` search) or just by name/invite-link? (4) Any **abuse ceiling** — max groups created per user, approval before a group is publicly listed? (5) Does a group get a **DM-style group chat** (extends the DM `type='team'` work) or is the feed enough for v1?
+
+---
+
 ### Distribution backlog
 - Reddit reposts, 25 podcaster DMs, 10 beer-league emails, Hockey Twitter launch (state-of-play tasks #82–85).
 - Swap LiveBarn placeholder venue IDs for real ones (task #28).
