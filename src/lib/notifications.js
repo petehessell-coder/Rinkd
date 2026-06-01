@@ -98,6 +98,7 @@ export function subscribe(userId, onChange) {
 export const KIND_META = {
   comment:             { icon: '💬', label: 'Comment' },
   mention:             { icon: '@', label: 'Mention' },
+  reaction:            { icon: '🔥', label: 'Reaction' },
   like:                { icon: '❤️', label: 'Like' },
   follow:              { icon: '👀', label: 'New follower' },
   team_join_request:   { icon: '🏒', label: 'Roster request' },

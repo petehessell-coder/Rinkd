@@ -580,6 +580,8 @@ export default function TournamentPage({ currentUser }) {
             navigate={navigate}
             currentUser={currentUser}
             tournamentId={id}
+            liveGames={liveGames}
+            accent={accent}
           />
         )}
 
@@ -594,12 +596,72 @@ export default function TournamentPage({ currentUser }) {
   );
 }
 
+// Live game strip — pinned to the top of the Feed tab while any game is in
+// progress (status='live'). PERIOD ONLY: Rinkd has no running game clock
+// (games.period_time is never written; the only time data is per-event
+// time_in_period stamps on goals/penalties), so showing a ticking clock here
+// would be silently-wrong data. We show the period label + live score, which
+// updates in real time via the page's existing `games` realtime subscription.
+function periodLabelShort(p) {
+  return p === 1 ? '1st' : p === 2 ? '2nd' : p === 3 ? '3rd' : p === 4 ? 'OT' : p === 5 ? 'SO' : null;
+}
+
+function LiveScoreRow({ name, score, lead }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '2px 0' }}>
+      <span style={{ fontSize: 14, fontWeight: lead ? 800 : 600, color: '#F4F7FA', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name || 'TBD'}</span>
+      <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, lineHeight: 1, color: lead ? '#F4F7FA' : 'rgba(244,247,250,0.7)' }}>{score}</span>
+    </div>
+  );
+}
+
+function LiveGameStrip({ games, accent, navigate }) {
+  if (!games || games.length === 0) return null;
+  const many = games.length > 1;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: accent, boxShadow: `0 0 0 3px ${accent}33`, display: 'inline-block' }} />
+        <span style={{ color: accent, fontWeight: 800, fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Live now</span>
+      </div>
+      <div style={{ display: 'flex', gap: 8, overflowX: many ? 'auto' : 'visible', paddingBottom: many ? 2 : 0 }}>
+        {games.map((g) => {
+          const pl = periodLabelShort(g.period);
+          const home = g.home_score ?? 0;
+          const away = g.away_score ?? 0;
+          const rink = g.rink?.name ? `${g.rink.name}${g.rink.sub_rink ? ` · ${g.rink.sub_rink}` : ''}` : null;
+          return (
+            <button
+              key={g.id}
+              onClick={() => navigate(`/game/${g.id}`)}
+              style={{
+                flex: many ? '0 0 auto' : '1 1 auto', minWidth: many ? 200 : 'auto', textAlign: 'left',
+                cursor: 'pointer', background: '#0B1F3A', border: `1px solid ${accent}55`, borderRadius: 10,
+                padding: '10px 12px', fontFamily: 'Barlow, sans-serif', color: '#F4F7FA',
+              }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, fontSize: 11 }}>
+                <span style={{ color: accent, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 5, letterSpacing: '0.04em' }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: accent, display: 'inline-block' }} />
+                  LIVE{pl ? ` · ${pl}` : ''}
+                </span>
+                {rink && <span style={{ color: 'rgba(244,247,250,0.6)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 110 }}>{rink}</span>}
+              </div>
+              <LiveScoreRow name={g.home_team?.team_name} score={home} lead={home > away} />
+              <LiveScoreRow name={g.away_team?.team_name} score={away} lead={away > home} />
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // Tournament-scoped feed. Surfaces auto-recap posts AND user-authored posts
 // scoped to this tournament. Render is intentionally minimal — extract a
 // shared PostCard later when there's enough reuse to justify the refactor.
 // User posts do NOT trigger pushes (only recaps do) to keep notification
 // volume sane.
-function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId }) {
+function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId, liveGames = [], accent = '#D72638' }) {
   const [draft, setDraft] = useState('');
   const [postMentionIds, setPostMentionIds] = useState([]);
   const [mediaFile, setMediaFile] = useState(null);
@@ -719,6 +781,7 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
 
   return (
     <div style={{display:'flex',flexDirection:'column',gap:12,padding:'0 12px'}}>
+      <LiveGameStrip games={liveGames} accent={accent} navigate={navigate} />
       {currentUser && (
         <div style={{background:'#11253E',borderRadius:10,padding:'10px 12px'}}>
           <MentionInput
