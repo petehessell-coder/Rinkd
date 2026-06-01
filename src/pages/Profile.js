@@ -6,7 +6,8 @@ import { updateProfile } from '../lib/auth';
 import { getTier, getTierProgress, getNextTier, TIERS } from '../lib/tiers';
 import { supabase } from '../lib/supabase';
 import { getPlayerLeagueStats } from '../lib/stats';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
+import { getOrCreateDm } from '../lib/messages';
 import { followUser, unfollowUser, isFollowing, getFollowCounts, timeAgo, uploadMedia } from '../lib/posts';
 import { blockUser, unblockUser, isBlockedByMe } from '../lib/blocks';
 import MapLink from '../components/MapLink';
@@ -19,6 +20,7 @@ const LEVELS = ['Youth (Mite-Bantam)', 'Youth (Midget)', 'High School', 'Junior 
 
 export default function Profile({ currentUser, profile: myProfile, onProfileUpdate }) {
   const { userId: urlUserId } = useParams();
+  const navigate = useNavigate();
   const [profile, setProfile] = useState(myProfile);
   const [posts, setPosts] = useState([]);
   const [editing, setEditing] = useState(false);
@@ -30,6 +32,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
   const [followLoading, setFollowLoading] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const [blockLoading, setBlockLoading] = useState(false);
+  const [dmLoading, setDmLoading] = useState(false);
   const [leagueStats, setLeagueStats] = useState([]);
 
   const [editName, setEditName] = useState('');
@@ -174,6 +177,21 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
       return next;
     });
     track('avatar_uploaded');
+  };
+
+  const handleMessage = async () => {
+    if (!currentUser || isOwnProfile || dmLoading) return;
+    setDmLoading(true);
+    try {
+      const conversationId = await getOrCreateDm(profileId);
+      if (!conversationId) throw new Error('Could not open a conversation.');
+      track('dm_opened_from_profile');
+      navigate(`/messages/${conversationId}`);
+    } catch (err) {
+      alert(err?.message || 'Could not open a conversation.');
+    } finally {
+      setDmLoading(false);
+    }
   };
 
   const handleFollow = async () => {
@@ -377,6 +395,14 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                 )}
                 {!isOwnProfile && (
                   <div style={{ display: 'flex', gap: 8 }}>
+                    {!blocked && (
+                      <button onClick={handleMessage} disabled={dmLoading} title="Send a direct message" style={{
+                        padding: '8px 16px', borderRadius: 8, cursor: 'pointer',
+                        background: 'transparent', border: `1.5px solid ${C.border}`, color: C.ice,
+                        fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 14,
+                        letterSpacing: '0.05em',
+                      }}>{dmLoading ? '...' : '💬 Message'}</button>
+                    )}
                     {!blocked && (
                       <button onClick={handleFollow} disabled={followLoading} style={{
                         padding: '8px 20px', borderRadius: 8, border: 'none', cursor: 'pointer',
