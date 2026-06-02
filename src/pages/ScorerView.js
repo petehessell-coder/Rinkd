@@ -309,6 +309,21 @@ export default function ScorerView() {
     });
   };
 
+  // Tap a team's name or its big score to log a goal for that side — the
+  // primary, stupid-proof path for non-technical timekeepers (Nick's BLPA
+  // crew ranges 10-to-70 yrs old). Opening the form writes NOTHING; Save is
+  // the confirm and every goal row has a ✕ undo, so a stray tap is harmless
+  // (just Cancel). Team id is read from `game` (in scope here) rather than the
+  // render-scoped homeTeam/awayTeam to avoid any declaration-order surprise.
+  const openGoalForTeam = (side) => {
+    if (isLocked) return;
+    setErrorMsg('');
+    const teamId = side === 'home' ? game?.home_team?.id : game?.away_team?.id;
+    if (!teamId) return;
+    setGoalForm(prev => ({ ...prev, team_id: teamId, period, scorer_number: '', assist1_number: '', assist2_number: '', time_in_period: '', is_shootout: false }));
+    setGoalModal(true);
+  };
+
   // Score is the goal-log count per team — derived, not stored separately.
   // The +/- buttons (changeScore above) still write a manual override for
   // cases where the scorer wants to bump the score without logging a goal,
@@ -653,15 +668,27 @@ export default function ScorerView() {
           <div style={{ padding: '14px 16px', borderBottom: '0.5px solid rgba(46,91,140,0.3)' }}>
             {[[homeTeam, homeScore, 'home'], [awayTeam, awayScore, 'away']].map(([team, score, side], i) => (
               <div key={side} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderTop: i > 0 ? '0.5px solid rgba(244,247,250,0.07)' : 'none', marginTop: i > 0 ? 6 : 0, paddingTop: i > 0 ? 12 : 6 }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: '#F4F7FA', flex: 1 }}>{team?.team_name}</div>
+                {/* Tap the team name (or the big score) to open the goal form for that side. */}
+                <div
+                  role={!isLocked ? 'button' : undefined}
+                  tabIndex={!isLocked ? 0 : undefined}
+                  onClick={!isLocked ? () => openGoalForTeam(side) : undefined}
+                  onKeyDown={!isLocked ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openGoalForTeam(side); } } : undefined}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minHeight: 44, cursor: !isLocked ? 'pointer' : 'default', WebkitTapHighlightColor: 'transparent' }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: '#F4F7FA' }}>{team?.team_name}</div>
+                  {!isLocked && <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: C.blue, border: `0.5px solid ${C.blue}`, borderRadius: 6, padding: '2px 6px', flexShrink: 0 }}>+ Goal</span>}
+                </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   {!isLocked && <ScoreBtn onClick={() => changeScore(side, -1)} variant="minus">−</ScoreBtn>}
-                  <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 44, color: '#F4F7FA', width: 56, textAlign: 'center', lineHeight: 1 }}>{score}</div>
+                  <div
+                    onClick={!isLocked ? () => openGoalForTeam(side) : undefined}
+                    title={!isLocked ? 'Tap to log a goal' : undefined}
+                    style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 44, color: '#F4F7FA', width: 56, textAlign: 'center', lineHeight: 1, cursor: !isLocked ? 'pointer' : 'default', WebkitTapHighlightColor: 'transparent' }}>{score}</div>
                   {!isLocked && <ScoreBtn onClick={() => changeScore(side, 1)} variant="plus">+</ScoreBtn>}
                 </div>
               </div>
             ))}
-            {!isLocked && <div style={{ fontSize: 10, color: 'rgba(244,247,250,0.25)', textAlign: 'center', marginTop: 8 }}>Score updates automatically when goals are logged · use +/− to correct</div>}
+            {!isLocked && <div style={{ fontSize: 10, color: 'rgba(244,247,250,0.25)', textAlign: 'center', marginTop: 8 }}>Tap a team or its score to log a goal · use +/− to correct</div>}
           </div>
 
           {/* Goal log section */}
