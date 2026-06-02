@@ -3,6 +3,18 @@ import { REACTION_EMOJIS, toggleReaction } from '../lib/reactions';
 
 const C = { ice: '#F4F7FA', steel: '#8BA3BE', blue: '#5B9FE2', border: 'rgba(46,91,140,0.5)' };
 
+// Inject the reaction micro-interaction keyframes once (the app styles inline,
+// so there's no global stylesheet to drop these in). `rinkdReactPop` springs
+// the tapped emoji; `rinkdReactFloat` lofts a ghost copy up + away for a beat.
+if (typeof document !== 'undefined' && !document.getElementById('rinkd-reaction-anim')) {
+  const el = document.createElement('style');
+  el.id = 'rinkd-reaction-anim';
+  el.textContent =
+    '@keyframes rinkdReactPop{0%{transform:scale(1)}35%{transform:scale(1.45)}60%{transform:scale(.9)}100%{transform:scale(1)}}' +
+    '@keyframes rinkdReactFloat{0%{transform:translate(-50%,0) scale(1);opacity:.9}100%{transform:translate(-50%,-26px) scale(1.5);opacity:0}}';
+  document.head.appendChild(el);
+}
+
 /**
  * Emoji-reaction strip for a single post (REACT-1). Self-contained: seeded from
  * the parent's batched `initial` summary ({ emoji: { count, mine } }) but owns
@@ -19,6 +31,11 @@ export default function PostReactions({ postId, currentUserId, initial }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const rootRef = useRef(null);
   const inFlight = useRef(new Set());
+  // Transient "just reacted" marker that drives the pop + float animation.
+  const [pop, setPop] = useState(null); // { emoji, key }
+  const popSeq = useRef(0);
+  const popTimer = useRef(null);
+  useEffect(() => () => clearTimeout(popTimer.current), []);
 
   // Re-seed when the parent hands us a genuinely new snapshot (feed reload),
   // but not on mere render churn — compare by content, and never stomp a
@@ -49,7 +66,15 @@ export default function PostReactions({ postId, currentUserId, initial }) {
   const onToggle = (emoji) => {
     if (!currentUserId) return;
     setPickerOpen(false);
+    // Only celebrate adding a reaction, not removing one.
+    const willReactOn = !(reactions[emoji]?.mine);
     setReactions((prev) => applyToggle(prev, emoji));
+    if (willReactOn) {
+      const key = ++popSeq.current;
+      setPop({ emoji, key });
+      clearTimeout(popTimer.current);
+      popTimer.current = setTimeout(() => setPop(null), 650);
+    }
     if (inFlight.current.has(emoji)) return;
     inFlight.current.add(emoji);
     (async () => {
@@ -69,6 +94,7 @@ export default function PostReactions({ postId, currentUserId, initial }) {
       {active.map((emoji) => {
         const cell = reactions[emoji];
         const mine = cell?.mine;
+        const popping = pop?.emoji === emoji;
         return (
           <button
             key={emoji}
@@ -76,6 +102,7 @@ export default function PostReactions({ postId, currentUserId, initial }) {
             disabled={!currentUserId}
             title={mine ? 'Remove reaction' : 'React'}
             style={{
+              position: 'relative',
               display: 'inline-flex', alignItems: 'center', gap: 4,
               padding: '2px 8px', borderRadius: 999,
               background: mine ? 'rgba(91,159,226,0.22)' : 'rgba(11,31,58,0.6)',
@@ -83,9 +110,16 @@ export default function PostReactions({ postId, currentUserId, initial }) {
               color: C.ice, fontSize: 12, lineHeight: 1.4,
               cursor: currentUserId ? 'pointer' : 'default',
               fontFamily: "'Barlow', sans-serif",
+              transition: 'background 0.15s, border-color 0.15s',
             }}>
-            <span style={{ fontSize: 13 }}>{emoji}</span>
+            <span
+              key={popping ? pop.key : 'static'}
+              style={{ fontSize: 13, display: 'inline-block', animation: popping ? 'rinkdReactPop .45s ease' : 'none' }}>{emoji}</span>
             <span style={{ fontWeight: mine ? 700 : 400 }}>{cell.count}</span>
+            {popping && (
+              <span key={`float-${pop.key}`} aria-hidden="true"
+                style={{ position: 'absolute', left: '50%', top: -4, transform: 'translate(-50%,0)', fontSize: 17, pointerEvents: 'none', animation: 'rinkdReactFloat .6s ease forwards' }}>{emoji}</span>
+            )}
           </button>
         );
       })}

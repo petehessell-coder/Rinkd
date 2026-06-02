@@ -30,6 +30,29 @@ const TAGS = [
   { label: 'Question', color: '#8BA3BE' },
 ];
 
+// Rotating composer prompts — keeps the chirp box feeling alive instead of a
+// dead "What's the chirp?". Cycles while the composer is collapsed; when the
+// user opens it, whatever prompt was showing becomes the ghost text.
+const CHIRP_STARTERS = [
+  "What's the chirp?",
+  "Who's got a game tonight? 🏒",
+  'Hottest take in your beer league?',
+  "Best goal you've seen this week?",
+  'Brag about a W — or own the L.',
+  'Drop a highlight clip 🎥',
+  "Who's your line's MVP tonight?",
+  'Beer-league nickname that needs a backstory?',
+  'Rate the rink coffee ☕',
+];
+
+// One-time keyframe inject for the prompt crossfade (app styles inline).
+if (typeof document !== 'undefined' && !document.getElementById('rinkd-feed-anim')) {
+  const el = document.createElement('style');
+  el.id = 'rinkd-feed-anim';
+  el.textContent = '@keyframes rinkdStarterFade{0%{opacity:0;transform:translateY(3px)}100%{opacity:1;transform:translateY(0)}}';
+  document.head.appendChild(el);
+}
+
 // Tap-to-fullscreen lightbox so highlight clips and goal photos actually look
 // like highlight clips and goal photos.
 function MediaLightbox({ url, type, onClose }) {
@@ -385,6 +408,18 @@ export default function Feed({ currentUser, profile }) {
   const [mediaFile, setMediaFile] = useState(null);
   const [mediaPreview, setMediaPreview] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [starterIdx, setStarterIdx] = useState(0);
+
+  // Cycle the composer prompt while it's collapsed so the feed feels alive.
+  // Pauses while composing; respects prefers-reduced-motion.
+  useEffect(() => {
+    if (composerOpen) return undefined;
+    const reduce = typeof window !== 'undefined' && window.matchMedia
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) return undefined;
+    const id = setInterval(() => setStarterIdx(i => (i + 1) % CHIRP_STARTERS.length), 4200);
+    return () => clearInterval(id);
+  }, [composerOpen]);
   const fileInputRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -599,7 +634,7 @@ export default function Feed({ currentUser, profile }) {
             {!composerOpen ? (
               <button onClick={() => setComposerOpen(true)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer' }}>
                 <Avatar profile={profile} size={36} />
-                <span style={{ flex: 1, color: C.steel, fontSize: 15, fontFamily: "'Barlow', sans-serif", textAlign: 'left' }}>What's the chirp?</span>
+                <span key={starterIdx} style={{ flex: 1, color: C.steel, fontSize: 15, fontFamily: "'Barlow', sans-serif", textAlign: 'left', animation: 'rinkdStarterFade .5s ease' }}>{CHIRP_STARTERS[starterIdx]}</span>
                 <span style={{ padding: '6px 14px', borderRadius: 8, background: C.red, color: 'white', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 13 }}>CHIRP</span>
               </button>
             ) : (
@@ -607,7 +642,7 @@ export default function Feed({ currentUser, profile }) {
                 <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
                   <Avatar profile={profile} size={36} />
                   <MentionInput value={content} onChange={setContent} onMentionsChange={setPostMentionIds}
-                    placeholder="What's the chirp? Tag players with @" maxLength={500} rows={3} autoFocus
+                    placeholder={`${CHIRP_STARTERS[starterIdx]} · tag players with @`} maxLength={500} rows={3} autoFocus
                     style={{ flex: 1 }}
                     textareaStyle={{ padding: '10px 12px', borderRadius: 10, background: C.navy, border: `1.5px solid ${C.blue}`, color: C.ice, fontSize: 15, resize: 'none', fontFamily: "'Barlow', sans-serif", lineHeight: 1.5 }}/>
                 </div>
