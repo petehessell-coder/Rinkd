@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { loadDailyRollup, loadDAU, loadRecentEvents } from '../lib/analytics';
+import { loadDailyRollup, loadDAU, loadRecentEvents, loadTopPages } from '../lib/analytics';
 import { useIsRinkdAdmin } from '../lib/userRole';
 import { supabase } from '../lib/supabase';
 
@@ -63,6 +63,7 @@ export default function AdminAnalytics({ currentUser, profile }) {
   const [daily, setDaily] = useState([]);
   const [dau, setDau] = useState([]);
   const [recent, setRecent] = useState([]);
+  const [topPages, setTopPages] = useState([]);
   // ENRICH-1: snapshot of every profile's last_seen_at + handle/name/persona
   // for the cohort tiles + recently-active table below. Sorted server-side
   // so we can also use .slice(0, N) for the visible table without resorting.
@@ -74,7 +75,7 @@ export default function AdminAnalytics({ currentUser, profile }) {
     setLoading(true);
     setError(null);
     try {
-      const [d, u, r, a] = await Promise.all([
+      const [d, u, r, a, tp] = await Promise.all([
         loadDailyRollup(30),
         loadDAU(30),
         loadRecentEvents(80),
@@ -82,8 +83,9 @@ export default function AdminAnalytics({ currentUser, profile }) {
           .from('profiles')
           .select('id, handle, name, persona, last_seen_at')
           .order('last_seen_at', { ascending: false, nullsFirst: false }),
+        loadTopPages(40),
       ]);
-      setDaily(d); setDau(u); setRecent(r);
+      setDaily(d); setDau(u); setRecent(r); setTopPages(tp);
       setActivity(a?.data || []);
     } catch (e) {
       // Without this catch, the entire useEffect's promise rejects unhandled
@@ -204,6 +206,31 @@ export default function AdminAnalytics({ currentUser, profile }) {
               <div style={{ fontSize: 12, color: C.ice }}>{dauSeries[dauSeries.length - 1]?.v || 0} today</div>
             </div>
             <MiniBars data={dauSeries} height={70} />
+          </div>
+
+          {/* Top pages — page_view events grouped by path (last 30d). Backed by
+              the analytics_top_pages security_invoker view. Empty until the
+              first page_view rows land after this ships. */}
+          <div style={{ fontSize: 11, color: C.steel, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 8 }}>
+            Top pages · last 30d
+          </div>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 22 }}>
+            <div style={{ display: 'flex', padding: '8px 14px', borderBottom: `1px solid ${C.border}`, fontSize: 10, color: C.steel, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700 }}>
+              <span style={{ flex: 1 }}>Path</span>
+              <span style={{ width: 70, textAlign: 'right' }}>Views</span>
+              <span style={{ width: 80, textAlign: 'right' }}>Sessions</span>
+              <span style={{ width: 70, textAlign: 'right' }}>Users</span>
+            </div>
+            {topPages.length === 0 ? (
+              <div style={{ padding: 18, color: C.steel, fontSize: 13, textAlign: 'center' }}>No pageviews yet — fills in once traffic lands after the next deploy.</div>
+            ) : topPages.map((row, i) => (
+              <div key={row.page} style={{ display: 'flex', alignItems: 'center', padding: '9px 14px', borderTop: i ? '1px solid rgba(46,91,140,0.2)' : 'none', fontSize: 13 }}>
+                <span style={{ flex: 1, minWidth: 0, color: C.ice, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.page}</span>
+                <span style={{ width: 70, textAlign: 'right', fontWeight: 700, color: C.ice }}>{row.views}</span>
+                <span style={{ width: 80, textAlign: 'right', color: C.steel }}>{row.sessions}</span>
+                <span style={{ width: 70, textAlign: 'right', color: C.steel }}>{row.users}</span>
+              </div>
+            ))}
           </div>
 
           {/* ENRICH-1 dormancy cohorts — sourced from profiles.last_seen_at,

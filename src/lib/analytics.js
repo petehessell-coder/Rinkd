@@ -84,7 +84,7 @@ if (typeof window !== 'undefined' && supabase?.auth) {
  * Fire-and-forget event tracker. Never blocks the UI. Failures are swallowed
  * so a 4xx from Supabase doesn't surface as a user-visible error.
  */
-export async function track(event, properties = {}) {
+export async function track(event, properties = {}, urlOverride) {
   if (typeof window === 'undefined') return;
   // Don't track on localhost so dev work doesn't pollute prod data.
   if (window.location?.hostname === 'localhost') return;
@@ -97,7 +97,9 @@ export async function track(event, properties = {}) {
       event,
       user_id,
       session_id: sessionId(),
-      url: window.location?.pathname + (window.location?.search || ''),
+      // urlOverride lets pageviews record the bare pathname (no query string)
+      // so single-use tokens in `?...` (invite / reset links) never land here.
+      url: urlOverride != null ? urlOverride : window.location?.pathname + (window.location?.search || ''),
       referrer: document.referrer || null,
       user_agent: navigator.userAgent || null,
       properties,
@@ -105,9 +107,17 @@ export async function track(event, properties = {}) {
   } catch { /* silent */ }
 }
 
-/** Pageview helper. Call from any route on mount. */
-export function trackPage(name, properties = {}) {
-  return track('page_view', { page: name, ...properties });
+/**
+ * Pageview helper — fired on every route change by <RouteAnalytics/>. Records
+ * the bare pathname (query string stripped) so per-session navigation paths can
+ * be reconstructed (ORDER BY created_at within a session_id) without capturing
+ * tokens/PII. Pass an explicit path; falls back to the current pathname.
+ */
+export function trackPage(path, properties = {}) {
+  const p = path
+    || (typeof window !== 'undefined' ? window.location?.pathname : null)
+    || '/';
+  return track('page_view', { page: p, ...properties }, p);
 }
 
 /** Bulk-load helper for the admin dashboard. */
@@ -133,6 +143,19 @@ export async function loadRecentEvents(limit = 100) {
     .from('analytics_events')
     .select('id, event, user_id, url, properties, created_at')
     .order('created_at', { ascending: false })
+    .limit(limit);
+  return data || [];
+}
+
+/**
+ * Top viewed pages over the last 30d (page_view events grouped by path).
+ * Backed by the security_invoker view analytics_top_pages, so RLS still scopes
+ * reads to commissioners/admins. Each row: { page, views, sessions, users }.
+ */
+export async function loadTopPages(limit = 40) {
+  const { data } = await supabase
+    .from('analytics_top_pages')
+    .select('*')
     .limit(limit);
   return data || [];
 }

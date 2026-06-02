@@ -32,6 +32,7 @@ import { setSentryUser } from './lib/sentry';
 import Notifications from './pages/Notifications';
 import Messages from './pages/Messages';
 import OnboardingModal from './components/OnboardingModal';
+import RouteAnalytics from './components/RouteAnalytics';
 import ErrorBoundary from './components/ErrorBoundary';
 import ResetPassword from './pages/ResetPassword';
 import Teams from './pages/Teams';
@@ -125,6 +126,8 @@ function AppRoutes() {
   );
   return (
     <>
+    {/* Fires a page_view on every route change → per-session navigation paths. */}
+    <RouteAnalytics />
     {showOnboarding && (
       <OnboardingModal
         currentUser={user}
