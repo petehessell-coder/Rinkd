@@ -171,3 +171,64 @@ export async function getUserLeagueRole(leagueId) {
   if (role?.role === 'scorer') return 'scorer';
   return 'viewer';
 }
+
+// The single league to surface as a user's "quick-nav" pin (LeaguePinIcon).
+// "My league" resolves by strength of belonging, first match wins:
+//   1. a league I run        — leagues.commissioner_id, then league_roles=commissioner
+//   2. a league my team is in — team_members → league_teams
+//   3. a league I follow      — league_subscriptions
+// Fail-soft: any error / no match returns null (the pin just doesn't render).
+// Returns only the fields the avatar + link need. Ordered by name where a tier
+// has several so the pick is stable across reloads.
+const PIN_COLS = 'id, name, logo_url, accent_color, logo_color, logo_initials';
+
+export async function getMyPrimaryLeague(userId) {
+  if (!userId) return null;
+  try {
+    // 1a — leagues I founded
+    const { data: founded } = await supabase
+      .from('leagues')
+      .select(PIN_COLS)
+      .eq('commissioner_id', userId)
+      .order('name')
+      .limit(1);
+    if (founded?.length) return founded[0];
+
+    // 1b — leagues where I'm an added commissioner
+    const { data: roleRows } = await supabase
+      .from('league_roles')
+      .select(`league:leagues(${PIN_COLS})`)
+      .eq('user_id', userId)
+      .eq('role', 'commissioner')
+      .limit(1);
+    if (roleRows?.[0]?.league) return roleRows[0].league;
+
+    // 2 — the league my team plays in
+    const { data: memberships } = await supabase
+      .from('team_members')
+      .select('team_id')
+      .eq('user_id', userId)
+      .in('status', ['active', 'pending']);
+    const teamIds = (memberships || []).map(m => m.team_id).filter(Boolean);
+    if (teamIds.length) {
+      const { data: lt } = await supabase
+        .from('league_teams')
+        .select(`league:leagues(${PIN_COLS})`)
+        .in('team_id', teamIds)
+        .limit(1);
+      if (lt?.[0]?.league) return lt[0].league;
+    }
+
+    // 3 — a league I follow
+    const { data: subs } = await supabase
+      .from('league_subscriptions')
+      .select(`league:leagues(${PIN_COLS})`)
+      .eq('user_id', userId)
+      .limit(1);
+    if (subs?.[0]?.league) return subs[0].league;
+
+    return null;
+  } catch {
+    return null;
+  }
+}
