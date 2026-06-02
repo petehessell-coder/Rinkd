@@ -405,6 +405,11 @@ export default function Feed({ currentUser, profile }) {
   // 4D.5-3: default to "following" so new users see signal, not noise.
   // "For You" is still available as a secondary tab for discovery.
   const [tab, setTab] = useState('following');
+  // Cold-start fix: a new user follows nobody, so the Following feed is empty
+  // and they'd hit a blank wall. When Following comes back empty we fall back
+  // to the global "For You" posts and show a hint. This flag also keeps
+  // loadMore paginating the right source.
+  const [followingFallback, setFollowingFallback] = useState(false);
   const [mediaFile, setMediaFile] = useState(null);
   const [mediaPreview, setMediaPreview] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -425,11 +430,19 @@ export default function Feed({ currentUser, profile }) {
   const load = useCallback(async () => {
     setLoading(true);
     let data;
+    let fellBack = false;
     if (tab === 'following' && currentUser) {
       ({ data } = await getFollowingPosts(currentUser.id, PAGE_SIZE));
+      // Never blank-wall a user who follows nobody yet: fall back to the global
+      // discovery feed (with a hint they can personalize it).
+      if (!data || data.length === 0) {
+        ({ data } = await getPosts(PAGE_SIZE));
+        fellBack = true;
+      }
     } else {
       ({ data } = await getPosts(PAGE_SIZE));
     }
+    setFollowingFallback(fellBack);
     const page = data || [];
     setPosts(page);
     setHasMore(page.length === PAGE_SIZE);
@@ -450,7 +463,8 @@ export default function Feed({ currentUser, profile }) {
     setLoadingMore(true);
     const before = posts[posts.length - 1].created_at;
     let data;
-    if (tab === 'following' && currentUser) {
+    // When the Following feed fell back to global, keep paginating global too.
+    if (tab === 'following' && currentUser && !followingFallback) {
       ({ data } = await getFollowingPosts(currentUser.id, PAGE_SIZE, before));
     } else {
       ({ data } = await getPosts(PAGE_SIZE, before));
@@ -469,7 +483,7 @@ export default function Feed({ currentUser, profile }) {
       setReactionMap(prev => ({ ...prev, ...newReactions }));
     }
     setLoadingMore(false);
-  }, [loadingMore, hasMore, posts, tab, currentUser]);
+  }, [loadingMore, hasMore, posts, tab, currentUser, followingFallback]);
 
   // A new comment just bumps the count chip on that one card — no full reload.
   const handleCommentAdded = useCallback((postId) => {
@@ -696,6 +710,13 @@ export default function Feed({ currentUser, profile }) {
           />
         ) : (
           <>
+            {followingFallback && (
+              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, padding: '10px 12px', marginBottom: 8, borderRadius: 10, background: C.navy, border: `1px solid ${C.border}`, color: C.steel, fontSize: 13, fontFamily: "'Barlow', sans-serif" }}>
+                <span>✨ Showing popular chirps —</span>
+                <button onClick={() => navigate('/discover')} style={{ background: 'transparent', border: 'none', color: C.blue, fontWeight: 600, cursor: 'pointer', padding: 0, fontSize: 13, fontFamily: 'inherit' }}>follow players</button>
+                <span>to personalize your feed.</span>
+              </div>
+            )}
             {posts.map(post => (
               <PostCard
                 key={post.id}
