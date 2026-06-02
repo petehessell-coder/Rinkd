@@ -602,6 +602,7 @@ export default function LeaguePage({ currentUser, profile }) {
               navigate={navigate}
               currentUser={currentUser}
               leagueId={id}
+              canModerate={isCommissioner}
             />
           )}
 
@@ -668,7 +669,7 @@ const card = { background: '#0f2847', border: '0.5px solid rgba(46,91,140,0.4)',
 // ScorerView finalize → createGameRecapPost + triggerLeagueRecapPush) AND
 // user-authored posts scoped to this league. User posts do NOT trigger
 // pushes — only recaps do — to keep notification volume sane.
-function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, leagueId }) {
+function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, leagueId, canModerate = false }) {
   const [draft, setDraft] = useState('');
   const [postMentionIds, setPostMentionIds] = useState([]);
   const [mediaFile, setMediaFile] = useState(null);
@@ -853,9 +854,11 @@ function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, league
                     authorId={p.author_id}
                     authorHandle={p.profiles?.handle}
                     currentUserId={currentUser.id}
+                    canModerate={canModerate}
                     onReported={() => handleHidden(p.id)}
                     onBlocked={() => handleAuthorBlocked(p.author_id)}
                     onDeleted={() => handleHidden(p.id)}
+                    onModerated={() => handleHidden(p.id)}
                   />
                 )}
               </div>

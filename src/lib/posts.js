@@ -298,6 +298,7 @@ export async function getComments(postId) {
     .from('comments')
     .select(`*, profiles!comments_author_id_fkey(id, name, handle, avatar_url, avatar_color, avatar_initials, tier), ${COMMENT_MENTIONS_EMBED}`)
     .eq('post_id', postId)
+    .eq('is_hidden', false)
     .order('created_at', { ascending: true });
   // Filter blocked users out of the result. Doing it client-side avoids a
   // separate IN-list URL fragment per thread fetch; comment threads are small.
@@ -308,7 +309,7 @@ export async function getComments(postId) {
     console.warn('[comments] load failed:', error);
     // Graceful fallback: fetch without the embed so users at least see the text.
     const { data: fallback } = await supabase
-      .from('comments').select('*').eq('post_id', postId).order('created_at', { ascending: true });
+      .from('comments').select('*').eq('post_id', postId).eq('is_hidden', false).order('created_at', { ascending: true });
     return drop(fallback || []);
   }
   return drop(data || []);

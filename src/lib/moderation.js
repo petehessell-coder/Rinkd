@@ -50,3 +50,20 @@ export async function reportComment(commentId, reason, details = null) {
   });
   return { error };
 }
+
+/**
+ * Director / commissioner / team-manager moderation (DIR-MOD-1). Soft-hides a
+ * post or comment in the caller's OWN event — flips is_hidden so it drops from
+ * every feed (reversible). Authorization is re-derived server-side from the
+ * target's scope by the SECURITY DEFINER RPCs set_post_hidden / set_comment_hidden;
+ * the client can't claim a role it doesn't hold (a `forbidden` error comes back).
+ */
+export async function hidePost(postId, hidden = true) {
+  const { error } = await supabase.rpc('set_post_hidden', { p_post_id: postId, p_hidden: hidden });
+  return { error };
+}
+
+export async function hideComment(commentId, hidden = true) {
+  const { error } = await supabase.rpc('set_comment_hidden', { p_comment_id: commentId, p_hidden: hidden });
+  return { error };
+}

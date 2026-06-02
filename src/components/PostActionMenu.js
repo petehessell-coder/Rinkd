@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { reportPost, reportComment, REPORT_REASONS } from '../lib/moderation';
+import { reportPost, reportComment, REPORT_REASONS, hidePost, hideComment } from '../lib/moderation';
 import { blockUser } from '../lib/blocks';
 import { deletePost, deleteComment } from '../lib/posts';
 
@@ -20,14 +20,16 @@ const C = {
  *     authorId={post.author_id}
  *     authorHandle={post.profiles?.handle}
  *     currentUserId={currentUser?.id}
+ *     canModerate={isDirector}// viewer can moderate THIS item's event scope (DIR-MOD-1)
  *     onReported={() => ...}  // parent typically removes the row from local state
  *     onBlocked={() => ...}   // parent typically filters all rows from this user
  *     onDeleted={() => ...}   // own content: parent removes the row (+ adjusts counts)
+ *     onModerated={() => ...} // director hid it: parent removes the row (falls back to onDeleted)
  *   />
  */
 export default function PostActionMenu({
   kind, targetId, authorId, authorHandle,
-  currentUserId, onReported, onBlocked, onDeleted,
+  currentUserId, canModerate = false, onReported, onBlocked, onDeleted, onModerated,
 }) {
   const [open, setOpen] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -36,6 +38,7 @@ export default function PostActionMenu({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [hiding, setHiding] = useState(false);
   const rootRef = useRef(null);
 
   // Close the menu on outside click / Escape. Declared before any conditional
@@ -83,6 +86,26 @@ export default function PostActionMenu({
     }
     setOpen(false);
     onDeleted?.();
+  };
+
+  const doHide = async () => {
+    if (hiding) return;
+    const ok = window.confirm(
+      kind === 'comment'
+        ? "Hide this comment from your event? It's removed from the feed but recoverable."
+        : "Hide this post from your event? It's removed from the feed but recoverable."
+    );
+    if (!ok) return;
+    setHiding(true);
+    const fn = kind === 'comment' ? hideComment : hidePost;
+    const { error: e } = await fn(targetId, true);
+    setHiding(false);
+    if (e) {
+      window.alert(e.message || 'Could not hide. Try again.');
+      return;
+    }
+    setOpen(false);
+    (onModerated || onDeleted)?.();
   };
 
   const openReport = () => {
@@ -143,6 +166,11 @@ export default function PostActionMenu({
             </button>
           ) : (
             <>
+              {canModerate && (
+                <button onClick={doHide} disabled={hiding} style={{ ...menuItemStyle, opacity: hiding ? 0.6 : 1 }}>
+                  🙈 {hiding ? 'Hiding…' : `Hide ${kind === 'comment' ? 'comment' : 'post'}`}
+                </button>
+              )}
               <button onClick={openReport} style={menuItemStyle}>🚩 Report</button>
               <button onClick={doBlock} style={menuItemStyle}>
                 🚫 Block {authorHandle ? `@${authorHandle}` : 'user'}

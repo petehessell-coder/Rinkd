@@ -586,6 +586,7 @@ export default function TournamentPage({ currentUser }) {
             tournamentId={id}
             liveGames={liveGames}
             accent={accent}
+            canModerate={isDirector}
           />
         )}
 
@@ -665,7 +666,7 @@ function LiveGameStrip({ games, accent, navigate }) {
 // shared PostCard later when there's enough reuse to justify the refactor.
 // User posts do NOT trigger pushes (only recaps do) to keep notification
 // volume sane.
-function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId, liveGames = [], accent = '#D72638' }) {
+function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId, liveGames = [], accent = '#D72638', canModerate = false }) {
   const [draft, setDraft] = useState('');
   const [postMentionIds, setPostMentionIds] = useState([]);
   const [mediaFile, setMediaFile] = useState(null);
@@ -860,9 +861,11 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
                     authorId={p.author_id}
                     authorHandle={p.profiles?.handle}
                     currentUserId={currentUser.id}
+                    canModerate={canModerate}
                     onReported={() => handleHidden(p.id)}
                     onBlocked={() => handleAuthorBlocked(p.author_id)}
                     onDeleted={() => handleHidden(p.id)}
+                    onModerated={() => handleHidden(p.id)}
                   />
                 )}
               </div>
