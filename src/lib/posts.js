@@ -5,7 +5,7 @@ import { POST_MENTIONS_EMBED, COMMENT_MENTIONS_EMBED } from './mentions';
 export async function getPosts(limit = 30, before = null) {
   let query = supabase
     .from('posts')
-    .select(`*, profiles(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position), ${POST_MENTIONS_EMBED}`)
+    .select(`*, profiles!posts_author_id_fkey(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position), ${POST_MENTIONS_EMBED}`)
     // Tournament-, league- and team-scoped posts live on their own Feed tabs.
     // Keep the global feed clean for users who haven't opted into those contexts.
     .is('tournament_id', null)
@@ -48,7 +48,7 @@ export async function getFollowingPosts(userId, limit = 30, before = null) {
 
   let query = supabase
     .from('posts')
-    .select(`*, profiles(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position), ${POST_MENTIONS_EMBED}`)
+    .select(`*, profiles!posts_author_id_fkey(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position), ${POST_MENTIONS_EMBED}`)
     .in('author_id', ids)
     // Tournament-, league- and team-scoped posts live on their own Feed tabs.
     .is('tournament_id', null)
@@ -72,7 +72,7 @@ export async function getTournamentPosts(tournamentId, limit = 50) {
   if (!tournamentId) return { data: [], error: null };
   let query = supabase
     .from('posts')
-    .select(`*, profiles(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position), ${POST_MENTIONS_EMBED}`)
+    .select(`*, profiles!posts_author_id_fkey(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position), ${POST_MENTIONS_EMBED}`)
     .eq('tournament_id', tournamentId)
     .eq('is_hidden', false)
     .order('created_at', { ascending: false })
@@ -90,7 +90,7 @@ export async function getLeaguePosts(leagueId, limit = 50) {
   if (!leagueId) return { data: [], error: null };
   let query = supabase
     .from('posts')
-    .select(`*, profiles(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position), ${POST_MENTIONS_EMBED}`)
+    .select(`*, profiles!posts_author_id_fkey(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position), ${POST_MENTIONS_EMBED}`)
     .eq('league_id', leagueId)
     .eq('is_hidden', false)
     .order('created_at', { ascending: false })
@@ -197,7 +197,7 @@ export async function deletePost(postId) {
 export async function getTeamPosts(teamId, limit = 50) {
   let query = supabase
     .from('posts')
-    .select(`*, profiles(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position), ${POST_MENTIONS_EMBED}`)
+    .select(`*, profiles!posts_author_id_fkey(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position), ${POST_MENTIONS_EMBED}`)
     .eq('team_id', teamId)
     .eq('is_hidden', false)
     .order('created_at', { ascending: false })
@@ -220,7 +220,7 @@ export async function getGalleryPosts({ tournamentId = null, leagueId = null, to
   if (!tournamentId && !leagueId) return { data: [], error: null };
   let query = supabase
     .from('posts')
-    .select(`*, profiles(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position), tournament_teams(id, team_name, logo_url), league_teams(id, team_name, logo_color, logo_initials), ${POST_MENTIONS_EMBED}`)
+    .select(`*, profiles!posts_author_id_fkey(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position), tournament_teams(id, team_name, logo_url), league_teams(id, team_name, logo_color, logo_initials), ${POST_MENTIONS_EMBED}`)
     .not('media_url', 'is', null)
     .eq('is_hidden', false)
     .order('created_at', { ascending: false })

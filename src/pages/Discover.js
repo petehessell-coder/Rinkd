@@ -112,7 +112,7 @@ function TrendingRail({ navigate }) {
     const sevenDaysAgo = new Date(Date.now() - 7 * 86400_000).toISOString();
     const { data, error: qErr } = await supabase
       .from('posts')
-      .select('id, content, media_url, media_type, likes, comment_count, created_at, profiles(id, name, handle, avatar_color, avatar_initials, tier)')
+      .select('id, content, media_url, media_type, likes, comment_count, created_at, profiles!posts_author_id_fkey(id, name, handle, avatar_color, avatar_initials, tier)')
       .gte('created_at', sevenDaysAgo)
       .order('likes', { ascending: false })
       .limit(6);
