@@ -684,11 +684,11 @@ export default function ScorerView() {
                     onClick={!isLocked ? () => openGoalForTeam(side) : undefined}
                     title={!isLocked ? 'Tap to log a goal' : undefined}
                     style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 44, color: '#F4F7FA', width: 56, textAlign: 'center', lineHeight: 1, cursor: !isLocked ? 'pointer' : 'default', WebkitTapHighlightColor: 'transparent' }}>{score}</div>
-                  {!isLocked && <ScoreBtn onClick={() => changeScore(side, 1)} variant="plus">+</ScoreBtn>}
+                  {!isLocked && <ScoreBtn onClick={() => openGoalForTeam(side)} variant="plus">+</ScoreBtn>}
                 </div>
               </div>
             ))}
-            {!isLocked && <div style={{ fontSize: 10, color: 'rgba(244,247,250,0.25)', textAlign: 'center', marginTop: 8 }}>Tap a team or its score to log a goal · use +/− to correct</div>}
+            {!isLocked && <div style={{ fontSize: 10, color: 'rgba(244,247,250,0.25)', textAlign: 'center', marginTop: 8 }}>Tap a team, its score, or + to log a goal · use − to fix the score</div>}
           </div>
 
           {/* Goal log section */}
