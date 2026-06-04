@@ -1,11 +1,9 @@
 import { supabase } from './supabase';
 
-// LEAGUE-DIV-1 (M1): all league-standings reads go through this constant so the
-// M4 cutover is a one-line flip. On `feature/league-divisions` this points at
-// the staged division-scoped + OTL view (`league_standings_md`); `main` stays
-// on the live `league_standings` until the M4 rename. The staged view is proven
-// byte-identical to live for single-division leagues (KOHA/ESHL/CSHL).
-export const STANDINGS_VIEW = 'league_standings_md';
+// LEAGUE-DIV-1: all league-standings reads go through this constant. M4 cutover
+// (Jun 2) renamed the staged division-scoped + OTL view into place, so this now
+// points at the live `league_standings` (was `league_standings_md` on-branch).
+export const STANDINGS_VIEW = 'league_standings';
 
 export async function listLeagues({ search = '' } = {}) {
   // TODO: paginate — cap to avoid pulling the entire leagues table once the
