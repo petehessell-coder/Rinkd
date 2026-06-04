@@ -16,6 +16,70 @@ export async function listLeagueDivisions(leagueId) {
   return data || [];
 }
 
+// ── M3 commissioner CRUD (writes go through league_divisions RLS, which is
+//    gated on is_league_commissioner; the client can't bypass it). ──
+
+/** Create a division at the end of the order. Returns the new row. */
+export async function createLeagueDivision(leagueId, name) {
+  const { data: last } = await supabase
+    .from('league_divisions')
+    .select('sort_order')
+    .eq('league_id', leagueId)
+    .order('sort_order', { ascending: false })
+    .limit(1);
+  const nextSort = ((last?.[0]?.sort_order) ?? -1) + 1;
+  const { data, error } = await supabase
+    .from('league_divisions')
+    .insert({ league_id: leagueId, name: (name || '').trim() || 'New Division', sort_order: nextSort })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+/** Rename (and/or update settings on) a division. */
+export async function updateLeagueDivision(id, updates) {
+  const { data, error } = await supabase
+    .from('league_divisions')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Delete a division. Per the M1 FK rules this CASCADE-removes its league_teams
+ * links (the teams' membership in this league) and SET NULLs its games'
+ * division_id (games survive, unscoped). Callers MUST warn first.
+ */
+export async function deleteLeagueDivision(id) {
+  const { error } = await supabase.from('league_divisions').delete().eq('id', id);
+  if (error) throw error;
+}
+
+/** Persist a new order — sets sort_order = array index for each id. */
+export async function reorderLeagueDivisions(orderedIds) {
+  // Sequential to keep it simple; division counts are small (≤ a few dozen).
+  for (let i = 0; i < orderedIds.length; i++) {
+    const { error } = await supabase
+      .from('league_divisions')
+      .update({ sort_order: i })
+      .eq('id', orderedIds[i]);
+    if (error) throw error;
+  }
+}
+
+/** Assign (or clear) a league team's division. Uses the M1 league_teams_update policy. */
+export async function assignLeagueTeamDivision(leagueTeamId, divisionId) {
+  const { error } = await supabase
+    .from('league_teams')
+    .update({ division_id: divisionId || null })
+    .eq('id', leagueTeamId);
+  if (error) throw error;
+}
+
 /**
  * The current user's division in THIS league, resolved via team membership:
  *   user → team_members (active/pending) → teams → league_teams (this league) → division_id

@@ -80,9 +80,9 @@ export async function getLeagueTeams(leagueId) {
   return data || [];
 }
 
-export async function addLeagueTeam(leagueId, { teamId = null, teamName, logoColor, logoInitials, division = '' }) {
+export async function addLeagueTeam(leagueId, { teamId = null, teamName, logoColor, logoInitials, division = '', divisionId = null }) {
   const { data, error } = await supabase.from('league_teams')
-    .insert({ league_id: leagueId, team_id: teamId || null, team_name: teamName, logo_color: logoColor, logo_initials: logoInitials, division })
+    .insert({ league_id: leagueId, team_id: teamId || null, team_name: teamName, logo_color: logoColor, logo_initials: logoInitials, division, division_id: divisionId || null })
     .select().single();
   if (error) throw error;
   return data;
