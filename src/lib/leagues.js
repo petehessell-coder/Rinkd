@@ -1,5 +1,10 @@
 import { supabase } from './supabase';
 
+// LEAGUE-DIV-1: all league-standings reads go through this constant. M4 cutover
+// (Jun 2) renamed the staged division-scoped + OTL view into place, so this now
+// points at the live `league_standings` (was `league_standings_md` on-branch).
+export const STANDINGS_VIEW = 'league_standings';
+
 export async function listLeagues({ search = '' } = {}) {
   // TODO: paginate — cap to avoid pulling the entire leagues table once the
   // directory grows. The search box lets users find anything beyond the cap.
@@ -73,9 +78,9 @@ export async function getLeagueTeams(leagueId) {
   return data || [];
 }
 
-export async function addLeagueTeam(leagueId, { teamId = null, teamName, logoColor, logoInitials, division = '' }) {
+export async function addLeagueTeam(leagueId, { teamId = null, teamName, logoColor, logoInitials, division = '', divisionId = null }) {
   const { data, error } = await supabase.from('league_teams')
-    .insert({ league_id: leagueId, team_id: teamId || null, team_name: teamName, logo_color: logoColor, logo_initials: logoInitials, division })
+    .insert({ league_id: leagueId, team_id: teamId || null, team_name: teamName, logo_color: logoColor, logo_initials: logoInitials, division, division_id: divisionId || null })
     .select().single();
   if (error) throw error;
   return data;
@@ -109,10 +114,11 @@ export async function getLeagueGames(leagueId) {
   return data || [];
 }
 
-export async function addLeagueGame({ league_id, home_team_id, away_team_id, rink_id, location, start_time, live_barn_venue_id, youtube_url }) {
+export async function addLeagueGame({ league_id, home_team_id, away_team_id, rink_id, location, start_time, live_barn_venue_id, youtube_url, division_id = null }) {
   const { data, error } = await supabase.from('league_games')
     .insert({
       league_id, home_team_id, away_team_id, rink_id, location, start_time,
+      division_id: division_id || null,
       live_barn_venue_id: live_barn_venue_id || null,
       youtube_url: (youtube_url || '').trim() || null,
       status: 'scheduled',
@@ -128,12 +134,15 @@ export async function updateLeagueGame(id, updates) {
   return data;
 }
 
-export async function getLeagueStandings(leagueId) {
-  const { data, error } = await supabase
-    .from('league_standings')
+export async function getLeagueStandings(leagueId, divisionId = null) {
+  let q = supabase
+    .from(STANDINGS_VIEW)
     .select('*')
-    .eq('league_id', leagueId)
-    .order('rank', { ascending: true });
+    .eq('league_id', leagueId);
+  // Optional division scope (M2+ passes the selected division; null = whole
+  // league, which for single-division leagues is the one "Main" division).
+  if (divisionId) q = q.eq('division_id', divisionId);
+  const { data, error } = await q.order('rank', { ascending: true });
   if (error) throw error;
   return data || [];
 }

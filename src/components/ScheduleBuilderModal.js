@@ -26,7 +26,7 @@ const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
  * `rinkByTeam` — a map from team_id → rink_id, derived from existing games).
  */
 export default function ScheduleBuilderModal({
-  leagueId, leagueTeams, rinkByTeam, defaultStartDate, onClose, onPublished,
+  leagueId, leagueTeams, rinkByTeam, defaultStartDate, onClose, onPublished, divisionId = null,
 }) {
   // Wizard form state
   const today = new Date();
@@ -76,7 +76,7 @@ export default function ScheduleBuilderModal({
     if (!proposed) return;
     setSubmitting(true);
     setError(null);
-    const { data, error } = await bulkInsertLeagueGames(leagueId, proposed.games);
+    const { data, error } = await bulkInsertLeagueGames(leagueId, proposed.games, divisionId);
     setSubmitting(false);
     if (error) { setError(error.message); return; }
     setResult({ inserted: data?.length || 0 });

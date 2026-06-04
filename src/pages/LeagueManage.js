@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import DateTimePicker from '../components/DateTimePicker';
 import { getLeague, getLeagueTeams, getLeagueGames, getLeagueStandings, updateLeague, addLeagueTeam, removeLeagueTeam, addLeagueGame, linkLeagueTeam, getUserLeagueRole } from '../lib/leagues';
+import { listLeagueDivisions, createLeagueDivision, updateLeagueDivision, deleteLeagueDivision, reorderLeagueDivisions, assignLeagueTeamDivision } from '../lib/leagueDivisions';
+import DivisionPicker from '../components/DivisionPicker';
 import { getLeagueRegistrations, updateRegistrationStatus, approveRegistration } from '../lib/registrations';
 import { leaguePayoutsReady, startConnectOnboarding } from '../lib/stripeConnect';
 import { generatePlayoffRoundOne, generatePlayoffNextRound, SUPPORTED_BRACKET_SIZES } from '../lib/leaguePlayoffGenerator';
@@ -80,6 +82,13 @@ function ManageLeague({ id, navigate }) {
   const [error, setError] = useState(null);
   const [isCommissioner, setIsCommissioner] = useState(false);
   const [registrations, setRegistrations] = useState([]);
+  // LEAGUE-DIV-1 M3 — divisions + the active scope. selectedDivisionId is set
+  // even for single-division leagues (to the one "Main" division) so newly
+  // added teams always land in a division.
+  const [divisions, setDivisions] = useState([]);
+  const [selectedDivisionId, setSelectedDivisionId] = useState(null);
+  const [newDivisionName, setNewDivisionName] = useState('');
+  const [divBusy, setDivBusy] = useState(false);
   const [showScheduleBuilder, setShowScheduleBuilder] = useState(false);
   const [teamSearch, setTeamSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -135,16 +144,21 @@ function ManageLeague({ id, navigate }) {
       // Fetch rinks alongside league/teams/games so the single-game form can
       // attach a real rink_id (and the rink shows up on the game cards via the
       // rinks join in getLeagueGames). listRinks() is small and cheap.
-      const [l, t, g, r, s, role, regs] = await Promise.all([
+      const [l, t, g, r, s, role, regs, dv] = await Promise.all([
         getLeague(id), getLeagueTeams(id), getLeagueGames(id),
         listRinks().catch(() => []),
         getLeagueStandings(id).catch(() => []),
         getUserLeagueRole(id).catch(() => null),
         getLeagueRegistrations(id).catch(() => []),
+        listLeagueDivisions(id).catch(() => []),
       ]);
       setLeague(l); setTeams(t); setGames(g); setRinks(r || []); setStandings(s || []);
       setIsCommissioner(role === 'commissioner');
       setRegistrations(regs || []);
+      setDivisions(dv || []);
+      // Keep the scope valid; default to the first division (works for single-
+      // division leagues too — new teams then land in the "Main" division).
+      setSelectedDivisionId(prev => (prev && (dv || []).some(d => d.id === prev)) ? prev : ((dv || [])[0]?.id || null));
       if (t.length >= 2) setGameForm(p => ({ ...p, home_team_id: t[0].id, away_team_id: t[1].id }));
     } catch(e) { console.error(e); }
     finally { setLoading(false); }
@@ -172,7 +186,7 @@ function ManageLeague({ id, navigate }) {
 
   const handleAddLinkedTeam = async (team) => {
     try {
-      await addLeagueTeam(id, { teamId: team.id, teamName: team.name, logoColor: team.logo_color, logoInitials: team.logo_initials });
+      await addLeagueTeam(id, { teamId: team.id, teamName: team.name, logoColor: team.logo_color, logoInitials: team.logo_initials, divisionId: selectedDivisionId });
       setTeamSearch(''); setSearchResults([]);
       await load();
       // Send league invite to team manager
@@ -203,6 +217,7 @@ function ManageLeague({ id, navigate }) {
         p_logo_color: DEFAULT_TEAM_COLOR,
         p_logo_initials: initials,
         p_division: '',
+        p_division_id: selectedDivisionId,
       });
       if (rpcErr) throw rpcErr;
       if (unlinkedEmail.trim()) {
@@ -237,13 +252,62 @@ function ManageLeague({ id, navigate }) {
         start_time: gameForm.start_time,
         live_barn_venue_id,
         youtube_url,
+        division_id: selectedDivisionId,
       });
       setGameForm(p => ({ ...p, rink_id: '', location: '', start_time: '', live_barn_venue_id: '', youtube_url: '' }));
       await load();
     } catch(e) { setError(e.message); }
   };
 
-  const MANAGE_TABS = ['Teams', 'Schedule', 'Playoffs', ...(isCommissioner ? ['Registrations'] : []), 'Settings'];
+  // ── LEAGUE-DIV-1 M3 — division management ──
+  const handleAddDivision = async () => {
+    const name = newDivisionName.trim();
+    if (!name) { setError('Division name required'); return; }
+    setDivBusy(true);
+    try { await createLeagueDivision(id, name); setNewDivisionName(''); await load(); }
+    catch (e) { setError(e.message); }
+    finally { setDivBusy(false); }
+  };
+  const handleRenameDivision = async (divId, name) => {
+    const nm = (name || '').trim();
+    if (!nm) return;
+    try { await updateLeagueDivision(divId, { name: nm }); await load(); }
+    catch (e) { setError(e.message); }
+  };
+  const handleDeleteDivision = async (div) => {
+    if (divisions.length <= 1) { setError('A league needs at least one division — add another before deleting this one.'); return; }
+    const teamCount = teams.filter(t => t.division_id === div.id).length;
+    const gameCount = games.filter(g => g.division_id === div.id).length;
+    const ok = window.confirm(
+      `Delete division "${div.name}"?\n\n` +
+      `• ${teamCount} team${teamCount === 1 ? '' : 's'} will be removed from the league\n` +
+      `• ${gameCount} game${gameCount === 1 ? '' : 's'} will be unassigned (kept, not deleted)\n\n` +
+      `This can't be undone.`
+    );
+    if (!ok) return;
+    try { await deleteLeagueDivision(div.id); if (selectedDivisionId === div.id) setSelectedDivisionId(null); await load(); }
+    catch (e) { setError(e.message); }
+  };
+  const handleMoveDivision = async (index, dir) => {
+    const j = index + dir;
+    if (j < 0 || j >= divisions.length) return;
+    const next = [...divisions];
+    [next[index], next[j]] = [next[j], next[index]];
+    try { await reorderLeagueDivisions(next.map(d => d.id)); await load(); }
+    catch (e) { setError(e.message); }
+  };
+  const handleAssignTeamDivision = async (leagueTeamId, divId) => {
+    try { await assignLeagueTeamDivision(leagueTeamId, divId); await load(); }
+    catch (e) { setError(e.message); }
+  };
+
+  const multiDivision = divisions.length > 1;
+  // Teams tab list scopes to the selected division when multi (the picker also
+  // targets which division new teams are added to). Single-division: all teams.
+  const scopedTeamsList = multiDivision && selectedDivisionId ? teams.filter(t => t.division_id === selectedDivisionId) : teams;
+  const scopedGamesList = multiDivision && selectedDivisionId ? games.filter(g => g.division_id === selectedDivisionId) : games;
+  const scopedStandingsList = multiDivision && selectedDivisionId ? standings.filter(r => r.division_id === selectedDivisionId) : standings;
+  const MANAGE_TABS = ['Teams', 'Divisions', 'Schedule', 'Playoffs', ...(isCommissioner ? ['Registrations'] : []), 'Settings'];
 
   if (loading) return <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Loading...</div>;
 
@@ -284,6 +348,13 @@ function ManageLeague({ id, navigate }) {
         {/* TEAMS */}
         {activeTab === 'Teams' && (
           <>
+            {multiDivision && (
+              <>
+                <SecLabel>Division</SecLabel>
+                <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.45)', marginBottom: 8 }}>New teams are added to this division, and the list below shows it. Use a team's dropdown to move it.</div>
+                <DivisionPicker divisions={divisions} selectedId={selectedDivisionId} onSelect={setSelectedDivisionId} accent={C.red} />
+              </>
+            )}
             <SecLabel>Add Team</SecLabel>
             <Card>
               <Field label="Team Name *">
@@ -323,10 +394,10 @@ function ManageLeague({ id, navigate }) {
               </div>
             </Card>
 
-            <SecLabel>League Teams ({teams.length})</SecLabel>
+            <SecLabel>League Teams ({scopedTeamsList.length})</SecLabel>
             <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
-              {teams.length === 0 && <div style={{ padding: 16, fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center' }}>No teams yet — add above</div>}
-              {teams.map(lt => {
+              {scopedTeamsList.length === 0 && <div style={{ padding: 16, fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center' }}>No teams yet — add above</div>}
+              {scopedTeamsList.map(lt => {
                 const name = lt.team?.name || lt.team_name || 'Unknown';
                 const color = lt.team?.logo_color || lt.logo_color || C.blue;
                 const initials = lt.team?.logo_initials || lt.logo_initials || name.slice(0, 2).toUpperCase();
@@ -356,6 +427,13 @@ function ManageLeague({ id, navigate }) {
                           title={isClaimed ? 'Add a co-manager' : 'Assign a manager to this team'}>
                           {isAssigning ? 'Cancel' : (isClaimed ? '+ Co-manager' : '+ Manager')}
                         </button>
+                      )}
+                      {multiDivision && (
+                        <select value={lt.division_id || ''} onChange={e => handleAssignTeamDivision(lt.id, e.target.value)}
+                          title="Move team to division"
+                          style={{ background: 'rgba(46,91,140,0.25)', border: `0.5px solid ${C.border}`, color: C.ice, borderRadius: 8, padding: '5px 8px', fontSize: 11, fontFamily: 'Barlow, sans-serif', cursor: 'pointer', maxWidth: 110 }}>
+                          {divisions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                        </select>
                       )}
                       <button onClick={() => removeLeagueTeam(lt.id).then(load)}
                         style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.2)', cursor: 'pointer', fontSize: 16 }}
@@ -425,14 +503,62 @@ function ManageLeague({ id, navigate }) {
           </>
         )}
 
+        {/* DIVISIONS (LEAGUE-DIV-1 M3) */}
+        {activeTab === 'Divisions' && (
+          <>
+            <SecLabel>Divisions</SecLabel>
+            <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.45)', marginBottom: 12, lineHeight: 1.5 }}>
+              Each division has its own teams, standings, schedule, and playoffs — all inheriting this league's rules. A single-division league needs no setup; the default "Main" division is already here. Add divisions to split the league (e.g. CAHL's D1 / 4B / 5C).
+            </div>
+            <Card>
+              {divisions.length === 0 && <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.3)', padding: '6px 0' }}>No divisions yet.</div>}
+              {divisions.map((d, i) => {
+                const teamCount = teams.filter(t => t.division_id === d.id).length;
+                const arrow = (disabled) => ({ background: 'none', border: 'none', color: disabled ? 'rgba(244,247,250,0.15)' : 'rgba(244,247,250,0.55)', cursor: disabled ? 'default' : 'pointer', fontSize: 9, lineHeight: 1.1, padding: 0 });
+                return (
+                  <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0', borderBottom: i < divisions.length - 1 ? '0.5px solid rgba(244,247,250,0.06)' : 'none' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <button onClick={() => handleMoveDivision(i, -1)} disabled={i === 0} style={arrow(i === 0)}>▲</button>
+                      <button onClick={() => handleMoveDivision(i, 1)} disabled={i === divisions.length - 1} style={arrow(i === divisions.length - 1)}>▼</button>
+                    </div>
+                    <input defaultValue={d.name}
+                      onBlur={e => { const v = e.target.value.trim(); if (v && v !== d.name) handleRenameDivision(d.id, v); }}
+                      style={{ ...inputStyle, flex: 1, marginBottom: 0 }} />
+                    <span style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', whiteSpace: 'nowrap' }}>{teamCount} team{teamCount === 1 ? '' : 's'}</span>
+                    <button onClick={() => handleDeleteDivision(d)} title="Delete division"
+                      style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.3)', cursor: 'pointer', fontSize: 15 }}
+                      onMouseEnter={e => e.currentTarget.style.color = C.red} onMouseLeave={e => e.currentTarget.style.color = 'rgba(244,247,250,0.3)'}>🗑</button>
+                  </div>
+                );
+              })}
+            </Card>
+            <SecLabel>Add Division</SecLabel>
+            <Card>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input style={{ ...inputStyle, flex: 1, marginBottom: 0 }} value={newDivisionName} onChange={e => setNewDivisionName(e.target.value)}
+                  placeholder='e.g. "5A-North", "Lower Draft"' onKeyDown={e => { if (e.key === 'Enter') handleAddDivision(); }} />
+                <Btn onClick={handleAddDivision} disabled={divBusy || !newDivisionName.trim()}>{divBusy ? 'Adding…' : 'Add'}</Btn>
+              </div>
+            </Card>
+          </>
+        )}
+
         {activeTab === 'Schedule' && (
           <>
+            {multiDivision && (
+              <>
+                <SecLabel>Division</SecLabel>
+                <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.45)', marginBottom: 8 }}>Schedule + games below are scoped to this division. Generate one division at a time.</div>
+                <DivisionPicker divisions={divisions} selectedId={selectedDivisionId} onSelect={setSelectedDivisionId} accent={C.red} />
+              </>
+            )}
             <SecLabel>⚡ Smart Generator — Target Games Per Team</SecLabel>
             <Card>
               <SmartScheduleGenerator
                 leagueId={id}
-                teams={teams}
+                teams={scopedTeamsList}
                 rinks={rinks}
+                divisionId={selectedDivisionId}
                 onPublished={async () => { await load(); }}
               />
             </Card>
@@ -445,8 +571,8 @@ function ManageLeague({ id, navigate }) {
                 conflict detection.
               </div>
               <button onClick={() => setShowScheduleBuilder(true)}
-                disabled={!teams || teams.length < 2}
-                style={{ padding: '11px 18px', borderRadius: 999, background: teams.length < 2 ? C.border : C.blue, border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: teams.length < 2 ? 'not-allowed' : 'pointer', fontFamily: 'Barlow, sans-serif', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                disabled={!scopedTeamsList || scopedTeamsList.length < 2}
+                style={{ padding: '11px 18px', borderRadius: 999, background: scopedTeamsList.length < 2 ? C.border : C.blue, border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: scopedTeamsList.length < 2 ? 'not-allowed' : 'pointer', fontFamily: 'Barlow, sans-serif', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 16 }}>📅</span>
                 <span>Open advanced builder</span>
               </button>
@@ -457,13 +583,13 @@ function ManageLeague({ id, navigate }) {
               <Field label="Home Team">
                 <select style={inputStyle} value={gameForm.home_team_id} onChange={e => setGameForm(p => ({ ...p, home_team_id: e.target.value }))}>
                   <option value="">Select home team</option>
-                  {teams.map(lt => <option key={lt.id} value={lt.id}>{lt.team?.name || lt.team_name}</option>)}
+                  {scopedTeamsList.map(lt => <option key={lt.id} value={lt.id}>{lt.team?.name || lt.team_name}</option>)}
                 </select>
               </Field>
               <Field label="Away Team">
                 <select style={inputStyle} value={gameForm.away_team_id} onChange={e => setGameForm(p => ({ ...p, away_team_id: e.target.value }))}>
                   <option value="">Select away team</option>
-                  {teams.map(lt => <option key={lt.id} value={lt.id}>{lt.team?.name || lt.team_name}</option>)}
+                  {scopedTeamsList.map(lt => <option key={lt.id} value={lt.id}>{lt.team?.name || lt.team_name}</option>)}
                 </select>
               </Field>
               <Field label="Rink">
@@ -488,10 +614,10 @@ function ManageLeague({ id, navigate }) {
               <Btn onClick={handleAddGame}>+ Add Game</Btn>
             </Card>
 
-            <SecLabel>Schedule ({games.length} games)</SecLabel>
+            <SecLabel>Schedule ({scopedGamesList.length} games)</SecLabel>
             <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
-              {games.length === 0 && <div style={{ padding: 16, fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center' }}>No games yet — try Generate Schedule above</div>}
-              {games.map(g => {
+              {scopedGamesList.length === 0 && <div style={{ padding: 16, fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center' }}>No games yet — try Generate Schedule above</div>}
+              {scopedGamesList.map(g => {
                 const home = g.home_lt?.team?.name || g.home_lt?.team_name;
                 const away = g.away_lt?.team?.name || g.away_lt?.team_name;
                 const date = new Date(g.start_time);
@@ -533,22 +659,33 @@ function ManageLeague({ id, navigate }) {
           </>
         )}
 
-        {/* PLAYOFFS — Phase 3b */}
+        {/* PLAYOFFS — Phase 3b (division-scoped in M4) */}
         {activeTab === 'Playoffs' && (
-          <PlayoffsTab
-            leagueId={id}
-            teams={teams}
-            standings={standings}
-            games={games}
-            rinks={rinks}
-            onPublished={async () => { await load(); }}
-          />
+          <>
+            {multiDivision && (
+              <>
+                <SecLabel>Division</SecLabel>
+                <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.45)', marginBottom: 8 }}>Bracket seeds from this division's standings.</div>
+                <DivisionPicker divisions={divisions} selectedId={selectedDivisionId} onSelect={setSelectedDivisionId} accent={C.red} />
+              </>
+            )}
+            <PlayoffsTab
+              leagueId={id}
+              teams={scopedTeamsList}
+              standings={scopedStandingsList}
+              games={scopedGamesList}
+              rinks={rinks}
+              divisionId={selectedDivisionId}
+              onPublished={async () => { await load(); }}
+            />
+          </>
         )}
 
         {showScheduleBuilder && (
           <ScheduleBuilderModal
             leagueId={id}
-            leagueTeams={teams}
+            leagueTeams={scopedTeamsList}
+            divisionId={selectedDivisionId}
             rinkByTeam={rinkByTeamMap(games)}
             onClose={() => setShowScheduleBuilder(false)}
             onPublished={async () => { setShowScheduleBuilder(false); await load(); }}
@@ -581,7 +718,7 @@ function ManageLeague({ id, navigate }) {
 // games-per-day / rink / first puck / spacing) and write through
 // bulkInsertLeagueGames with phase='playoffs' + round='quarterfinal' |
 // 'semifinal' | 'final' | 'bronze'.
-function PlayoffsTab({ leagueId, teams, standings, games, rinks, onPublished }) {
+function PlayoffsTab({ leagueId, teams, standings, games, rinks, divisionId = null, onPublished }) {
   const today = new Date().toISOString().slice(0, 10);
   const [bracketSize, setBracketSize] = useState(() => {
     // Pick the largest supported size that fits the team count.
@@ -673,7 +810,7 @@ function PlayoffsTab({ leagueId, teams, standings, games, rinks, onPublished }) 
     if (busy || !rows || rows.length === 0) return;
     setBusy(true);
     setError(errorOverride || null);
-    const { error: insertErr } = await bulkInsertLeagueGames(leagueId, rows);
+    const { error: insertErr } = await bulkInsertLeagueGames(leagueId, rows, divisionId);
     setBusy(false);
     if (insertErr) { setError(insertErr.message || 'Insert failed.'); return; }
     await onPublished?.();
@@ -958,7 +1095,7 @@ function firstRoundLabelFromSize(n) {
 // games-per-team / total-games / end-date before committing.
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-function SmartScheduleGenerator({ leagueId, teams, rinks, onPublished }) {
+function SmartScheduleGenerator({ leagueId, teams, rinks, divisionId = null, onPublished }) {
   const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
     targetGamesPerTeam: 20,
@@ -1015,7 +1152,7 @@ function SmartScheduleGenerator({ leagueId, teams, rinks, onPublished }) {
       return;
     }
     setBusy(true);
-    const { error: insertErr } = await bulkInsertLeagueGames(leagueId, preview.rows);
+    const { error: insertErr } = await bulkInsertLeagueGames(leagueId, preview.rows, divisionId);
     setBusy(false);
     if (insertErr) {
       setError(insertErr.message || 'Insert failed.');

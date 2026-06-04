@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import SEO from '../components/SEO';
 import MapLink from '../components/MapLink';
 import { getLeague, getLeagueTeams, getLeagueGames, getLeagueStandings, getUserLeagueRole } from '../lib/leagues';
+import { listLeagueDivisions, getMyDivisionInLeague } from '../lib/leagueDivisions';
+import DivisionPicker from '../components/DivisionPicker';
 import { isExtraCommissioner as isExtraCommissionerLookup } from '../lib/leagueCommissioners';
 import { followLeague, unfollowLeague, isFollowingLeague } from '../lib/leagueSubscriptions';
 import { subscribeToPush, isPushSubscribed } from '../lib/push';
@@ -144,10 +146,16 @@ function GameRow({ game, isCommissioner, navigate }) {
 export default function LeaguePage({ currentUser, profile }) {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [league, setLeague] = useState(null);
   const [teams, setTeams] = useState([]);
   const [games, setGames] = useState([]);
   const [standings, setStandings] = useState([]);
+  // LEAGUE-DIV-1 M2 — divisions + the active scope. Single-division leagues
+  // (KOHA/ESHL) get one "Main" division → no picker, no scoping change.
+  const [divisions, setDivisions] = useState([]);
+  const [selectedDivisionId, setSelectedDivisionId] = useState(null);
+  const [teamSearch, setTeamSearch] = useState('');
   const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -176,11 +184,12 @@ export default function LeaguePage({ currentUser, profile }) {
       // userRole comes back as null for anon users — that's fine, we render
       // PublicLeagueLanding before any role-gated UI. The other four queries
       // all hit public-read policies so they work for anon too.
-      const [l, t, g, s, r] = await Promise.all([
+      const [l, t, g, s, r, dv] = await Promise.all([
         getLeague(id), getLeagueTeams(id), getLeagueGames(id), getLeagueStandings(id),
         currentUser ? getUserLeagueRole(id) : Promise.resolve(null),
+        listLeagueDivisions(id),
       ]);
-      setLeague(l); setTeams(t); setGames(g); setStandings(s); setUserRole(r);
+      setLeague(l); setTeams(t); setGames(g); setStandings(s); setUserRole(r); setDivisions(dv);
     } catch(e) {
       // Distinguish a genuine fetch failure from "league not found" — both
       // used to render the same generic "League not found" screen, which made
@@ -221,6 +230,27 @@ export default function LeaguePage({ currentUser, profile }) {
     isExtraCommissionerLookup(currentUser.id, id).then((v) => { if (!cancelled) setIsExtraCommissioner(v); });
     return () => { cancelled = true; };
   }, [id, currentUser?.id]);
+
+  // Resolve the active division (LEAGUE-DIV-1 M2, Decision #6). Priority:
+  // ?division= URL param → the user's OWN division (team membership) → first by
+  // sort_order. Re-runs only when the current selection is missing/invalid for
+  // this league (so a manual switch is never overridden, and navigating to a
+  // different league re-resolves).
+  useEffect(() => {
+    if (!divisions.length) return;
+    if (selectedDivisionId && divisions.some((d) => d.id === selectedDivisionId)) return;
+    let cancelled = false;
+    (async () => {
+      const urlDiv = searchParams.get('division');
+      if (urlDiv && divisions.some((d) => d.id === urlDiv)) { if (!cancelled) setSelectedDivisionId(urlDiv); return; }
+      if (currentUser?.id) {
+        const mine = await getMyDivisionInLeague(currentUser.id, id);
+        if (!cancelled && mine && divisions.some((d) => d.id === mine)) { setSelectedDivisionId(mine); return; }
+      }
+      if (!cancelled) setSelectedDivisionId(divisions[0].id);
+    })();
+    return () => { cancelled = true; };
+  }, [divisions, selectedDivisionId, currentUser?.id, id, searchParams]);
 
   // Lazy-load the league-scoped feed the first time the Feed tab opens.
   useEffect(() => {
@@ -293,6 +323,29 @@ export default function LeaguePage({ currentUser, profile }) {
     if (!followErr) setIsFollowing(true);
   };
 
+  // Switch division + reflect it in the URL (shareable link + reload-safe).
+  const selectDivision = (divId) => {
+    setSelectedDivisionId(divId);
+    const next = new URLSearchParams(searchParams);
+    if (divId) next.set('division', divId); else next.delete('division');
+    setSearchParams(next, { replace: true });
+  };
+
+  // Shared team-row renderer for the Teams tab (flat list + grouped-by-division).
+  const renderLeagueTeamRow = (lt) => (
+    <div key={lt.id} onClick={() => navigate('/team/' + lt.team_id)}
+      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)', cursor: 'pointer' }}
+      onMouseEnter={e => e.currentTarget.style.background = 'rgba(46,91,140,0.1)'}
+      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+      <TeamLogo team={lt.team || { name: lt.team_name, logo_color: lt.logo_color, logo_initials: lt.logo_initials }} size={36} />
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{lt.team?.name || lt.team_name}</div>
+        <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>{lt.team?.home_rink || lt.team?.location || ''}</div>
+      </div>
+      <div style={{ color: 'rgba(244,247,250,0.25)', fontSize: 18 }}>›</div>
+    </div>
+  );
+
   if (loading) return <Layout profile={profile}><div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Loading...</div></Layout>;
   if (error) return (
     <Layout profile={profile}>
@@ -351,11 +404,26 @@ export default function LeaguePage({ currentUser, profile }) {
   // come back through the isExtraCommissioner async lookup. Either path
   // grants the same Manage button + scorer affordances.
   const isCommissioner = userRole === 'commissioner' || isExtraCommissioner;
+
+  // LEAGUE-DIV-1 M2 — scope the competitive views (Schedule + Standings) to the
+  // selected division. Single-division leagues (multiDivision=false) pass the
+  // full arrays through untouched → byte-identical to today. The Teams tab is a
+  // cross-division finder (handled in its own render), so it is NOT scoped here.
+  const multiDivision = divisions.length > 1;
+  const scopedGames = multiDivision && selectedDivisionId ? games.filter(g => g.division_id === selectedDivisionId) : games;
+  const scopedStandings = multiDivision && selectedDivisionId ? standings.filter(r => r.division_id === selectedDivisionId) : standings;
+
+  // OTL column appears only once real OTL data exists (any team has an OTL).
+  // Until M3's ScorerView capture marks a game OT/SO, every league renders
+  // exactly as today — the safest reading of the byte-identical guardrail.
+  const showOtl = scopedStandings.some(r => (r.otl || 0) > 0);
+  const standingsCols = showOtl ? '1fr 26px 26px 26px 30px 26px 26px 34px' : '1fr 28px 28px 28px 28px 28px 34px';
+
   const now = new Date();
-  const liveGames = games.filter(g => g.status === 'live');
-  const upcomingGames = games.filter(g => g.status === 'scheduled' && new Date(g.start_time) >= now);
-  const recentGames = games.filter(g => g.status === 'final').slice(-5).reverse();
-  const allGamesByWeek = games.reduce((acc, g) => {
+  const liveGames = scopedGames.filter(g => g.status === 'live');
+  const upcomingGames = scopedGames.filter(g => g.status === 'scheduled' && new Date(g.start_time) >= now);
+  const recentGames = scopedGames.filter(g => g.status === 'final').slice(-5).reverse();
+  const allGamesByWeek = scopedGames.reduce((acc, g) => {
     const week = getWeekLabel(g.start_time);
     if (!acc[week]) acc[week] = [];
     acc[week].push(g);
@@ -454,6 +522,9 @@ export default function LeaguePage({ currentUser, profile }) {
         </div>
 
         <div style={{ padding: 16 }}>
+          {/* LEAGUE-DIV-1 M2 — adaptive division selector. Renders nothing for
+              single-division leagues (KOHA/ESHL unchanged). */}
+          <DivisionPicker divisions={divisions} selectedId={selectedDivisionId} onSelect={selectDivision} accent={league.accent_color || C.red} />
           {league.status === 'draft' && (
             <div style={{ background: 'rgba(245,158,11,0.1)', border: '0.5px solid rgba(245,158,11,0.4)', borderRadius: 10, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 18 }}>⏳</span>
@@ -506,13 +577,13 @@ export default function LeaguePage({ currentUser, profile }) {
                       <div style={card}>{recentGames.map(g => <GameRow key={g.id} game={g} isCommissioner={isCommissioner} navigate={navigate} />)}</div>
                     </>
                   )}
-                  {games.length === 0 && <div style={{ textAlign: 'center', color: 'rgba(244,247,250,0.3)', fontSize: 13, padding: '40px 0' }}>No games scheduled yet</div>}
-                  {games.length > 0 && (
+                  {scopedGames.length === 0 && <div style={{ textAlign: 'center', color: 'rgba(244,247,250,0.3)', fontSize: 13, padding: '40px 0' }}>No games scheduled yet</div>}
+                  {scopedGames.length > 0 && (
                     <button onClick={() => setShowAll(true)}
                       style={{ width: '100%', padding: 12, background: 'rgba(46,91,140,0.15)', border: '0.5px solid rgba(46,91,140,0.4)', borderRadius: 10, color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', marginTop: 4 }}
                       onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
                       onMouseLeave={e => { e.currentTarget.style.background = 'rgba(46,91,140,0.15)'; e.currentTarget.style.color = C.ice; }}>
-                      View Full Season Schedule ({games.length} games)
+                      View Full Season Schedule ({scopedGames.length} games)
                     </button>
                   )}
                 </>
@@ -538,12 +609,12 @@ export default function LeaguePage({ currentUser, profile }) {
             <>
               <div style={secLabel}>Season Standings</div>
               <div style={card}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 28px 28px 28px 28px 28px 34px', padding: '8px 12px', background: 'rgba(46,91,140,0.2)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.35)', textTransform: 'uppercase' }}>
-                  <span>Team</span><span style={{textAlign:'center'}}>GP</span><span style={{textAlign:'center'}}>W</span><span style={{textAlign:'center'}}>L</span><span style={{textAlign:'center'}}>T</span><span style={{textAlign:'center'}}>GF</span><span style={{textAlign:'center'}}>PTS</span>
+                <div style={{ display: 'grid', gridTemplateColumns: standingsCols, padding: '8px 12px', background: 'rgba(46,91,140,0.2)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.35)', textTransform: 'uppercase' }}>
+                  <span>Team</span><span style={{textAlign:'center'}}>GP</span><span style={{textAlign:'center'}}>W</span><span style={{textAlign:'center'}}>L</span>{showOtl && <span style={{textAlign:'center'}}>OTL</span>}<span style={{textAlign:'center'}}>T</span><span style={{textAlign:'center'}}>GF</span><span style={{textAlign:'center'}}>PTS</span>
                 </div>
-                {standings.length === 0 && <div style={{ padding: 16, fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center' }}>No games played yet</div>}
-                {standings.map((row, i) => (
-                  <div key={row.lt_id} style={{ display: 'grid', gridTemplateColumns: '1fr 28px 28px 28px 28px 28px 34px', padding: '10px 12px', borderTop: '0.5px solid rgba(244,247,250,0.06)', alignItems: 'center' }}>
+                {scopedStandings.length === 0 && <div style={{ padding: 16, fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center' }}>No games played yet</div>}
+                {scopedStandings.map((row, i) => (
+                  <div key={row.lt_id} style={{ display: 'grid', gridTemplateColumns: standingsCols, padding: '10px 12px', borderTop: '0.5px solid rgba(244,247,250,0.06)', alignItems: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <div style={{ width: 28, height: 28, borderRadius: 5, background: row.logo_color || C.blue, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 11, color: '#fff', flexShrink: 0 }}>
                         {row.logo_initials || row.team_name.slice(0, 2).toUpperCase()}
@@ -553,6 +624,7 @@ export default function LeaguePage({ currentUser, profile }) {
                     <span style={{ fontSize: 12, textAlign: 'center', color: 'rgba(244,247,250,0.65)' }}>{row.gp}</span>
                     <span style={{ fontSize: 12, textAlign: 'center', color: 'rgba(244,247,250,0.65)' }}>{row.wins}</span>
                     <span style={{ fontSize: 12, textAlign: 'center', color: 'rgba(244,247,250,0.65)' }}>{row.losses}</span>
+                    {showOtl && <span style={{ fontSize: 12, textAlign: 'center', color: 'rgba(244,247,250,0.65)' }}>{row.otl || 0}</span>}
                     <span style={{ fontSize: 12, textAlign: 'center', color: 'rgba(244,247,250,0.65)' }}>{row.ties}</span>
                     <span style={{ fontSize: 12, textAlign: 'center', color: 'rgba(244,247,250,0.65)' }}>{row.gf}</span>
                     <span style={{ fontSize: 13, fontWeight: 700, textAlign: 'center', color: row.rank === 1 ? C.red : row.pts === 0 ? 'rgba(244,247,250,0.25)' : C.ice }}>{row.pts}</span>
@@ -572,25 +644,35 @@ export default function LeaguePage({ currentUser, profile }) {
 
           {/* TEAMS TAB */}
           {activeTab === 'Teams' && (
-            <>
-              <div style={secLabel}>{teams.length} Teams</div>
-              <div style={card}>
+            multiDivision ? (
+              /* Cross-division finder: search across the whole league, grouped
+                 by division. The competitive views (Schedule/Standings) follow
+                 the picker; Teams is intentionally the league-wide directory. */
+              <>
+                <input value={teamSearch} onChange={e => setTeamSearch(e.target.value)} placeholder="Search teams across all divisions…"
+                  style={{ width: '100%', boxSizing: 'border-box', background: '#0f2847', border: '0.5px solid rgba(46,91,140,0.4)', color: C.ice, borderRadius: 10, padding: '10px 12px', fontSize: 13, outline: 'none', marginBottom: 12, fontFamily: 'Barlow, sans-serif' }} />
                 {teams.length === 0 && <div style={{ padding: 16, fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center' }}>No teams yet</div>}
-                {teams.map(lt => (
-                  <div key={lt.id} onClick={() => navigate('/team/' + lt.team_id)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)', cursor: 'pointer' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(46,91,140,0.1)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                    <TeamLogo team={lt.team || { name: lt.team_name, logo_color: lt.logo_color, logo_initials: lt.logo_initials }} size={36} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{lt.team?.name || lt.team_name}</div>
-                      <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>{lt.team?.home_rink || lt.team?.location || ''}</div>
+                {divisions.map(d => {
+                  const term = teamSearch.trim().toLowerCase();
+                  const divTeams = teams.filter(t => t.division_id === d.id && (!term || (t.team?.name || t.team_name || '').toLowerCase().includes(term)));
+                  if (divTeams.length === 0) return null;
+                  return (
+                    <div key={d.id}>
+                      <div style={secLabel}>{d.name} · {divTeams.length}</div>
+                      <div style={card}>{divTeams.map(renderLeagueTeamRow)}</div>
                     </div>
-                    <div style={{ color: 'rgba(244,247,250,0.25)', fontSize: 18 }}>›</div>
-                  </div>
-                ))}
-              </div>
-            </>
+                  );
+                })}
+              </>
+            ) : (
+              <>
+                <div style={secLabel}>{teams.length} Teams</div>
+                <div style={card}>
+                  {teams.length === 0 && <div style={{ padding: 16, fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center' }}>No teams yet</div>}
+                  {teams.map(renderLeagueTeamRow)}
+                </div>
+              </>
+            )
           )}
 
           {/* FEED TAB — auto-recaps + user posts scoped to this league */}
