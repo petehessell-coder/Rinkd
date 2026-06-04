@@ -1,5 +1,12 @@
 import { supabase } from './supabase';
 
+// LEAGUE-DIV-1 (M1): all league-standings reads go through this constant so the
+// M4 cutover is a one-line flip. On `feature/league-divisions` this points at
+// the staged division-scoped + OTL view (`league_standings_md`); `main` stays
+// on the live `league_standings` until the M4 rename. The staged view is proven
+// byte-identical to live for single-division leagues (KOHA/ESHL/CSHL).
+export const STANDINGS_VIEW = 'league_standings_md';
+
 export async function listLeagues({ search = '' } = {}) {
   // TODO: paginate — cap to avoid pulling the entire leagues table once the
   // directory grows. The search box lets users find anything beyond the cap.
@@ -128,12 +135,15 @@ export async function updateLeagueGame(id, updates) {
   return data;
 }
 
-export async function getLeagueStandings(leagueId) {
-  const { data, error } = await supabase
-    .from('league_standings')
+export async function getLeagueStandings(leagueId, divisionId = null) {
+  let q = supabase
+    .from(STANDINGS_VIEW)
     .select('*')
-    .eq('league_id', leagueId)
-    .order('rank', { ascending: true });
+    .eq('league_id', leagueId);
+  // Optional division scope (M2+ passes the selected division; null = whole
+  // league, which for single-division leagues is the one "Main" division).
+  if (divisionId) q = q.eq('division_id', divisionId);
+  const { data, error } = await q.order('rank', { ascending: true });
   if (error) throw error;
   return data || [];
 }
