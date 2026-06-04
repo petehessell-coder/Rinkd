@@ -179,7 +179,7 @@ export function detectScheduleConflicts(games, { teamGapHours = 4, gameDurationM
 }
 
 /** Bulk INSERT generated games into league_games. */
-export async function bulkInsertLeagueGames(leagueId, games) {
+export async function bulkInsertLeagueGames(leagueId, games, divisionId = null) {
   const rows = games.map(g => ({
     league_id: leagueId,
     home_team_id: g.home_team_id,
@@ -189,6 +189,9 @@ export async function bulkInsertLeagueGames(leagueId, games) {
     status: g.status || 'scheduled',
     period: 1,
     round: g.round != null ? String(g.round) : null,
+    // LEAGUE-DIV-1 M4 — tag generated games with their division (per-game
+    // g.division_id wins, else the caller's scope). NULL for single-division.
+    division_id: g.division_id || divisionId || null,
     // Phase 3 of the league-parity build: tag every generated game with its
     // phase so the league_standings view can filter to regular_season only.
     // Default matches the DB column default; passing 'playoffs' from the
