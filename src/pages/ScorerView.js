@@ -143,6 +143,10 @@ export default function ScorerView() {
   // must pick the shootout winner before Finalize is enabled. Persisted to
   // games.shootout_winner. Reset on game load.
   const [shootoutWinner, setShootoutWinner] = useState(null);
+  // LEAGUE-DIV-1 M3 — how a LEAGUE game was decided (drives the OTL standings
+  // column). 'regulation' | 'ot' | 'so'. shootoutWinner ('home'/'away') names
+  // the SO winner when 'so'. Tournament games keep their existing path.
+  const [leagueResult, setLeagueResult] = useState('regulation');
   const [goals, setGoals] = useState([]);
   const [penalties, setPenalties] = useState([]);
   const [shotRows, setShotRows] = useState([]);
@@ -204,7 +208,13 @@ export default function ScorerView() {
     setAwayScore(g.away_score || 0);
     setPeriod(g.period || 1);
     setStatus(g.status || 'scheduled');
-    setShootoutWinner(g.shootout_winner || null);
+    if (isLeague) {
+      // league_games.shootout_winner is a league_teams UUID; map it back to a side.
+      setShootoutWinner(g.shootout_winner === g.home_team_id ? 'home' : g.shootout_winner === g.away_team_id ? 'away' : null);
+      setLeagueResult(g.decided_in || 'regulation');
+    } else {
+      setShootoutWinner(g.shootout_winner || null);
+    }
     setGoalForm(prev => ({ ...prev, team_id: g.home_team?.id || '', period: g.period || 1 }));
     setPenaltyForm(prev => ({ ...prev, team_id: g.home_team?.id || '', period: g.period || 1 }));
     const [{ data: gl }, { data: pl }, { data: sl }, { data: gc }] = await Promise.all([
@@ -267,6 +277,13 @@ export default function ScorerView() {
     const patch = { home_score: hs, away_score: as, period: p, status: st };
     if (!isLeague && Object.prototype.hasOwnProperty.call(opts, 'shootoutWinner')) {
       patch.shootout_winner = opts.shootoutWinner;
+    }
+    // League OTL capture (LEAGUE-DIV-1 M3): on finalize we set decided_in +
+    // shootout_winner (a league_teams UUID, or null). Always written together so
+    // a Reopen → re-finalize in regulation clears any stale OT/SO marker.
+    if (isLeague && Object.prototype.hasOwnProperty.call(opts, 'leagueDecidedIn')) {
+      patch.decided_in = opts.leagueDecidedIn;
+      patch.shootout_winner = opts.leagueShootoutWinner ?? null;
     }
     const { error } = await supabase.from(isLeague ? 'league_games' : 'games').update(patch).eq('id', gameId);
     setSaving(false);
@@ -374,9 +391,23 @@ export default function ScorerView() {
     // tied bracket game with SO allowed. Otherwise clear it (a Reopen → fix
     // score → re-finalize that ended in regulation must not leave a stale
     // shootout_winner attached to the row).
-    const opts = (!isLeague && p === 'final')
-      ? { shootoutWinner: requiresShootoutResolution ? (shootoutWinner || null) : null }
-      : {};
+    let opts = {};
+    if (p === 'final') {
+      if (!isLeague) {
+        opts = { shootoutWinner: requiresShootoutResolution ? (shootoutWinner || null) : null };
+      } else {
+        // League OTL capture: equal score → 'so' (if picked) else regulation/tie;
+        // unequal score → 'ot' (if picked) else regulation. Map the SO side to a
+        // league_teams UUID for league_games.shootout_winner.
+        const decided = isTied
+          ? (leagueResult === 'so' ? 'so' : 'regulation')
+          : (leagueResult === 'ot' ? 'ot' : 'regulation');
+        const soWinnerId = decided === 'so'
+          ? (shootoutWinner === 'home' ? game.home_team_id : shootoutWinner === 'away' ? game.away_team_id : null)
+          : null;
+        opts = { leagueDecidedIn: decided, leagueShootoutWinner: soWinnerId };
+      }
+    }
     const { error } = await updateScore(homeScore, awayScore, newPeriod, newStatus, opts);
 
     // Auto-recap post — fire once the score save succeeds and we just
@@ -602,7 +633,10 @@ export default function ScorerView() {
   const isTied = homeScore === awayScore;
   const requiresShootoutResolution = isBracketRound && allowSO && isTied;
   const needsShootoutPick = requiresShootoutResolution && !shootoutWinner;
-  const finalizeBlocked = needsShootoutPick;
+  // League: if the scorer marked a tied game as shootout-decided, they must pick the winner.
+  const leagueNeedsSoPick = isLeague && isTied && leagueResult === 'so' && !shootoutWinner;
+  const finalizeBlocked = needsShootoutPick || leagueNeedsSoPick;
+  const resultBtn = (on) => ({ padding: 12, border: `1px solid ${on ? C.red : C.border}`, background: on ? 'rgba(215,38,56,0.18)' : 'rgba(46,91,140,0.15)', color: C.ice, borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' });
   const numPeriods = settings.num_periods ?? 3;
   const periodOptions = [
     ['1', '1st'],
@@ -835,6 +869,40 @@ export default function ScorerView() {
               ))}
             </div>
           </div>
+        )}
+        {/* League OTL capture (LEAGUE-DIV-1 M3) — how did this game end? Drives
+            the OTL standings column. Tournament games use their own SO flow above. */}
+        {isLeague && !isLocked && status !== 'final' && (
+          !isTied ? (
+            <div style={{ background: 'rgba(46,91,140,0.12)', border: `0.5px solid ${C.border}`, borderRadius: 12, padding: 14, marginTop: 10, marginBottom: 4 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(244,247,250,0.5)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>How did it end?</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                {[['regulation', 'Regulation'], ['ot', 'Overtime']].map(([v, label]) => (
+                  <button key={v} onClick={() => setLeagueResult(v)} style={resultBtn(leagueResult === v)}>{leagueResult === v ? '✓ ' : ''}{label}</button>
+                ))}
+              </div>
+              <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 8 }}>Overtime gives the losing team an OTL (1 pt).</div>
+            </div>
+          ) : (
+            <div style={{ background: 'rgba(46,91,140,0.12)', border: `0.5px solid ${C.border}`, borderRadius: 12, padding: 14, marginTop: 10, marginBottom: 4 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(244,247,250,0.5)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>Tied {homeScore}–{awayScore} — result?</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: leagueResult === 'so' ? 10 : 0 }}>
+                {[['regulation', 'Tie'], ['so', 'Shootout']].map(([v, label]) => (
+                  <button key={v} onClick={() => setLeagueResult(v)} style={resultBtn(leagueResult === v)}>{leagueResult === v ? '✓ ' : ''}{label}</button>
+                ))}
+              </div>
+              {leagueResult === 'so' && (
+                <>
+                  <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.5)', marginBottom: 8 }}>Who won the shootout? (loser gets an OTL)</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    {[['home', homeTeam?.team_name], ['away', awayTeam?.team_name]].map(([side, name]) => (
+                      <button key={side} onClick={() => setShootoutWinner(side)} style={resultBtn(shootoutWinner === side)}>{shootoutWinner === side ? '✓ ' : ''}{name}</button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )
         )}
         {status !== 'final'
           ? <button onClick={() => changePeriod('final')} disabled={finalizeBlocked}
