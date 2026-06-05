@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import DateTimePicker from '../components/DateTimePicker';
-import { getLeague, getLeagueTeams, getLeagueGames, getLeagueStandings, updateLeague, addLeagueTeam, removeLeagueTeam, addLeagueGame, linkLeagueTeam, getUserLeagueRole } from '../lib/leagues';
+import { getLeague, getLeagueTeams, getLeagueGames, getLeagueStandings, updateLeague, addLeagueTeam, removeLeagueTeam, addLeagueGame, updateLeagueGame, linkLeagueTeam, getUserLeagueRole } from '../lib/leagues';
 import { listLeagueDivisions, createLeagueDivision, updateLeagueDivision, deleteLeagueDivision, reorderLeagueDivisions, assignLeagueTeamDivision } from '../lib/leagueDivisions';
 import DivisionPicker from '../components/DivisionPicker';
 import { getLeagueRegistrations, updateRegistrationStatus, approveRegistration } from '../lib/registrations';
@@ -12,7 +12,8 @@ import { listRinks } from '../lib/rinks';
 import { supabase } from '../lib/supabase';
 import { sendLeagueInvite } from '../lib/invites';
 import ScheduleBuilderModal from '../components/ScheduleBuilderModal';
-import { rescheduleGame, deleteLeagueGame, bulkInsertLeagueGames } from '../lib/scheduleBuilder';
+import EditGameModal from '../components/EditGameModal';
+import { deleteLeagueGame, bulkInsertLeagueGames } from '../lib/scheduleBuilder';
 import { generateLeagueSchedule } from '../lib/leagueScheduleGenerator';
 import { uploadMedia } from '../lib/posts';
 import { classifyImage } from '../lib/imageModeration';
@@ -33,12 +34,6 @@ function Field({ label, children }) {
 }
 
 function Row2({ children }) { return <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>{children}</div>; }
-
-// Format a Date for <input type="datetime-local"> (local time, no tz suffix)
-function toDateTimeLocal(d) {
-  const pad = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 // Derive team_id → rink_id from existing games. Used by Schedule Builder to
 // default the home team's rink on newly-generated games.
@@ -90,6 +85,7 @@ function ManageLeague({ id, navigate }) {
   const [newDivisionName, setNewDivisionName] = useState('');
   const [divBusy, setDivBusy] = useState(false);
   const [showScheduleBuilder, setShowScheduleBuilder] = useState(false);
+  const [editGameId, setEditGameId] = useState(null);
   const [teamSearch, setTeamSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [gameForm, setGameForm] = useState({ home_team_id: '', away_team_id: '', rink_id: '', location: '', start_time: '', live_barn_venue_id: '', youtube_url: '' });
@@ -620,42 +616,51 @@ function ManageLeague({ id, navigate }) {
               {scopedGamesList.map(g => {
                 const home = g.home_lt?.team?.name || g.home_lt?.team_name;
                 const away = g.away_lt?.team?.name || g.away_lt?.team_name;
-                const date = new Date(g.start_time);
                 const isFinal = g.status === 'final';
                 return (
                   <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
-                    <input type="datetime-local"
-                      disabled={isFinal}
-                      value={toDateTimeLocal(date)}
-                      onChange={async (e) => {
-                        const iso = new Date(e.target.value).toISOString();
-                        await rescheduleGame(g.id, { start_time: iso });
-                        await load();
-                      }}
-                      style={{ flex: '0 0 180px', background:'#07111F', border:`0.5px solid ${C.border}`, borderRadius:6, padding:'6px 8px', color:isFinal ? C.steel : C.ice, fontFamily:'Barlow, sans-serif', fontSize:12, outline:'none', opacity: isFinal ? 0.6 : 1 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {home || '?'} <span style={{ color: 'rgba(244,247,250,0.4)' }}>vs.</span> {away || '?'}
                       </div>
-                      {g.rink?.name && <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 1 }}>{g.rink.sub_rink ? `${g.rink.sub_rink} · ` : ''}{g.rink.name}</div>}
+                      <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 1 }}>
+                        {new Date(g.start_time).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                        {g.rink?.name ? ` · ${g.rink.sub_rink ? `${g.rink.sub_rink} · ` : ''}${g.rink.name}` : ''}
+                        {g.youtube_url ? ' · 📺 stream' : ''}
+                      </div>
                     </div>
                     {isFinal && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: 'rgba(244,247,250,0.08)', color: 'rgba(244,247,250,0.4)' }}>FINAL</span>}
-                    {!isFinal && (
-                      <button
-                        onClick={async () => {
-                          if (!window.confirm(`Delete this game (${home || '?'} vs. ${away || '?'})?`)) return;
-                          await deleteLeagueGame(g.id);
-                          await load();
-                        }}
-                        style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.4)', fontSize: 14, cursor: 'pointer', padding: 4 }}
-                        title="Delete game">
-                        🗑
-                      </button>
-                    )}
+                    <button onClick={() => setEditGameId(g.id)} style={{ background: 'none', border: '0.5px solid rgba(244,247,250,0.2)', color: C.ice, borderRadius: 999, padding: '5px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>Edit</button>
                   </div>
                 );
               })}
             </div>
+
+            {editGameId && (() => {
+              const g = scopedGamesList.find(x => x.id === editGameId);
+              if (!g) return null;
+              return (
+                <EditGameModal
+                  game={g}
+                  rinks={rinks}
+                  teams={scopedTeamsList.map(lt => ({ id: lt.id, name: lt.team?.name || lt.team_name }))}
+                  title="Edit game"
+                  onClose={() => setEditGameId(null)}
+                  onSave={async (v) => {
+                    await updateLeagueGame(g.id, {
+                      start_time: v.start_time, rink_id: v.rink_id,
+                      location: v.location, live_barn_venue_id: v.live_barn_venue_id, youtube_url: v.youtube_url,
+                      home_team_id: v.home_team_id, away_team_id: v.away_team_id,
+                    });
+                    await load();
+                  }}
+                  onDelete={async () => {
+                    await deleteLeagueGame(g.id);
+                    await load();
+                  }}
+                />
+              );
+            })()}
           </>
         )}
 

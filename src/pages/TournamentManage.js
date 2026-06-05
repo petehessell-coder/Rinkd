@@ -18,6 +18,7 @@ import { teamInitials } from '../lib/teamInitials';
 import { uploadMedia } from '../lib/posts';
 import { classifyImage } from '../lib/imageModeration';
 import DateTimePicker from '../components/DateTimePicker';
+import EditGameModal from '../components/EditGameModal';
 import { supabase } from '../lib/supabase';
 import { getTournamentRegistrations, updateTournamentRegistrationStatus, approveTournamentRegistration } from '../lib/registrations';
 import { tournamentPayoutsReady, startConnectOnboarding } from '../lib/stripeConnect';
@@ -51,13 +52,6 @@ const btnGhost = { background: 'transparent', color: C.ice, border: `1px solid $
 function fmtDateTime(iso) {
   if (!iso) return 'TBD';
   return new Date(iso).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-}
-
-function toLocalInput(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export default function TournamentManagePage({ currentUser, profile }) {
@@ -466,10 +460,7 @@ function ScheduleTab({ tournamentId, tournament, teams, games, rinks, reload, fl
         </div>
       ) : (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
-          {poolGames.map((g, i) => editingId === g.id ? (
-            <GameEditRow key={g.id} game={g} rinks={rinks} teams={teams} flash={flash}
-              onDone={() => { setEditingId(null); reload(); }} onCancel={() => setEditingId(null)} />
-          ) : (
+          {poolGames.map((g, i) => (
             <div key={g.id} style={{ display: 'flex', alignItems: 'center', padding: 12, borderTop: i ? `1px solid rgba(46,91,140,0.25)` : 'none', gap: 10 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>
@@ -479,6 +470,7 @@ function ScheduleTab({ tournamentId, tournament, teams, games, rinks, reload, fl
                 <div style={{ fontSize: 12, color: C.steel, marginTop: 2 }}>
                   {fmtDateTime(g.start_time)}
                   {g.rink ? ` · ${[g.rink.sub_rink, g.rink.name].filter(Boolean).join(' · ')}` : ''}
+                  {g.youtube_url ? ' · 📺 stream' : ''}
                 </div>
               </div>
               <button onClick={() => setEditingId(g.id)} style={btnGhost}>Edit</button>
@@ -486,70 +478,36 @@ function ScheduleTab({ tournamentId, tournament, teams, games, rinks, reload, fl
           ))}
         </div>
       )}
-    </div>
-  );
-}
 
-function GameEditRow({ game, rinks, teams, flash, onDone, onCancel }) {
-  const [startTime, setStartTime] = useState(toLocalInput(game.start_time));
-  const [rinkId, setRinkId] = useState(game.rink_id || '');
-  const [homeId, setHomeId] = useState(game.home_team_id || '');
-  const [awayId, setAwayId] = useState(game.away_team_id || '');
-  const [busy, setBusy] = useState(false);
-
-  const save = async () => {
-    setBusy(true);
-    const { error } = await updateGame(game.id, {
-      startTime: startTime ? new Date(startTime).toISOString() : null,
-      rinkId, homeTeamId: homeId, awayTeamId: awayId,
-    });
-    setBusy(false);
-    if (error) { flash?.('error', `Save failed: ${error.message}`); return; }
-    flash?.('success', 'Game updated.');
-    onDone();
-  };
-  const remove = async () => {
-    if (!window.confirm('Delete this game?')) return;
-    const { error } = await deleteGame(game.id);
-    if (error) { flash?.('error', `Delete failed: ${error.message}`); return; }
-    flash?.('success', 'Game deleted.');
-    onDone();
-  };
-
-  return (
-    <div style={{ padding: 12, borderTop: '1px solid rgba(46,91,140,0.25)' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8, marginBottom: 8 }}>
-        <div>
-          <label style={labelStyle}>Start</label>
-          <input type="datetime-local" value={startTime} onChange={(e) => setStartTime(e.target.value)} style={inputStyle}/>
-        </div>
-        <div>
-          <label style={labelStyle}>Rink</label>
-          <select value={rinkId} onChange={(e) => setRinkId(e.target.value)} style={inputStyle}>
-            <option value="">—</option>
-            {rinks.map((r) => <option key={r.id} value={r.id}>{[r.sub_rink, r.name].filter(Boolean).join(' · ')}</option>)}
-          </select>
-        </div>
-        <div>
-          <label style={labelStyle}>Home</label>
-          <select value={homeId} onChange={(e) => setHomeId(e.target.value)} style={inputStyle}>
-            {teams.map((t) => <option key={t.id} value={t.id}>{t.team_name}</option>)}
-          </select>
-        </div>
-        <div>
-          <label style={labelStyle}>Away</label>
-          <select value={awayId} onChange={(e) => setAwayId(e.target.value)} style={inputStyle}>
-            {teams.map((t) => <option key={t.id} value={t.id}>{t.team_name}</option>)}
-          </select>
-        </div>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <button onClick={remove} style={{ ...btnGhost, color: C.red, borderColor: C.red }}>Delete</button>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onCancel} style={btnGhost}>Cancel</button>
-          <button onClick={save} disabled={busy} style={btnPrimary}>{busy ? 'Saving…' : 'Save'}</button>
-        </div>
-      </div>
+      {editingId && (() => {
+        const g = poolGames.find((x) => x.id === editingId);
+        if (!g) return null;
+        return (
+          <EditGameModal
+            game={g}
+            rinks={rinks}
+            teams={teams.map((t) => ({ id: t.id, name: t.team_name }))}
+            title="Edit game"
+            onClose={() => setEditingId(null)}
+            onSave={async (v) => {
+              const { error } = await updateGame(g.id, {
+                startTime: v.start_time, rinkId: v.rink_id,
+                homeTeamId: v.home_team_id, awayTeamId: v.away_team_id,
+                location: v.location, liveBarnVenueId: v.live_barn_venue_id, youtubeUrl: v.youtube_url,
+              });
+              if (error) throw new Error(error.message);
+              flash?.('success', 'Game updated.');
+              reload();
+            }}
+            onDelete={async () => {
+              const { error } = await deleteGame(g.id);
+              if (error) throw new Error(error.message);
+              flash?.('success', 'Game deleted.');
+              reload();
+            }}
+          />
+        );
+      })()}
     </div>
   );
 }

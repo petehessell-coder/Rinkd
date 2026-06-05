@@ -80,6 +80,9 @@ export async function updateGame(gameId, fields) {
   if (fields.awayTeamId !== undefined) payload.away_team_id = fields.awayTeamId || null;
   if (fields.round !== undefined) payload.round = fields.round || 'pool';
   if (fields.status !== undefined) payload.status = fields.status;
+  if (fields.location !== undefined) payload.location = (fields.location || '').trim() || null;
+  if (fields.liveBarnVenueId !== undefined) payload.live_barn_venue_id = (fields.liveBarnVenueId || '').trim() || null;
+  if (fields.youtubeUrl !== undefined) payload.youtube_url = (fields.youtubeUrl || '').trim() || null;
   const { data, error } = await supabase
     .from('games')
     .update(payload)
