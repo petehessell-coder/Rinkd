@@ -9,6 +9,7 @@ import { useWakeLock } from '../lib/useWakeLock';
 import { createGameRecapPost } from '../lib/posts';
 import { resolveBracketSlotsFromSemis } from '../lib/tournamentManage';
 import { triggerTournamentRecapPush, triggerLeagueRecapPush } from '../lib/push';
+import { isExtraCommissioner } from '../lib/leagueCommissioners';
 
 const C = {
   dark: '#07111F', navy: '#0B1F3A', blue: '#2E5B8C',
@@ -202,6 +203,13 @@ export default function ScorerView() {
     if (user) {
       if (isLeague) {
         director = user.id === g.league?.commissioner_id;
+        // Multi-commissioner support: added commissioners live in league_roles,
+        // not leagues.commissioner_id (which is only the founder). Mirror the
+        // tournament_roles path below so they can run the scorer too. The league
+        // RLS already authorizes their writes via is_league_commissioner().
+        if (!director && g.league_id) {
+          director = await isExtraCommissioner(user.id, g.league_id);
+        }
         ok = director || user.id === g.scorekeeper_id;
       } else {
         director = user.id === g.tournament?.director_id;
