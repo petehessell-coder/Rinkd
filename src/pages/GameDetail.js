@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
+import { isExtraCommissioner } from '../lib/leagueCommissioners';
 import Layout from '../components/Layout';
 import RsvpBlock from '../components/RsvpBlock';
 import MapLink from '../components/MapLink';
@@ -80,8 +81,12 @@ export default function GameDetail({ profile }) {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         if (isLeague) {
-          const { data: league } = await supabase.from('leagues').select('commissioner_id').eq('id', g.league_id || g.home_lt?.league_id).maybeSingle();
-          setIsOrganizer(league?.commissioner_id === user.id);
+          const lgId = g.league_id || g.home_lt?.league_id;
+          const { data: league } = await supabase.from('leagues').select('commissioner_id').eq('id', lgId).maybeSingle();
+          // Honor multi-commissioner (league_roles), not just the founder field,
+          // so added commissioners see the "Open Scorer View" button + Reopen.
+          const isComm = league?.commissioner_id === user.id || await isExtraCommissioner(user.id, lgId);
+          setIsOrganizer(isComm);
         } else if (isTeamGame) {
           setIsOrganizer(g.team?.manager_id === user.id);
         } else {
