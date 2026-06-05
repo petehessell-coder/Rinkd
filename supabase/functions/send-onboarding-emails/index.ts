@@ -35,8 +35,9 @@ function shellHtml({ eyebrow, headline, body, ctaLabel, ctaUrl, footnote }) {
 <body style="margin:0;padding:0;background:#07111F;font-family:'Helvetica Neue',Arial,sans-serif;">
   <div style="max-width:520px;margin:0 auto;padding:32px 20px;">
     <div style="text-align:center;margin-bottom:24px;">
-      <div style="display:inline-block;background:#0B1F3A;border-radius:12px;padding:16px 24px;">
-        <span style="font-size:28px;font-weight:900;font-style:italic;color:#F4F7FA;letter-spacing:-0.5px;">R<span style="color:#D72638">INKD</span></span>
+      <div style="display:inline-block;background:#0B1F3A;border-radius:16px;padding:18px 28px;border:1px solid rgba(46,91,140,0.4);">
+        <img src="https://rinkd.app/mascot-rizzo.png" alt="Rizzo — Rinkd mascot" width="120" style="display:block;width:120px;height:auto;margin:0 auto 10px;border:0;" />
+        <div style="font-family:'Helvetica Neue',Arial,sans-serif;font-size:13px;font-weight:900;font-style:italic;color:#F4F7FA;letter-spacing:0.08em;text-transform:uppercase;text-align:center;">R<span style="color:#D72638">INKD</span></div>
       </div>
     </div>
     <div style="background:#0B1F3A;border-radius:16px;padding:32px;margin-bottom:24px;border:1px solid rgba(46,91,140,0.4);">
@@ -56,10 +57,10 @@ function shellHtml({ eyebrow, headline, body, ctaLabel, ctaUrl, footnote }) {
 
 const TEMPLATES = {
   welcome_day0: (name) => ({
-    subject: `Welcome to Rinkd${name ? `, ${name}` : ''} 🏒`,
+    subject: `Welcome to the locker room${name ? `, ${name}` : ''} 🏒`,
     html: shellHtml({
       eyebrow: 'Welcome',
-      headline: `Glad you're here${name ? `, ${name}` : ''}.`,
+      headline: `Welcome to the locker room${name ? `, ${name}` : ''}.`,
       body: `Rinkd is the social platform built for the hockey community — players, parents, coaches, fans. <br/><br/>Three things worth doing in your first week:<br/><br/>
         • <strong style="color:#F4F7FA">Find your team</strong> — join a roster or invite your captain<br/>
         • <strong style="color:#F4F7FA">Drop your first highlight</strong> — photo or short clip<br/>
