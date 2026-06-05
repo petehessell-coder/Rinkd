@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { subscribeToPush, getPushState } from '../lib/push';
+import { iosCanInstallButHasnt } from '../lib/platform';
+import { IOS_INSTALL_EVENT } from './IOSInstallBanner';
 
 const B = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
@@ -25,6 +27,10 @@ export default function PushPrompt({ userId }) {
     try { return localStorage.getItem(DISMISS_KEY) === '1'; } catch { return false; }
   });
   const [busy, setBusy] = useState(false);
+  // On iOS Safari, web push can't be delivered until the PWA is installed to
+  // the home screen — so the "Enable" tap must lead to the install banner, not
+  // a subscribeToPush() that silently fails. Mirrors the Tournament Follow flow.
+  const iosNeedsInstall = iosCanInstallButHasnt();
 
   useEffect(() => {
     getPushState().then(setState);
@@ -34,6 +40,14 @@ export default function PushPrompt({ userId }) {
   if (state === 'loading' || state === 'unsupported' || state === 'subscribed' || state === 'denied') return null;
 
   const handleEnable = async () => {
+    if (iosNeedsInstall) {
+      // Surface the "Add to Home Screen" banner (which explains how) instead of
+      // calling subscribeToPush, which would silently fail on un-installed iOS
+      // Safari and leave the user believing they'd enabled alerts.
+      window.dispatchEvent(new CustomEvent(IOS_INSTALL_EVENT));
+      handleDismiss();
+      return;
+    }
     setBusy(true);
     const sub = await subscribeToPush(userId);
     setBusy(false);
@@ -66,7 +80,9 @@ export default function PushPrompt({ userId }) {
           marginBottom: 2,
         }}>Don't miss a game</div>
         <div style={{ fontSize: 13, color: B.steel, lineHeight: 1.4 }}>
-          Get a quick ping when your team has a game tomorrow, your RSVP is needed, or a teammate replies.
+          {iosNeedsInstall
+            ? 'Add Rinkd to your home screen to get game-day alerts on iPhone — tap below to see how.'
+            : 'Get a quick ping when your team has a game tomorrow, your RSVP is needed, or a teammate replies.'}
         </div>
       </div>
       <button onClick={handleDismiss}
@@ -75,7 +91,7 @@ export default function PushPrompt({ userId }) {
       </button>
       <button onClick={handleEnable} disabled={busy}
         style={{ padding: '7px 14px', borderRadius: 999, background: busy ? B.border : B.red, border: 'none', color: '#fff', fontSize: 12, fontWeight: 700, cursor: busy ? 'not-allowed' : 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-        {busy ? 'Enabling…' : '🔔 Enable'}
+        {iosNeedsInstall ? '📲 Add to Home Screen' : (busy ? 'Enabling…' : '🔔 Enable')}
       </button>
     </div>
   );

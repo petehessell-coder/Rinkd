@@ -1,55 +1,61 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { AuthContext, useAuth } from './lib/authContext';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import { getProfile, ensureProfileForUser, touchLastSeen } from './lib/auth';
+// Eager — first-paint-critical + the public pilot path (no chunk-load flash).
 import Auth from './pages/Auth';
 import Feed from './pages/Feed';
 import Profile from './pages/Profile';
-import Rinkside from './pages/Rinkside';
-import Crease from './pages/Crease';
-import CreaseShow from './pages/CreaseShow';
-import CreaseEpisode from './pages/CreaseEpisode';
-import Survey from './pages/Survey';
-import RinksideArticle from './pages/RinksideArticle';
-import RinksideEditor from './pages/RinksideEditor';
 import Leagues from './pages/Leagues';
-import Store from './pages/Store';
-import Legal from './pages/Legal';
-import Discover from './pages/Discover';
 import Tournament from './pages/Tournament';
 import Tournaments from './pages/Tournaments';
-import TournamentCreate from './pages/TournamentCreate';
-import TournamentManage from './pages/TournamentManage';
-import AdminAnalytics from './pages/AdminAnalytics';
-import AdminActivations from './pages/AdminActivations';
-import AdminFeedback from './pages/AdminFeedback';
-import AdminModeration from './pages/AdminModeration';
-import Settings from './pages/Settings';
 import Landing from './pages/Landing';
-import Pricing from './pages/Pricing';
 import { setSentryUser } from './lib/sentry';
-import Notifications from './pages/Notifications';
-import Messages from './pages/Messages';
 import OnboardingModal from './components/OnboardingModal';
 import RouteAnalytics from './components/RouteAnalytics';
 import ErrorBoundary from './components/ErrorBoundary';
-import ResetPassword from './pages/ResetPassword';
-import Teams from './pages/Teams';
-import League from './pages/League';
-import LeagueManage from './pages/LeagueManage';
-import LeagueCreate from './pages/LeagueCreate';
-import LeagueRegister from './pages/LeagueRegister';
-import TournamentRegister from './pages/TournamentRegister';
-import AcceptTeamInvite from './pages/AcceptTeamInvite';
-import Team from './pages/Team';
-import TeamManage from './pages/TeamManage';
-import ScorerView from './pages/ScorerView';
-import GameDetail from './pages/GameDetail';
 import { DuesTrackerPage } from './pages/ComingSoon';
-import AdminPanel from './pages/AdminPanel';
-import VolunteerCoordinator from './pages/VolunteerCoordinator';
-import NotFound from './pages/NotFound';
+
+// Lazy — code-split the heavier / less-frequent routes out of the main bundle
+// (pre-pilot audit P1-11). Each is its own chunk fetched on first visit; the
+// <Suspense> boundary around <Routes> shows RouteFallback while it loads. Only
+// default-export pages are lazied here.
+const Rinkside = lazy(() => import('./pages/Rinkside'));
+const Crease = lazy(() => import('./pages/Crease'));
+const CreaseShow = lazy(() => import('./pages/CreaseShow'));
+const CreaseEpisode = lazy(() => import('./pages/CreaseEpisode'));
+const Survey = lazy(() => import('./pages/Survey'));
+const RinksideArticle = lazy(() => import('./pages/RinksideArticle'));
+const RinksideEditor = lazy(() => import('./pages/RinksideEditor'));
+const Store = lazy(() => import('./pages/Store'));
+const Legal = lazy(() => import('./pages/Legal'));
+const Discover = lazy(() => import('./pages/Discover'));
+const TournamentCreate = lazy(() => import('./pages/TournamentCreate'));
+const TournamentManage = lazy(() => import('./pages/TournamentManage'));
+const AdminAnalytics = lazy(() => import('./pages/AdminAnalytics'));
+const AdminActivations = lazy(() => import('./pages/AdminActivations'));
+const AdminFeedback = lazy(() => import('./pages/AdminFeedback'));
+const AdminModeration = lazy(() => import('./pages/AdminModeration'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Pricing = lazy(() => import('./pages/Pricing'));
+const Notifications = lazy(() => import('./pages/Notifications'));
+const Messages = lazy(() => import('./pages/Messages'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
+const Teams = lazy(() => import('./pages/Teams'));
+const League = lazy(() => import('./pages/League'));
+const LeagueManage = lazy(() => import('./pages/LeagueManage'));
+const LeagueCreate = lazy(() => import('./pages/LeagueCreate'));
+const LeagueRegister = lazy(() => import('./pages/LeagueRegister'));
+const TournamentRegister = lazy(() => import('./pages/TournamentRegister'));
+const AcceptTeamInvite = lazy(() => import('./pages/AcceptTeamInvite'));
+const Team = lazy(() => import('./pages/Team'));
+const TeamManage = lazy(() => import('./pages/TeamManage'));
+const ScorerView = lazy(() => import('./pages/ScorerView'));
+const GameDetail = lazy(() => import('./pages/GameDetail'));
+const AdminPanel = lazy(() => import('./pages/AdminPanel'));
+const VolunteerCoordinator = lazy(() => import('./pages/VolunteerCoordinator'));
+const NotFound = lazy(() => import('./pages/NotFound'));
 
 // AuthContext + useAuth live in ./lib/authContext so leaf components can
 // consume them without creating a circular import back to App.js. Re-exported
@@ -107,6 +113,17 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
+// Shown while a lazy route chunk loads (pre-pilot P1-11 code-splitting).
+function RouteFallback() {
+  return (
+    <div style={{ minHeight: '100vh', background: '#07111F', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <img src="/icon-192.png" alt="Rinkd" width={64} height={64}
+        style={{ borderRadius: 16, animation: 'rinkd-pulse 1.6s ease-in-out infinite' }} />
+      <style>{`@keyframes rinkd-pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.65; transform: scale(0.96); } }`}</style>
+    </div>
+  );
+}
+
 function AppRoutes() {
   const { user, profile, setProfile } = useAuth();
 
@@ -142,6 +159,7 @@ function AppRoutes() {
         onClose={() => setProfile((p) => ({ ...(p || {}), welcome_seen: true }))}
       />
     )}
+    <Suspense fallback={<RouteFallback />}>
     <Routes>
       {/* Root: Landing handles the "first time mobile visitor" install pitch
           and falls through to Auth for desktop, installed PWA, or "continue
@@ -228,6 +246,7 @@ function AppRoutes() {
           explanation when a link is dead. */}
       <Route path="*" element={<NotFound />} />
     </Routes>
+    </Suspense>
     </>
   );
 }

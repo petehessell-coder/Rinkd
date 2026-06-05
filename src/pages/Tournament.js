@@ -291,7 +291,7 @@ export default function TournamentPage({ currentUser }) {
     }
     const { error } = await followTournament(currentUser.id, id);
     setFollowBusy(false);
-    if (!error) setIsFollowing(true);
+    if (!error) { setIsFollowing(true); track('tournament_followed', { tournament_id: id }); }
   };
 
   if (loading) return (

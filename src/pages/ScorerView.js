@@ -1,6 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import Scoresheet from '../components/Scoresheet';
+// Lazy-loaded: Scoresheet pulls in jsPDF + autotable + signature-canvas
+// (hundreds of KB) that only a scorer exporting a PDF ever needs — keep it out
+// of the main bundle so it doesn't slow first paint for every player.
+const Scoresheet = React.lazy(() => import('../components/Scoresheet'));
 import { supabase } from '../lib/supabase';
 import { useWakeLock } from '../lib/useWakeLock';
 import { createGameRecapPost } from '../lib/posts';
@@ -82,7 +85,7 @@ function ScoreBtn({ onClick, children, variant = 'minus' }) {
   );
 }
 
-function Modal({ title, onClose, onSave, saveLabel = 'Save', children }) {
+function Modal({ title, onClose, onSave, saveLabel = 'Save', busy = false, children }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
       <div style={{ background: C.navy, borderRadius: '16px 16px 0 0', padding: 20, width: '100%', maxWidth: 480, borderTop: '0.5px solid rgba(46,91,140,0.4)' }}>
@@ -93,10 +96,10 @@ function Modal({ title, onClose, onSave, saveLabel = 'Save', children }) {
             style={{ flex: 1, padding: 12, background: 'rgba(244,247,250,0.08)', border: 'none', borderRadius: 999, color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', fontSize: 14, cursor: 'pointer', transition: 'all 0.15s' }}
             onMouseEnter={e => { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'rgba(244,247,250,0.08)'; e.currentTarget.style.color = '#F4F7FA'; }}>Cancel</button>
-          <button onClick={onSave}
-            style={{ flex: 2, padding: 12, background: C.red, border: 'none', borderRadius: 999, color: '#fff', fontFamily: 'Barlow, sans-serif', fontSize: 14, fontWeight: 700, cursor: 'pointer', transition: 'all 0.15s' }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = C.red; e.currentTarget.style.color = '#fff'; }}>{saveLabel}</button>
+          <button onClick={busy ? undefined : onSave} disabled={busy}
+            style={{ flex: 2, padding: 12, background: busy ? C.border : C.red, border: 'none', borderRadius: 999, color: '#fff', fontFamily: 'Barlow, sans-serif', fontSize: 14, fontWeight: 700, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.7 : 1, transition: 'all 0.15s' }}
+            onMouseEnter={e => { if (!busy) { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; } }}
+            onMouseLeave={e => { e.currentTarget.style.background = busy ? C.border : C.red; e.currentTarget.style.color = '#fff'; }}>{busy ? 'Saving…' : saveLabel}</button>
         </div>
       </div>
     </div>
@@ -130,11 +133,22 @@ export default function ScorerView() {
   const [game, setGame] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   // Distinguishes a director (tournament) / commissioner (league) from a
   // plain assigned scorer. Only directors can Reopen a finalized game so
   // mistakes can be corrected without bouncing back to the manage UI.
   const [isDirector, setIsDirector] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Synchronous mirror of `saving` for re-entry guards — state updates are
+  // async, so a double-tap can slip through before `saving` re-renders.
+  const savingRef = useRef(false);
+  // In-flight lock for the goal/penalty/goalie modals so a double-tap on Save
+  // can't insert the same event twice.
+  const [modalBusy, setModalBusy] = useState(false);
+  const modalBusyRef = useRef(false);
+  // Latest home/away team ids, read inside the realtime handler (whose closure
+  // would otherwise capture a stale null `game` from first mount).
+  const teamIdsRef = useRef({ home: null, away: null });
   const [homeScore, setHomeScore] = useState(0);
   const [awayScore, setAwayScore] = useState(0);
   const [period, setPeriod] = useState(1);
@@ -161,7 +175,8 @@ export default function ScorerView() {
   const [goalieForm, setGoalieForm] = useState({ goalie_out_number: '', goalie_in_number: '', period: 1, time_in_period: '' });
 
   const load = useCallback(async () => {
-    const { data: g } = isLeague
+    setLoadError(false);
+    const { data: g, error: gErr } = isLeague
       ? await supabase.from('league_games')
           .select('*, home_team:league_teams!home_team_id(id, team_name, team:teams(id,name)), away_team:league_teams!away_team_id(id, team_name, team:teams(id,name)), rink:rinks(name,sub_rink), league:leagues(name,commissioner_id,is_activated)')
           .eq('id', gameId).single()
@@ -172,6 +187,9 @@ export default function ScorerView() {
           // gate — show the activation-pending wall instead of the scorer UI.
           .select('*, home_team:tournament_teams!home_team_id(id,team_name), away_team:tournament_teams!away_team_id(id,team_name), rink:rinks(name,sub_rink), tournament:tournaments(name,director_id,settings,is_activated)')
           .eq('id', gameId).single();
+    // A transient fetch failure (flaky rink wifi) must NOT eject the scorer
+    // mid-game. Distinguish a real error (show retry) from a genuine not-found.
+    if (gErr) { setLoadError(true); setLoading(false); return; }
     if (!g) { navigate(-1); return; }
 
     // Authorization — only the director / assigned scorer (tournament) or the
@@ -204,6 +222,7 @@ export default function ScorerView() {
     setIsDirector(director);
 
     setGame(g);
+    teamIdsRef.current = { home: g.home_team?.id || null, away: g.away_team?.id || null };
     setHomeScore(g.home_score || 0);
     setAwayScore(g.away_score || 0);
     setPeriod(g.period || 1);
@@ -232,11 +251,14 @@ export default function ScorerView() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Realtime — if two scorekeepers are entering events on the same game (a
-  // common case at tournaments), reload the events lists whenever either
-  // game_goals or game_penalties for this game changes. Score/period/status
-  // sync between scorers is a follow-up; for now the +1/+/- buttons + Live
-  // toggle are owned by whoever clicks them and converge via the DB write.
+  // Realtime — if two scorekeepers (or a director watching alongside the
+  // scorer) are entering events on the same game (the common BLPA case),
+  // reload the events lists whenever game_goals or game_penalties changes, and
+  // re-derive the displayed score from the authoritative goal log so both
+  // screens agree (otherwise the log grows but the score stays stale, and
+  // whoever finalizes writes the wrong score to standings). Manual +/- score
+  // overrides (which don't touch game_goals) are still owned by whoever taps
+  // them and converge via the DB write.
   useEffect(() => {
     if (!gameId) return;
     let channel = null;
@@ -247,7 +269,18 @@ export default function ScorerView() {
           supabase.from('game_goals').select('*').eq('game_id', gameId).order('created_at', { ascending: false }),
           supabase.from('game_penalties').select('*').eq('game_id', gameId).order('created_at', { ascending: false }),
         ]);
-        if (gl) setGoals(gl);
+        if (gl) {
+          setGoals(gl);
+          // Re-derive the score from the goal log (the canonical count). Local
+          // state only — no DB write here, which would echo back to the other
+          // scorer. Skip while our own write is in flight so we don't stomp an
+          // optimistic local change mid-flight.
+          const { home: homeId, away: awayId } = teamIdsRef.current;
+          if (homeId && awayId && !savingRef.current) {
+            setHomeScore(gl.filter(x => x.team_id === homeId && !x.is_shootout).length);
+            setAwayScore(gl.filter(x => x.team_id === awayId && !x.is_shootout).length);
+          }
+        }
         if (pl) setPenalties(pl);
       };
       channel = supabase.channel(name)
@@ -270,6 +303,7 @@ export default function ScorerView() {
   const isLocked = status === 'final';
 
   const updateScore = async (hs, as, p, st, opts = {}) => {
+    savingRef.current = true;
     setSaving(true);
     // shootout_winner only applies to tournament games (column doesn't exist
     // on league_games). Pass `undefined` to skip the field rather than
@@ -286,6 +320,7 @@ export default function ScorerView() {
       patch.shootout_winner = opts.leagueShootoutWinner ?? null;
     }
     const { error } = await supabase.from(isLeague ? 'league_games' : 'games').update(patch).eq('id', gameId);
+    savingRef.current = false;
     setSaving(false);
     if (error) setErrorMsg('Could not save the score — check your connection and try again.');
     return { error };
@@ -364,6 +399,11 @@ export default function ScorerView() {
     // the current period would re-write status='live' via updateScore below
     // and silently un-lock the game. Directors must use the Reopen button.
     if (isLocked) return;
+    // Re-entry guard: a double-tap on Finalize (or a tap during an in-flight
+    // score write) would otherwise double-post the recap, double-fire the push
+    // to every subscriber, and re-run bracket auto-fill. updateScore flips
+    // savingRef for the duration of its write, so the second tap bails here.
+    if (savingRef.current) return;
     setErrorMsg('');
     // Pre-finalize sanity check — make sure the goal log matches the score.
     // Score is derived from goals on every saveGoal/deleteGoal, but the
@@ -494,60 +534,78 @@ export default function ScorerView() {
   const saveGoal = async () => {
     if (isLocked) return;
     if (!goalForm.team_id) return;
+    if (modalBusyRef.current) return;   // ignore double-taps while the insert is in flight
+    modalBusyRef.current = true; setModalBusy(true);
     setErrorMsg('');
-    const { data, error } = await supabase.from('game_goals').insert({
-      game_id: gameId, team_id: goalForm.team_id,
-      scorer_number: goalForm.scorer_number ? parseInt(goalForm.scorer_number) : null,
-      assist1_number: goalForm.assist1_number ? parseInt(goalForm.assist1_number) : null,
-      assist2_number: goalForm.assist2_number ? parseInt(goalForm.assist2_number) : null,
-      period: goalForm.period, time_in_period: goalForm.time_in_period || null,
-      is_shootout: goalForm.is_shootout,
-    }).select().single();
-    // Keep the modal open and the score untouched if the write failed — the
-    // goal was NOT recorded, and the scorer needs to know so they can retry.
-    if (error || !data) { setErrorMsg('Could not save the goal — check your connection and try again. The goal was NOT recorded.'); return; }
-    // Append optimistically, then derive score from the new goal list so the
-    // score on the games table stays in lock-step with the goal log. Eliminates
-    // the drift that could happen when the goal insert succeeded but the
-    // separate score update failed (the pre-refactor pattern).
-    const nextGoals = [data, ...goals];
-    setGoals(nextGoals);
-    syncScoreFromGoals(nextGoals);
-    setGoalModal(false);
-    setGoalForm(prev => ({ ...prev, scorer_number: '', assist1_number: '', assist2_number: '', time_in_period: '' }));
+    try {
+      const { data, error } = await supabase.from('game_goals').insert({
+        game_id: gameId, team_id: goalForm.team_id,
+        scorer_number: goalForm.scorer_number ? parseInt(goalForm.scorer_number) : null,
+        assist1_number: goalForm.assist1_number ? parseInt(goalForm.assist1_number) : null,
+        assist2_number: goalForm.assist2_number ? parseInt(goalForm.assist2_number) : null,
+        period: goalForm.period, time_in_period: goalForm.time_in_period || null,
+        is_shootout: goalForm.is_shootout,
+      }).select().single();
+      // Keep the modal open and the score untouched if the write failed — the
+      // goal was NOT recorded, and the scorer needs to know so they can retry.
+      if (error || !data) { setErrorMsg('Could not save the goal — check your connection and try again. The goal was NOT recorded.'); return; }
+      // Append optimistically, then derive score from the new goal list so the
+      // score on the games table stays in lock-step with the goal log. Eliminates
+      // the drift that could happen when the goal insert succeeded but the
+      // separate score update failed (the pre-refactor pattern).
+      const nextGoals = [data, ...goals];
+      setGoals(nextGoals);
+      syncScoreFromGoals(nextGoals);
+      setGoalModal(false);
+      setGoalForm(prev => ({ ...prev, scorer_number: '', assist1_number: '', assist2_number: '', time_in_period: '' }));
+    } finally {
+      modalBusyRef.current = false; setModalBusy(false);
+    }
   };
 
   const savePenalty = async () => {
     if (isLocked) return;
     if (!penaltyForm.team_id) return;
+    if (modalBusyRef.current) return;   // ignore double-taps while the insert is in flight
+    modalBusyRef.current = true; setModalBusy(true);
     setErrorMsg('');
-    const { data, error } = await supabase.from('game_penalties').insert({
-      game_id: gameId, team_id: penaltyForm.team_id,
-      player_number: penaltyForm.player_number ? parseInt(penaltyForm.player_number) : null,
-      penalty_type: penaltyForm.penalty_type, severity: penaltyForm.severity,
-      duration_minutes: PENALTY_DURATIONS[penaltyForm.severity] || 2,
-      period: penaltyForm.period, time_in_period: penaltyForm.time_in_period || null,
-    }).select().single();
-    if (error || !data) { setErrorMsg('Could not save the penalty — check your connection and try again. It was NOT recorded.'); return; }
-    setPenalties(prev => [data, ...prev]);
-    setPenaltyModal(false);
-    setPenaltyForm(prev => ({ ...prev, player_number: '', time_in_period: '' }));
+    try {
+      const { data, error } = await supabase.from('game_penalties').insert({
+        game_id: gameId, team_id: penaltyForm.team_id,
+        player_number: penaltyForm.player_number ? parseInt(penaltyForm.player_number) : null,
+        penalty_type: penaltyForm.penalty_type, severity: penaltyForm.severity,
+        duration_minutes: PENALTY_DURATIONS[penaltyForm.severity] || 2,
+        period: penaltyForm.period, time_in_period: penaltyForm.time_in_period || null,
+      }).select().single();
+      if (error || !data) { setErrorMsg('Could not save the penalty — check your connection and try again. It was NOT recorded.'); return; }
+      setPenalties(prev => [data, ...prev]);
+      setPenaltyModal(false);
+      setPenaltyForm(prev => ({ ...prev, player_number: '', time_in_period: '' }));
+    } finally {
+      modalBusyRef.current = false; setModalBusy(false);
+    }
   };
 
   const saveGoalie = async () => {
     if (isLocked) return;
     if (!goalieModal) return;
+    if (modalBusyRef.current) return;   // ignore double-taps while the insert is in flight
+    modalBusyRef.current = true; setModalBusy(true);
     setErrorMsg('');
-    const { data, error } = await supabase.from('game_goalie_changes').insert({
-      game_id: gameId, team_id: goalieModal,
-      goalie_out_number: goalieForm.goalie_out_number ? parseInt(goalieForm.goalie_out_number) : null,
-      goalie_in_number: goalieForm.goalie_in_number ? parseInt(goalieForm.goalie_in_number) : null,
-      period: goalieForm.period, time_in_period: goalieForm.time_in_period || null,
-    }).select().single();
-    if (error || !data) { setErrorMsg('Could not save the goalie change — check your connection and try again.'); return; }
-    setGoalieChanges(prev => [data, ...prev]);
-    setGoalieModal(null);
-    setGoalieForm({ goalie_out_number: '', goalie_in_number: '', period, time_in_period: '' });
+    try {
+      const { data, error } = await supabase.from('game_goalie_changes').insert({
+        game_id: gameId, team_id: goalieModal,
+        goalie_out_number: goalieForm.goalie_out_number ? parseInt(goalieForm.goalie_out_number) : null,
+        goalie_in_number: goalieForm.goalie_in_number ? parseInt(goalieForm.goalie_in_number) : null,
+        period: goalieForm.period, time_in_period: goalieForm.time_in_period || null,
+      }).select().single();
+      if (error || !data) { setErrorMsg('Could not save the goalie change — check your connection and try again.'); return; }
+      setGoalieChanges(prev => [data, ...prev]);
+      setGoalieModal(null);
+      setGoalieForm({ goalie_out_number: '', goalie_in_number: '', period, time_in_period: '' });
+    } finally {
+      modalBusyRef.current = false; setModalBusy(false);
+    }
   };
 
   const deleteGoal = async (id) => {
@@ -567,6 +625,20 @@ export default function ScorerView() {
     if (error) { setErrorMsg('Could not delete the penalty — check your connection and try again.'); return; }
     setPenalties(prev => prev.filter(p => p.id !== id));
   };
+
+  if (loadError) return (
+    <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', padding: 24 }}>
+      <div style={{ textAlign: 'center', maxWidth: 320 }}>
+        <div style={{ fontSize: 32, marginBottom: 12 }}>📶</div>
+        <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, marginBottom: 8 }}>Couldn't load the game</div>
+        <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.5)', marginBottom: 18, lineHeight: 1.5 }}>Check your connection — any scoring already saved is safe on the server.</div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+          <button onClick={() => { setLoading(true); load(); }} style={{ background: C.red, border: 'none', borderRadius: 999, color: '#fff', padding: '10px 22px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>↻ Retry</button>
+          <button onClick={() => navigate(-1)} style={{ background: C.blue, border: 'none', borderRadius: 999, color: '#fff', padding: '10px 22px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>← Back</button>
+        </div>
+      </div>
+    </div>
+  );
 
   if (loading) return <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif' }}>Loading game...</div>;
 
@@ -905,31 +977,33 @@ export default function ScorerView() {
           )
         )}
         {status !== 'final'
-          ? <button onClick={() => changePeriod('final')} disabled={finalizeBlocked}
-              style={{ width: '100%', padding: 14, background: finalizeBlocked ? C.border : C.red, border: 'none', borderRadius: 999, color: '#fff', fontSize: 15, fontWeight: 700, cursor: finalizeBlocked ? 'not-allowed' : 'pointer', fontFamily: 'Barlow, sans-serif', marginTop: 4, transition: 'all 0.15s', opacity: finalizeBlocked ? 0.6 : 1 }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; }}
+          ? <button onClick={() => changePeriod('final')} disabled={finalizeBlocked || saving}
+              style={{ width: '100%', padding: 14, background: (finalizeBlocked || saving) ? C.border : C.red, border: 'none', borderRadius: 999, color: '#fff', fontSize: 15, fontWeight: 700, cursor: (finalizeBlocked || saving) ? 'not-allowed' : 'pointer', fontFamily: 'Barlow, sans-serif', marginTop: 4, transition: 'all 0.15s', opacity: (finalizeBlocked || saving) ? 0.6 : 1 }}
+              onMouseEnter={e => { if (!(finalizeBlocked || saving)) { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; } }}
               onMouseLeave={e => { e.currentTarget.style.background = C.red; e.currentTarget.style.color = '#fff'; }}>
-              🏒 Finalize Game
+              {saving ? '⏳ Finalizing…' : '🏒 Finalize Game'}
             </button>
           : <div style={{ textAlign: 'center', padding: 14, background: 'rgba(215,38,56,0.1)', border: '0.5px solid rgba(215,38,56,0.3)', borderRadius: 999, fontSize: 14, fontWeight: 700, color: C.red }}>✓ Game Finalized — Standings Updated</div>
         }
       </div>
 
       {showScoresheet && (
-        <Scoresheet
-          game={{ ...game, home_score: homeScore, away_score: awayScore }}
-          goals={goals}
-          penalties={penalties}
-          shots={shotTotals}
-          goalieChanges={goalieChanges}
-          isLeague={isLeague}
-          onClose={() => setShowScoresheet(false)}
-        />
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif' }}>Preparing scoresheet…</div>}>
+          <Scoresheet
+            game={{ ...game, home_score: homeScore, away_score: awayScore }}
+            goals={goals}
+            penalties={penalties}
+            shots={shotTotals}
+            goalieChanges={goalieChanges}
+            isLeague={isLeague}
+            onClose={() => setShowScoresheet(false)}
+          />
+        </Suspense>
       )}
 
       {/* GOAL MODAL */}
       {goalModal && (
-        <Modal title="Log Goal" onClose={() => setGoalModal(false)} onSave={saveGoal} saveLabel="Save Goal">
+        <Modal title="Log Goal" onClose={() => setGoalModal(false)} onSave={saveGoal} saveLabel="Save Goal" busy={modalBusy}>
           <MField label="Team">
             <select style={selectStyle} value={goalForm.team_id} onChange={e => setGoalForm(p => ({ ...p, team_id: e.target.value }))}>
               <option value={homeTeam?.id}>{homeTeam?.team_name}</option>
@@ -962,7 +1036,7 @@ export default function ScorerView() {
 
       {/* PENALTY MODAL */}
       {penaltyModal && (
-        <Modal title="Add Penalty" onClose={() => setPenaltyModal(false)} onSave={savePenalty} saveLabel="Save Penalty">
+        <Modal title="Add Penalty" onClose={() => setPenaltyModal(false)} onSave={savePenalty} saveLabel="Save Penalty" busy={modalBusy}>
           <MField label="Team">
             <select style={selectStyle} value={penaltyForm.team_id} onChange={e => setPenaltyForm(p => ({ ...p, team_id: e.target.value }))}>
               <option value={homeTeam?.id}>{homeTeam?.team_name}</option>
@@ -993,7 +1067,7 @@ export default function ScorerView() {
 
       {/* GOALIE MODAL */}
       {goalieModal && (
-        <Modal title={`Goalie Change — ${teamName(goalieModal)}`} onClose={() => setGoalieModal(null)} onSave={saveGoalie} saveLabel="Save Change">
+        <Modal title={`Goalie Change — ${teamName(goalieModal)}`} onClose={() => setGoalieModal(null)} onSave={saveGoalie} saveLabel="Save Change" busy={modalBusy}>
           <Row2>
             <MField label="Out #"><input style={inputStyle} type="number" placeholder="Jersey #" value={goalieForm.goalie_out_number} onChange={e => setGoalieForm(p => ({ ...p, goalie_out_number: e.target.value }))} /></MField>
             <MField label="In #"><input style={inputStyle} type="number" placeholder="Jersey #" value={goalieForm.goalie_in_number} onChange={e => setGoalieForm(p => ({ ...p, goalie_in_number: e.target.value }))} /></MField>

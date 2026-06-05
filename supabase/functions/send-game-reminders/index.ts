@@ -241,10 +241,12 @@ async function sendOne(toEmail: string, subject: string, html: string): Promise<
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
 
-  // Optional bearer-token gate so only the pg_cron can fire this.
-  if (CRON_KEY) {
+  // Fail-closed bearer-token gate so only the pg_cron (which sends this header)
+  // can fire this. If CRON_KEY is ever unset we DENY rather than run wide open
+  // (the old `if (CRON_KEY)` form silently disabled auth when the var was unset).
+  {
     const auth = req.headers.get('authorization') ?? '';
-    if (auth !== `Bearer ${CRON_KEY}`) {
+    if (!CRON_KEY || auth !== `Bearer ${CRON_KEY}`) {
       return new Response(JSON.stringify({ error: 'forbidden' }), { status: 403, headers: { ...cors, 'Content-Type': 'application/json' } });
     }
   }
