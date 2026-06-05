@@ -52,6 +52,7 @@ function showReloadBanner(reg) {
       // No waiting worker on click — either the banner caught a stale state
       // or the SW already activated in another tab. Reload directly so the
       // user still gets the fresh assets they tapped for.
+      try { sessionStorage.setItem('rinkd_sw_reload', '1'); } catch { /* ignore */ }
       window.location.reload();
     }
   });
@@ -104,6 +105,9 @@ if ('serviceWorker' in navigator && window.location.hostname !== 'localhost') {
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (refreshing) return;
       refreshing = true;
+      // Mark this as a deploy-driven reload so RouteAnalytics skips the phantom
+      // page_view the fresh worker would otherwise log on re-serve.
+      try { sessionStorage.setItem('rinkd_sw_reload', '1'); } catch { /* ignore */ }
       window.location.reload();
     });
   });
