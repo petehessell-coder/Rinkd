@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { track } from '../lib/analytics';
 import Layout from '../components/Layout';
 import RsvpBlock from '../components/RsvpBlock';
 import MapLink from '../components/MapLink';
@@ -131,6 +132,41 @@ export default function GameDetail({ profile }) {
   }, [gameId, isLeague, isTeamGame]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Realtime — keep a spectator's single-game view fresh. This page is what
+  // fans open from a shared link; without this the score/goals stay frozen
+  // until they manually reload. Re-run load() (debounced) on any change to this
+  // game's row or its goals/penalties. Read-only page, so a full reload is fine.
+  useEffect(() => {
+    if (!gameId) return;
+    const rowTable = isLeague ? 'league_games' : isTeamGame ? 'team_games' : 'games';
+    let t = null;
+    const bump = () => { if (t) clearTimeout(t); t = setTimeout(() => { load(); }, 400); };
+    let channel = null;
+    try {
+      const name = `gamedetail:${gameId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+      let ch = supabase.channel(name)
+        .on('postgres_changes', { event: '*', schema: 'public', table: rowTable, filter: `id=eq.${gameId}` }, bump);
+      if (!isTeamGame) {
+        ch = ch
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'game_goals', filter: `game_id=eq.${gameId}` }, bump)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'game_penalties', filter: `game_id=eq.${gameId}` }, bump);
+      }
+      ch.subscribe();
+      channel = ch;
+    } catch { /* realtime is best-effort; manual reload still works */ }
+    return () => { if (t) clearTimeout(t); try { if (channel) supabase.removeChannel(channel); } catch { /* swallow */ } };
+  }, [gameId, isLeague, isTeamGame, load]);
+
+  // Activation analytics (pre-pilot P1-3): record the first time this spectator
+  // sees the game live — a core "did they engage with the pilot" signal.
+  const liveTrackedRef = useRef(false);
+  useEffect(() => {
+    if (game?.status === 'live' && !liveTrackedRef.current) {
+      liveTrackedRef.current = true;
+      track('live_game_viewed', { game_id: gameId, kind: isLeague ? 'league' : isTeamGame ? 'team' : 'tournament' });
+    }
+  }, [game?.status, gameId, isLeague, isTeamGame]);
 
   if (loading) return (
     <Layout profile={profile}>

@@ -1,6 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import Scoresheet from '../components/Scoresheet';
+// Lazy-loaded: Scoresheet pulls in jsPDF + autotable + signature-canvas
+// (hundreds of KB) that only a scorer exporting a PDF ever needs — keep it out
+// of the main bundle so it doesn't slow first paint for every player.
+const Scoresheet = React.lazy(() => import('../components/Scoresheet'));
 import { supabase } from '../lib/supabase';
 import { useWakeLock } from '../lib/useWakeLock';
 import { createGameRecapPost } from '../lib/posts';
@@ -130,6 +133,7 @@ export default function ScorerView() {
   const [game, setGame] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   // Distinguishes a director (tournament) / commissioner (league) from a
   // plain assigned scorer. Only directors can Reopen a finalized game so
   // mistakes can be corrected without bouncing back to the manage UI.
@@ -171,7 +175,8 @@ export default function ScorerView() {
   const [goalieForm, setGoalieForm] = useState({ goalie_out_number: '', goalie_in_number: '', period: 1, time_in_period: '' });
 
   const load = useCallback(async () => {
-    const { data: g } = isLeague
+    setLoadError(false);
+    const { data: g, error: gErr } = isLeague
       ? await supabase.from('league_games')
           .select('*, home_team:league_teams!home_team_id(id, team_name, team:teams(id,name)), away_team:league_teams!away_team_id(id, team_name, team:teams(id,name)), rink:rinks(name,sub_rink), league:leagues(name,commissioner_id,is_activated)')
           .eq('id', gameId).single()
@@ -182,6 +187,9 @@ export default function ScorerView() {
           // gate — show the activation-pending wall instead of the scorer UI.
           .select('*, home_team:tournament_teams!home_team_id(id,team_name), away_team:tournament_teams!away_team_id(id,team_name), rink:rinks(name,sub_rink), tournament:tournaments(name,director_id,settings,is_activated)')
           .eq('id', gameId).single();
+    // A transient fetch failure (flaky rink wifi) must NOT eject the scorer
+    // mid-game. Distinguish a real error (show retry) from a genuine not-found.
+    if (gErr) { setLoadError(true); setLoading(false); return; }
     if (!g) { navigate(-1); return; }
 
     // Authorization — only the director / assigned scorer (tournament) or the
@@ -618,6 +626,20 @@ export default function ScorerView() {
     setPenalties(prev => prev.filter(p => p.id !== id));
   };
 
+  if (loadError) return (
+    <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', padding: 24 }}>
+      <div style={{ textAlign: 'center', maxWidth: 320 }}>
+        <div style={{ fontSize: 32, marginBottom: 12 }}>📶</div>
+        <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, marginBottom: 8 }}>Couldn't load the game</div>
+        <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.5)', marginBottom: 18, lineHeight: 1.5 }}>Check your connection — any scoring already saved is safe on the server.</div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+          <button onClick={() => { setLoading(true); load(); }} style={{ background: C.red, border: 'none', borderRadius: 999, color: '#fff', padding: '10px 22px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>↻ Retry</button>
+          <button onClick={() => navigate(-1)} style={{ background: C.blue, border: 'none', borderRadius: 999, color: '#fff', padding: '10px 22px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>← Back</button>
+        </div>
+      </div>
+    </div>
+  );
+
   if (loading) return <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif' }}>Loading game...</div>;
 
   if (!authorized) return (
@@ -966,15 +988,17 @@ export default function ScorerView() {
       </div>
 
       {showScoresheet && (
-        <Scoresheet
-          game={{ ...game, home_score: homeScore, away_score: awayScore }}
-          goals={goals}
-          penalties={penalties}
-          shots={shotTotals}
-          goalieChanges={goalieChanges}
-          isLeague={isLeague}
-          onClose={() => setShowScoresheet(false)}
-        />
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif' }}>Preparing scoresheet…</div>}>
+          <Scoresheet
+            game={{ ...game, home_score: homeScore, away_score: awayScore }}
+            goals={goals}
+            penalties={penalties}
+            shots={shotTotals}
+            goalieChanges={goalieChanges}
+            isLeague={isLeague}
+            onClose={() => setShowScoresheet(false)}
+          />
+        </Suspense>
       )}
 
       {/* GOAL MODAL */}
