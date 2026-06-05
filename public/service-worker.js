@@ -103,8 +103,8 @@ self.addEventListener('push', (e) => {
   const title = data.title || 'Rinkd';
   const options = {
     body: data.body || 'Something happened on the ice.',
-    icon: '/rinkd_icon_192.png',
-    badge: '/rinkd_icon_80.png',
+    icon: '/icon-192.png',
+    badge: '/favicon-64.png',
     tag: data.tag || 'rinkd-notification',
     data: { url: data.url || '/' },
     vibrate: [100, 50, 100],
