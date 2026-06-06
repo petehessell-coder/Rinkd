@@ -29,16 +29,17 @@ const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:
 const TABS = ['Schedule', 'Standings', 'Stats', 'Teams', 'Feed', 'Gallery', 'Info'];
 
 function TeamLogo({ team, size = 32 }) {
+  const logoUrl = team?.logo_url;
   return (
-    <div style={{ width: size, height: size, borderRadius: 6, background: team?.logo_color || C.blue, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: size * 0.35, color: '#fff', flexShrink: 0 }}>
-      {team?.logo_initials || (team?.name || '?').slice(0, 2).toUpperCase()}
+    <div style={{ width: size, height: size, borderRadius: 6, background: logoUrl ? `url(${logoUrl}) center/cover, ${team?.logo_color || C.blue}` : (team?.logo_color || C.blue), display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: size * 0.35, color: '#fff', flexShrink: 0 }}>
+      {!logoUrl && (team?.logo_initials || (team?.name || '?').slice(0, 2).toUpperCase())}
     </div>
   );
 }
 
 function GameRow({ game, isCommissioner, navigate }) {
-  const home = game.home_lt?.team || { name: game.home_lt?.team_name, logo_color: game.home_lt?.logo_color, logo_initials: game.home_lt?.logo_initials };
-  const away = game.away_lt?.team || { name: game.away_lt?.team_name, logo_color: game.away_lt?.logo_color, logo_initials: game.away_lt?.logo_initials };
+  const home = game.home_lt?.team || { name: game.home_lt?.team_name, logo_color: game.home_lt?.logo_color, logo_initials: game.home_lt?.logo_initials, logo_url: game.home_lt?.logo_url };
+  const away = game.away_lt?.team || { name: game.away_lt?.team_name, logo_color: game.away_lt?.logo_color, logo_initials: game.away_lt?.logo_initials, logo_url: game.away_lt?.logo_url };
   const isLive = game.status === 'live';
   const isFinal = game.status === 'final';
   const date = new Date(game.start_time);
@@ -337,7 +338,7 @@ export default function LeaguePage({ currentUser, profile }) {
       style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)', cursor: 'pointer' }}
       onMouseEnter={e => e.currentTarget.style.background = 'rgba(46,91,140,0.1)'}
       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-      <TeamLogo team={lt.team || { name: lt.team_name, logo_color: lt.logo_color, logo_initials: lt.logo_initials }} size={36} />
+      <TeamLogo team={lt.team || { name: lt.team_name, logo_color: lt.logo_color, logo_initials: lt.logo_initials, logo_url: lt.logo_url }} size={36} />
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{lt.team?.name || lt.team_name}</div>
         <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>{lt.team?.home_rink || lt.team?.location || ''}</div>
@@ -616,8 +617,8 @@ export default function LeaguePage({ currentUser, profile }) {
                 {scopedStandings.map((row, i) => (
                   <div key={row.lt_id} style={{ display: 'grid', gridTemplateColumns: standingsCols, padding: '10px 12px', borderTop: '0.5px solid rgba(244,247,250,0.06)', alignItems: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 28, height: 28, borderRadius: 5, background: row.logo_color || C.blue, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 11, color: '#fff', flexShrink: 0 }}>
-                        {row.logo_initials || row.team_name.slice(0, 2).toUpperCase()}
+                      <div style={{ width: 28, height: 28, borderRadius: 5, background: row.logo_url ? `url(${row.logo_url}) center/cover, ${row.logo_color || C.blue}` : (row.logo_color || C.blue), display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 11, color: '#fff', flexShrink: 0 }}>
+                        {!row.logo_url && (row.logo_initials || row.team_name.slice(0, 2).toUpperCase())}
                       </div>
                       <span style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>{row.team_name}</span>
                     </div>
