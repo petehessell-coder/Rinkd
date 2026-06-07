@@ -192,9 +192,30 @@ export async function getJoinRequests(teamId) {
   return data || [];
 }
 
-export async function approveJoinRequest(requestId, { team_id, user_id, role = 'player', jersey_number, position }) {
-  await supabase.from('team_join_requests').update({ status: 'approved' }).eq('id', requestId);
-  return addTeamMember({ team_id, user_id, role, jersey_number, position });
+/**
+ * Approve a join request. If `member_id` is given, the requester is BOUND onto
+ * that existing unclaimed (ghost/imported) roster slot instead of creating a
+ * duplicate row. Otherwise a fresh membership is created. The RPC enforces the
+ * manager/commissioner guard and de-dupes server-side.
+ */
+export async function approveJoinRequest(requestId, { member_id = null } = {}) {
+  const { error } = await supabase.rpc('approve_join_request', {
+    p_request_id: requestId,
+    p_member_id: member_id || null,
+  });
+  if (error) throw error;
+}
+
+/** Unclaimed (no user_id) roster slots on a team — e.g. imported ghost rosters. */
+export async function getUnclaimedSlots(teamId) {
+  const { data, error } = await supabase
+    .from('team_members')
+    .select('id, invite_name, jersey_number, position, role')
+    .eq('team_id', teamId)
+    .is('user_id', null)
+    .order('invite_name');
+  if (error) throw error;
+  return data || [];
 }
 
 export async function denyJoinRequest(requestId) {

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import DateTimePicker from '../components/DateTimePicker';
-import { getTeam, getTeamMembers, getTeamGames, getJoinRequests, createTeam, updateTeam, addTeamMember, removeTeamMember, updateTeamMember, addTeamGame, approveJoinRequest, denyJoinRequest } from '../lib/teams';
+import { getTeam, getTeamMembers, getTeamGames, getJoinRequests, createTeam, updateTeam, addTeamMember, removeTeamMember, updateTeamMember, addTeamGame, approveJoinRequest, denyJoinRequest, getUnclaimedSlots } from '../lib/teams';
 import { supabase } from '../lib/supabase';
 import RosterUpload from '../components/RosterUpload';
 import { uploadMedia } from '../lib/posts';
@@ -158,6 +158,8 @@ function ManageTeam({ id, profile, navigate }) {
   const [members, setMembers] = useState([]);
   const [games, setGames] = useState([]);
   const [requests, setRequests] = useState([]);
+  const [unclaimedSlots, setUnclaimedSlots] = useState([]);
+  const [slotChoice, setSlotChoice] = useState({});
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('Roster');
   const [saving, setSaving] = useState(false);
@@ -170,8 +172,19 @@ function ManageTeam({ id, profile, navigate }) {
 
   const load = useCallback(async () => {
     try {
-      const [t, m, g, r] = await Promise.all([getTeam(id), getTeamMembers(id), getTeamGames(id), getJoinRequests(id)]);
-      setTeam(t); setMembers(m); setGames(g); setRequests(r);
+      const [t, m, g, r, slots] = await Promise.all([getTeam(id), getTeamMembers(id), getTeamGames(id), getJoinRequests(id), getUnclaimedSlots(id)]);
+      setTeam(t); setMembers(m); setGames(g); setRequests(r); setUnclaimedSlots(slots);
+      // Pre-select a ghost slot whose name matches each requester (manager can change).
+      setSlotChoice(prev => {
+        const next = { ...prev };
+        for (const req of r) {
+          if (next[req.id] !== undefined) continue;
+          const nm = (req.profile?.name || '').trim().toLowerCase();
+          const match = nm ? slots.find(s => (s.invite_name || '').trim().toLowerCase() === nm) : null;
+          next[req.id] = match ? match.id : '';
+        }
+        return next;
+      });
     } catch(e) { console.error(e); }
     finally { setLoading(false); }
   }, [id]);
@@ -254,7 +267,7 @@ function ManageTeam({ id, profile, navigate }) {
   const handleApprove = async (req) => {
     setError(null);
     try {
-      await approveJoinRequest(req.id, { team_id: id, user_id: req.user_id });
+      await approveJoinRequest(req.id, { member_id: slotChoice[req.id] || null });
       await load();
     } catch (e) {
       setError(`Couldn't approve ${req.profile?.name || 'this request'}: ${e?.message || 'try again'}`);
@@ -442,6 +455,19 @@ function ManageTeam({ id, profile, navigate }) {
                   </div>
                 </div>
                 {req.message && <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.6)', marginBottom: 12, fontStyle: 'italic' }}>"{req.message}"</div>}
+                {unclaimedSlots.length > 0 && (
+                  <div style={{ marginBottom: 10 }}>
+                    <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'rgba(244,247,250,0.4)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 5 }}>Assign to roster spot</label>
+                    <select value={slotChoice[req.id] ?? ''} onChange={e => setSlotChoice(s => ({ ...s, [req.id]: e.target.value }))} style={{ ...selectStyle, fontSize: 13, padding: '8px 10px' }}>
+                      <option value="">➕ New roster spot</option>
+                      {unclaimedSlots.map(s => (
+                        <option key={s.id} value={s.id}>
+                          {s.invite_name || 'Unnamed'}{s.position ? ` · ${s.position}` : ''}{s.jersey_number ? ` · #${s.jersey_number}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: 8 }}>
                   <ActionBtn onClick={() => handleApprove(req)}>✓ Approve</ActionBtn>
                   <ActionBtn onClick={() => handleDeny(req)} variant="danger" small>Deny</ActionBtn>
