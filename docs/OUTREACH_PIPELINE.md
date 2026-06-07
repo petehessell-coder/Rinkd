@@ -57,6 +57,14 @@ The additive-wedge framing landed exactly as the playbook predicts. Matt runs **
 
 ---
 
+## Validation / ally contacts (not product targets)
+
+| Contact | Who | What they gave us | Status / next |
+|---|---|---|---|
+| **Bryce Aldrich** | Video Coach, USA Hockey **U18 Women's National Team** (LinkedIn, verified) | **Gap thesis confirmed at the top of the sport (Jun 7, 2026):** Pete asked whether anything in the national-team stack (video/stats/comms — all separate tools) is family- or fan-facing. Bryce: *"It is all internal only."* → Even the best-resourced program in US hockey has zero consumer/family surface. Pitch-deck-grade validation (get his OK before quoting by name). | Warm thread open. Next: give-first follow-up — ask what he'd WANT families to see vs. keep internal (product intel on the elite-program privacy line). Long-game: advisor/credibility name for the girls/women's angle (+30% since 2022; pairs with Premier Ice Prospects + Pony Tail targets). NO pitch yet per playbook. |
+
+---
+
 ## Competitive intel
 
 - **Sportsheadz** (Canadian) — the **most serious incumbent** found. All-in-one ops platform: registration + payments, managed websites, scheduling, tournament brackets, hotel/travel, fundraising, evaluations, comms, a team-management app. **What it lacks: a social/community feed and true live in-app scoring** — exactly Rinkd's two leads. Verdict: complementary today (they own back-office, Rinkd owns front-of-house/engagement), collision course long-term. Win on social/live now; when Rinkd builds registration, do it the unified-social way, not bolt-on-admin. **Approach the Canadian market with awareness of them.**
