@@ -1,12 +1,12 @@
 // Supabase Edge Function: sync-hockeyshift
 // -----------------------------------------------------------------------------
 // Pulls live league data from HockeyShift / DigitalShift (the ShiftStats API)
-// and upserts it into Rinkd's league_teams + league_games for any league wired
-// up via settings.hockeyshift.division_id.
+// and upserts it into Rinkd's league_teams + league_games + team_members for any
+// league wired up via settings.hockeyshift.division_id.
 //
-// This is the "Rinkd Social import wedge": an operator keeps scoring in their
-// existing tool (HockeyShift), Rinkd pulls the results, and the existing
-// recap / standings / feed / leaderboard pipeline does the rest. No double entry.
+// "Rinkd Social import wedge": an operator keeps scoring in their existing tool
+// (HockeyShift), Rinkd pulls results, and the existing recap / standings / feed /
+// leaderboard / roster surfaces do the rest. No double entry.
 //
 // Idempotent: every row is upserted on (external_source, external_id), so this
 // is safe to run on a cron (every few minutes during game windows).
@@ -73,8 +73,8 @@ Deno.serve(async (_req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Find leagues wired to a HockeyShift division. Only 5 leagues total, so we
-    // filter in JS rather than fight PostgREST nested-jsonb null filters.
+    // Find leagues wired to a HockeyShift division. Only a handful of leagues,
+    // so filter in JS rather than fight PostgREST nested-jsonb null filters.
     const { data: leagues, error: lerr } = await supabase
       .from("leagues")
       .select("id, name, settings");
@@ -111,23 +111,28 @@ Deno.serve(async (_req) => {
         );
       }
 
-      // Build ShiftStats team id -> Rinkd league_team.id
+      // Map ShiftStats team id -> Rinkd league_team.id (games) and -> global
+      // teams.id (rosters live in team_members on the global team).
       const { data: lts } = await supabase
         .from("league_teams")
-        .select("id, external_id")
+        .select("id, external_id, team_id")
         .eq("league_id", lg.id)
         .eq("external_source", "hockeyshift");
-      const teamMap = new Map<string, string>();
-      (lts || []).forEach((r: any) => teamMap.set(String(r.external_id), r.id));
+      const leagueTeamMap = new Map<string, string>();
+      const globalTeamMap = new Map<string, string>();
+      (lts || []).forEach((r: any) => {
+        leagueTeamMap.set(String(r.external_id), r.id);
+        if (r.team_id) globalTeamMap.set(String(r.external_id), r.team_id);
+      });
 
       // 2) Games — full upsert (scores/status change over time = the live path).
       const gamesRes = await shiftGet(`division/${div}/games`, ticket);
       const games: any[] = gamesRes?.games || [];
-      let gcount = 0, skipped = 0;
+      let gcount = 0, gskip = 0;
       for (const g of games) {
-        const home = teamMap.get(String(g.home_team_id));
-        const away = teamMap.get(String(g.away_team_id));
-        if (!home || !away) { skipped++; continue; }
+        const home = leagueTeamMap.get(String(g.home_team_id));
+        const away = leagueTeamMap.get(String(g.away_team_id));
+        if (!home || !away) { gskip++; continue; }
 
         const row: Record<string, unknown> = {
           league_id: lg.id,
@@ -149,12 +154,48 @@ Deno.serve(async (_req) => {
         gcount++;
       }
 
+      // 3) Rosters — per team, pull active players and upsert team_members on
+      //    the linked global team. Ghost roster: user_id null, name in
+      //    invite_name (same shape Rinkd already uses for imported rosters).
+      let rcount = 0, rskip = 0;
+      for (const t of teams) {
+        const globalTeamId = globalTeamMap.get(String(t.id));
+        if (!globalTeamId) { rskip++; continue; }
+        const playersRes = await shiftGet(
+          `team/${t.id}/players?status=active`, ticket,
+        );
+        const players: any[] = playersRes?.players || [];
+        for (const p of players) {
+          const name = (p.name ||
+            `${p.first_name || ""} ${p.last_name || ""}`).trim();
+          if (!name) continue;
+          const isGoalie = String(p.position || "").toUpperCase() === "G";
+          const row: Record<string, unknown> = {
+            team_id: globalTeamId,
+            external_source: "hockeyshift",
+            external_id: String(p.id),
+            invite_name: name,
+            jersey_number: p.number ?? null,
+            position: p.position || null,
+            role: isGoalie ? "goalie" : "player",
+            status: "active",
+          };
+          const { error: rerr } = await supabase
+            .from("team_members")
+            .upsert(row, { onConflict: "external_source,external_id" });
+          if (rerr) throw rerr;
+          rcount++;
+        }
+      }
+
       summary.push({
         league: lg.name,
         division: div,
         teams_seen: teams.length,
         games_upserted: gcount,
-        games_skipped_unmapped: skipped,
+        games_skipped_unmapped: gskip,
+        roster_members_upserted: rcount,
+        teams_skipped_no_global: rskip,
       });
     }
 
