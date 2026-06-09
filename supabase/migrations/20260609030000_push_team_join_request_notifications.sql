@@ -8,12 +8,16 @@
 -- league director requesting to join the team they manage): self-excluded, the
 -- league commissioner was the sole recipient and got no real-time alert.
 --
--- Add 'team_join_request' to the push WHEN clause. enqueue_notification_push is
--- kind-agnostic (it just posts the notification id to send-notification-push).
+-- Add 'team_join_request' to the push WHEN clause, plus the join-DECISION kinds
+-- ('team_join_approved'/'team_join_denied' from notify_requester_on_join_decision)
+-- so the requester is pushed when a manager/commissioner acts — closing the loop.
+-- enqueue_notification_push is kind-agnostic (it just posts the notification id to
+-- send-notification-push).
 
 DROP TRIGGER IF EXISTS trg_enqueue_notification_push ON public.notifications;
 CREATE TRIGGER trg_enqueue_notification_push
   AFTER INSERT ON public.notifications
   FOR EACH ROW
-  WHEN (new.kind = ANY (ARRAY['comment'::text, 'mention'::text, 'reaction'::text, 'message'::text, 'team_join_request'::text]))
+  WHEN (new.kind = ANY (ARRAY['comment'::text, 'mention'::text, 'reaction'::text, 'message'::text,
+                              'team_join_request'::text, 'team_join_approved'::text, 'team_join_denied'::text]))
   EXECUTE FUNCTION enqueue_notification_push();
