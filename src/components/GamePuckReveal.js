@@ -202,7 +202,7 @@ export default function GamePuckReveal({
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
           style={{
-            position: 'relative', width: '100%', aspectRatio: '5 / 6',
+            position: 'relative', width: '100%', aspectRatio: '700 / 981',
             borderRadius: 16, overflow: 'hidden',
             border: `1px solid ${C.border}`, background: C.card,
             boxShadow: '0 20px 50px rgba(0,0,0,0.6)',
@@ -249,7 +249,9 @@ export default function GamePuckReveal({
 
           {confettiOn && <Confetti seed={peelPct} />}
 
-          {/* ── Tape layer (cover) — clipped away from the left as you peel right ── */}
+          {/* ── Tape layer (cover) — clipped away from the left as you peel right.
+               Real frayed-tape photo (Pete) over the CSS gradient, which stays as
+               the fallback if the image fails to load. ── */}
           {!tapeGone && (
             <div aria-hidden style={{
               position: 'absolute', inset: 0, zIndex: 4,
@@ -262,16 +264,20 @@ export default function GamePuckReveal({
                 'repeating-linear-gradient(0deg, rgba(0,0,0,0.05) 0 1px, rgba(255,255,255,0) 1px 22px),' +
                 'linear-gradient(180deg,#f3f4f6,#dfe3e8 55%,#cfd5dc)',
             }}>
-              {/* worn smudges */}
-              <div style={{ position: 'absolute', top: '22%', left: '12%', width: 60, height: 30, borderRadius: '50%', background: 'rgba(0,0,0,0.06)', filter: 'blur(6px)' }} />
-              <div style={{ position: 'absolute', bottom: '18%', right: '16%', width: 80, height: 26, borderRadius: '50%', background: 'rgba(0,0,0,0.05)', filter: 'blur(7px)' }} />
+              {/* the real frayed tape — covers the gradient; onError → gradient shows */}
+              <img
+                src="/gamepuck/tape.webp" alt="" draggable={false}
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', userSelect: 'none', pointerEvents: 'none' }}
+              />
               {/* label + grip hint, hidden once you start pulling */}
               <div style={{
                 position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                gap: 10, opacity: peel > 0.04 ? 0 : 1, transition: 'opacity 0.15s',
+                gap: 10, opacity: peel > 0.04 ? 0 : 1, transition: 'opacity 0.15s', zIndex: 1,
+                textShadow: '0 1px 2px rgba(255,255,255,0.55)',
               }}>
-                <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 30, letterSpacing: '0.04em', color: '#2a3340', textTransform: 'uppercase' }}>Game Puck</div>
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: '#5b6776', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 32, letterSpacing: '0.04em', color: '#2a2a26', textTransform: 'uppercase' }}>Game Puck</div>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: '#4a463c', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span aria-hidden style={{ fontSize: 16 }}>👉</span> Drag to peel the tape
                 </div>
               </div>
@@ -291,8 +297,8 @@ export default function GamePuckReveal({
               <div style={{
                 position: 'absolute', top: -2, bottom: -2, right: 0, width: 22,
                 borderRadius: '3px 9px 9px 3px',
-                background: 'linear-gradient(90deg,#cfd5dc 0%,#eef1f4 45%,#ffffff 72%,#dfe3e8 100%)',
-                boxShadow: '0 0 6px rgba(0,0,0,0.35), inset -2px 0 2px rgba(255,255,255,0.8)',
+                background: 'linear-gradient(90deg,#c7bfa8 0%,#e6dfcd 42%,#f5efe1 72%,#d6cdb8 100%)',
+                boxShadow: '0 0 6px rgba(0,0,0,0.4), inset -2px 0 2px rgba(255,255,255,0.7)',
                 transform: 'skewY(-1.5deg)',
               }} />
             </div>
