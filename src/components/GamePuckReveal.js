@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Avatar } from './Logos';
 import ShareButton from './ShareButton';
+import PuckMark from './PuckMark';
 import { loadGamePuckCardData } from '../lib/gameCardData';
 
 // GAMEPUCK-2 — the "peel the tape" reveal. A settled Game Puck winner sits UNDER
@@ -24,7 +24,6 @@ import { loadGamePuckCardData } from '../lib/gameCardData';
 // Props:
 //   gameId, kind                  the polymorphic game ref
 //   result                        { jersey, winner_name, votes, total_votes }
-//   winnerProfile                 profiles row | null (nameplate-only)
 //   teamName                      winning team's display name | null
 //   winnerPucks                   the winner's career Game Puck count
 //   accent                        accent color (default Rinkd red)
@@ -104,7 +103,7 @@ function Confetti({ seed = 0 }) {
 }
 
 export default function GamePuckReveal({
-  gameId, kind, result, winnerProfile = null, teamName = null,
+  gameId, kind, result, teamName = null,
   winnerPucks = 0, accent = '#D72638', onClose, onRevealed,
 }) {
   const stageRef = useRef(null);
@@ -117,7 +116,7 @@ export default function GamePuckReveal({
   const [confettiOn, setConfettiOn] = useState(false);
   const [tapeImgFailed, setTapeImgFailed] = useState(false); // real tape couldn't load → CSS fallback
 
-  const name = result?.winner_name || winnerProfile?.name || null;
+  const name = result?.winner_name || null;
   const jersey = result?.jersey;
   const votes = result?.votes || 0;
   const totalVotes = result?.total_votes || 0;
@@ -189,7 +188,7 @@ export default function GamePuckReveal({
       <div style={{ width: '100%', maxWidth: 360 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.ice }}>
-            <span aria-hidden style={{ width: 13, height: 13, borderRadius: '50%', background: '#0a0a0a', border: '1.5px solid rgba(244,247,250,0.4)' }} />
+            <PuckMark size={20} />
             <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: C.dim }}>Game Puck</span>
           </div>
           <button onClick={onClose} aria-label="Close" style={{ background: 'transparent', border: 'none', color: C.faint, fontSize: 22, lineHeight: 1, cursor: 'pointer', padding: 4 }}>×</button>
@@ -221,16 +220,9 @@ export default function GamePuckReveal({
             <div style={{
               transform: done ? 'scale(1)' : 'scale(0.94)', opacity: done ? 1 : 0.0,
               transition: done ? 'transform 0.5s cubic-bezier(.18,1.3,.4,1) 0.05s, opacity 0.35s ease 0.05s' : 'none',
+              filter: 'drop-shadow(0 8px 18px rgba(0,0,0,0.5))',
             }}>
-              {winnerProfile
-                ? <Avatar profile={winnerProfile} size={104} />
-                : (
-                  <div aria-hidden style={{
-                    width: 104, height: 104, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: 'linear-gradient(160deg,#1b3a5e,#0f2847)', border: `2px solid ${accent}`,
-                    color: C.ice, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 38,
-                  }}>#{jersey}</div>
-                )}
+              <PuckMark size={132} />
             </div>
             <div style={{
               transform: done ? 'translateY(0)' : 'translateY(6px)', opacity: done ? 1 : 0,

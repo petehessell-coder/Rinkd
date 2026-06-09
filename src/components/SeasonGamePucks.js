@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getSeasonGamePucks } from '../lib/gamePucks';
+import PuckMark from './PuckMark';
 
 // Rinkd Game Puck (SOCIAL-3, Phase 1) — season "Game Pucks won" board, the
 // fan-vote companion to StatLeaderboards. Per final game, the most-voted
@@ -31,7 +32,7 @@ export default function SeasonGamePucks({ scope = 'tournament', id, accent = '#D
   return (
     <div style={{ marginBottom: 18 }}>
       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'rgba(244,247,250,0.3)', textTransform: 'uppercase', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span aria-hidden style={{ width: 11, height: 11, borderRadius: '50%', background: '#0a0a0a', border: '1px solid rgba(244,247,250,0.35)', display: 'inline-block' }} />
+        <PuckMark size={18} />
         Game Pucks · Fans’ Pick
       </div>
       <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>

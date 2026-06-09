@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { getGamePuck, getMyGamePuckVote, castGamePuckVote, getGamePuckResult, getUserGamePuckCount, getGamePuckState, settleGamePuck, getGamePuckWinnerProfile } from '../lib/gamePucks';
+import { getGamePuck, getMyGamePuckVote, castGamePuckVote, getGamePuckResult, getUserGamePuckCount, getGamePuckState, settleGamePuck } from '../lib/gamePucks';
 import ShareButton from './ShareButton';
+import PuckMark from './PuckMark';
 import { loadGamePuckCardData } from '../lib/gameCardData';
 import GamePuckReveal, { hasRevealed } from './GamePuckReveal';
 
@@ -39,7 +40,6 @@ export default function GamePuckCard({
   const [err, setErr] = useState(false);
   const [result, setResult] = useState(null);       // SOCIAL-3 P2: settled winner | null
   const [winnerPucks, setWinnerPucks] = useState(0); // the winner's career Game Puck count
-  const [winnerProfile, setWinnerProfile] = useState(null); // winner's avatar profile (for the reveal)
   const [state, setState] = useState(null);          // { phase, opened_at, closes_at, total_votes, is_settled }
   const [settling, setSettling] = useState(false);   // lazy settle-on-view in flight
   const [revealed, setRevealed] = useState(false);   // GAMEPUCK-2: peeled on this device
@@ -61,9 +61,6 @@ export default function GamePuckCard({
       if (res) setRevealed(hasRevealed(kind, gameId));
       if (res?.winner_user_id) {
         getUserGamePuckCount(res.winner_user_id).then(setWinnerPucks).catch(() => {});
-        getGamePuckWinnerProfile(res.winner_user_id).then(setWinnerProfile).catch(() => {});
-      } else {
-        setWinnerProfile(null);
       }
     } catch (e) {
       console.error('[GamePuck] load failed', e);
@@ -170,7 +167,7 @@ export default function GamePuckCard({
     <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: '12px 14px 14px', marginBottom: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'rgba(244,247,250,0.3)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span aria-hidden style={{ width: 11, height: 11, borderRadius: '50%', background: '#0a0a0a', border: '1px solid rgba(244,247,250,0.35)', display: 'inline-block' }} />
+          <PuckMark size={18} />
           Game Puck
         </div>
         {!hideTally && total > 0 && (
@@ -195,7 +192,7 @@ export default function GamePuckCard({
   if (result) {
     const revealModal = revealOpen && (
       <GamePuckReveal
-        gameId={gameId} kind={kind} result={result} winnerProfile={winnerProfile}
+        gameId={gameId} kind={kind} result={result}
         teamName={teamNameFor(result.team_id)} winnerPucks={winnerPucks} accent={accent}
         onClose={() => setRevealOpen(false)}
         onRevealed={() => setRevealed(true)}
@@ -215,7 +212,7 @@ export default function GamePuckCard({
                 'linear-gradient(180deg, rgba(233,236,239,0.14), rgba(207,213,220,0.10))',
             }}
           >
-            <span aria-hidden style={{ fontSize: 22 }}>🏒</span>
+            <PuckMark size={30} />
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.12em', color: C.faint, textTransform: 'uppercase' }}>Voting closed · winner sealed</div>
               <div style={{ fontSize: 14.5, fontWeight: 900, fontStyle: 'italic', fontFamily: "'Barlow Condensed', sans-serif", color: C.ice, letterSpacing: '0.02em' }}>
@@ -232,7 +229,7 @@ export default function GamePuckCard({
     return (
       <Wrap>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(215,38,56,0.12)', border: `0.5px solid ${accent}`, borderRadius: 9, padding: '10px 12px' }}>
-          <span aria-hidden style={{ fontSize: 20 }}>🏒</span>
+          <PuckMark size={30} />
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: C.faint, textTransform: 'uppercase' }}>Game Puck winner · Fans’ Pick</div>
             <div style={{ fontSize: 14, fontWeight: 800, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -259,7 +256,7 @@ export default function GamePuckCard({
     return (
       <Wrap>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(46,91,140,0.14)', border: `0.5px solid ${C.border}`, borderRadius: 9, padding: '12px 12px' }}>
-          <span aria-hidden style={{ fontSize: 20 }}>🏒</span>
+          <PuckMark size={30} />
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: C.faint, textTransform: 'uppercase' }}>Voting closed</div>
             <div style={{ fontSize: 13.5, fontWeight: 800, color: C.ice }}>Peeling the tape…</div>
@@ -336,7 +333,7 @@ export default function GamePuckCard({
     <Wrap>
       {!hideTally && total > 0 && leader && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(46,91,140,0.14)', border: `0.5px solid ${C.border}`, borderRadius: 9, padding: '8px 11px', marginBottom: 12 }}>
-          <span aria-hidden style={{ fontSize: 16 }}>🏒</span>
+          <PuckMark size={22} />
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: C.faint, textTransform: 'uppercase' }}>Leading</div>
             <div style={{ fontSize: 13, fontWeight: 700, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
