@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
 import { teamInitials } from '../lib/teamInitials';
 import SEO from '../components/SEO';
+import ShareButton from '../components/ShareButton';
+import { buildRecapCardData } from '../lib/shareCard';
 import {
   isPublicSharingEnabled, areScorersHidden, isParentPublic, gameAppUrl,
 } from '../lib/publicShare';
@@ -149,15 +151,19 @@ export default function PublicGame({ league }) {
     return titleCase(r);
   })();
 
-  const scorerLine = (teamId) => {
-    if (scorersHidden) return null;
+  // [{ name, goals }] per team, suppressed for youth. Feeds both the on-page
+  // scorer line and the share-card.
+  const scorersArrayFor = (teamId) => {
+    if (scorersHidden) return [];
     const counts = {};
     goals.filter(g => g.team_id === teamId && !g.is_shootout).forEach(g => { const k = g.scorer_number; if (k == null) return; counts[k] = (counts[k] || 0) + 1; });
-    const parts = Object.entries(counts)
-      .map(([num, n]) => ({ label: lineupByTeam[teamId]?.[num] || `#${num}`, n }))
-      .sort((a, b) => b.n - a.n)
-      .map(s => s.n > 1 ? `${s.label} (${s.n})` : s.label);
-    return parts.length ? parts.join('  ·  ') : null;
+    return Object.entries(counts)
+      .map(([num, n]) => ({ name: lineupByTeam[teamId]?.[num] || `#${num}`, goals: n }))
+      .sort((a, b) => b.goals - a.goals);
+  };
+  const scorerLine = (teamId) => {
+    const arr = scorersArrayFor(teamId);
+    return arr.length ? arr.map(s => s.goals > 1 ? `${s.name} (${s.goals})` : s.name).join('  ·  ') : null;
   };
 
   const goalScorer = (g) => {
@@ -177,20 +183,31 @@ export default function PublicGame({ league }) {
   const ogTitle = `${homeTeam.name || 'Home'} ${game.home_score ?? 0}, ${awayTeam.name || 'Away'} ${game.away_score ?? 0}`;
   const ogDesc = [isFinal ? 'FINAL' : isLive ? 'LIVE' : null, roundLabel, competition].filter(Boolean).join(' · ');
 
+  // Share-card data — built lazily on tap (getCard) from what's already loaded.
+  const getCard = () => buildRecapCardData({
+    home: homeTeam, away: awayTeam,
+    homeScore: game.home_score, awayScore: game.away_score,
+    round: roundLabel, competition, league: competition,
+    tie: isFinal && game.home_score === game.away_score,
+    scorersHome: scorersArrayFor(homeTeam.id),
+    scorersAway: scorersArrayFor(awayTeam.id),
+  });
+
   return (
     <Shell>
       <SEO title={ogTitle} description={ogDesc} />
       <div style={{ maxWidth: 600, margin: '0 auto', padding: '20px 16px 40px' }}>
 
-        {/* event chip */}
+        {/* event chip + share */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
           {parent?.logo_url
             ? <img src={parent.logo_url} alt="" width={32} height={32} style={{ borderRadius: 8, objectFit: 'cover' }} />
-            : <div style={{ width: 32, height: 32, borderRadius: 8, background: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, color: '#fff', fontSize: 15 }}>{(competition || 'R').slice(0, 1).toUpperCase()}</div>}
-          <div>
-            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 800, fontSize: 17, color: C.ice, lineHeight: 1.1 }}>{competition || 'Rinkd'}</div>
+            : <div style={{ width: 32, height: 32, borderRadius: 8, background: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, color: '#fff', fontSize: 15, flexShrink: 0 }}>{(competition || 'R').slice(0, 1).toUpperCase()}</div>}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 800, fontSize: 17, color: C.ice, lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{competition || 'Rinkd'}</div>
             <div style={{ fontSize: 12, color: C.steel }}>{roundLabel}{dateStr ? `  ·  ${dateStr}` : ''}</div>
           </div>
+          {isFinal && <ShareButton getCard={getCard} isLeague={isLeague} gameId={gameId} variant="ghost" />}
         </div>
 
         {/* scoreboard */}
