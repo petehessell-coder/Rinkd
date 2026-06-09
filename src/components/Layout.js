@@ -4,7 +4,7 @@ import { RinkdLogo, Avatar, ProfileNavIcon, ChirpNavIcon } from './Logos';
 import { signOut } from '../lib/auth';
 import NotificationBell from './NotificationBell';
 import MessagesIcon from './MessagesIcon';
-import LeaguePinIcon from './LeaguePinIcon';
+import NavPins from './NavPins';
 import HelpButton from './HelpButton';
 import MoreDrawer from './MoreDrawer';
 import IOSInstallBanner from './IOSInstallBanner';
@@ -195,10 +195,10 @@ export default function Layout({ children, profile }) {
           </Link>
         </div>
 
-        {/* League quick-nav — one tap to the user's own league (hidden if none) */}
+        {/* Nav pins — the user's pinned league/team/tournament (hidden if none) */}
         {profile?.id && (
           <div style={{ padding: '0 10px 8px' }}>
-            <LeaguePinIcon userId={profile.id} variant="row" size={30} />
+            <NavPins userId={profile.id} variant="row" size={30} />
           </div>
         )}
 
@@ -254,7 +254,7 @@ export default function Layout({ children, profile }) {
         )}
         {profile?.id && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <LeaguePinIcon userId={profile.id} size={30} />
+            <NavPins userId={profile.id} size={26} />
             <MessagesIcon userId={profile.id} size={22} />
             <NotificationBell userId={profile.id} size={22} />
           </div>

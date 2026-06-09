@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import SEO from '../components/SEO';
 import MapLink from '../components/MapLink';
+import PinToNavButton from '../components/PinToNavButton';
 import { getLeague, getLeagueTeams, getLeagueGames, getLeagueStandings, getUserLeagueRole } from '../lib/leagues';
 import { listLeagueDivisions, getMyDivisionInLeague } from '../lib/leagueDivisions';
 import DivisionPicker from '../components/DivisionPicker';
@@ -494,6 +495,7 @@ export default function LeaguePage({ currentUser, profile }) {
                 {isFollowing ? '🔔 Following' : '🔔 Follow'}
               </button>
             )}
+            {currentUser && <PinToNavButton userId={currentUser.id} pinType="league" targetId={id} />}
             {isManager && (
               <button onClick={() => navigate(`/league/${id}/manage`)}
                 style={{ background: 'rgba(46,91,140,0.25)', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 20, padding: '5px 12px', fontSize: 12, fontWeight: 600, color: C.ice, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap', transition: 'all 0.15s' }}
