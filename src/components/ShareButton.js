@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { composeRecapCard } from '../lib/shareCard';
-import { canWebShareFiles, downloadBlob, copyText, absoluteShareUrl } from '../lib/share';
+import { prefersNativeShare, downloadBlob, copyText, absoluteShareUrl } from '../lib/share';
 import { gameShareUrl } from '../lib/publicShare';
 import { track } from '../lib/analytics';
 
@@ -23,35 +23,43 @@ export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghos
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState(null); // { imgUrl, blob, deepLink }
   const [copied, setCopied] = useState(false);
+  const [err, setErr] = useState(false);
 
   const deepLink = absoluteShareUrl(gameShareUrl(!!isLeague, gameId));
+  const kind = isLeague ? 'league' : 'tournament';
 
   const onShare = async () => {
     if (busy) return;
-    setBusy(true);
+    setBusy(true); setErr(false);
+    // 1) Compose the card. If this fails, SHOW it — never fail silently.
+    let blob, card;
     try {
-      const card = await getCard();
-      const blob = await composeRecapCard(card, { format: 'portrait' });
-      const text = `${card.home.name} ${card.homeScore ?? 0}, ${card.away.name} ${card.awayScore ?? 0} — on Rinkd`;
-
-      if (canWebShareFiles()) {
-        const file = new File([blob], 'rinkd-recap.png', { type: 'image/png' });
-        try {
-          await navigator.share({ files: [file], text, url: deepLink });
-          track('share_recap', { method: 'web_share', kind: isLeague ? 'league' : 'tournament', game_id: gameId });
-          setBusy(false);
-          return;
-        } catch (e) {
-          if (e && e.name === 'AbortError') { setBusy(false); return; } // user cancelled
-          // any other failure → drop to the fallback modal
-        }
-      }
-      setModal({ imgUrl: URL.createObjectURL(blob), blob, deepLink });
-      track('share_recap', { method: 'fallback', kind: isLeague ? 'league' : 'tournament', game_id: gameId });
+      card = await getCard();
+      blob = await composeRecapCard(card, { format: 'portrait' });
     } catch (e) {
       // eslint-disable-next-line no-console
-      console.error('[ShareButton] compose/share failed', e);
+      console.error('[ShareButton] compose failed', e);
+      setErr(true); setBusy(false);
+      return;
     }
+    // 2) Touch device with file-share → one-tap native sheet. Any failure (incl.
+    //    lost user-activation after the async compose) drops to the modal.
+    if (prefersNativeShare()) {
+      try {
+        const file = new File([blob], 'rinkd-recap.png', { type: 'image/png' });
+        const text = `${card.home.name} ${card.homeScore ?? 0}, ${card.away.name} ${card.awayScore ?? 0} — on Rinkd`;
+        await navigator.share({ files: [file], text, url: deepLink });
+        track('share_recap', { method: 'web_share', kind, game_id: gameId });
+        setBusy(false);
+        return;
+      } catch (e) {
+        if (e && e.name === 'AbortError') { setBusy(false); return; } // user cancelled
+        // else fall through to the modal
+      }
+    }
+    // 3) Desktop / fallback → modal with the card + Download + Copy link.
+    setModal({ imgUrl: URL.createObjectURL(blob), blob, deepLink });
+    track('share_recap', { method: 'fallback', kind, game_id: gameId });
     setBusy(false);
   };
 
@@ -66,12 +74,12 @@ export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghos
 
   return (
     <>
-      <button onClick={onShare} disabled={busy} style={{
+      <button onClick={onShare} disabled={busy} title={err ? 'Could not build the card — tap to try again' : 'Share'} style={{
         display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 999,
         fontFamily: "'Barlow', sans-serif", fontWeight: 700, fontSize: 14, cursor: busy ? 'default' : 'pointer',
-        opacity: busy ? 0.6 : 1, ...btnStyle,
+        opacity: busy ? 0.6 : 1, ...btnStyle, ...(err ? { color: '#E26B6B', borderColor: '#E26B6B' } : {}),
       }}>
-        <ShareIcon /> {busy ? 'Preparing…' : label}
+        <ShareIcon /> {busy ? 'Preparing…' : err ? 'Try again' : label}
       </button>
 
       {modal && (

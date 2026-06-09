@@ -13,6 +13,20 @@ export function canWebShareFiles() {
   }
 }
 
+// Should we fire the one-tap NATIVE share sheet, or show the fallback modal?
+// Only go native on a touch device — desktop browsers report canShare(files)=true
+// but their native share is flaky/silent, so desktop always gets the modal (card
+// preview + Download + Copy link), which is the reliable experience there.
+export function prefersNativeShare() {
+  if (!canWebShareFiles()) return false;
+  try {
+    const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+    return (navigator.maxTouchPoints || 0) > 0 || coarse;
+  } catch {
+    return false;
+  }
+}
+
 // Trigger a browser download of a blob (desktop fallback path).
 export function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);

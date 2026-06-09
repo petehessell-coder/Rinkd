@@ -11,6 +11,8 @@ import { LedR } from '../components/Logos';
 import { getLiveBarnUrl } from '../lib/livebarn';
 import { teamInitials } from '../lib/teamInitials';
 import GamePuckCard from '../components/GamePuckCard';
+import ShareButton from '../components/ShareButton';
+import { loadGameCardData } from '../lib/gameCardData';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 
@@ -371,6 +373,14 @@ export default function GameDetail({ profile }) {
         </div>
 
         <div style={{ padding: 16 }}>
+
+          {/* Share the recap — final league/tournament games (team games have no public page) */}
+          {isFinal && !isTeamGame && (
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
+              <ShareButton gameId={gameId} isLeague={isLeague} variant="solid" label="Share recap"
+                getCard={() => loadGameCardData(gameId, isLeague)} />
+            </div>
+          )}
 
           {/* GAME PUCK — fan vote, final league/tournament games only */}
           {isFinal && !isTeamGame && (

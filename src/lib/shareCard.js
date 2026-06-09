@@ -47,20 +47,45 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-// Load an image for canvas compositing. crossOrigin='anonymous' makes an external
-// image WITHOUT CORS headers ERROR (→ null → fallback) instead of TAINTING the
-// canvas (which would make toBlob throw). So this is the CORS guardrail: a logo
-// only ever draws when it's same-origin or a CORS-clean host (Supabase). Never
-// breaks the share.
-function loadImage(src) {
+// Load an image for canvas compositing — taint-proof. We fetch the bytes and
+// createImageBitmap() them: a bitmap built from a blob is ALWAYS canvas-clean,
+// which sidesteps the service-worker/CORS replay traps that can taint a plain
+// <img crossOrigin> (and make toBlob() throw). Any failure → null → the draw
+// falls back (text wordmark / initials disc). Never breaks the share.
+const _imgCache = new Map();
+function _imgFromObjectURL(url) {
   return new Promise((resolve) => {
-    if (!src) return resolve(null);
     const img = new Image();
-    img.crossOrigin = 'anonymous';
     img.onload = () => resolve(img);
     img.onerror = () => resolve(null);
-    img.src = src;
+    img.src = url;
   });
+}
+async function loadImage(src) {
+  if (!src) return null;
+  if (_imgCache.has(src)) return _imgCache.get(src);
+  let result = null;
+  try {
+    const res = await fetch(src, { cache: 'force-cache' });
+    if (res.ok) {
+      const blob = await res.blob();
+      result = typeof createImageBitmap === 'function'
+        ? await createImageBitmap(blob)
+        : await _imgFromObjectURL(URL.createObjectURL(blob));
+    }
+  } catch { /* fall through to the <img> attempt */ }
+  if (!result) {
+    // Fallback for environments without fetch/bitmap support.
+    result = await new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = src;
+    });
+  }
+  if (result) _imgCache.set(src, result); // cache hits only, so transient fails can retry
+  return result;
 }
 
 // Make sure the brand fonts are rasterized before we draw, or canvas falls back
