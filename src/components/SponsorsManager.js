@@ -20,7 +20,7 @@ const label = { fontSize: 11, fontWeight: 700, color: C.steel, letterSpacing: '0
 
 const prettyCat = (c) => c.replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
 
-export default function SponsorsManager({ ownerType, ownerId, isYouth = false }) {
+export default function SponsorsManager({ ownerType, ownerId, isYouth = false, settings = {}, onSaveSettings }) {
   const [userId, setUserId] = useState(null);
   const [sponsors, setSponsors] = useState(null); // null = loading
   const [form, setForm] = useState({ sponsor_name: '', link_url: '', category: '', image_url: '', slot: 'event_banner', weight: 1, starts_at: '', ends_at: '' });
@@ -98,6 +98,8 @@ export default function SponsorsManager({ ownerType, ownerId, isYouth = false })
         Your event’s “digital dasher board.” Add a sponsor and choose a placement — a banner at the top of the page, or a “presented by” lockup on Standings / Schedule / Stats. Their inventory, your call. Impressions + taps are counted; see the report below.
         {isYouth && <span style={{ display: 'block', marginTop: 6, color: '#E0A93B' }}>Youth event: {YOUTH_BLOCKED_CATEGORIES.map(prettyCat).join(', ')} sponsors are not allowed.</span>}
       </div>
+
+      {onSaveSettings && <ShareCardSponsors settings={settings} onSaveSettings={onSaveSettings} />}
 
       {msg && <div style={{ marginBottom: 12, fontSize: 13, color: msg.kind === 'ok' ? '#5BCF8E' : C.red }}>{msg.text}</div>}
 
@@ -257,6 +259,64 @@ function SponsorReport({ ownerType, ownerId, nonce }) {
         </div>
       )}
       <div style={{ fontSize: 11, color: C.dim, marginTop: 6 }}>On-page delivery. Pair with your recap-share reach for total “delivered + off-platform” impressions.</div>
+    </div>
+  );
+}
+
+// Recap + Game Puck "presented by" sponsors — live in the owner's settings JSONB
+// (settings.recap_sponsor / settings.gamepuck_sponsor), shown on shared recap /
+// Game Puck cards + the public game page. Moved here from the Settings tab so all
+// sponsor management is one surface.
+function ShareCardSponsors({ settings = {}, onSaveSettings }) {
+  const blank = { name: '', url: '', logo_url: '' };
+  const [recap, setRecap] = useState({ ...blank, ...(settings.recap_sponsor || {}) });
+  const [puck, setPuck] = useState({ ...blank, ...(settings.gamepuck_sponsor || {}) });
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const setR = (k, v) => setRecap((p) => ({ ...p, [k]: v }));
+  const setP = (k, v) => setPuck((p) => ({ ...p, [k]: v }));
+
+  // Blank name clears the sponsor (-> null), so a saved sponsor can be removed.
+  const clean = (s) => ((s.name || '').trim()
+    ? { name: s.name.trim(), url: (s.url || '').trim() || null, logo_url: (s.logo_url || '').trim() || null }
+    : null);
+
+  const save = async () => {
+    setSaving(true); setMsg(null);
+    try {
+      await onSaveSettings({ recap_sponsor: clean(recap), gamepuck_sponsor: clean(puck) });
+      setMsg({ kind: 'ok', text: 'Saved.' });
+    } catch (e) { setMsg({ kind: 'err', text: e.message || 'Could not save' }); }
+    setSaving(false); setTimeout(() => setMsg(null), 4000);
+  };
+
+  const fieldRow = (val, onChange, ph) => (
+    <input value={val} onChange={(e) => onChange(e.target.value)} placeholder={ph} style={{ ...inputStyle, marginBottom: 8 }} />
+  );
+
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 18 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 6 }}>Recap &amp; Game Puck sponsors</div>
+      <div style={{ fontSize: 12, color: C.steel, marginBottom: 14, lineHeight: 1.5 }}>
+        Shown as “presented by …” on shared recap + Game Puck cards and the public game page. Blank recap → falls back to “presented by Rinkd.” Blank Game Puck → uses the recap sponsor.
+      </div>
+      {msg && <div style={{ marginBottom: 10, fontSize: 13, color: msg.kind === 'ok' ? '#5BCF8E' : C.red }}>{msg.text}</div>}
+
+      <div style={{ marginBottom: 14 }}>
+        <label style={label}>Recap sponsor</label>
+        {fieldRow(recap.name, (v) => setR('name', v), 'Sponsor name — e.g. Little Caesars')}
+        {fieldRow(recap.url, (v) => setR('url', v), 'Link (optional) — https://sponsor.com')}
+        {fieldRow(recap.logo_url, (v) => setR('logo_url', v), 'Logo URL (optional)')}
+      </div>
+      <div>
+        <label style={label}>Game Puck sponsor</label>
+        {fieldRow(puck.name, (v) => setP('name', v), 'Sponsor name — defaults to the recap sponsor')}
+        {fieldRow(puck.url, (v) => setP('url', v), 'Link (optional) — https://sponsor.com')}
+        {fieldRow(puck.logo_url, (v) => setP('logo_url', v), 'Logo URL (optional)')}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+        <button onClick={save} disabled={saving} style={{ background: saving ? C.border : C.blue, color: '#fff', border: 'none', borderRadius: 999, padding: '10px 22px', fontWeight: 700, fontSize: 14, cursor: saving ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif' }}>{saving ? 'Saving…' : 'Save sponsors'}</button>
+      </div>
     </div>
   );
 }

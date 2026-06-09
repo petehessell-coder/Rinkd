@@ -320,10 +320,10 @@ function ManageLeague({ id, navigate }) {
         <div style={{ width: 80 }} />
       </div>
 
-      <div style={{ display: 'flex', background: C.navy, borderBottom: '2px solid rgba(46,91,140,0.3)' }}>
+      <div style={{ display: 'flex', flexWrap: 'nowrap', overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', background: C.navy, borderBottom: '2px solid rgba(46,91,140,0.3)' }}>
         {MANAGE_TABS.map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
-            style={{ fontSize: 13, fontWeight: 700, padding: '10px 16px', color: '#FFFFFF', background: 'transparent', border: 'none', borderBottom: activeTab === tab ? '3px solid #D72638' : '3px solid transparent', marginBottom: -2, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', opacity: activeTab === tab ? 1 : 0.5, transition: 'opacity 0.15s' }}
+            style={{ fontSize: 13, fontWeight: 700, padding: '10px 16px', color: '#FFFFFF', background: 'transparent', border: 'none', borderBottom: activeTab === tab ? '3px solid #D72638' : '3px solid transparent', marginBottom: -2, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap', flexShrink: 0, opacity: activeTab === tab ? 1 : 0.5, transition: 'opacity 0.15s' }}
             onMouseEnter={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.color = '#0B1F3A'; e.currentTarget.style.opacity = '1'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#FFFFFF'; e.currentTarget.style.opacity = activeTab === tab ? '1' : '0.5'; }}>
             {tab}
@@ -708,7 +708,9 @@ function ManageLeague({ id, navigate }) {
         )}
 
         {activeTab === 'Sponsors' && league && isCommissioner && (
-          <SponsorsManager ownerType="league" ownerId={id} isYouth={league.settings?.feature_profile === 'youth_competitive'} />
+          <SponsorsManager ownerType="league" ownerId={id} isYouth={league.settings?.feature_profile === 'youth_competitive'}
+            settings={league.settings || {}}
+            onSaveSettings={async (partial) => { await updateLeague(id, { settings: { ...(league.settings || {}), ...partial } }); await load(); }} />
         )}
 
         {activeTab === 'Staff' && league && isCommissioner && (
@@ -1584,9 +1586,6 @@ function LeagueSettings({ league, onSave }) {
   const [saving, setSaving] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
-  // Recap + Game Puck sponsors (GROWTH-SHARE-1) live inside the settings JSONB.
-  const setSp = (k, v) => setForm(p => ({ ...p, settings: { ...(p.settings || {}), recap_sponsor: { ...((p.settings || {}).recap_sponsor || {}), [k]: v } } }));
-  const setPsp = (k, v) => setForm(p => ({ ...p, settings: { ...(p.settings || {}), gamepuck_sponsor: { ...((p.settings || {}).gamepuck_sponsor || {}), [k]: v } } }));
 
   // Mirror the team / tournament / LeagueCreate logo upload flow: 5MB cap
   // → classifyImage() NSFW pre-check → uploadMedia → returns public URL
@@ -1666,24 +1665,9 @@ function LeagueSettings({ league, onSave }) {
           </Field>
         </Row2>
       </Card>
-      <SecLabel>Recap Sponsor</SecLabel>
-      <Card>
-        <div style={{ fontSize: 12, color: '#8BA3BE', marginBottom: 12, lineHeight: 1.5 }}>
-          The league’s default sponsor — shown as “Recap presented by …” on every shared recap card + the public game page (and on the Game Puck card unless you set a separate one below). Blank → falls back to “presented by Rinkd.”
-        </div>
-        <Field label="Sponsor name"><input style={inputStyle} value={(form.settings?.recap_sponsor)?.name || ''} maxLength={40} placeholder="e.g. Little Caesars" onChange={e => setSp('name', e.target.value)} /></Field>
-        <Field label="Sponsor link (optional)"><input style={inputStyle} value={(form.settings?.recap_sponsor)?.url || ''} placeholder="https://sponsor.com" onChange={e => setSp('url', e.target.value)} /></Field>
-        <Field label="Sponsor logo URL (optional)"><input style={inputStyle} value={(form.settings?.recap_sponsor)?.logo_url || ''} placeholder="https://… (shown on the public page)" onChange={e => setSp('logo_url', e.target.value)} /></Field>
-      </Card>
-      <SecLabel>Game Puck Sponsor</SecLabel>
-      <Card>
-        <div style={{ fontSize: 12, color: '#8BA3BE', marginBottom: 12, lineHeight: 1.5 }}>
-          The Game Puck (Player-of-the-Game) card is the most-shared, highest-value slot. Shown as “Game Puck presented by …”. <b>Leave blank to use the recap sponsor above.</b>
-        </div>
-        <Field label="Sponsor name"><input style={inputStyle} value={(form.settings?.gamepuck_sponsor)?.name || ''} maxLength={40} placeholder="Defaults to the recap sponsor" onChange={e => setPsp('name', e.target.value)} /></Field>
-        <Field label="Sponsor link (optional)"><input style={inputStyle} value={(form.settings?.gamepuck_sponsor)?.url || ''} placeholder="https://sponsor.com" onChange={e => setPsp('url', e.target.value)} /></Field>
-        <Field label="Sponsor logo URL (optional)"><input style={inputStyle} value={(form.settings?.gamepuck_sponsor)?.logo_url || ''} placeholder="https://… (shown on the public page)" onChange={e => setPsp('logo_url', e.target.value)} /></Field>
-      </Card>
+      <div style={{ fontSize: 12, color: '#8BA3BE', margin: '4px 0 14px', lineHeight: 1.5 }}>
+        Recap &amp; Game Puck sponsors moved to the <b style={{ color: '#F4F7FA' }}>Sponsors</b> tab.
+      </div>
       <button onClick={async () => { setSaving(true); await onSave(cleanSponsorOnForm(form)); setSaving(false); }} disabled={saving || uploadingLogo}
         style={{ width: '100%', padding: 13, background: C.red, border: 'none', borderRadius: 999, color: '#fff', fontSize: 14, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'Barlow, sans-serif', opacity: saving ? 0.7 : 1, transition: 'all 0.15s' }}
         onMouseEnter={e => { if (!saving) { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}}

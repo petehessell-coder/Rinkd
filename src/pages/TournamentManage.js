@@ -225,7 +225,9 @@ export default function TournamentManagePage({ currentUser, profile }) {
           {tab === 'Bracket' && <BracketTab tournamentId={id} tournament={tournament} teams={teams} games={games} rinks={rinks} reload={load} flash={showFlash} />}
           {tab === 'Registrations' && <RegistrationsTab tournamentId={id} tournament={tournament} reload={load} flash={showFlash} />}
           {tab === 'Scorers' && <ScorersTab tournamentId={id} tournamentName={tournament.name} originalDirectorId={tournament.director_id} profile={profile} flash={showFlash} />}
-          {tab === 'Sponsors' && <SponsorsManager ownerType="tournament" ownerId={id} isYouth={tournament.settings?.feature_profile === 'youth_competitive'} />}
+          {tab === 'Sponsors' && <SponsorsManager ownerType="tournament" ownerId={id} isYouth={tournament.settings?.feature_profile === 'youth_competitive'}
+            settings={tournament.settings || {}}
+            onSaveSettings={async (partial) => { await updateTournament(id, { settings: { ...(tournament.settings || {}), ...partial } }); await load(); }} />}
           {tab === 'Settings' && <SettingsTab tournament={tournament} currentUser={currentUser} reload={load} flash={showFlash} />}
         </div>
       </div>
@@ -1042,20 +1044,8 @@ function SettingsTab({ tournament, currentUser, reload, flash }) {
     overtime_allowed: s0.overtime_allowed ?? true,
     advancement_per_pool: s0.advancement_per_pool ?? 2,
   });
-  // Recap-card sponsor (GROWTH-SHARE-1) — also lives in settings JSONB.
-  const [sponsor, setSponsor] = useState({
-    name: s0.recap_sponsor?.name || '',
-    logo_url: s0.recap_sponsor?.logo_url || '',
-    url: s0.recap_sponsor?.url || '',
-  });
-  const setSp = (k, v) => setSponsor((p) => ({ ...p, [k]: v }));
-  // Game Puck sponsor (ADS-1 premium slot) — own field; blank = inherit recap.
-  const [puckSponsor, setPuckSponsor] = useState({
-    name: s0.gamepuck_sponsor?.name || '',
-    logo_url: s0.gamepuck_sponsor?.logo_url || '',
-    url: s0.gamepuck_sponsor?.url || '',
-  });
-  const setPsp = (k, v) => setPuckSponsor((p) => ({ ...p, [k]: v }));
+  // Recap + Game Puck sponsors moved to the Sponsors tab (SponsorsManager); the
+  // save below preserves settings.recap_sponsor / gamepuck_sponsor untouched.
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const setF = (k, v) => setFmt((prev) => ({ ...prev, [k]: v }));
@@ -1115,14 +1105,9 @@ function SettingsTab({ tournament, currentUser, reload, flash }) {
     };
     // Merge back into the existing settings JSONB so keys we don't edit here
     // (venue_name, venue_address, pool_names, tiebreakers) are never clobbered.
+    // Spreading the existing settings preserves recap_sponsor / gamepuck_sponsor
+    // (now edited in the Sponsors tab) + venue/pool/tiebreaker keys we don't touch.
     const mergedSettings = { ...(tournament.settings || {}), ...cleanFmt };
-    // Recap sponsor → null clears it (card falls back to "presented by Rinkd").
-    mergedSettings.recap_sponsor = (sponsor.name || '').trim()
-      ? { name: sponsor.name.trim(), logo_url: (sponsor.logo_url || '').trim() || null, url: (sponsor.url || '').trim() || null }
-      : null;
-    mergedSettings.gamepuck_sponsor = (puckSponsor.name || '').trim()
-      ? { name: puckSponsor.name.trim(), logo_url: (puckSponsor.logo_url || '').trim() || null, url: (puckSponsor.url || '').trim() || null }
-      : null;
     // Branding: only store a valid 6-digit hex; anything else clears it so the
     // public page falls back to the default Rinkd look.
     const cleanAccent = /^#[0-9a-fA-F]{6}$/.test((accentColor || '').trim()) ? accentColor.trim() : '';
@@ -1302,48 +1287,9 @@ function SettingsTab({ tournament, currentUser, reload, flash }) {
         )}
       </div>
 
-      {/* Recap Sponsor — GROWTH-SHARE-1 × ADS-1 */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 4 }}>Recap Sponsor</div>
-        <div style={{ fontSize: 12, color: C.steel, marginBottom: 14, lineHeight: 1.5 }}>
-          The event’s default sponsor — shown as “Recap presented by …” on every shared recap card + the public game page (and on the Game Puck card unless you set a separate one below). Blank → falls back to “presented by Rinkd.”
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label style={labelStyle}>Sponsor name</label>
-            <input value={sponsor.name} onChange={(e) => setSp('name', e.target.value)} placeholder="e.g. Little Caesars" maxLength={40} style={inputStyle}/>
-          </div>
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label style={labelStyle}>Sponsor link (optional)</label>
-            <input value={sponsor.url} onChange={(e) => setSp('url', e.target.value)} placeholder="https://sponsor.com" style={inputStyle}/>
-          </div>
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label style={labelStyle}>Sponsor logo URL (optional)</label>
-            <input value={sponsor.logo_url} onChange={(e) => setSp('logo_url', e.target.value)} placeholder="https://… (shown on the public page)" style={inputStyle}/>
-          </div>
-        </div>
-      </div>
-
-      {/* Game Puck Sponsor — ADS-1 premium slot (separate from the recap) */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 4 }}>Game Puck Sponsor</div>
-        <div style={{ fontSize: 12, color: C.steel, marginBottom: 14, lineHeight: 1.5 }}>
-          The Game Puck (Player-of-the-Game) card is the most-shared, highest-value slot. Shown as “Game Puck presented by …”. <b>Leave blank to use the recap sponsor above.</b>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label style={labelStyle}>Sponsor name</label>
-            <input value={puckSponsor.name} onChange={(e) => setPsp('name', e.target.value)} placeholder="Defaults to the recap sponsor" maxLength={40} style={inputStyle}/>
-          </div>
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label style={labelStyle}>Sponsor link (optional)</label>
-            <input value={puckSponsor.url} onChange={(e) => setPsp('url', e.target.value)} placeholder="https://sponsor.com" style={inputStyle}/>
-          </div>
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label style={labelStyle}>Sponsor logo URL (optional)</label>
-            <input value={puckSponsor.logo_url} onChange={(e) => setPsp('logo_url', e.target.value)} placeholder="https://… (shown on the public page)" style={inputStyle}/>
-          </div>
-        </div>
+      {/* Recap + Game Puck sponsors moved to the Sponsors tab. */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 16px', marginBottom: 14, fontSize: 12, color: C.steel, lineHeight: 1.5 }}>
+        Recap &amp; Game Puck sponsors moved to the <b style={{ color: '#F4F7FA' }}>Sponsors</b> tab.
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
