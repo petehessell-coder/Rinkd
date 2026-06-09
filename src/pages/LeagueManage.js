@@ -1543,14 +1543,15 @@ function RegistrationsTab({ leagueId, league, registrations, onChanged }) {
   );
 }
 
-// Normalize the recap sponsor before save: a blank name clears it (→ null) so
-// the card falls back to "presented by Rinkd"; otherwise trim + null empty fields.
+// Normalize the recap + game-puck sponsors before save: a blank name clears that
+// one (→ null) so it falls back (puck → recap → Rinkd); otherwise trim + null empties.
 function cleanSponsorOnForm(form) {
-  const sp = (form.settings || {}).recap_sponsor;
   const settings = { ...(form.settings || {}) };
-  settings.recap_sponsor = sp && (sp.name || '').trim()
+  const norm = (sp) => sp && (sp.name || '').trim()
     ? { name: sp.name.trim(), logo_url: (sp.logo_url || '').trim() || null, url: (sp.url || '').trim() || null }
     : null;
+  settings.recap_sponsor = norm(settings.recap_sponsor);
+  settings.gamepuck_sponsor = norm(settings.gamepuck_sponsor);
   return { ...form, settings };
 }
 
@@ -1570,8 +1571,9 @@ function LeagueSettings({ league, onSave }) {
   const [saving, setSaving] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
-  // Recap sponsor (GROWTH-SHARE-1) lives inside the settings JSONB.
+  // Recap + Game Puck sponsors (GROWTH-SHARE-1) live inside the settings JSONB.
   const setSp = (k, v) => setForm(p => ({ ...p, settings: { ...(p.settings || {}), recap_sponsor: { ...((p.settings || {}).recap_sponsor || {}), [k]: v } } }));
+  const setPsp = (k, v) => setForm(p => ({ ...p, settings: { ...(p.settings || {}), gamepuck_sponsor: { ...((p.settings || {}).gamepuck_sponsor || {}), [k]: v } } }));
 
   // Mirror the team / tournament / LeagueCreate logo upload flow: 5MB cap
   // → classifyImage() NSFW pre-check → uploadMedia → returns public URL
@@ -1654,11 +1656,20 @@ function LeagueSettings({ league, onSave }) {
       <SecLabel>Recap Sponsor</SecLabel>
       <Card>
         <div style={{ fontSize: 12, color: '#8BA3BE', marginBottom: 12, lineHeight: 1.5 }}>
-          Shown as “Recap presented by …” on the top strip of every shared recap card and the public game page. Leave the name blank to fall back to “presented by Rinkd.”
+          The league’s default sponsor — shown as “Recap presented by …” on every shared recap card + the public game page (and on the Game Puck card unless you set a separate one below). Blank → falls back to “presented by Rinkd.”
         </div>
         <Field label="Sponsor name"><input style={inputStyle} value={(form.settings?.recap_sponsor)?.name || ''} maxLength={40} placeholder="e.g. Little Caesars" onChange={e => setSp('name', e.target.value)} /></Field>
         <Field label="Sponsor link (optional)"><input style={inputStyle} value={(form.settings?.recap_sponsor)?.url || ''} placeholder="https://sponsor.com" onChange={e => setSp('url', e.target.value)} /></Field>
         <Field label="Sponsor logo URL (optional)"><input style={inputStyle} value={(form.settings?.recap_sponsor)?.logo_url || ''} placeholder="https://… (shown on the public page)" onChange={e => setSp('logo_url', e.target.value)} /></Field>
+      </Card>
+      <SecLabel>Game Puck Sponsor</SecLabel>
+      <Card>
+        <div style={{ fontSize: 12, color: '#8BA3BE', marginBottom: 12, lineHeight: 1.5 }}>
+          The Game Puck (Player-of-the-Game) card is the most-shared, highest-value slot. Shown as “Game Puck presented by …”. <b>Leave blank to use the recap sponsor above.</b>
+        </div>
+        <Field label="Sponsor name"><input style={inputStyle} value={(form.settings?.gamepuck_sponsor)?.name || ''} maxLength={40} placeholder="Defaults to the recap sponsor" onChange={e => setPsp('name', e.target.value)} /></Field>
+        <Field label="Sponsor link (optional)"><input style={inputStyle} value={(form.settings?.gamepuck_sponsor)?.url || ''} placeholder="https://sponsor.com" onChange={e => setPsp('url', e.target.value)} /></Field>
+        <Field label="Sponsor logo URL (optional)"><input style={inputStyle} value={(form.settings?.gamepuck_sponsor)?.logo_url || ''} placeholder="https://… (shown on the public page)" onChange={e => setPsp('logo_url', e.target.value)} /></Field>
       </Card>
       <button onClick={async () => { setSaving(true); await onSave(cleanSponsorOnForm(form)); setSaving(false); }} disabled={saving || uploadingLogo}
         style={{ width: '100%', padding: 13, background: C.red, border: 'none', borderRadius: 999, color: '#fff', fontSize: 14, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'Barlow, sans-serif', opacity: saving ? 0.7 : 1, transition: 'all 0.15s' }}

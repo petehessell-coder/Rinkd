@@ -31,6 +31,15 @@ export function getRecapSponsor(settings) {
   return { name: String(s.name).trim(), logo_url: s.logo_url || null, url: s.url || null };
 }
 
+// The Game Puck is the highest-value ad slot (ADS-1), so it gets its OWN sponsor
+// (`settings.gamepuck_sponsor`). If unsold it INHERITS the event's recap sponsor,
+// so an operator who set one event sponsor sees it everywhere without re-entering.
+export function getGamePuckSponsor(settings) {
+  const g = (settings || {}).gamepuck_sponsor;
+  if (g && g.name) return { name: String(g.name).trim(), logo_url: g.logo_url || null, url: g.url || null };
+  return getRecapSponsor(settings); // fall back to the event/recap sponsor, then Rinkd
+}
+
 // Parent-event visibility — mirrors the anon-read RLS gates so the public page
 // never renders a game whose parent event isn't itself public.
 export function isParentPublic({ isLeague, league, tournament }) {

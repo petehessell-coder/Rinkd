@@ -8,7 +8,7 @@
 import { supabase } from './supabase';
 import { buildRecapCardData } from './shareCard';
 import { getGamePuck } from './gamePucks';
-import { areScorersHidden, getRecapSponsor } from './publicShare';
+import { areScorersHidden, getRecapSponsor, getGamePuckSponsor } from './publicShare';
 
 const TOURN_BLUE = '#2E5B8C';
 const TOURN_RED = '#D72638';
@@ -121,7 +121,7 @@ export async function loadGamePuckCardData(gameId, isLeague) {
     votes: leader.votes,
     game: { homeName, awayName, homeScore: g.home_score, awayScore: g.away_score, round: roundLabelFor(isLeague, g), competition },
     league: competition,
-    sponsor: getRecapSponsor(parent?.settings)?.name || null,
+    sponsor: getGamePuckSponsor(parent?.settings)?.name || null,
   };
 }
 

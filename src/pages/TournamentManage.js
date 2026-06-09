@@ -1047,6 +1047,13 @@ function SettingsTab({ tournament, currentUser, reload, flash }) {
     url: s0.recap_sponsor?.url || '',
   });
   const setSp = (k, v) => setSponsor((p) => ({ ...p, [k]: v }));
+  // Game Puck sponsor (ADS-1 premium slot) — own field; blank = inherit recap.
+  const [puckSponsor, setPuckSponsor] = useState({
+    name: s0.gamepuck_sponsor?.name || '',
+    logo_url: s0.gamepuck_sponsor?.logo_url || '',
+    url: s0.gamepuck_sponsor?.url || '',
+  });
+  const setPsp = (k, v) => setPuckSponsor((p) => ({ ...p, [k]: v }));
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const setF = (k, v) => setFmt((prev) => ({ ...prev, [k]: v }));
@@ -1110,6 +1117,9 @@ function SettingsTab({ tournament, currentUser, reload, flash }) {
     // Recap sponsor → null clears it (card falls back to "presented by Rinkd").
     mergedSettings.recap_sponsor = (sponsor.name || '').trim()
       ? { name: sponsor.name.trim(), logo_url: (sponsor.logo_url || '').trim() || null, url: (sponsor.url || '').trim() || null }
+      : null;
+    mergedSettings.gamepuck_sponsor = (puckSponsor.name || '').trim()
+      ? { name: puckSponsor.name.trim(), logo_url: (puckSponsor.logo_url || '').trim() || null, url: (puckSponsor.url || '').trim() || null }
       : null;
     // Branding: only store a valid 6-digit hex; anything else clears it so the
     // public page falls back to the default Rinkd look.
@@ -1294,7 +1304,7 @@ function SettingsTab({ tournament, currentUser, reload, flash }) {
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 4 }}>Recap Sponsor</div>
         <div style={{ fontSize: 12, color: C.steel, marginBottom: 14, lineHeight: 1.5 }}>
-          Shown as “Recap presented by …” on the top strip of every shared recap card and the public game page. Leave the name blank to fall back to “presented by Rinkd.”
+          The event’s default sponsor — shown as “Recap presented by …” on every shared recap card + the public game page (and on the Game Puck card unless you set a separate one below). Blank → falls back to “presented by Rinkd.”
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
           <div style={{ gridColumn: '1 / -1' }}>
@@ -1308,6 +1318,28 @@ function SettingsTab({ tournament, currentUser, reload, flash }) {
           <div style={{ gridColumn: '1 / -1' }}>
             <label style={labelStyle}>Sponsor logo URL (optional)</label>
             <input value={sponsor.logo_url} onChange={(e) => setSp('logo_url', e.target.value)} placeholder="https://… (shown on the public page)" style={inputStyle}/>
+          </div>
+        </div>
+      </div>
+
+      {/* Game Puck Sponsor — ADS-1 premium slot (separate from the recap) */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 4 }}>Game Puck Sponsor</div>
+        <div style={{ fontSize: 12, color: C.steel, marginBottom: 14, lineHeight: 1.5 }}>
+          The Game Puck (Player-of-the-Game) card is the most-shared, highest-value slot. Shown as “Game Puck presented by …”. <b>Leave blank to use the recap sponsor above.</b>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={labelStyle}>Sponsor name</label>
+            <input value={puckSponsor.name} onChange={(e) => setPsp('name', e.target.value)} placeholder="Defaults to the recap sponsor" maxLength={40} style={inputStyle}/>
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={labelStyle}>Sponsor link (optional)</label>
+            <input value={puckSponsor.url} onChange={(e) => setPsp('url', e.target.value)} placeholder="https://sponsor.com" style={inputStyle}/>
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={labelStyle}>Sponsor logo URL (optional)</label>
+            <input value={puckSponsor.logo_url} onChange={(e) => setPsp('logo_url', e.target.value)} placeholder="https://… (shown on the public page)" style={inputStyle}/>
           </div>
         </div>
       </div>
