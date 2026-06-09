@@ -1065,6 +1065,14 @@ A social-layer cleanup pass plus two engagement features for BLPA. All eight shi
 
 ## 7. What's next — the broader roadmap
 
+### June 9, 2026 (latest++++) — NAV-PIN-2 SHIPPED + LIVE on `main`: explicit league/team/tournament nav pins
+
+> **The nav pin went from v1 auto-league to v2 fully user-chosen** (merge `ba988ccf`, branch `feature/nav-pin-2`). Decisions (Pete, Jun 9): **3 pins** (one each league/team/tournament), **user choice** (no auto-derive), **tournament pins expire 7 days after the event**.
+> - **DB (`20260609130000_nav_pins.sql`, on prod):** `nav_pins` (`user_id`, `pin_type` ∈ league/team/tournament, `target_id` — **NO FK**, polymorphic, `expires_at`, `created_at`, **UNIQUE(user_id, pin_type)** → max 3). RLS own-rows only. `set_nav_pin(p_pin_type, p_target_id)` (upsert; re-pin swaps; computes tournament `expires_at = end_date + 7d`) + `clear_nav_pin(p_pin_type)` — both SECURITY DEFINER, **authenticated-only** (anon REVOKEd). Expired pins **filtered on read** (`expires_at IS NULL OR > now()`) — no cron.
+> - **UI:** `PinToNavButton` (📌 Pin / Pinned toggle) mounted on the League/Team/Tournament page headers next to Follow/Manage. `NavPins` renders the cluster (mobile avatars top-right; desktop sidebar labeled rows), **replaces `LeaguePinIcon` (deleted)** in `Layout.js`; fail-soft → null when no pins. `navPins.js`: `getMyNavPins` (hydrates each pin's logo/name/href, drops expired + deleted targets), `isPinned`, `setNavPin`, `clearNavPin`; module-level session cache (cleared on mutation).
+> - **Behavior change:** fully explicit means users who had the v1 auto-league pin now see **nothing in the nav until they tap 📌 Pin**. `getMyPrimaryLeague` left in `leagues.js` as a dormant export (zero importers).
+> - **Verified:** clean build; RPCs end-to-end under an impersonated `authenticated` JWT + RLS — 3 pins created, league/team permanent, BLPA tournament `expires_at` = 2026-06-21, all rolled back (0 rows left).
+
 ### June 9, 2026 (latest+++) — GAMEPUCK-2 SHIPPED + LIVE on `main`: peel-the-tape reveal + branded puck + sealed feed post
 
 > **The hockey-native Game Puck reveal is DONE and on `main`** (merge `724e167b`, branch `feature/gamepuck-2-peel-reveal`). Pete's Jun 8 pick. Peel feel confirmed on a real device; DB migrations already on prod.
