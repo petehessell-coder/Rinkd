@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   listOwnerSponsors, createSponsor, updatePlacement, deleteSponsor,
-  uploadCreativeImage, AD_CATEGORIES, YOUTH_BLOCKED_CATEGORIES, isCategoryAllowedForYouth,
+  uploadCreativeImage, getAdReport, AD_CATEGORIES, AD_SLOTS, slotLabel,
+  YOUTH_BLOCKED_CATEGORIES, isCategoryAllowedForYouth,
 } from '../lib/ads';
 import { classifyImage } from '../lib/imageModeration';
 import { supabase } from '../lib/supabase';
@@ -22,7 +23,7 @@ const prettyCat = (c) => c.replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperC
 export default function SponsorsManager({ ownerType, ownerId, isYouth = false }) {
   const [userId, setUserId] = useState(null);
   const [sponsors, setSponsors] = useState(null); // null = loading
-  const [form, setForm] = useState({ sponsor_name: '', link_url: '', category: '', image_url: '', weight: 1, starts_at: '', ends_at: '' });
+  const [form, setForm] = useState({ sponsor_name: '', link_url: '', category: '', image_url: '', slot: 'event_banner', weight: 1, starts_at: '', ends_at: '' });
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
@@ -65,12 +66,12 @@ export default function SponsorsManager({ ownerType, ownerId, isYouth = false })
         imageUrl: form.image_url.trim() || null,
         linkUrl: form.link_url.trim() || null,
         category: form.category || null,
-        slot: 'event_banner',
+        slot: form.slot || 'event_banner',
         weight: Math.max(1, parseInt(form.weight, 10) || 1),
         startsAt: form.starts_at || null,
         endsAt: form.ends_at || null,
       });
-      setForm({ sponsor_name: '', link_url: '', category: '', image_url: '', weight: 1, starts_at: '', ends_at: '' });
+      setForm({ sponsor_name: '', link_url: '', category: '', image_url: '', slot: 'event_banner', weight: 1, starts_at: '', ends_at: '' });
       await load();
       flash('ok', 'Sponsor added — live on the event page.');
     } catch (e) { flash('err', e.message || 'Could not add sponsor'); }
@@ -94,7 +95,7 @@ export default function SponsorsManager({ ownerType, ownerId, isYouth = false })
   return (
     <div style={{ fontFamily: 'Barlow, sans-serif' }}>
       <div style={{ fontSize: 13, color: C.steel, marginBottom: 14, lineHeight: 1.5 }}>
-        Your event’s “digital dasher board.” Add a sponsor → a banner runs at the top of your public {ownerType} page. Their inventory, your call. Impressions + taps are counted (report coming).
+        Your event’s “digital dasher board.” Add a sponsor and choose a placement — a banner at the top of the page, or a “presented by” lockup on Standings / Schedule / Stats. Their inventory, your call. Impressions + taps are counted; see the report below.
         {isYouth && <span style={{ display: 'block', marginTop: 6, color: '#E0A93B' }}>Youth event: {YOUTH_BLOCKED_CATEGORIES.map(prettyCat).join(', ')} sponsors are not allowed.</span>}
       </div>
 
@@ -118,6 +119,13 @@ export default function SponsorsManager({ ownerType, ownerId, isYouth = false })
           <div><label style={label}>Sponsor name *</label><input value={form.sponsor_name} onChange={(e) => setF('sponsor_name', e.target.value)} maxLength={50} placeholder="e.g. Little Caesars" style={inputStyle} /></div>
           <div><label style={label}>Link (tap-through)</label><input value={form.link_url} onChange={(e) => setF('link_url', e.target.value)} placeholder="https://sponsor.com" style={inputStyle} /></div>
           <div>
+            <label style={label}>Placement</label>
+            <select value={form.slot} onChange={(e) => setF('slot', e.target.value)} style={inputStyle}>
+              {AD_SLOTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+            <div style={{ fontSize: 11, color: C.dim, marginTop: 5 }}>{AD_SLOTS.find((s) => s.value === form.slot)?.hint}</div>
+          </div>
+          <div>
             <label style={label}>Category</label>
             <select value={form.category} onChange={(e) => setF('category', e.target.value)} style={inputStyle}>
               <option value="">— Select —</option>
@@ -140,13 +148,13 @@ export default function SponsorsManager({ ownerType, ownerId, isYouth = false })
       </div>
 
       {/* Existing sponsors */}
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 8 }}>Event banner sponsors</div>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 8 }}>Active sponsors</div>
       {sponsors === null ? (
         <div style={{ color: C.dim, fontSize: 13, padding: '14px 0' }}>Loading…</div>
       ) : sponsors.length === 0 ? (
         <div style={{ color: C.dim, fontSize: 13, padding: '14px 0' }}>No sponsors yet — add one above and it goes live on your event page.</div>
       ) : sponsors.map((s) => {
-        const p = (s.placements || []).find((x) => x.slot === 'event_banner') || (s.placements || [])[0];
+        const p = (s.placements || [])[0];
         return (
           <div key={s.id} style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: 12, marginBottom: 10, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             {s.image_url
@@ -154,7 +162,7 @@ export default function SponsorsManager({ ownerType, ownerId, isYouth = false })
               : <div style={{ height: 44, width: 80, borderRadius: 6, background: C.input, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: C.dim }}>text</div>}
             <div style={{ flex: 1, minWidth: 140 }}>
               <div style={{ color: C.ice, fontWeight: 700, fontSize: 14 }}>{s.sponsor_name}</div>
-              <div style={{ color: C.dim, fontSize: 12 }}>{s.category ? prettyCat(s.category) : 'No category'}{p ? ` · weight ${p.weight}` : ''}{p?.ends_at ? ` · ends ${new Date(p.ends_at).toLocaleDateString()}` : ''}</div>
+              <div style={{ color: C.dim, fontSize: 12 }}>{p ? slotLabel(p.slot) : '—'}{s.category ? ` · ${prettyCat(s.category)}` : ''}{p ? ` · weight ${p.weight}` : ''}{p?.ends_at ? ` · ends ${new Date(p.ends_at).toLocaleDateString()}` : ''}</div>
             </div>
             {p && (
               <>
@@ -169,13 +177,86 @@ export default function SponsorsManager({ ownerType, ownerId, isYouth = false })
         );
       })}
 
-      {/* Live preview of the banner slot */}
-      {sponsors && sponsors.some((s) => (s.placements || []).some((p) => p.slot === 'event_banner' && p.is_active)) && (
-        <div style={{ marginTop: 20 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 8 }}>Banner preview (as fans see it)</div>
-          <AdSlot key={nonce} slot="event_banner" targetType={ownerType} targetId={ownerId} />
+      {/* Live preview of each active slot */}
+      {(() => {
+        const activeSlots = AD_SLOTS.map((s) => s.value).filter((slot) =>
+          (sponsors || []).some((s) => (s.placements || []).some((p) => p.slot === slot && p.is_active)));
+        if (activeSlots.length === 0) return null;
+        return (
+          <div style={{ marginTop: 20 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 8 }}>Preview (as fans see it)</div>
+            {activeSlots.map((slot) => (
+              <div key={slot} style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 11, color: C.dim, marginBottom: 4 }}>{slotLabel(slot)}</div>
+                <AdSlot key={`${slot}:${nonce}`} slot={slot} targetType={ownerType} targetId={ownerId} />
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
+      <SponsorReport ownerType={ownerType} ownerId={ownerId} nonce={nonce} />
+    </div>
+  );
+}
+
+// ADS-1 · M4 — the sponsor report: impressions / taps / CTR per placement over
+// the trailing 30 days, owner-scoped via get_ad_report (signed-in only).
+function SponsorReport({ ownerType, ownerId, nonce }) {
+  const [rows, setRows] = useState(null); // null = loading, [] = none
+  const [err, setErr] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    getAdReport(ownerType, ownerId, 30)
+      .then((r) => { if (!cancelled) setRows(r); })
+      .catch((e) => { if (!cancelled) { setErr(e.message || 'Could not load report'); setRows([]); } });
+    return () => { cancelled = true; };
+  }, [ownerType, ownerId, nonce]);
+
+  const totalImp = (rows || []).reduce((s, r) => s + Number(r.impressions || 0), 0);
+  const totalTap = (rows || []).reduce((s, r) => s + Number(r.taps || 0), 0);
+  const ctr = (imp, tap) => (Number(imp) > 0 ? `${((Number(tap) / Number(imp)) * 100).toFixed(1)}%` : '—');
+  const cell = { padding: '8px 10px', fontSize: 12, color: C.ice, borderTop: `1px solid ${C.border}` };
+  const head = { padding: '8px 10px', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.steel, textAlign: 'left' };
+  const num = { textAlign: 'right' };
+
+  return (
+    <div style={{ marginTop: 26 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 8 }}>Sponsor report · last 30 days</div>
+      {rows === null ? (
+        <div style={{ color: C.dim, fontSize: 13, padding: '10px 0' }}>Loading…</div>
+      ) : err ? (
+        <div style={{ color: C.red, fontSize: 13, padding: '10px 0' }}>{err}</div>
+      ) : rows.length === 0 ? (
+        <div style={{ color: C.dim, fontSize: 13, padding: '10px 0' }}>No impressions yet — once a sponsor runs on your public page, delivery shows here.</div>
+      ) : (
+        <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead><tr style={{ background: 'rgba(46,91,140,0.18)' }}>
+              <th style={head}>Sponsor</th><th style={head}>Placement</th>
+              <th style={{ ...head, ...num }}>Impr.</th><th style={{ ...head, ...num }}>Taps</th><th style={{ ...head, ...num }}>CTR</th>
+            </tr></thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.placement_id}>
+                  <td style={cell}>{r.sponsor_name}</td>
+                  <td style={{ ...cell, color: C.steel }}>{slotLabel(r.slot)}</td>
+                  <td style={{ ...cell, ...num }}>{Number(r.impressions || 0).toLocaleString()}</td>
+                  <td style={{ ...cell, ...num }}>{Number(r.taps || 0).toLocaleString()}</td>
+                  <td style={{ ...cell, ...num }}>{ctr(r.impressions, r.taps)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot><tr style={{ background: 'rgba(46,91,140,0.1)' }}>
+              <td style={{ ...cell, fontWeight: 700 }} colSpan={2}>Total</td>
+              <td style={{ ...cell, ...num, fontWeight: 700 }}>{totalImp.toLocaleString()}</td>
+              <td style={{ ...cell, ...num, fontWeight: 700 }}>{totalTap.toLocaleString()}</td>
+              <td style={{ ...cell, ...num, fontWeight: 700 }}>{ctr(totalImp, totalTap)}</td>
+            </tr></tfoot>
+          </table>
         </div>
       )}
+      <div style={{ fontSize: 11, color: C.dim, marginTop: 6 }}>On-page delivery. Pair with your recap-share reach for total “delivered + off-platform” impressions.</div>
     </div>
   );
 }

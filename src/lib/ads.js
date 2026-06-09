@@ -49,6 +49,18 @@ export function clearAdCache(targetType, targetId) {
   else CACHE.clear();
 }
 
+// ---- placement slots offered in the Sponsors tab (Phase 1) ------------------
+// feed_native is PAUSED (Pete, Jun 9); side_rail/team_banner are Phase 2 — none
+// are offered in the picker yet. event_banner = full-width top banner; the
+// *_presented slots are small "presented by" lockups on each tab.
+export const AD_SLOTS = [
+  { value: 'event_banner', label: 'Top banner', hint: 'Full-width banner at the top of the page' },
+  { value: 'standings_presented', label: 'Standings — presented by', hint: 'Small lockup above the standings table' },
+  { value: 'schedule_presented', label: 'Schedule — presented by', hint: 'Small lockup above the schedule' },
+  { value: 'stats_presented', label: 'Stats — presented by', hint: 'Small lockup above the stat leaderboards' },
+];
+export const slotLabel = (s) => AD_SLOTS.find((x) => x.value === s)?.label || s;
+
 // ---- sponsor categories (youth content rule) --------------------------------
 export const AD_CATEGORIES = [
   'food', 'beverage', 'retail', 'automotive', 'financial', 'healthcare',

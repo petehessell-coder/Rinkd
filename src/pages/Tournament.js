@@ -458,7 +458,9 @@ export default function TournamentPage({ currentUser }) {
       <div style={{padding:16}}>
 
         {activeTab === 'Standings' && (
-          Object.keys(standings).length === 0
+          <>
+            <AdSlot slot="standings_presented" targetType="tournament" targetId={tournament.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
+            {Object.keys(standings).length === 0
             ? <div style={{textAlign:'center',color:'rgba(244,247,250,0.3)',fontSize:13,paddingTop:40}}>No games played yet</div>
             : Object.entries(standings).map(([pool, rawRows]) => {
               // Re-sort and re-rank client-side per the format's tiebreaker order.
@@ -551,13 +553,17 @@ export default function TournamentPage({ currentUser }) {
                 </div>
               </div>
               );
-            })
+            })}
+          </>
         )}
 
         {activeTab === 'Schedule' && (
-          games.length === 0
+          <>
+            <AdSlot slot="schedule_presented" targetType="tournament" targetId={tournament.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
+            {games.length === 0
             ? <div style={{textAlign:'center',color:'rgba(244,247,250,0.3)',fontSize:13,paddingTop:40}}>No games scheduled yet</div>
-            : <ScheduleByDay games={games} navigate={navigate} canScore={canScore} />
+            : <ScheduleByDay games={games} navigate={navigate} canScore={canScore} />}
+          </>
         )}
 
         {activeTab === 'Bracket' && (
@@ -577,6 +583,7 @@ export default function TournamentPage({ currentUser }) {
 
         {activeTab === 'Stats' && (
           <>
+            <AdSlot slot="stats_presented" targetType="tournament" targetId={tournament.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
             <SeasonGamePucks scope="tournament" id={id} accent={accent} />
             <StatLeaderboards source="tournament" id={id} accent={accent} />
           </>

@@ -546,6 +546,7 @@ export default function LeaguePage({ currentUser, profile }) {
           {/* SCHEDULE TAB */}
           {activeTab === 'Schedule' && (
             <>
+              <AdSlot slot="schedule_presented" targetType="league" targetId={league.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
               {games.length > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
                   <button
@@ -614,6 +615,7 @@ export default function LeaguePage({ currentUser, profile }) {
           {/* STANDINGS TAB */}
           {activeTab === 'Standings' && (
             <>
+              <AdSlot slot="standings_presented" targetType="league" targetId={league.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
               <div style={secLabel}>Season Standings</div>
               <div style={card}>
                 <div style={{ display: 'grid', gridTemplateColumns: standingsCols, padding: '8px 12px', background: 'rgba(46,91,140,0.2)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.35)', textTransform: 'uppercase' }}>
@@ -644,6 +646,7 @@ export default function LeaguePage({ currentUser, profile }) {
           {/* STATS TAB — skater + goalie leaderboards (jersey-keyed, roster names) */}
           {activeTab === 'Stats' && (
             <>
+              <AdSlot slot="stats_presented" targetType="league" targetId={league.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
               <SeasonGamePucks scope="league" id={id} accent={league.accent_color || C.red} />
               <StatLeaderboards source="league" id={id} accent={league.accent_color || C.red} archived={league.settings?.archived_stats || null} />
             </>
