@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { LedR } from '../components/Logos';
+import AdSlot from '../components/AdSlot';
 import { getLiveBarnUrl } from '../lib/livebarn';
 import { teamInitials } from '../lib/teamInitials';
 import { followTournament, unfollowTournament, isFollowingTournament } from '../lib/tournamentSubscriptions';
@@ -385,6 +386,9 @@ export default function TournamentPage({ currentUser }) {
   return (
     <div style={{background:'#07111F',minHeight:'100vh',fontFamily:'Barlow,sans-serif',color:'#F4F7FA'}}>
 
+      {/* ADS-1 event banner — renders only when this tournament has an active sponsor */}
+      <AdSlot slot="event_banner" targetType="tournament" targetId={tournament.id} style={{ margin: '12px 16px 0' }} />
+
       {/* HEADER */}
       <div style={{background:'#0B1F3A',padding:'14px 16px 0',borderTop:`3px solid ${accent}`,borderBottom:'0.5px solid rgba(46,91,140,0.4)'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,gap:8,flexWrap:'wrap'}}>
@@ -454,7 +458,9 @@ export default function TournamentPage({ currentUser }) {
       <div style={{padding:16}}>
 
         {activeTab === 'Standings' && (
-          Object.keys(standings).length === 0
+          <>
+            <AdSlot slot="standings_presented" targetType="tournament" targetId={tournament.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
+            {Object.keys(standings).length === 0
             ? <div style={{textAlign:'center',color:'rgba(244,247,250,0.3)',fontSize:13,paddingTop:40}}>No games played yet</div>
             : Object.entries(standings).map(([pool, rawRows]) => {
               // Re-sort and re-rank client-side per the format's tiebreaker order.
@@ -547,13 +553,17 @@ export default function TournamentPage({ currentUser }) {
                 </div>
               </div>
               );
-            })
+            })}
+          </>
         )}
 
         {activeTab === 'Schedule' && (
-          games.length === 0
+          <>
+            <AdSlot slot="schedule_presented" targetType="tournament" targetId={tournament.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
+            {games.length === 0
             ? <div style={{textAlign:'center',color:'rgba(244,247,250,0.3)',fontSize:13,paddingTop:40}}>No games scheduled yet</div>
-            : <ScheduleByDay games={games} navigate={navigate} canScore={canScore} />
+            : <ScheduleByDay games={games} navigate={navigate} canScore={canScore} />}
+          </>
         )}
 
         {activeTab === 'Bracket' && (
@@ -573,6 +583,7 @@ export default function TournamentPage({ currentUser }) {
 
         {activeTab === 'Stats' && (
           <>
+            <AdSlot slot="stats_presented" targetType="tournament" targetId={tournament.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
             <SeasonGamePucks scope="tournament" id={id} accent={accent} />
             <StatLeaderboards source="tournament" id={id} accent={accent} />
           </>

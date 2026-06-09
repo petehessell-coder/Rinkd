@@ -23,7 +23,7 @@ const SESSION_KEY = 'rinkd_anon_session_v1';
 // on real mobile/desktop browsers.
 const BOT_UA = /bot\b|crawl|spider|slurp|bingpreview|facebookexternalhit|embedly|quora link preview|outbrain|pinterest|slackbot|telegrambot|whatsapp|vkshare|w3c_validator|headlesschrome|phantomjs|lighthouse|gtmetrix|pingdom|uptimerobot|datadog|statuscake|semrush|ahrefs|mj12bot|dotbot|petalbot|bytespider|python-requests|axios\/|node-fetch|okhttp|java\/|curl\/|wget\//i;
 
-function isLikelyBot() {
+export function isLikelyBot() {
   if (typeof navigator === 'undefined') return false;
   try {
     if (navigator.webdriver) return true; // automated browser (Selenium/Playwright/etc.)
@@ -31,7 +31,7 @@ function isLikelyBot() {
   } catch { return false; }
 }
 
-function sessionId() {
+export function sessionId() {
   if (typeof window === 'undefined') return null;
   try {
     let s = localStorage.getItem(SESSION_KEY);

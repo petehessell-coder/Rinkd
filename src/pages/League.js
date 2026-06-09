@@ -6,6 +6,7 @@ import MapLink from '../components/MapLink';
 import { getLeague, getLeagueTeams, getLeagueGames, getLeagueStandings, getUserLeagueRole } from '../lib/leagues';
 import { listLeagueDivisions, getMyDivisionInLeague } from '../lib/leagueDivisions';
 import DivisionPicker from '../components/DivisionPicker';
+import AdSlot from '../components/AdSlot';
 import { isExtraCommissioner as isExtraCommissionerLookup } from '../lib/leagueCommissioners';
 import { followLeague, unfollowLeague, isFollowingLeague } from '../lib/leagueSubscriptions';
 import { subscribeToPush, isPushSubscribed } from '../lib/push';
@@ -446,6 +447,9 @@ export default function LeaguePage({ currentUser, profile }) {
       />
       <div style={{ background: C.dark, minHeight: '100vh', fontFamily: 'Barlow, sans-serif', color: C.ice }}>
 
+        {/* ADS-1 event banner — renders only when this league has an active sponsor */}
+        <AdSlot slot="event_banner" targetType="league" targetId={league.id} style={{ margin: '12px 16px 0' }} />
+
         {/* BANNER */}
         <div style={{ background: 'linear-gradient(135deg,#0B1F3A 0%,#1a3a5c 100%)', padding: '20px 16px 0' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
@@ -546,6 +550,7 @@ export default function LeaguePage({ currentUser, profile }) {
           {/* SCHEDULE TAB */}
           {activeTab === 'Schedule' && (
             <>
+              <AdSlot slot="schedule_presented" targetType="league" targetId={league.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
               {games.length > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
                   <button
@@ -614,6 +619,7 @@ export default function LeaguePage({ currentUser, profile }) {
           {/* STANDINGS TAB */}
           {activeTab === 'Standings' && (
             <>
+              <AdSlot slot="standings_presented" targetType="league" targetId={league.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
               <div style={secLabel}>Season Standings</div>
               <div style={card}>
                 <div style={{ display: 'grid', gridTemplateColumns: standingsCols, padding: '8px 12px', background: 'rgba(46,91,140,0.2)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.35)', textTransform: 'uppercase' }}>
@@ -644,6 +650,7 @@ export default function LeaguePage({ currentUser, profile }) {
           {/* STATS TAB — skater + goalie leaderboards (jersey-keyed, roster names) */}
           {activeTab === 'Stats' && (
             <>
+              <AdSlot slot="stats_presented" targetType="league" targetId={league.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
               <SeasonGamePucks scope="league" id={id} accent={league.accent_color || C.red} />
               <StatLeaderboards source="league" id={id} accent={league.accent_color || C.red} archived={league.settings?.archived_stats || null} />
             </>

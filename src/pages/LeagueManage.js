@@ -6,6 +6,7 @@ import { getLeague, getLeagueTeams, getLeagueGames, getLeagueStandings, updateLe
 import { listLeagueDivisions, createLeagueDivision, updateLeagueDivision, deleteLeagueDivision, reorderLeagueDivisions, assignLeagueTeamDivision } from '../lib/leagueDivisions';
 import LeagueStaffManager from '../components/LeagueStaffManager';
 import DivisionPicker from '../components/DivisionPicker';
+import SponsorsManager from '../components/SponsorsManager';
 import { getLeagueRegistrations, updateRegistrationStatus, approveRegistration } from '../lib/registrations';
 import { leaguePayoutsReady, startConnectOnboarding } from '../lib/stripeConnect';
 import { generatePlayoffRoundOne, generatePlayoffNextRound, SUPPORTED_BRACKET_SIZES } from '../lib/leaguePlayoffGenerator';
@@ -305,8 +306,9 @@ function ManageLeague({ id, navigate }) {
   const scopedGamesList = multiDivision && selectedDivisionId ? games.filter(g => g.division_id === selectedDivisionId) : games;
   const scopedStandingsList = multiDivision && selectedDivisionId ? standings.filter(r => r.division_id === selectedDivisionId) : standings;
   // Operational tabs show for managers + commissioners (RLS gates the writes).
-  // Registrations / Staff / Settings are commissioner-only (billing, staff, delete).
-  const MANAGE_TABS = ['Teams', 'Divisions', 'Schedule', 'Playoffs', ...(isCommissioner ? ['Registrations', 'Staff', 'Settings'] : [])];
+  // Registrations / Sponsors / Staff / Settings are commissioner-only
+  // (billing, sponsor inventory, staff, delete).
+  const MANAGE_TABS = ['Teams', 'Divisions', 'Schedule', 'Playoffs', ...(isCommissioner ? ['Registrations', 'Sponsors', 'Staff', 'Settings'] : [])];
 
   if (loading) return <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Loading...</div>;
 
@@ -703,6 +705,10 @@ function ManageLeague({ id, navigate }) {
         {/* SETTINGS */}
         {activeTab === 'Registrations' && league && isCommissioner && (
           <RegistrationsTab leagueId={id} league={league} registrations={registrations} onChanged={load} />
+        )}
+
+        {activeTab === 'Sponsors' && league && isCommissioner && (
+          <SponsorsManager ownerType="league" ownerId={id} isYouth={league.settings?.feature_profile === 'youth_competitive'} />
         )}
 
         {activeTab === 'Staff' && league && isCommissioner && (
