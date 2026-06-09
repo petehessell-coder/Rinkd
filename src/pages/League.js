@@ -1017,6 +1017,8 @@ function PublicLeagueLanding({ league, teams, games, navigate }) {
   const returnTo = encodeURIComponent(`/league/${league.id}`);
   return (
     <div style={{ background: C.dark, minHeight: '100vh', fontFamily: 'Barlow, sans-serif', color: C.ice }}>
+      {/* ADS-1 M5 — sponsor banner also shows to anon spectators (null when no sponsor) */}
+      <AdSlot slot="event_banner" targetType="league" targetId={league.id} style={{ margin: '12px 16px 0' }} />
       <div style={{ background: C.navy, padding: '16px 18px 0', borderTop: `3px solid ${accent}`, borderBottom: '0.5px solid rgba(46,91,140,0.4)' }}>
         <button onClick={() => navigate('/leagues')} style={{ color: 'rgba(244,247,250,0.6)', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Barlow, sans-serif', marginBottom: 8 }}>← All leagues</button>
         {league?.logo_url && (

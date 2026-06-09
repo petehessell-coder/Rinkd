@@ -14,6 +14,9 @@ const hdr = (s: unknown) => String(s ?? '').replace(/[\r\n]+/g, ' ').trim()
 // Only allow real UUIDs into the href so a malformed id can't break out of the URL.
 const isUuid = (s: unknown) =>
   typeof s === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
+// Invite accept tokens are hex (gen_random_bytes(32) -> 64 chars). Guard the value
+// that goes into the magic-link URL.
+const isToken = (s: unknown) => typeof s === 'string' && /^[0-9a-f]{16,128}$/i.test(s)
 
 // NOTE (pre-pilot P1-2, remaining): this function does not yet verify that the
 // authenticated caller actually manages the team/league/tournament being
@@ -27,7 +30,7 @@ serve(async (req) => {
   }
 
   try {
-    const { type, to_email, to_name, team_name, league_name, league_id, division, season, invited_by, tournament_name, tournament_id } = await req.json()
+    const { type, to_email, to_name, team_name, league_name, league_id, division, season, invited_by, tournament_name, tournament_id, accept_token } = await req.json()
 
     // Reject missing / malformed recipient addresses up front.
     if (typeof to_email !== 'string' || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to_email)) {
@@ -36,6 +39,7 @@ serve(async (req) => {
 
     // Render-safe copies of every caller-supplied value used in the HTML.
     const eName = esc(to_name || 'you')
+    const eEmail = esc(to_email)
     const eInvitedBy = invited_by ? esc(invited_by) : null
     const eTeam = esc(team_name)
     const eLeague = esc(league_name)
@@ -44,6 +48,7 @@ serve(async (req) => {
     const eTournament = esc(tournament_name || 'a tournament')
     const leagueUrl = isUuid(league_id) ? `https://www.rinkd.app/league/${league_id}` : 'https://www.rinkd.app/leagues'
     const tournamentUrl = isUuid(tournament_id) ? `https://www.rinkd.app/tournament/${tournament_id}` : 'https://www.rinkd.app'
+    const acceptTeamUrl = isToken(accept_token) ? `https://www.rinkd.app/accept-team-invite?token=${encodeURIComponent(accept_token)}` : 'https://www.rinkd.app'
 
     let subject = ''
     let html = ''
@@ -162,6 +167,54 @@ serve(async (req) => {
             <div style="text-align:center;font-size:12px;color:rgba(244,247,250,0.25);line-height:1.6;">
               You received this because ${eInvitedBy || 'a tournament director'} added you as a scorer.<br>
               Once you've signed up with this email, they'll finish adding you.<br>
+              <a href="https://www.rinkd.app" style="color:rgba(244,247,250,0.4);">rinkd.app</a> ·
+              <a href="https://www.rinkd.app/privacy" style="color:rgba(244,247,250,0.4);">Privacy</a>
+            </div>
+          </div>
+        </body>
+        </html>`
+    }
+
+    if (type === 'team_manager_invite') {
+      // Magic-link email: a commissioner assigned the recipient as manager of a
+      // team in their league. Token credentials accept_team_manager_invite; URL
+      // routes to /accept-team-invite (signs them in / through signup before consuming).
+      subject = hdr(`You're managing ${team_name || 'a team'} on Rinkd`)
+      html = `
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+        <body style="margin:0;padding:0;background:#07111F;font-family:'Helvetica Neue',Arial,sans-serif;">
+          <div style="max-width:520px;margin:0 auto;padding:32px 20px;">
+            <div style="text-align:center;margin-bottom:32px;">
+              <div style="display:inline-block;background:#0B1F3A;border-radius:12px;padding:16px 24px;">
+                <span style="font-size:28px;font-weight:900;font-style:italic;color:#F4F7FA;letter-spacing:-0.5px;">R<span style="color:#D72638">INKD</span></span>
+              </div>
+            </div>
+            <div style="background:#0B1F3A;border-radius:16px;padding:32px;margin-bottom:24px;border:1px solid rgba(46,91,140,0.4);">
+              <div style="font-size:22px;font-weight:900;font-style:italic;color:#F4F7FA;margin-bottom:8px;">You're managing the team. 🏒</div>
+              <div style="font-size:15px;color:rgba(244,247,250,0.6);line-height:1.6;margin-bottom:8px;">
+                ${eInvitedBy ? `<strong style="color:#F4F7FA">${eInvitedBy}</strong> has invited you` : "You've been invited"}
+                to manage <strong style="color:#F4F7FA">${eTeam}</strong>${eLeague ? ` in <strong style="color:#F4F7FA">${eLeague}</strong>` : ''} on Rinkd.
+              </div>
+              <div style="font-size:14px;color:rgba(244,247,250,0.5);line-height:1.6;margin-bottom:24px;">
+                Click below to accept. If you don't have a Rinkd account yet, you'll create one with this email first — then you'll be set up as a manager automatically.
+              </div>
+              <a href="${acceptTeamUrl}" style="display:inline-block;background:#D72638;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 28px;border-radius:999px;">
+                Accept Invitation →
+              </a>
+              <div style="font-size:11px;color:rgba(244,247,250,0.35);margin-top:18px;">
+                This link expires in 14 days and can only be used once. Sign up with <strong style="color:rgba(244,247,250,0.6)">${eEmail}</strong> — the link verifies that the account matches.
+              </div>
+            </div>
+            <div style="background:#0B1F3A;border-radius:12px;padding:20px;margin-bottom:24px;border:1px solid rgba(46,91,140,0.3);">
+              <div style="font-size:13px;font-weight:700;color:rgba(244,247,250,0.4);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:12px;">What you'll be able to do</div>
+              ${['🏒 Build the team roster (jersey numbers, positions)', '📅 RSVP players to games', '🎬 Post team updates to the league feed', '👥 Invite co-managers if you want help'].map(item => `
+                <div style="padding:5px 0;font-size:14px;color:rgba(244,247,250,0.7);">${item}</div>
+              `).join('')}
+            </div>
+            <div style="text-align:center;font-size:12px;color:rgba(244,247,250,0.25);line-height:1.6;">
+              You received this because ${eInvitedBy || 'a league commissioner'} invited you to manage a team.<br>
               <a href="https://www.rinkd.app" style="color:rgba(244,247,250,0.4);">rinkd.app</a> ·
               <a href="https://www.rinkd.app/privacy" style="color:rgba(244,247,250,0.4);">Privacy</a>
             </div>

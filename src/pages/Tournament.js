@@ -959,6 +959,8 @@ function PublicTournamentLanding({ tournament, games, navigate }) {
   const returnTo = encodeURIComponent(`/tournament/${tournament.id}`);
   return (
     <div style={{background:'#07111F',minHeight:'100vh',fontFamily:'Barlow,sans-serif',color:'#F4F7FA'}}>
+      {/* ADS-1 M5 — sponsor banner also shows to anon spectators (null when no sponsor) */}
+      <AdSlot slot="event_banner" targetType="tournament" targetId={tournament.id} style={{ margin: '12px 16px 0' }} />
       <div style={{background:'#0B1F3A',padding:'16px 18px 0',borderTop:`3px solid ${accent}`,borderBottom:'0.5px solid rgba(46,91,140,0.4)'}}>
         <button onClick={() => navigate('/tournaments')} style={{color:'rgba(244,247,250,0.6)',fontSize:13,background:'none',border:'none',cursor:'pointer',fontFamily:'Barlow,sans-serif',marginBottom:8}}>← All tournaments</button>
         {tournament?.logo_url && (
