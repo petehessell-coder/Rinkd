@@ -1,23 +1,34 @@
 import React from 'react';
+import { isChunkLoadError, reloadOnceForChunk } from '../lib/chunkReload';
 
 /**
  * Top-level error boundary. Without this, any uncaught render error blanks
  * the entire React tree and the user sees a black screen with zero context.
  * With this, they see a branded fallback + Reload button, and we get a clear
  * console log + analytics event to chase the bug.
+ *
+ * Stale-chunk-after-deploy errors are handled specially: they're benign (a new
+ * build shipped), so we self-heal by reloading once and DON'T report them to
+ * Sentry — otherwise every deploy spams the issue tracker. (lazyWithRetry
+ * catches most before they reach here; this is the backstop for any other
+ * dynamic import.)
  */
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null, errorInfo: null };
+    this.state = { hasError: false, error: null, errorInfo: null, isChunk: false };
   }
 
   static getDerivedStateFromError(error) {
-    return { hasError: true, error };
+    return { hasError: true, error, isChunk: isChunkLoadError(error) };
   }
 
   componentDidCatch(error, errorInfo) {
     this.setState({ errorInfo });
+    // Stale chunk after a deploy → reload once to the fresh build; skip the
+    // Sentry/analytics noise. If we've already reloaded (still failing), fall
+    // through and report it as a genuine error.
+    if (isChunkLoadError(error) && reloadOnceForChunk()) return;
     // eslint-disable-next-line no-console
     console.error('[Rinkd] Caught error:', error, errorInfo);
     // Best-effort: fire to both Sentry (if configured) and our self-hosted
@@ -52,6 +63,21 @@ export default class ErrorBoundary extends React.Component {
 
   render() {
     if (!this.state.hasError) return this.props.children;
+    // Stale chunk → we're reloading to the fresh build; show a calm interstitial
+    // (not the scary error screen) for the moment before navigation.
+    if (this.state.isChunk) {
+      return (
+        <div style={{
+          minHeight: '100vh', background: '#07111F', color: '#8BA3BE',
+          fontFamily: 'Barlow, sans-serif', display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center', gap: 14,
+        }}>
+          <div style={{ fontSize: 40 }}>🏒</div>
+          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 20, color: '#F4F7FA', textTransform: 'uppercase' }}>Updating to the latest version…</div>
+          <button onClick={this.handleReload} style={{ background: 'transparent', color: '#8BA3BE', border: '1px solid rgba(46,91,140,0.4)', borderRadius: 999, padding: '8px 18px', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Reload now</button>
+        </div>
+      );
+    }
     const isProd = window.location.hostname === 'rinkd.app' || window.location.hostname === 'www.rinkd.app';
     return (
       <div style={{
