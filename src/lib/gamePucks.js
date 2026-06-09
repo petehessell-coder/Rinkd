@@ -85,6 +85,44 @@ export async function getGamePuckResult(gameId, kind) {
   };
 }
 
+// SOCIAL-3 reconcile — the voting window state for a game. Voting opens on the
+// FIRST vote and runs 30 min; the tally is hidden during the last 10 min
+// (blackout) to build the reveal. phase ∈ 'none' (no votes yet) | 'open' |
+// 'blackout' | 'closed' (window elapsed, awaiting settle) | 'settled'.
+export async function getGamePuckState(gameId, kind) {
+  if (!gameId) return { phase: 'none', opened_at: null, closes_at: null, total_votes: 0, is_settled: false };
+  const { data, error } = await supabase.rpc('get_game_puck_state', {
+    p_game_id: gameId,
+    p_kind: isLeague(kind) ? 'league' : 'tournament',
+  });
+  if (error) throw error;
+  const r = Array.isArray(data) ? data[0] : data;
+  if (!r) return { phase: 'none', opened_at: null, closes_at: null, total_votes: 0, is_settled: false };
+  return {
+    phase: r.phase || 'none',
+    opened_at: r.opened_at || null,
+    closes_at: r.closes_at || null,
+    total_votes: Number(r.total_votes) || 0,
+    is_settled: !!r.is_settled,
+  };
+}
+
+// Lazy settle-on-view: when a signed-in viewer opens a game whose 30-min window
+// has closed but isn't settled yet, nudge the settle so the reveal is instant
+// instead of waiting for the cron. Window-guarded + idempotent server-side, so
+// a no-op (or an anon caller's permission error) is harmless — swallow it.
+export async function settleGamePuck(gameId, kind) {
+  if (!gameId) return null;
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth?.user?.id) return null;
+  const { data, error } = await supabase.rpc('settle_game_puck', {
+    p_game_id: gameId,
+    p_kind: isLeague(kind) ? 'league' : 'tournament',
+  });
+  if (error) return null;
+  return data || null;
+}
+
 // How many Game Pucks a user has won (settled) — the "Nx Game Puck" badge.
 export async function getUserGamePuckCount(userId) {
   if (!userId) return 0;
