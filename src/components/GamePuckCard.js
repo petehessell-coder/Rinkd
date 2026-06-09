@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { getGamePuck, getMyGamePuckVote, castGamePuckVote } from '../lib/gamePucks';
+import ShareButton from './ShareButton';
+import { loadGamePuckCardData } from '../lib/gameCardData';
 
 // Rinkd Game Puck (SOCIAL-3, Phase 1) — fan "Game Puck" / Fans' Pick vote on a
 // FINAL league or tournament game. Jersey-keyed: candidate players come from the
@@ -199,13 +201,15 @@ export default function GamePuckCard({
       {total > 0 && leader && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(46,91,140,0.14)', border: `0.5px solid ${C.border}`, borderRadius: 9, padding: '8px 11px', marginBottom: 12 }}>
           <span aria-hidden style={{ fontSize: 16 }}>🏒</span>
-          <div style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: C.faint, textTransform: 'uppercase' }}>Leading</div>
             <div style={{ fontSize: 13, fontWeight: 700, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {labelFor(leader.team_id, leader.jersey)}
               <span style={{ fontWeight: 400, color: C.dim }}> · {teamNameFor(leader.team_id)}</span>
             </div>
           </div>
+          <ShareButton gameId={gameId} isLeague={kind === 'league'} cardType="gamepuck" variant="ghost" label="Share"
+            getCard={() => loadGamePuckCardData(gameId, kind === 'league')} />
         </div>
       )}
 

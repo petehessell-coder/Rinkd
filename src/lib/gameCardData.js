@@ -7,6 +7,7 @@
 
 import { supabase } from './supabase';
 import { buildRecapCardData } from './shareCard';
+import { getGamePuck } from './gamePucks';
 import { areScorersHidden, getRecapSponsor } from './publicShare';
 
 const TOURN_BLUE = '#2E5B8C';
@@ -72,6 +73,56 @@ export async function loadGameCardData(gameId, isLeague) {
     scorersHome: scorers(home.id), scorersAway: scorers(away.id),
     sponsor: sponsor?.name || null,
   });
+}
+
+// Player-of-Game / Game Puck card data — game basics + the fan-vote winner.
+// Youth events suppress the winner's name (jersey only; COPPA).
+export async function loadGamePuckCardData(gameId, isLeague) {
+  let g, parent;
+  if (isLeague) {
+    const { data } = await supabase.from('league_games')
+      .select('*, home_lt:league_teams!home_team_id(id, team_name, logo_color, team:teams(id,name,logo_color)), away_lt:league_teams!away_team_id(id, team_name, logo_color, team:teams(id,name,logo_color)), league:leagues(name,settings)')
+      .eq('id', gameId).maybeSingle();
+    g = data; parent = data?.league || null;
+  } else {
+    const { data } = await supabase.from('games')
+      .select('*, home_team:tournament_teams!home_team_id(id,team_name,pool), away_team:tournament_teams!away_team_id(id,team_name,pool), tournament:tournaments(name,settings)')
+      .eq('id', gameId).maybeSingle();
+    g = data; parent = data?.tournament || null;
+  }
+  if (!g) throw new Error('Game not found');
+
+  const { leader, total } = await getGamePuck(gameId, isLeague ? 'league' : 'tournament');
+  if (!leader) throw new Error('No Game Puck winner yet');
+
+  const youth = areScorersHidden(parent?.settings);
+  let name = null;
+  if (!youth) {
+    const { data: lu } = await supabase.from('game_lineups')
+      .select('invite_name').eq('game_id', gameId).eq('team_id', leader.team_id).eq('jersey_number', leader.jersey).maybeSingle();
+    name = lu?.invite_name || null;
+  }
+
+  const homeId = g.home_team_id, awayId = g.away_team_id;
+  const homeName = isLeague ? (g.home_lt?.team?.name || g.home_lt?.team_name) : g.home_team?.team_name;
+  const awayName = isLeague ? (g.away_lt?.team?.name || g.away_lt?.team_name) : g.away_team?.team_name;
+  const homeColor = isLeague ? (g.home_lt?.team?.logo_color || g.home_lt?.logo_color) : '#2E5B8C';
+  const awayColor = isLeague ? (g.away_lt?.team?.logo_color || g.away_lt?.logo_color) : '#D72638';
+  const isHome = leader.team_id === homeId;
+  const competition = parent?.name || 'Rinkd';
+
+  return {
+    player: {
+      name,
+      jersey: leader.jersey,
+      teamName: isHome ? homeName : awayName,
+      teamColor: (isHome ? homeColor : awayColor) || '#2E5B8C',
+    },
+    votes: leader.votes,
+    game: { homeName, awayName, homeScore: g.home_score, awayScore: g.away_score, round: roundLabelFor(isLeague, g), competition },
+    league: competition,
+    sponsor: getRecapSponsor(parent?.settings)?.name || null,
+  };
 }
 
 const titleCase = (s) => String(s || '').replace(/\b\w/g, c => c.toUpperCase());

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { composeRecapCard } from '../lib/shareCard';
+import { composeRecapCard, composeGamePuckCard } from '../lib/shareCard';
 import { prefersNativeShare, downloadBlob, copyText, absoluteShareUrl } from '../lib/share';
 import { gameShareUrl } from '../lib/publicShare';
 import { uploadShareCard } from '../lib/ogCard';
@@ -20,7 +20,7 @@ import { track } from '../lib/analytics';
 
 const C = { blue: '#2E5B8C', ice: '#F4F7FA', steel: '#8BA3BE', card: '#0f2847', border: 'rgba(46,91,140,0.4)', dark: '#07111F' };
 
-export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghost', label = 'Share' }) {
+export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghost', label = 'Share', cardType = 'recap' }) {
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState(null); // { imgUrl, blob, deepLink }
   const [copied, setCopied] = useState(false);
@@ -28,6 +28,8 @@ export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghos
 
   const deepLink = absoluteShareUrl(gameShareUrl(!!isLeague, gameId));
   const kind = isLeague ? 'league' : 'tournament';
+  const isPuck = cardType === 'gamepuck';
+  const fileName = isPuck ? 'rinkd-gamepuck.png' : 'rinkd-recap.png';
 
   const onShare = async () => {
     if (busy) return;
@@ -36,7 +38,7 @@ export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghos
     let blob, card;
     try {
       card = await getCard();
-      blob = await composeRecapCard(card, { format: 'portrait' });
+      blob = isPuck ? await composeGamePuckCard(card) : await composeRecapCard(card, { format: 'portrait' });
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('[ShareButton] compose failed', e);
@@ -44,16 +46,18 @@ export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghos
       return;
     }
     // Fire-and-forget: persist the wide card so a pasted link unfurls it (OG).
-    // Authed-only inside; never blocks or fails the share.
-    uploadShareCard(gameId, isLeague, card);
+    // Recap only — the game's OG image is the recap card. Authed-only inside.
+    if (!isPuck) uploadShareCard(gameId, isLeague, card);
+    const text = isPuck
+      ? `🏒 Game Puck: ${card.player.name || '#' + card.player.jersey} — ${card.player.teamName} · on Rinkd`
+      : `${card.home.name} ${card.homeScore ?? 0}, ${card.away.name} ${card.awayScore ?? 0} — on Rinkd`;
     // 2) Touch device with file-share → one-tap native sheet. Any failure (incl.
     //    lost user-activation after the async compose) drops to the modal.
     if (prefersNativeShare()) {
       try {
-        const file = new File([blob], 'rinkd-recap.png', { type: 'image/png' });
-        const text = `${card.home.name} ${card.homeScore ?? 0}, ${card.away.name} ${card.awayScore ?? 0} — on Rinkd`;
+        const file = new File([blob], fileName, { type: 'image/png' });
         await navigator.share({ files: [file], text, url: deepLink });
-        track('share_recap', { method: 'web_share', kind, game_id: gameId });
+        track('share_recap', { method: 'web_share', kind, game_id: gameId, card_type: cardType });
         setBusy(false);
         return;
       } catch (e) {
@@ -63,7 +67,7 @@ export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghos
     }
     // 3) Desktop / fallback → modal with the card + Download + Copy link.
     setModal({ imgUrl: URL.createObjectURL(blob), blob, deepLink });
-    track('share_recap', { method: 'fallback', kind, game_id: gameId });
+    track('share_recap', { method: 'fallback', kind, game_id: gameId, card_type: cardType });
     setBusy(false);
   };
 
@@ -89,10 +93,10 @@ export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghos
       {modal && (
         <div onClick={closeModal} style={{ position: 'fixed', inset: 0, background: 'rgba(3,9,18,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 16, padding: 18, maxWidth: 360, width: '100%' }}>
-            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice, marginBottom: 12 }}>Share this recap</div>
-            <img src={modal.imgUrl} alt="Recap card" style={{ width: '100%', borderRadius: 10, display: 'block', marginBottom: 14, border: `1px solid ${C.border}` }} />
+            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice, marginBottom: 12 }}>{isPuck ? 'Share this Game Puck' : 'Share this recap'}</div>
+            <img src={modal.imgUrl} alt={isPuck ? 'Game Puck card' : 'Recap card'} style={{ width: '100%', borderRadius: 10, display: 'block', marginBottom: 14, border: `1px solid ${C.border}` }} />
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => downloadBlob(modal.blob, 'rinkd-recap.png')} style={{ flex: 1, background: C.blue, color: '#fff', border: 'none', borderRadius: 999, padding: '11px 0', fontFamily: "'Barlow', sans-serif", fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>⬇ Download</button>
+              <button onClick={() => downloadBlob(modal.blob, fileName)} style={{ flex: 1, background: C.blue, color: '#fff', border: 'none', borderRadius: 999, padding: '11px 0', fontFamily: "'Barlow', sans-serif", fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>⬇ Download</button>
               <button onClick={async () => { const ok = await copyText(modal.deepLink); setCopied(ok); }} style={{ flex: 1, background: 'transparent', color: C.ice, border: `1px solid ${C.border}`, borderRadius: 999, padding: '11px 0', fontFamily: "'Barlow', sans-serif", fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>{copied ? '✓ Link copied' : '🔗 Copy link'}</button>
             </div>
             <button onClick={closeModal} style={{ width: '100%', marginTop: 10, background: 'transparent', color: C.steel, border: 'none', padding: 8, fontSize: 13, cursor: 'pointer' }}>Close</button>

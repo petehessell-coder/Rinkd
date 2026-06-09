@@ -341,3 +341,128 @@ export async function composeBothFormats(card) {
   ]);
   return { portrait, wide };
 }
+
+// ---- Game Puck / Player-of-Game card (P2) -----------------------------------
+// Player-centric, vertical (Stories). Card data:
+//   { player:{ name|null, jersey, teamName, teamColor }, votes,
+//     game:{ homeName, awayName, homeScore, awayScore, round, competition },
+//     league, sponsor }
+// player.name === null → youth-suppressed (jersey only; COPPA).
+
+const PUCK = {
+  W: 1080, H: 1350, pad: 64, topH: 150, botH: 240, wmText: 96, wmImgH: 96, wmSize: 150,
+  puckR: 208, puckCy: 486, jerseySize: 258, eyebrowSize: 40, nameSize: 88, teamSize: 46, voteSize: 32, gameSize: 38,
+};
+
+function fitFont(ctx, text, weight, maxW, base, floor) {
+  let s = base;
+  ctx.font = `${weight} ${s}px 'Barlow Condensed'`;
+  while (s > floor && ctx.measureText(text).width > maxW) { s -= 4; ctx.font = `${weight} ${s}px 'Barlow Condensed'`; }
+  return s;
+}
+
+function drawGamePuck(ctx, L, card, assets) {
+  const { W, H } = L;
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, C.navyHi); grad.addColorStop(1, C.navy);
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+  drawWatermark(ctx, W, H, L.wmSize);
+
+  // TOP STRIP — GAME PUCK + sponsor
+  ctx.fillStyle = C.strip; ctx.fillRect(0, 0, W, L.topH);
+  ctx.fillStyle = C.line; ctx.fillRect(0, L.topH - 2, W, 2);
+  const chipR = L.topH * 0.30, chipX = L.pad + chipR, chipY = L.topH / 2;
+  ctx.save(); ctx.beginPath(); ctx.arc(chipX, chipY, chipR, 0, Math.PI * 2);
+  ctx.fillStyle = '#0a0a0a'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(244,247,250,0.4)'; ctx.stroke(); ctx.restore();
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = C.steel; ctx.font = `700 ${L.topH * 0.19}px 'Barlow'`;
+  ctx.fillText('GAME PUCK · PRESENTED BY', chipX + chipR + L.pad * 0.5, chipY - L.topH * 0.13);
+  ctx.fillStyle = C.ice; ctx.font = `800 italic ${L.topH * 0.30}px 'Barlow Condensed'`;
+  ctx.fillText((card.sponsor || 'RINKD').toUpperCase(), chipX + chipR + L.pad * 0.5, chipY + L.topH * 0.16);
+
+  // FANS' PICK eyebrow
+  ctx.textAlign = 'center';
+  ctx.fillStyle = C.red; ctx.font = `900 italic ${L.eyebrowSize}px 'Barlow Condensed'`;
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText("FANS' PICK", W / 2, L.topH + 78);
+
+  // puck medallion + jersey
+  const cx = W / 2, cy = L.puckCy;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, L.puckR, 0, Math.PI * 2); ctx.fillStyle = '#0a0a0a'; ctx.fill();
+  ctx.lineWidth = L.puckR * 0.09; ctx.strokeStyle = card.player.teamColor || C.blue; ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx, cy, L.puckR * 0.84, 0, Math.PI * 2); ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle';
+  ctx.font = `900 italic ${L.jerseySize}px 'Barlow Condensed'`;
+  ctx.fillText(`${card.player.jersey ?? '?'}`, cx, cy + L.jerseySize * 0.03);
+
+  // player name (adult) or "#jersey" (youth-suppressed)
+  ctx.textBaseline = 'alphabetic';
+  let y = cy + L.puckR + L.nameSize * 0.95;
+  ctx.fillStyle = C.ice;
+  const heroText = (card.player.name ? card.player.name : `#${card.player.jersey}`).toUpperCase();
+  const ns = fitFont(ctx, heroText, '900 italic', W - L.pad * 2, L.nameSize, 44);
+  ctx.fillText(heroText, W / 2, y);
+
+  // team accent + name
+  const teamName = (card.player.teamName || '').toUpperCase();
+  ctx.font = `800 italic ${L.teamSize}px 'Barlow Condensed'`;
+  const ty = y + L.teamSize * 1.5;
+  const barW = Math.min(ctx.measureText(teamName).width, 380);
+  roundRect(ctx, W / 2 - barW / 2, ty - L.teamSize * 1.15, barW, 9, 4); ctx.fillStyle = card.player.teamColor || C.blue; ctx.fill();
+  ctx.fillStyle = C.steel; ctx.fillText(teamName, W / 2, ty);
+  let blockBottom = ty;
+  if (card.votes > 0) {
+    blockBottom = ty + L.voteSize * 1.9;
+    ctx.fillStyle = 'rgba(244,247,250,0.5)'; ctx.font = `700 ${L.voteSize}px 'Barlow'`;
+    ctx.fillText(`${card.votes} ${card.votes === 1 ? 'fan vote' : 'fan votes'}`, W / 2, blockBottom);
+  }
+
+  // game result line — flows below the player block (clears the bottom strip)
+  const gl = `${card.game.homeName} ${card.game.homeScore ?? 0} · ${card.game.awayName} ${card.game.awayScore ?? 0}`;
+  const ctxLine = [card.game.round, card.game.competition].filter(Boolean).join('   ·   ');
+  const gy = Math.min(blockBottom + L.gameSize * 2.0, H - L.botH - 78);
+  ctx.fillStyle = C.ice; fitFont(ctx, gl, '800 italic', W - L.pad * 2, L.gameSize, 24); ctx.fillText(gl, W / 2, gy);
+  ctx.fillStyle = C.steel; ctx.font = `600 ${L.gameSize * 0.72}px 'Barlow'`; ctx.fillText(ctxLine, W / 2, gy + L.gameSize * 1.3);
+
+  // BOTTOM STRIP — Rinkd frame (mirrors the recap card)
+  const bY = H - L.botH;
+  ctx.fillStyle = C.dark; ctx.fillRect(0, bY, W, L.botH);
+  ctx.fillStyle = C.line; ctx.fillRect(0, bY, W, 2);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  const wmY = bY + L.botH * 0.40;
+  let wmRight;
+  if (assets.wordmark) {
+    const h = L.wmImgH, w = h * (assets.wordmark.width / assets.wordmark.height);
+    ctx.drawImage(assets.wordmark, L.pad, wmY - h / 2, w, h); wmRight = L.pad + w;
+  } else {
+    ctx.font = `900 italic ${L.wmText}px 'Barlow Condensed'`; ctx.fillStyle = C.ice; ctx.fillText('RINKD', L.pad, wmY);
+    wmRight = L.pad + ctx.measureText('RINKD').width + L.wmText * 0.26;
+  }
+  ctx.fillStyle = C.steel; ctx.font = `700 ${L.wmText * 0.34}px 'Barlow'`; ctx.fillText('rinkd.app', L.pad, bY + L.botH * 0.76);
+  const ctaMaxW = W - L.pad - wmRight - L.pad * 0.6;
+  let ctaSize = L.wmText * 0.42;
+  ctx.fillStyle = C.ice; ctx.textAlign = 'right'; ctx.font = `700 italic ${ctaSize}px 'Barlow Condensed'`;
+  let ctaText = `FOLLOW ${(card.league || 'YOUR LEAGUE').toUpperCase()} LIVE →`;
+  if (ctx.measureText(ctaText).width > ctaMaxW) {
+    ctaText = 'FOLLOW LIVE ON RINKD →';
+    while (ctaSize > L.wmText * 0.26 && (ctx.font = `700 italic ${ctaSize}px 'Barlow Condensed'`, ctx.measureText(ctaText).width > ctaMaxW)) ctaSize -= 2;
+  }
+  ctx.fillText(ctaText, W - L.pad, bY + L.botH * 0.42);
+  ctx.fillStyle = C.steel; ctx.font = `600 ${L.wmText * 0.21}px 'Barlow'`; ctx.textAlign = 'right';
+  ctx.fillText('Every game lives on Rinkd', W - L.pad, bY + L.botH * 0.72);
+}
+
+export async function composeGamePuckCard(card) {
+  const L = PUCK;
+  await ensureFonts();
+  const wordmark = await loadImage(WORDMARK_SRC);
+  const canvas = document.createElement('canvas');
+  canvas.width = L.W; canvas.height = L.H;
+  const ctx = canvas.getContext('2d');
+  drawGamePuck(ctx, L, card, { wordmark });
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob returned null'))), 'image/png');
+  });
+}
