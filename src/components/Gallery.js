@@ -5,6 +5,8 @@ import { getReactions } from '../lib/reactions';
 import PostReactions from './PostReactions';
 import { MentionText } from './Mentions';
 import { mentionMapFromRows } from '../lib/mentions';
+import ShareButton from './ShareButton';
+import { absoluteShareUrl } from '../lib/share';
 
 const C = {
   ice: '#F4F7FA', steel: '#9BB5D6', dim: '#7C8B9F', panel: '#11253E',
@@ -158,6 +160,7 @@ export default function Gallery({ tournamentId = null, leagueId = null, currentU
         <Lightbox
           post={lightbox}
           isTournament={isTournament}
+          scopeId={tournamentId || leagueId}
           currentUser={currentUser}
           reactionInitial={reactionMap[lightbox.id]}
           onClose={() => setLightbox(null)}
@@ -314,7 +317,7 @@ function AddPhotoModal({ scopeLabel, teams, currentUser, tournamentId, leagueId,
   );
 }
 
-function Lightbox({ post, isTournament, currentUser, reactionInitial, onClose }) {
+function Lightbox({ post, isTournament, scopeId, currentUser, reactionInitial, onClose }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
@@ -325,6 +328,10 @@ function Lightbox({ post, isTournament, currentUser, reactionInitial, onClose })
   const team = isTournament ? post.tournament_teams : post.league_teams;
   const teamName = team?.team_name || null;
   const mentionMap = mentionMapFromRows(post.post_mentions);
+  const isImage = post.media_type !== 'video';
+  // Shared photos get a Rinkd corner watermark + a tap-back link to the event.
+  const photoDeepLink = scopeId ? absoluteShareUrl(`/${isTournament ? 'tournament' : 'league'}/${scopeId}`) : absoluteShareUrl('/');
+  const getPhotoCard = () => ({ imageUrl: post.media_url, tag: teamName, deepLink: photoDeepLink });
 
   return (
     <Backdrop onClose={onClose}>
@@ -360,7 +367,13 @@ function Lightbox({ post, isTournament, currentUser, reactionInitial, onClose })
               <MentionText text={post.content} mentions={mentionMap} />
             </div>
           )}
-          <PostReactions postId={post.id} currentUserId={currentUser?.id} initial={reactionInitial} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+            <PostReactions postId={post.id} currentUserId={currentUser?.id} initial={reactionInitial} />
+            {isImage && (
+              <ShareButton cardType="photo" gameId={post.id} isLeague={!isTournament} variant="ghost" label="Share"
+                getCard={getPhotoCard} />
+            )}
+          </div>
         </div>
       </div>
     </Backdrop>

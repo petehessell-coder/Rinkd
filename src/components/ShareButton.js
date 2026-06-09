@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { composeRecapCard, composeGamePuckCard } from '../lib/shareCard';
+import { composeRecapCard, composeGamePuckCard, composeWatermarkedPhoto } from '../lib/shareCard';
 import { prefersNativeShare, downloadBlob, copyText, absoluteShareUrl } from '../lib/share';
 import { gameShareUrl } from '../lib/publicShare';
 import { uploadShareCard } from '../lib/ogCard';
@@ -26,37 +26,44 @@ export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghos
   const [copied, setCopied] = useState(false);
   const [err, setErr] = useState(false);
 
-  const deepLink = absoluteShareUrl(gameShareUrl(!!isLeague, gameId));
+  const gameDeepLink = absoluteShareUrl(gameShareUrl(!!isLeague, gameId));
   const kind = isLeague ? 'league' : 'tournament';
   const isPuck = cardType === 'gamepuck';
-  const fileName = isPuck ? 'rinkd-gamepuck.png' : 'rinkd-recap.png';
+  const isPhoto = cardType === 'photo';
+  const fileName = isPhoto ? 'rinkd-photo.jpg' : isPuck ? 'rinkd-gamepuck.png' : 'rinkd-recap.png';
+  const mime = isPhoto ? 'image/jpeg' : 'image/png';
 
   const onShare = async () => {
     if (busy) return;
     setBusy(true); setErr(false);
-    // 1) Compose the card. If this fails, SHOW it — never fail silently.
+    // 1) Compose. If this fails, SHOW it — never fail silently.
     let blob, card;
     try {
       card = await getCard();
-      blob = isPuck ? await composeGamePuckCard(card) : await composeRecapCard(card, { format: 'portrait' });
+      blob = isPhoto ? await composeWatermarkedPhoto(card.imageUrl, { tag: card.tag })
+        : isPuck ? await composeGamePuckCard(card)
+          : await composeRecapCard(card, { format: 'portrait' });
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('[ShareButton] compose failed', e);
       setErr(true); setBusy(false);
       return;
     }
-    // Fire-and-forget: persist the wide card so a pasted link unfurls it (OG).
-    // Recap only — the game's OG image is the recap card. Authed-only inside.
-    if (!isPuck) uploadShareCard(gameId, isLeague, card);
-    const text = isPuck
-      ? `🏒 Game Puck: ${card.player.name || '#' + card.player.jersey} — ${card.player.teamName} · on Rinkd`
-      : `${card.home.name} ${card.homeScore ?? 0}, ${card.away.name} ${card.awayScore ?? 0} — on Rinkd`;
+    // Photos deep-link to the event page (no per-photo public page); games to /g|/lg.
+    const link = isPhoto ? (card.deepLink || gameDeepLink) : gameDeepLink;
+    // Fire-and-forget OG upload — recap only (the game's OG image is the recap card).
+    if (cardType === 'recap') uploadShareCard(gameId, isLeague, card);
+    const text = isPhoto
+      ? `📸 ${card.tag ? card.tag + ' · ' : ''}on Rinkd`
+      : isPuck
+        ? `🏒 Game Puck: ${card.player.name || '#' + card.player.jersey} — ${card.player.teamName} · on Rinkd`
+        : `${card.home.name} ${card.homeScore ?? 0}, ${card.away.name} ${card.awayScore ?? 0} — on Rinkd`;
     // 2) Touch device with file-share → one-tap native sheet. Any failure (incl.
     //    lost user-activation after the async compose) drops to the modal.
     if (prefersNativeShare()) {
       try {
-        const file = new File([blob], fileName, { type: 'image/png' });
-        await navigator.share({ files: [file], text, url: deepLink });
+        const file = new File([blob], fileName, { type: mime });
+        await navigator.share({ files: [file], text, url: link });
         track('share_recap', { method: 'web_share', kind, game_id: gameId, card_type: cardType });
         setBusy(false);
         return;
@@ -65,8 +72,8 @@ export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghos
         // else fall through to the modal
       }
     }
-    // 3) Desktop / fallback → modal with the card + Download + Copy link.
-    setModal({ imgUrl: URL.createObjectURL(blob), blob, deepLink });
+    // 3) Desktop / fallback → modal with the image + Download + Copy link.
+    setModal({ imgUrl: URL.createObjectURL(blob), blob, deepLink: link });
     track('share_recap', { method: 'fallback', kind, game_id: gameId, card_type: cardType });
     setBusy(false);
   };
@@ -93,8 +100,8 @@ export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghos
       {modal && (
         <div onClick={closeModal} style={{ position: 'fixed', inset: 0, background: 'rgba(3,9,18,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 16, padding: 18, maxWidth: 360, width: '100%' }}>
-            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice, marginBottom: 12 }}>{isPuck ? 'Share this Game Puck' : 'Share this recap'}</div>
-            <img src={modal.imgUrl} alt={isPuck ? 'Game Puck card' : 'Recap card'} style={{ width: '100%', borderRadius: 10, display: 'block', marginBottom: 14, border: `1px solid ${C.border}` }} />
+            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice, marginBottom: 12 }}>{isPhoto ? 'Share this photo' : isPuck ? 'Share this Game Puck' : 'Share this recap'}</div>
+            <img src={modal.imgUrl} alt={isPhoto ? 'Photo' : isPuck ? 'Game Puck card' : 'Recap card'} style={{ width: '100%', borderRadius: 10, display: 'block', marginBottom: 14, border: `1px solid ${C.border}` }} />
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => downloadBlob(modal.blob, fileName)} style={{ flex: 1, background: C.blue, color: '#fff', border: 'none', borderRadius: 999, padding: '11px 0', fontFamily: "'Barlow', sans-serif", fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>⬇ Download</button>
               <button onClick={async () => { const ok = await copyText(modal.deepLink); setCopied(ok); }} style={{ flex: 1, background: 'transparent', color: C.ice, border: `1px solid ${C.border}`, borderRadius: 999, padding: '11px 0', fontFamily: "'Barlow', sans-serif", fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>{copied ? '✓ Link copied' : '🔗 Copy link'}</button>

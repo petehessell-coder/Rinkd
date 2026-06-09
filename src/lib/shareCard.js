@@ -466,3 +466,53 @@ export async function composeGamePuckCard(card) {
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob returned null'))), 'image/png');
   });
 }
+
+// ---- Gallery photo watermark (P2) -------------------------------------------
+// Composite a SUBTLE corner Rinkd watermark onto a shared gallery photo. High
+// Rinkd brand, low/no sponsor (these are often candid kid photos — don't
+// over-monetize, per the spec). Output JPEG (photos). Image loads taint-proof
+// via fetch+createImageBitmap, so a Supabase-hosted photo never breaks toBlob.
+export async function composeWatermarkedPhoto(imageUrl, { tag = null, maxSize = 1440 } = {}) {
+  await ensureFonts();
+  const [img, wordmark] = await Promise.all([loadImage(imageUrl), loadImage(WORDMARK_SRC)]);
+  if (!img) throw new Error('photo failed to load');
+
+  const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+  const W = Math.max(1, Math.round(img.width * scale));
+  const H = Math.max(1, Math.round(img.height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, W, H);
+
+  // bottom scrim so the mark stays legible on any photo
+  const scrimH = Math.max(70, W * 0.13);
+  const grad = ctx.createLinearGradient(0, H - scrimH, 0, H);
+  grad.addColorStop(0, 'rgba(0,0,0,0)'); grad.addColorStop(1, 'rgba(0,0,0,0.55)');
+  ctx.fillStyle = grad; ctx.fillRect(0, H - scrimH, W, scrimH);
+
+  const pad = Math.max(16, W * 0.035);
+  const wmH = Math.max(22, W * 0.045);
+  const cy = H - pad - wmH / 2;
+  if (wordmark) {
+    const wmW = wmH * (wordmark.width / wordmark.height);
+    ctx.globalAlpha = 0.96; ctx.drawImage(wordmark, pad, cy - wmH / 2, wmW, wmH); ctx.globalAlpha = 1;
+    ctx.fillStyle = 'rgba(244,247,250,0.85)'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.font = `700 ${wmH * 0.5}px 'Barlow'`;
+    ctx.fillText('rinkd.app', pad + wmW + wmH * 0.45, cy + 1);
+  } else {
+    ctx.fillStyle = C.ice; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.font = `900 italic ${wmH}px 'Barlow Condensed'`; ctx.fillText('RINKD', pad, cy);
+  }
+  // optional team/event tag, bottom-right
+  if (tag) {
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(244,247,250,0.9)';
+    ctx.font = `800 italic ${wmH * 0.64}px 'Barlow Condensed'`;
+    ctx.fillText(String(tag).toUpperCase(), W - pad, cy);
+  }
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob returned null'))), 'image/jpeg', 0.9);
+  });
+}
