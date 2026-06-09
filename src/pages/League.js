@@ -6,6 +6,7 @@ import MapLink from '../components/MapLink';
 import { getLeague, getLeagueTeams, getLeagueGames, getLeagueStandings, getUserLeagueRole } from '../lib/leagues';
 import { listLeagueDivisions, getMyDivisionInLeague } from '../lib/leagueDivisions';
 import DivisionPicker from '../components/DivisionPicker';
+import AdSlot from '../components/AdSlot';
 import { isExtraCommissioner as isExtraCommissionerLookup } from '../lib/leagueCommissioners';
 import { followLeague, unfollowLeague, isFollowingLeague } from '../lib/leagueSubscriptions';
 import { subscribeToPush, isPushSubscribed } from '../lib/push';
@@ -441,6 +442,9 @@ export default function LeaguePage({ currentUser, profile }) {
         url={`https://rinkd.app/league/${league.id}`}
       />
       <div style={{ background: C.dark, minHeight: '100vh', fontFamily: 'Barlow, sans-serif', color: C.ice }}>
+
+        {/* ADS-1 event banner — renders only when this league has an active sponsor */}
+        <AdSlot slot="event_banner" targetType="league" targetId={league.id} style={{ margin: '12px 16px 0' }} />
 
         {/* BANNER */}
         <div style={{ background: 'linear-gradient(135deg,#0B1F3A 0%,#1a3a5c 100%)', padding: '20px 16px 0' }}>

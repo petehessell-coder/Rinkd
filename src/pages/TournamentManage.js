@@ -19,6 +19,7 @@ import { uploadMedia } from '../lib/posts';
 import { classifyImage } from '../lib/imageModeration';
 import DateTimePicker from '../components/DateTimePicker';
 import EditGameModal from '../components/EditGameModal';
+import SponsorsManager from '../components/SponsorsManager';
 import { supabase } from '../lib/supabase';
 import { getTournamentRegistrations, updateTournamentRegistrationStatus, approveTournamentRegistration } from '../lib/registrations';
 import { tournamentPayoutsReady, startConnectOnboarding } from '../lib/stripeConnect';
@@ -29,7 +30,7 @@ const C = {
   green: '#22C55E', amber: '#F59E0B',
 };
 
-const TABS = ['Teams', 'Schedule', 'Bracket', 'Registrations', 'Scorers', 'Settings'];
+const TABS = ['Teams', 'Schedule', 'Bracket', 'Registrations', 'Scorers', 'Sponsors', 'Settings'];
 
 const REG_STATUS = {
   pending:    { label: 'Pending',    color: '#F59E0B', bg: 'rgba(245,158,11,0.15)' },
@@ -224,6 +225,7 @@ export default function TournamentManagePage({ currentUser, profile }) {
           {tab === 'Bracket' && <BracketTab tournamentId={id} tournament={tournament} teams={teams} games={games} rinks={rinks} reload={load} flash={showFlash} />}
           {tab === 'Registrations' && <RegistrationsTab tournamentId={id} tournament={tournament} reload={load} flash={showFlash} />}
           {tab === 'Scorers' && <ScorersTab tournamentId={id} tournamentName={tournament.name} originalDirectorId={tournament.director_id} profile={profile} flash={showFlash} />}
+          {tab === 'Sponsors' && <SponsorsManager ownerType="tournament" ownerId={id} isYouth={tournament.settings?.feature_profile === 'youth_competitive'} />}
           {tab === 'Settings' && <SettingsTab tournament={tournament} currentUser={currentUser} reload={load} flash={showFlash} />}
         </div>
       </div>

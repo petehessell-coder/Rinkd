@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { LedR } from '../components/Logos';
+import AdSlot from '../components/AdSlot';
 import { getLiveBarnUrl } from '../lib/livebarn';
 import { teamInitials } from '../lib/teamInitials';
 import { followTournament, unfollowTournament, isFollowingTournament } from '../lib/tournamentSubscriptions';
@@ -384,6 +385,9 @@ export default function TournamentPage({ currentUser }) {
 
   return (
     <div style={{background:'#07111F',minHeight:'100vh',fontFamily:'Barlow,sans-serif',color:'#F4F7FA'}}>
+
+      {/* ADS-1 event banner — renders only when this tournament has an active sponsor */}
+      <AdSlot slot="event_banner" targetType="tournament" targetId={tournament.id} style={{ margin: '12px 16px 0' }} />
 
       {/* HEADER */}
       <div style={{background:'#0B1F3A',padding:'14px 16px 0',borderTop:`3px solid ${accent}`,borderBottom:'0.5px solid rgba(46,91,140,0.4)'}}>
