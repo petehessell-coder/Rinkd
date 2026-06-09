@@ -189,7 +189,7 @@ function BtnRow({ onBack, onNext, nextLabel = 'Next →', loading = false }) {
   );
 }
 
-const periodOptions = Array.from({length:20},(_,i)=>({value:i+1,label:`${i+1} min`}));
+const periodOptions = Array.from({length:60},(_,i)=>({value:i+1,label:`${i+1} min`}));
 const pointOptions  = Array.from({length:5}, (_,i)=>({value:i,label:`${i} pt${i!==1?'s':''}`}));
 const goalDiffOptions = [{value:'none',label:'No limit'}, ...Array.from({length:10},(_,i)=>({value:i+1,label:String(i+1)}))];
 
@@ -350,7 +350,7 @@ function Step2({ data, onChange, onBack, onNext }) {
         <Row2>
           <Field label="Periods per Game">
             <Select value={s.num_periods} onChange={v => set('num_periods', parseInt(v))}
-              options={[{value:2,label:'2 periods'},{value:3,label:'3 periods'}]} />
+              options={[{value:1,label:'1 period'},{value:2,label:'2 periods'},{value:3,label:'3 periods'}]} />
           </Field>
           <Field label="Max Goal Diff">
             <Select value={s.max_goal_differential ?? 'none'} onChange={v => set('max_goal_differential', v==='none'?null:parseInt(v))}
