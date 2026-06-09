@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { getGamePuck, getMyGamePuckVote, castGamePuckVote, getGamePuckResult, getUserGamePuckCount } from '../lib/gamePucks';
+import { getGamePuck, getMyGamePuckVote, castGamePuckVote, getGamePuckResult, getUserGamePuckCount, getGamePuckState, settleGamePuck } from '../lib/gamePucks';
 import ShareButton from './ShareButton';
 import { loadGamePuckCardData } from '../lib/gameCardData';
 
@@ -38,18 +38,22 @@ export default function GamePuckCard({
   const [err, setErr] = useState(false);
   const [result, setResult] = useState(null);       // SOCIAL-3 P2: settled winner | null
   const [winnerPucks, setWinnerPucks] = useState(0); // the winner's career Game Puck count
+  const [state, setState] = useState(null);          // { phase, opened_at, closes_at, total_votes, is_settled }
+  const [settling, setSettling] = useState(false);   // lazy settle-on-view in flight
 
   const load = useCallback(async () => {
     setErr(false);
     try {
-      const [t, mine, res] = await Promise.all([
+      const [t, mine, res, st] = await Promise.all([
         getGamePuck(gameId, kind),
         canVote ? getMyGamePuckVote(gameId, kind) : Promise.resolve(null),
         getGamePuckResult(gameId, kind),
+        getGamePuckState(gameId, kind),
       ]);
       setTally(t);
       setMyVote(mine);
       setResult(res);
+      setState(st);
       if (res?.winner_user_id) getUserGamePuckCount(res.winner_user_id).then(setWinnerPucks).catch(() => {});
     } catch (e) {
       console.error('[GamePuck] load failed', e);
@@ -59,6 +63,22 @@ export default function GamePuckCard({
   }, [gameId, kind, canVote]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Lazy settle-on-view: the 30-min window has closed but no winner is recorded
+  // yet (cron hasn't run). A signed-in viewer nudges the settle so the reveal is
+  // instant. Window-guarded + idempotent server-side; reload picks up the result.
+  useEffect(() => {
+    if (!canVote) return;                         // only signed-in viewers may settle
+    if (settling || result) return;
+    if (state?.phase !== 'closed') return;
+    let cancelled = false;
+    setSettling(true);
+    (async () => {
+      await settleGamePuck(gameId, kind);
+      if (!cancelled) { await load(); setSettling(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [state?.phase, result, canVote, settling, gameId, kind, load]);
 
   // Candidate players per team: union of lineup jerseys + goal participants.
   const candidatesByTeam = useMemo(() => {
@@ -114,6 +134,14 @@ export default function GamePuckCard({
 
   const total = tally?.total || 0;
   const leader = tally?.leader || null;
+  // Phase: 'none'|'open' = live tally + voting; 'blackout' = vote, tally hidden
+  // (last 10 min); 'closed' = window elapsed, settling; 'settled' = winner shown.
+  const phase = state?.phase || 'open';
+  const hideTally = phase === 'blackout';       // seal the count for the reveal
+  const votingClosed = phase === 'closed' || phase === 'settled';
+  const closesInMin = state?.closes_at
+    ? Math.max(0, Math.round((new Date(state.closes_at).getTime() - Date.now()) / 60000))
+    : null;
   const nameFor = (teamId, jersey) => lineupByTeam[teamId]?.[jersey] || null;
   const teamNameFor = (teamId) => (teamId === homeTeam.id ? homeTeam.name : awayTeam.name);
   const labelFor = (teamId, jersey) => {
@@ -128,8 +156,11 @@ export default function GamePuckCard({
           <span aria-hidden style={{ width: 11, height: 11, borderRadius: '50%', background: '#0a0a0a', border: '1px solid rgba(244,247,250,0.35)', display: 'inline-block' }} />
           Game Puck
         </div>
-        {total > 0 && (
+        {!hideTally && total > 0 && (
           <span style={{ fontSize: 10, fontWeight: 700, color: C.faint }}>{total} {total === 1 ? 'vote' : 'votes'}</span>
+        )}
+        {hideTally && (
+          <span style={{ fontSize: 10, fontWeight: 700, color: C.faint }}>🤐 sealed</span>
         )}
       </div>
       <div style={{ fontSize: 11, color: C.dim, marginBottom: 10 }}>Fans’ Pick — who earned it?</div>
@@ -162,6 +193,26 @@ export default function GamePuckCard({
     );
   }
 
+  // Window has closed (≥30 min from the first vote) but no winner is recorded
+  // yet — the reveal moment. A signed-in viewer's lazy-settle (or the cron) will
+  // post the winner within seconds; show the "peeling the tape" interstitial.
+  if (phase === 'closed') {
+    return (
+      <Wrap>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(46,91,140,0.14)', border: `0.5px solid ${C.border}`, borderRadius: 9, padding: '12px 12px' }}>
+          <span aria-hidden style={{ fontSize: 20 }}>🏒</span>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: C.faint, textTransform: 'uppercase' }}>Voting closed</div>
+            <div style={{ fontSize: 13.5, fontWeight: 800, color: C.ice }}>Peeling the tape…</div>
+            <div style={{ fontSize: 11, color: C.dim }}>
+              {total > 0 ? `Counting ${total} ${total === 1 ? 'vote' : 'votes'} — winner revealed in a moment.` : 'Tallying the Fans’ Pick — back in a moment.'}
+            </div>
+          </div>
+        </div>
+      </Wrap>
+    );
+  }
+
   if (!hasCandidates) {
     return (
       <Wrap>
@@ -185,12 +236,12 @@ export default function GamePuckCard({
           {cands.map(({ jersey, name }) => {
             const votes = voteMap[keyOf(team.id, jersey)] || 0;
             const mine = myVote && myVote.team_id === team.id && myVote.jersey === jersey;
-            const isLeader = leader && leader.team_id === team.id && leader.jersey === jersey && total > 0;
+            const isLeader = !hideTally && leader && leader.team_id === team.id && leader.jersey === jersey && total > 0;
             return (
               <button
                 key={jersey}
                 onClick={() => onVote(team.id, jersey)}
-                disabled={!canVote || saving}
+                disabled={!canVote || saving || votingClosed}
                 title={canVote ? (mine ? 'Your pick' : 'Vote') : 'Sign in to vote'}
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -206,7 +257,7 @@ export default function GamePuckCard({
                 <span style={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {name ? `${name} ` : ''}<span style={{ opacity: name ? 0.7 : 1 }}>#{jersey}</span>
                 </span>
-                {votes > 0 && (
+                {!hideTally && votes > 0 && (
                   <span style={{
                     fontSize: 10, fontWeight: 800, lineHeight: 1,
                     padding: '2px 6px', borderRadius: 999,
@@ -224,7 +275,7 @@ export default function GamePuckCard({
 
   return (
     <Wrap>
-      {total > 0 && leader && (
+      {!hideTally && total > 0 && leader && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(46,91,140,0.14)', border: `0.5px solid ${C.border}`, borderRadius: 9, padding: '8px 11px', marginBottom: 12 }}>
           <span aria-hidden style={{ fontSize: 16 }}>🏒</span>
           <div style={{ minWidth: 0, flex: 1 }}>
@@ -239,15 +290,29 @@ export default function GamePuckCard({
         </div>
       )}
 
+      {hideTally && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(46,91,140,0.14)', border: `0.5px solid ${C.border}`, borderRadius: 9, padding: '8px 11px', marginBottom: 12 }}>
+          <span aria-hidden style={{ fontSize: 16 }}>🤐</span>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: C.faint, textTransform: 'uppercase' }}>Final minutes</div>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: C.ice }}>
+              Votes are sealed{closesInMin != null && closesInMin > 0 ? ` — winner revealed in ~${closesInMin} min` : ' — winner revealed soon'}
+            </div>
+          </div>
+        </div>
+      )}
+
       {renderTeam(homeTeam)}
       {renderTeam(awayTeam)}
 
       <div style={{ fontSize: 10.5, color: C.faint, marginTop: 4, lineHeight: 1.5 }}>
         {!canVote
           ? 'Sign in to cast your vote for the Game Puck.'
-          : myVote
-            ? 'Tap another player to change your pick. Fan vote — separate from any team or league award.'
-            : 'Tap a player to cast your vote. One vote per game.'}
+          : hideTally
+            ? 'Last call — votes are hidden until the winner is revealed. You can still change your pick.'
+            : myVote
+              ? `Tap another player to change your pick.${closesInMin != null && closesInMin > 0 ? ` Voting closes in ~${closesInMin} min.` : ''} Fan vote — separate from any team or league award.`
+              : `Tap a player to cast your vote. One vote per game.${closesInMin != null && closesInMin > 0 ? ` Voting open ~${closesInMin} more min.` : ''}`}
         {err && <span style={{ color: accent }}> · Something went wrong, try again.</span>}
       </div>
     </Wrap>
