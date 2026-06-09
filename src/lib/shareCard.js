@@ -21,7 +21,9 @@ const C = {
 };
 
 const WORDMARK_SRC = '/rinkd-wordmark-tape.png'; // same-origin asset in public/
-const PUCK_SRC = '/gamepuck/puck.webp';          // the RINKD Game Puck brand mark
+const PUCK_SRC = '/gamepuck/puck.png';           // RINKD Game Puck mark — PNG so the
+                                                 // canvas decodes it on every browser
+                                                 // (webp isn't universally decodable)
 
 const PORTRAIT = {
   W: 1080, H: 1350, pad: 64, topH: 150, heroPadTop: 64, finalPillW: 230, finalPillH: 64,

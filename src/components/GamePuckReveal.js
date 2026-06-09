@@ -261,13 +261,18 @@ export default function GamePuckReveal({
                   'linear-gradient(180deg,#f3f4f6,#dfe3e8 55%,#cfd5dc)'
                 : 'none',
             }}>
-              {/* the real frayed tape — its transparent fray shows the navy behind */}
+              {/* the real frayed tape — its transparent fray shows the navy behind.
+                  webp + PNG fallback (some phones don't decode webp); both fail →
+                  tapeImgFailed → the CSS gradient. */}
               {!tapeImgFailed && (
-                <img
-                  src="/gamepuck/tape.webp" alt="" draggable={false}
-                  onError={() => setTapeImgFailed(true)}
-                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', userSelect: 'none', pointerEvents: 'none' }}
-                />
+                <picture>
+                  <source srcSet="/gamepuck/tape.webp" type="image/webp" />
+                  <img
+                    src="/gamepuck/tape.png" alt="" draggable={false}
+                    onError={() => setTapeImgFailed(true)}
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', userSelect: 'none', pointerEvents: 'none' }}
+                  />
+                </picture>
               )}
               {/* label + grip hint, hidden once you start pulling */}
               <div style={{
