@@ -227,7 +227,7 @@ begin
   if v_email = '' or v_email !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$' then
     raise exception 'valid email required' using errcode = '22023';
   end if;
-  v_token := encode(gen_random_bytes(32), 'hex');
+  v_token := encode(extensions.gen_random_bytes(32), 'hex');  -- pgcrypto lives in the extensions schema
   insert into public.league_manager_invites (league_id, email, token, invited_by)
   values (p_league_id, v_email, v_token, (select auth.uid()))
   returning league_manager_invites.id into v_id;
@@ -237,6 +237,9 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.accept_league_manager_invite(p_token text)
 RETURNS TABLE(league_id uuid) LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public', 'auth' AS $$
+-- use_column so the bare league_id in the ON CONFLICT below binds to the column,
+-- not the RETURNS TABLE(league_id) OUT variable.
+#variable_conflict use_column
 declare v_invite record; v_uid uuid; v_email text;
 begin
   v_uid := (select auth.uid());

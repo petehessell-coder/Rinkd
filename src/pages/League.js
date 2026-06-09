@@ -407,6 +407,10 @@ export default function LeaguePage({ currentUser, profile }) {
   // come back through the isExtraCommissioner async lookup. Either path
   // grants the same Manage button + scorer affordances.
   const isCommissioner = userRole === 'commissioner' || isExtraCommissioner;
+  // LEAGUE-MGR-1 — operational staff (manager-or-above). Gets the Manage button +
+  // feed/gallery moderation, but the Manage page itself hides the commissioner-only
+  // tabs (Registrations, Settings, Staff) and RLS blocks settings/billing/delete.
+  const isManager = isCommissioner || userRole === 'manager';
 
   // LEAGUE-DIV-1 M2 — scope the competitive views (Schedule + Standings) to the
   // selected division. Single-division leagues (multiDivision=false) pass the
@@ -486,7 +490,7 @@ export default function LeaguePage({ currentUser, profile }) {
                 {isFollowing ? '🔔 Following' : '🔔 Follow'}
               </button>
             )}
-            {isCommissioner && (
+            {isManager && (
               <button onClick={() => navigate(`/league/${id}/manage`)}
                 style={{ background: 'rgba(46,91,140,0.25)', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 20, padding: '5px 12px', fontSize: 12, fontWeight: 600, color: C.ice, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap', transition: 'all 0.15s' }}
                 onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
@@ -687,7 +691,7 @@ export default function LeaguePage({ currentUser, profile }) {
               navigate={navigate}
               currentUser={currentUser}
               leagueId={id}
-              canModerate={isCommissioner}
+              canModerate={isManager}
             />
           )}
 
