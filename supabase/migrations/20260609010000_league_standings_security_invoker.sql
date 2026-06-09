@@ -1,0 +1,14 @@
+-- Fix: league_standings was left as a SECURITY DEFINER view.
+--
+-- The LEAGUE-DIV-1 cutover (league_divisions_m4_cutover_rename_standings_view)
+-- dropped the old league_standings and renamed league_standings_md ->
+-- league_standings. The rename lost the security_invoker = on setting the staged
+-- view was verified with, leaving the live view as SECURITY DEFINER — the security
+-- advisor's only ERROR-level finding.
+--
+-- Per the standing rule (memory security_definer_views.md): all views should be
+-- security_invoker = on, so the view runs with the QUERYING user's RLS rather than
+-- the view owner's. Transparent here: league_standings reads are public, so callers
+-- see the same rows (verified: anon returns 12 rows for the Riverbend demo league
+-- after the flip; advisor security_definer_view ERROR clears -> 0 errors).
+ALTER VIEW public.league_standings SET (security_invoker = on);
