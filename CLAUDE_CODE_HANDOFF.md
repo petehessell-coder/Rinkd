@@ -1065,6 +1065,15 @@ A social-layer cleanup pass plus two engagement features for BLPA. All eight shi
 
 ## 7. What's next — the broader roadmap
 
+### June 9, 2026 (latest+++) — GAMEPUCK-2 SHIPPED + LIVE on `main`: peel-the-tape reveal + branded puck + sealed feed post
+
+> **The hockey-native Game Puck reveal is DONE and on `main`** (merge `724e167b`, branch `feature/gamepuck-2-peel-reveal`). Pete's Jun 8 pick. Peel feel confirmed on a real device; DB migrations already on prod.
+> - **Peel-the-tape reveal** (`src/components/GamePuckReveal.js`): tap-to-open modal (`touch-action:none` so the peel never scrolls the feed). Pointer-drag peel via `clip-path` with a curl lip + cast shadow tracking the finger; **springs back if released <70%, auto-rips at 70%** → confetti (dependency-free) + haptic "rrrip". Per-wrap haptic ticks while lifting. **Instant "Reveal" button** for reduced-motion/keyboard/no-pointer. One-time per device (`localStorage gp_revealed_<kind>_<gameId>`).
+> - **Real frayed-tape PHOTO** over a navy base (so the transparent fray blends into the card — no rectangular border). **Branded RINKD puck** (mascot + LED "R") replaces the puck mark on **every** Game Puck surface (`PuckMark.js`): card header / leader / teaser / settled banner / interstitial, reveal medallion, season board, **and the share card** (`shareCard.js` chip + medallion). No jersey # on the puck — it sits next to the name.
+> - **Cross-device assets:** `public/gamepuck/{tape,puck}.{webp,png}` served via `<picture>` (webp + PNG fallback). **A real device that doesn't decode webp (Pete's phone) proved the need** — without the PNG it silently fell back to the dot/gradient. Share-card canvas loads the PNG (canvas can't decode webp on those devices either). Total failure still degrades to the black dot / CSS gradient.
+> - **Sealed feed post** (migration `20260609120000`, `posts.gamepuck_reveal_game_id` — **NO FK**, link/audit col only, avoids the bare-`profiles()` embed-ambiguity footgun): `settle_game_puck` now posts a **name-less teaser** ("🏒 A Fans' Pick has been crowned — peel the tape to reveal…") + a "Peel to reveal" deep-link button (Feed/League/Tournament) so the feed doesn't spoil the surprise. The winner's **own** notification still names their win (private). Backfilled the 2 demo posts. Drive-by fix: league feed "View game" used `/league-game/:id` (404s) → `/game/:id?type=league`.
+> - **Card flow:** settled + not-yet-revealed → "Peel to reveal" teaser (no name); after the peel → locked winner banner + "Replay reveal". The **name is gated behind the peel** on the card.
+
 ### June 9, 2026 (latest++) — SOCIAL-3 RECONCILED to the GAMEPUCK-2 timing: 30-min window + 10-min blackout (replaces 24h auto-settle)
 
 > **The settle window changed from 24h to a 30-min, first-vote-anchored voting window with a 10-min tally blackout** — aligning the shipped engine with Pete's GAMEPUCK-2 reveal spec. On `main`, migration `20260609110000_gamepuck_reconcile_30min_window.sql` (applied to prod + verified). The 24h model below is **superseded by this**; the rest of the Phase-2 plumbing (auto-post, notify, badge, lock) is unchanged.
