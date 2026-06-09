@@ -6,6 +6,7 @@ import { updateProfile } from '../lib/auth';
 import { getTier, getTierProgress, getNextTier, TIERS } from '../lib/tiers';
 import { supabase } from '../lib/supabase';
 import { getPlayerLeagueStats } from '../lib/stats';
+import { getUserGamePuckCount } from '../lib/gamePucks';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getOrCreateDm } from '../lib/messages';
 import { followUser, unfollowUser, isFollowing, getFollowCounts, timeAgo, uploadMedia } from '../lib/posts';
@@ -34,6 +35,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
   const [blockLoading, setBlockLoading] = useState(false);
   const [dmLoading, setDmLoading] = useState(false);
   const [leagueStats, setLeagueStats] = useState([]);
+  const [puckCount, setPuckCount] = useState(0);
 
   const [editName, setEditName] = useState('');
   const [editHandle, setEditHandle] = useState('');
@@ -83,7 +85,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
       // Posts are capped at 50; the activity strip only uses the latest 20 and
       // the grid stays useful without pulling a power-user's entire history.
       const wantsRel = !isOwnProfile && currentUser;
-      const [postsRes, stats, counts, commentsRes, f, b] = await Promise.all([
+      const [postsRes, stats, counts, commentsRes, f, b, pucks] = await Promise.all([
         supabase.from('posts').select('*').eq('author_id', profileId).order('created_at', { ascending: false }).limit(50),
         getPlayerLeagueStats(profileId),
         getFollowCounts(profileId),
@@ -95,10 +97,12 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
           .limit(20),
         wantsRel ? isFollowing(currentUser.id, profileId) : Promise.resolve(false),
         wantsRel ? isBlockedByMe(profileId) : Promise.resolve(false),
+        getUserGamePuckCount(profileId),
       ]);
       const data = postsRes.data;
       const comments = commentsRes.data;
       setLeagueStats(stats);
+      setPuckCount(pucks || 0);
       setPosts(data || []);
       setFollowCounts(counts);
       if (wantsRel) {
@@ -425,9 +429,12 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
             </div>
 
             {/* Follow counts */}
-            <div style={{ display: 'flex', gap: 20, marginBottom: 10 }}>
+            <div style={{ display: 'flex', gap: 20, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
               <span style={{ fontSize: 13, color: C.steel }}><strong style={{ color: C.ice }}>{followCounts.followers}</strong> Followers</span>
               <span style={{ fontSize: 13, color: C.steel }}><strong style={{ color: C.ice }}>{followCounts.following}</strong> Following</span>
+              {puckCount > 0 && (
+                <span title="Game Pucks won (fans' pick)" style={{ fontSize: 12, fontWeight: 800, color: '#fff', background: 'rgba(215,38,56,0.85)', padding: '2px 9px', borderRadius: 999 }}>🏒 {puckCount}× Game Puck</span>
+              )}
             </div>
 
             {profile.bio && !editing && <p style={{ color: C.ice, fontSize: 14, lineHeight: 1.5, marginBottom: 10, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}><MentionText text={profile.bio} mentions={{}} /></p>}

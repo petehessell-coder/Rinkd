@@ -112,4 +112,5 @@ export const KIND_META = {
   game_reminder:       { icon: '⏰', label: 'Game reminder' },
   team_invite:         { icon: '✉️', label: 'Team invite' },
   league_invite:       { icon: '🏆', label: 'League invite' },
+  game_puck_won:       { icon: '🏒', label: 'Game Puck' },
 };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { getGamePuck, getMyGamePuckVote, castGamePuckVote } from '../lib/gamePucks';
+import { getGamePuck, getMyGamePuckVote, castGamePuckVote, getGamePuckResult, getUserGamePuckCount } from '../lib/gamePucks';
 import ShareButton from './ShareButton';
 import { loadGamePuckCardData } from '../lib/gameCardData';
 
@@ -36,16 +36,21 @@ export default function GamePuckCard({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(false);
+  const [result, setResult] = useState(null);       // SOCIAL-3 P2: settled winner | null
+  const [winnerPucks, setWinnerPucks] = useState(0); // the winner's career Game Puck count
 
   const load = useCallback(async () => {
     setErr(false);
     try {
-      const [t, mine] = await Promise.all([
+      const [t, mine, res] = await Promise.all([
         getGamePuck(gameId, kind),
         canVote ? getMyGamePuckVote(gameId, kind) : Promise.resolve(null),
+        getGamePuckResult(gameId, kind),
       ]);
       setTally(t);
       setMyVote(mine);
+      setResult(res);
+      if (res?.winner_user_id) getUserGamePuckCount(res.winner_user_id).then(setWinnerPucks).catch(() => {});
     } catch (e) {
       console.error('[GamePuck] load failed', e);
       setErr(true);
@@ -134,6 +139,27 @@ export default function GamePuckCard({
 
   if (loading) {
     return <Wrap><div style={{ color: C.faint, fontSize: 13, textAlign: 'center', padding: '12px 0' }}>Loading…</div></Wrap>;
+  }
+
+  // SOCIAL-3 P2 — settled: show the locked winner, no voting.
+  if (result) {
+    return (
+      <Wrap>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(215,38,56,0.12)', border: `0.5px solid ${accent}`, borderRadius: 9, padding: '10px 12px' }}>
+          <span aria-hidden style={{ fontSize: 20 }}>🏒</span>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: C.faint, textTransform: 'uppercase' }}>Game Puck winner · Fans’ Pick</div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {result.winner_name ? `${result.winner_name} ` : ''}<span style={{ opacity: result.winner_name ? 0.7 : 1, fontWeight: 700 }}>#{result.jersey}</span>
+              {winnerPucks > 1 && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 800, color: accent, padding: '2px 7px', borderRadius: 999, background: 'rgba(215,38,56,0.16)' }}>{winnerPucks}× Game Puck</span>}
+            </div>
+            <div style={{ fontSize: 11, color: C.dim }}>{teamNameFor(result.team_id)} · {result.votes} of {result.total_votes} {result.total_votes === 1 ? 'vote' : 'votes'} · voting closed</div>
+          </div>
+          <ShareButton gameId={gameId} isLeague={kind === 'league'} cardType="gamepuck" variant="ghost" label="Share"
+            getCard={() => loadGamePuckCardData(gameId, kind === 'league')} />
+        </div>
+      </Wrap>
+    );
   }
 
   if (!hasCandidates) {

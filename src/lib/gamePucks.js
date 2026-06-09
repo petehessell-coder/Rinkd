@@ -63,6 +63,36 @@ export async function castGamePuckVote(gameId, kind, teamId, jersey) {
   if (error) throw error;
 }
 
+// SOCIAL-3 P2 — the SETTLED winner for a game, or null if voting is still open.
+// Once a row exists, the card shows the locked winner state instead of voting.
+export async function getGamePuckResult(gameId, kind) {
+  if (!gameId) return null;
+  const { data, error } = await supabase.rpc('get_game_puck_result', {
+    p_game_id: gameId,
+    p_kind: isLeague(kind) ? 'league' : 'tournament',
+  });
+  if (error) throw error;
+  const r = Array.isArray(data) ? data[0] : data;
+  if (!r) return null;
+  return {
+    team_id: r.team_id,
+    jersey: r.jersey,
+    winner_user_id: r.winner_user_id || null,
+    winner_name: r.winner_name || null,
+    votes: Number(r.votes) || 0,
+    total_votes: Number(r.total_votes) || 0,
+    settled_at: r.settled_at,
+  };
+}
+
+// How many Game Pucks a user has won (settled) — the "Nx Game Puck" badge.
+export async function getUserGamePuckCount(userId) {
+  if (!userId) return 0;
+  const { data, error } = await supabase.rpc('get_user_game_puck_count', { p_user_id: userId });
+  if (error) return 0;
+  return Number(data) || 0;
+}
+
 // Season board: how many game-pucks each (team, jersey) won across a scope.
 // `scope` is 'league' | 'tournament'. Returns rows
 // { team_id, jersey, pucks_won, team_name, player_name } sorted pucks-won desc.
