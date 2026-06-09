@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { composeRecapCard } from '../lib/shareCard';
 import { prefersNativeShare, downloadBlob, copyText, absoluteShareUrl } from '../lib/share';
 import { gameShareUrl } from '../lib/publicShare';
+import { uploadShareCard } from '../lib/ogCard';
 import { track } from '../lib/analytics';
 
 // GROWTH-SHARE-1 · M3 — the Share button.
@@ -42,6 +43,9 @@ export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghos
       setErr(true); setBusy(false);
       return;
     }
+    // Fire-and-forget: persist the wide card so a pasted link unfurls it (OG).
+    // Authed-only inside; never blocks or fails the share.
+    uploadShareCard(gameId, isLeague, card);
     // 2) Touch device with file-share → one-tap native sheet. Any failure (incl.
     //    lost user-activation after the async compose) drops to the modal.
     if (prefersNativeShare()) {
