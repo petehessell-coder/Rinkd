@@ -7,7 +7,7 @@
 
 import { supabase } from './supabase';
 import { buildRecapCardData } from './shareCard';
-import { areScorersHidden } from './publicShare';
+import { areScorersHidden, getRecapSponsor } from './publicShare';
 
 const TOURN_BLUE = '#2E5B8C';
 const TOURN_RED = '#D72638';
@@ -63,12 +63,14 @@ export async function loadGameCardData(gameId, isLeague) {
   };
 
   const competition = parent?.name || 'Rinkd';
+  const sponsor = getRecapSponsor(parent?.settings);
   return buildRecapCardData({
     home, away,
     homeScore: g.home_score, awayScore: g.away_score,
     round: roundLabelFor(isLeague, g), competition, league: competition,
     tie: g.status === 'final' && g.home_score === g.away_score,
     scorersHome: scorers(home.id), scorersAway: scorers(away.id),
+    sponsor: sponsor?.name || null,
   });
 }
 

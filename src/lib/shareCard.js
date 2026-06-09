@@ -169,7 +169,8 @@ function drawCard(ctx, L, card, assets) {
   ctx.fillText('RECAP PRESENTED BY', chipX + chipR + L.pad * 0.5, chipY - L.topH * 0.13);
   ctx.fillStyle = C.ice;
   ctx.font = `800 italic ${L.topH * 0.30}px 'Barlow Condensed'`;
-  ctx.fillText(g.sponsor || 'YOUR LEAGUE’S SPONSOR', chipX + chipR + L.pad * 0.5, chipY + L.topH * 0.16);
+  // No sponsor sold → Rinkd fills the slot (house slot), never an empty placeholder.
+  ctx.fillText((g.sponsor || 'RINKD').toUpperCase(), chipX + chipR + L.pad * 0.5, chipY + L.topH * 0.16);
 
   // HERO — FINAL pill
   const pillW = L.finalPillW, pillH = L.finalPillH, pillX = W / 2 - pillW / 2, pillY = L.topH + L.heroPadTop;

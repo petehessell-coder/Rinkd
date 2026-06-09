@@ -21,6 +21,16 @@ export function areScorersHidden(settings) {
   return (settings || {}).feature_profile === 'youth_competitive';
 }
 
+// The recap sponsor, set by a director/commissioner. Rides settings JSONB so
+// there's no new table. Shape: { name, logo_url, url }. null when unsold — the
+// card then falls back to "presented by Rinkd" (a house slot). This is the
+// GROWTH-SHARE-1 × ADS-1 intersection (the recap sponsor lockup).
+export function getRecapSponsor(settings) {
+  const s = (settings || {}).recap_sponsor;
+  if (!s || !s.name) return null;
+  return { name: String(s.name).trim(), logo_url: s.logo_url || null, url: s.url || null };
+}
+
 // Parent-event visibility — mirrors the anon-read RLS gates so the public page
 // never renders a game whose parent event isn't itself public.
 export function isParentPublic({ isLeague, league, tournament }) {

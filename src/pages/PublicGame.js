@@ -7,7 +7,7 @@ import SEO from '../components/SEO';
 import ShareButton from '../components/ShareButton';
 import { loadGameCardData } from '../lib/gameCardData';
 import {
-  isPublicSharingEnabled, areScorersHidden, isParentPublic, gameAppUrl,
+  isPublicSharingEnabled, areScorersHidden, isParentPublic, gameAppUrl, getRecapSponsor,
 } from '../lib/publicShare';
 
 // GROWTH-SHARE-1 · M1 — the login-less public game/recap page. NO <Layout>, no
@@ -133,6 +133,7 @@ export default function PublicGame({ league }) {
     : { name: game.away_team?.team_name, color: C.red, logo_url: game.away_team?.logo_url, id: game.away_team_id };
 
   const scorersHidden = areScorersHidden(parent?.settings);
+  const sponsor = getRecapSponsor(parent?.settings);
   const competition = isLeague ? parent?.name : parent?.name;
   const accent = parent?.accent_color || C.blue;
   const status = game.status;
@@ -218,6 +219,16 @@ export default function PublicGame({ league }) {
             <TeamSide team={awayTeam} score={game.away_score} scorerLine={scorerLine(awayTeam.id)} hideScore={!isFinal && !isLive} />
           </div>
           {venue && <div style={{ textAlign: 'center', marginTop: 16, fontSize: 12, color: C.steel }}>📍 {venue}</div>}
+        </div>
+
+        {/* sponsor lockup — the recap "presented by" (GROWTH-SHARE-1 × ADS-1) */}
+        <div style={{ textAlign: 'center', marginBottom: 16, fontSize: 12, color: C.steel, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <span style={{ letterSpacing: '0.04em' }}>Recap presented by</span>
+          {sponsor ? (
+            sponsor.url
+              ? <a href={sponsor.url} target="_blank" rel="noopener noreferrer nofollow" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: C.ice, fontWeight: 700 }}>{sponsor.logo_url && <img src={sponsor.logo_url} alt="" height={18} style={{ borderRadius: 3, maxHeight: 18 }} />}{sponsor.name} ↗</a>
+              : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: C.ice, fontWeight: 700 }}>{sponsor.logo_url && <img src={sponsor.logo_url} alt="" height={18} style={{ borderRadius: 3, maxHeight: 18 }} />}{sponsor.name}</span>
+          ) : <span style={{ color: C.ice, fontWeight: 700 }}>Rinkd</span>}
         </div>
 
         {/* box score — goals */}
