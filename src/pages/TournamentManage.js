@@ -1191,6 +1191,7 @@ function SettingsTab({ tournament, currentUser, reload, flash }) {
           <div>
             <label style={labelStyle}>Periods per Game</label>
             <select value={fmt.num_periods} onChange={(e) => setF('num_periods', parseInt(e.target.value, 10))} style={inputStyle}>
+              <option value={1}>1 period</option>
               <option value={2}>2 periods</option>
               <option value={3}>3 periods</option>
             </select>

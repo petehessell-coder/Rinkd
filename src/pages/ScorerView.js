@@ -720,7 +720,7 @@ export default function ScorerView() {
   const numPeriods = settings.num_periods ?? 3;
   const periodOptions = [
     ['1', '1st'],
-    ['2', '2nd'],
+    ...(numPeriods >= 2 ? [['2', '2nd']] : []),
     ...(numPeriods >= 3 ? [['3', '3rd']] : []),
     ...(allowOT ? [['4', 'OT']] : []),
     ...(allowSO ? [['5', 'SO']] : []),
@@ -728,7 +728,7 @@ export default function ScorerView() {
   ];
   // Same trim for the in-modal "Period" dropdowns. Keep parallel with the
   // top-of-page selector so a goal can never be logged in a hidden period.
-  const modalPeriods = [1, 2, ...(numPeriods >= 3 ? [3] : []), ...(allowOT ? [4] : []), ...(allowSO ? [5] : [])];
+  const modalPeriods = [1, ...(numPeriods >= 2 ? [2] : []), ...(numPeriods >= 3 ? [3] : []), ...(allowOT ? [4] : []), ...(allowSO ? [5] : [])];
   const modalPeriodLabel = (n) => n === 4 ? 'OT' : n === 5 ? 'SO' : n === 1 ? '1st' : n === 2 ? '2nd' : '3rd';
 
   return (
