@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { getTeam, getTeamMembers, getTeamGames, getUserRoleOnTeam, requestToJoin } from '../lib/teams';
+import { getTeam, getTeamMembers, getTeamGames, getUserRoleOnTeam, isLeagueStaffOfTeam, requestToJoin } from '../lib/teams';
 import { supabase } from '../lib/supabase';
 import RsvpBlock from '../components/RsvpBlock';
 import MapLink from '../components/MapLink';
@@ -32,6 +32,7 @@ export default function TeamPage({ currentUser, profile }) {
   const [members, setMembers] = useState([]);
   const [games, setGames] = useState([]);
   const [userRole, setUserRole] = useState(null);
+  const [isLeagueStaff, setIsLeagueStaff] = useState(false); // league commissioner/manager of this team's league
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('Roster');
   const [joinRequested, setJoinRequested] = useState(false);
@@ -45,10 +46,10 @@ export default function TeamPage({ currentUser, profile }) {
 
   const load = useCallback(async () => {
     try {
-      const [t, m, g, r] = await Promise.all([
-        getTeam(id), getTeamMembers(id), getTeamGames(id), getUserRoleOnTeam(id)
+      const [t, m, g, r, ls] = await Promise.all([
+        getTeam(id), getTeamMembers(id), getTeamGames(id), getUserRoleOnTeam(id), isLeagueStaffOfTeam(id)
       ]);
-      setTeam(t); setMembers(m); setGames(g); setUserRole(r);
+      setTeam(t); setMembers(m); setGames(g); setUserRole(r); setIsLeagueStaff(ls);
 
       // Hydrate joinRequested from the DB so a reload after requesting
       // doesn't show the button as fresh-and-active. RLS lets a user
@@ -106,6 +107,9 @@ export default function TeamPage({ currentUser, profile }) {
   // roadmap). Honored server-side too: is_team_manager() treats manager + coach alike.
   // We OR the checks client-side so the UI matches what the server will allow.
   const isManager = userRole?.role === 'manager' || userRole?.role === 'coach' || (currentUser && team && team.manager_id === currentUser.id);
+  // A league commissioner/manager of this team's league can also reach Manage (to
+  // approve roster join-requests etc.) even when they don't directly manage the team.
+  const canManage = isManager || isLeagueStaff;
   const isMember = !!userRole;
   const goalies = members.filter(m => m.role === 'goalie' || m.position?.toLowerCase().includes('goalie'));
   const defense = members.filter(m => m.position?.toLowerCase().includes('defense') || m.position?.toLowerCase().includes('d'));
@@ -291,7 +295,7 @@ export default function TeamPage({ currentUser, profile }) {
               </div>
             )}
           </div>
-          {isManager && (
+          {canManage && (
             <button onClick={() => navigate(`/team/${id}/manage`)}
               style={{ background: 'rgba(46,91,140,0.25)', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 20, padding: '5px 12px', fontSize: 12, fontWeight: 600, color: C.ice, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', transition: 'all 0.15s', whiteSpace: 'nowrap' }}
               onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}

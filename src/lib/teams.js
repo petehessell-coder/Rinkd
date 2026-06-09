@@ -243,3 +243,16 @@ export async function getUserRoleOnTeam(teamId) {
     .maybeSingle();
   return data ?? null;
 }
+
+// True if the current user is a league commissioner OR manager of the league this
+// team plays in (server-side check via the SECURITY DEFINER RPC; league_roles isn't
+// directly client-readable). Powers the team-page Manage button for league staff who
+// don't directly manage the team — e.g. so a commissioner can reach the Requests tab
+// to approve a roster join-request when the team has no (other) manager.
+export async function isLeagueStaffOfTeam(teamId) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return false;
+  const { data, error } = await supabase.rpc('is_league_commissioner_of_team', { p_team_id: teamId, p_user_id: user.id });
+  if (error) return false;
+  return !!data;
+}
