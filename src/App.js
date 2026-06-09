@@ -50,6 +50,7 @@ const LeagueCreate = lazy(() => import('./pages/LeagueCreate'));
 const LeagueRegister = lazy(() => import('./pages/LeagueRegister'));
 const TournamentRegister = lazy(() => import('./pages/TournamentRegister'));
 const AcceptTeamInvite = lazy(() => import('./pages/AcceptTeamInvite'));
+const AcceptLeagueInvite = lazy(() => import('./pages/AcceptLeagueInvite'));
 const Team = lazy(() => import('./pages/Team'));
 const TeamManage = lazy(() => import('./pages/TeamManage'));
 const ScorerView = lazy(() => import('./pages/ScorerView'));
@@ -177,6 +178,9 @@ function AppRoutes() {
           via the AcceptTeamInvite component (bounces to /login?returnTo
           when needed so the token survives the round trip). */}
       <Route path="/accept-team-invite" element={<AcceptTeamInvite profile={profile} />} />
+      {/* Magic-link landing for league-MANAGER invites (LEAGUE-MGR-1). Same
+          public, self-routing pattern as the team-manager accept page. */}
+      <Route path="/accept-league-invite" element={<AcceptLeagueInvite profile={profile} />} />
       {/* Survey is public — accessible from auth screen, marketing pages, and embedded in feeds */}
       <Route path="/survey" element={<Survey />} />
       {/* Pricing is public — shareable + indexable; linked from hosting CTAs, activation banners, and More */}

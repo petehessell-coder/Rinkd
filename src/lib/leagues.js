@@ -177,6 +177,7 @@ export async function getUserLeagueRole(leagueId) {
     .limit(1)
     .maybeSingle();
   if (role?.role === 'commissioner') return 'commissioner';
+  if (role?.role === 'manager') return 'manager';
   if (role?.role === 'scorer') return 'scorer';
   return 'viewer';
 }
