@@ -982,13 +982,19 @@ function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, league
                 </div>
                 {p.recap_for_game_id && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                    <button onClick={() => navigate(`/league-game/${p.recap_for_game_id}`)}
+                    <button onClick={() => navigate(`/game/${p.recap_for_game_id}?type=league`)}
                       style={{ background: 'transparent', border: 'none', color: '#5B9FE2', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}>
                       View game →
                     </button>
                     <ShareButton gameId={p.recap_for_game_id} isLeague variant="ghost"
                       getCard={() => loadGameCardData(p.recap_for_game_id, true)} />
                   </div>
+                )}
+                {p.gamepuck_reveal_game_id && (
+                  <button onClick={() => navigate(`/game/${p.gamepuck_reveal_game_id}?type=league`)}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(215,38,56,0.15)', border: '1px solid #D72638', color: '#F4F7FA', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '6px 12px', borderRadius: 999 }}>
+                    🏒 Peel to reveal →
+                  </button>
                 )}
               </div>
             </div>

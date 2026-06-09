@@ -918,6 +918,12 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
                       getCard={() => loadGameCardData(p.recap_for_game_id, false)} />
                   </div>
                 )}
+                {p.gamepuck_reveal_game_id && (
+                  <button onClick={() => navigate(`/game/${p.gamepuck_reveal_game_id}`)}
+                    style={{display:'inline-flex',alignItems:'center',gap:6,background:'rgba(215,38,56,0.15)',border:'1px solid #D72638',color:'#F4F7FA',fontSize:12,fontWeight:700,cursor:'pointer',padding:'6px 12px',borderRadius:999}}>
+                    🏒 Peel to reveal →
+                  </button>
+                )}
               </div>
             </div>
           );

@@ -224,6 +224,16 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
               getCard={() => loadGameCardData(post.recap_for_game_id, !!post.league_id)} />
           </div>
         )}
+        {/* Sealed Game Puck teaser — no winner named; tap through to the game
+            card to peel the tape (the reveal lives there). No Share (would spoil). */}
+        {post.gamepuck_reveal_game_id && (
+          <div style={{ marginBottom: 10 }}>
+            <button type="button" onClick={() => navigate(`/game/${post.gamepuck_reveal_game_id}${post.league_id ? '?type=league' : ''}`)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: 'rgba(215,38,56,0.15)', border: '1px solid #D72638', color: '#F4F7FA', fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer' }}>
+              <span style={{ fontSize: 16 }}>🏒</span> Peel to reveal →
+            </button>
+          </div>
+        )}
         {post.livebarn_venue_id && (
           <a href={"https://watch.livebarn.com/en/videoplayer?venueid=" + post.livebarn_venue_id + "&referrer=rinkd"} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, marginBottom: 10, background: 'rgba(46,91,140,0.2)', border: '1px solid #2E5B8C', color: '#F4F7FA', fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', textDecoration: 'none' }}>
             <span style={{ fontSize: 16 }}>📺</span> Watch Live on LiveBarn
