@@ -4,6 +4,7 @@ import Layout from '../components/Layout';
 import { getTeam, getTeamMembers, getTeamGames, getUserRoleOnTeam, isLeagueStaffOfTeam, requestToJoin } from '../lib/teams';
 import { supabase } from '../lib/supabase';
 import RsvpBlock from '../components/RsvpBlock';
+import PinToNavButton from '../components/PinToNavButton';
 import MapLink from '../components/MapLink';
 import CalendarButton from '../components/CalendarButton';
 import LineupModal from '../components/LineupModal';
@@ -303,6 +304,7 @@ export default function TeamPage({ currentUser, profile }) {
               ⚙️ Manage
             </button>
           )}
+          {currentUser && <PinToNavButton userId={currentUser.id} pinType="team" targetId={id} />}
         </div>
 
         {/* STATS BAR */}

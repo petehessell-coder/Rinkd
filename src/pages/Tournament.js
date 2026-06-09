@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { LedR } from '../components/Logos';
 import AdSlot from '../components/AdSlot';
+import PinToNavButton from '../components/PinToNavButton';
 import { getLiveBarnUrl } from '../lib/livebarn';
 import { teamInitials } from '../lib/teamInitials';
 import { followTournament, unfollowTournament, isFollowingTournament } from '../lib/tournamentSubscriptions';
@@ -421,6 +422,7 @@ export default function TournamentPage({ currentUser }) {
                 {followBusy ? '...' : isFollowing ? '🔕 Following' : '🔔 Follow'}
               </button>
             )}
+            {tournament && currentUser && <PinToNavButton userId={currentUser.id} pinType="tournament" targetId={id} />}
             {tournament && currentUser && isDirector && (
               <button onClick={() => navigate(`/tournament/${id}/manage`)}
                 style={{background:accent,color:'#fff',border:'none',borderRadius:999,padding:'5px 12px',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',letterSpacing:'0.05em',textTransform:'uppercase'}}>
