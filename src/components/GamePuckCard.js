@@ -90,6 +90,13 @@ export default function GamePuckCard({
     return () => { cancelled = true; };
   }, [state?.phase, result, canVote, settling, gameId, kind, load]);
 
+  // Prefetch the tape image once a winner is settled but not yet revealed, so
+  // tapping "Reveal" opens to fully-painted tape (no load beat).
+  useEffect(() => {
+    if (!result || revealed) return;
+    try { const img = new Image(); img.src = '/gamepuck/tape.webp'; } catch { /* ignore */ }
+  }, [result, revealed]);
+
   // Candidate players per team: union of lineup jerseys + goal participants.
   const candidatesByTeam = useMemo(() => {
     const build = (teamId) => {

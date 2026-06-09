@@ -115,6 +115,7 @@ export default function GamePuckReveal({
   const [peel, setPeel] = useState(0);          // 0 = fully taped, 1 = revealed
   const [done, setDone] = useState(false);       // reveal latched
   const [confettiOn, setConfettiOn] = useState(false);
+  const [tapeImgFailed, setTapeImgFailed] = useState(false); // real tape couldn't load → CSS fallback
 
   const name = result?.winner_name || winnerProfile?.name || null;
   const jersey = result?.jersey;
@@ -258,18 +259,24 @@ export default function GamePuckReveal({
               clipPath: `inset(0 0 0 ${peelPct}%)`,
               WebkitClipPath: `inset(0 0 0 ${peelPct}%)`,
               transition: draggingRef.current ? 'none' : 'clip-path 0.45s cubic-bezier(.5,0,.2,1), -webkit-clip-path 0.45s cubic-bezier(.5,0,.2,1)',
-              background: '#e9ecef',
-              backgroundImage:
-                'repeating-linear-gradient(90deg, rgba(0,0,0,0.045) 0 2px, rgba(0,0,0,0) 2px 13px),' +
-                'repeating-linear-gradient(0deg, rgba(0,0,0,0.05) 0 1px, rgba(255,255,255,0) 1px 22px),' +
-                'linear-gradient(180deg,#f3f4f6,#dfe3e8 55%,#cfd5dc)',
+              // Behind the frayed/transparent parts of the real tape we want the
+              // SAME navy as the card so the patch sits seamlessly (no rectangular
+              // border). The CSS gradient is painted ONLY if the image fails.
+              background: tapeImgFailed ? '#e9ecef' : C.card,
+              backgroundImage: tapeImgFailed
+                ? 'repeating-linear-gradient(90deg, rgba(0,0,0,0.045) 0 2px, rgba(0,0,0,0) 2px 13px),' +
+                  'repeating-linear-gradient(0deg, rgba(0,0,0,0.05) 0 1px, rgba(255,255,255,0) 1px 22px),' +
+                  'linear-gradient(180deg,#f3f4f6,#dfe3e8 55%,#cfd5dc)'
+                : 'none',
             }}>
-              {/* the real frayed tape — covers the gradient; onError → gradient shows */}
-              <img
-                src="/gamepuck/tape.webp" alt="" draggable={false}
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', userSelect: 'none', pointerEvents: 'none' }}
-              />
+              {/* the real frayed tape — its transparent fray shows the navy behind */}
+              {!tapeImgFailed && (
+                <img
+                  src="/gamepuck/tape.webp" alt="" draggable={false}
+                  onError={() => setTapeImgFailed(true)}
+                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', userSelect: 'none', pointerEvents: 'none' }}
+                />
+              )}
               {/* label + grip hint, hidden once you start pulling */}
               <div style={{
                 position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
