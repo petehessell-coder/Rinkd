@@ -5,7 +5,7 @@ import { track } from '../lib/analytics';
 import { teamInitials } from '../lib/teamInitials';
 import SEO from '../components/SEO';
 import ShareButton from '../components/ShareButton';
-import { buildRecapCardData } from '../lib/shareCard';
+import { loadGameCardData } from '../lib/gameCardData';
 import {
   isPublicSharingEnabled, areScorersHidden, isParentPublic, gameAppUrl,
 } from '../lib/publicShare';
@@ -183,15 +183,10 @@ export default function PublicGame({ league }) {
   const ogTitle = `${homeTeam.name || 'Home'} ${game.home_score ?? 0}, ${awayTeam.name || 'Away'} ${game.away_score ?? 0}`;
   const ogDesc = [isFinal ? 'FINAL' : isLive ? 'LIVE' : null, roundLabel, competition].filter(Boolean).join(' · ');
 
-  // Share-card data — built lazily on tap (getCard) from what's already loaded.
-  const getCard = () => buildRecapCardData({
-    home: homeTeam, away: awayTeam,
-    homeScore: game.home_score, awayScore: game.away_score,
-    round: roundLabel, competition, league: competition,
-    tie: isFinal && game.home_score === game.away_score,
-    scorersHome: scorersArrayFor(homeTeam.id),
-    scorersAway: scorersArrayFor(awayTeam.id),
-  });
+  // Share-card data — built lazily on tap via the shared loader (single source
+  // of truth with the feed Share buttons; re-fetches so the card reflects the
+  // latest score).
+  const getCard = () => loadGameCardData(gameId, isLeague);
 
   return (
     <Shell>

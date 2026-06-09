@@ -19,6 +19,8 @@ import StatLeaderboards from '../components/StatLeaderboards';
 import SeasonGamePucks from '../components/SeasonGamePucks';
 import { MentionInput, MentionText } from '../components/Mentions';
 import { savePostMentions, mentionMapFromRows } from '../lib/mentions';
+import ShareButton from '../components/ShareButton';
+import { loadGameCardData } from '../lib/gameCardData';
 
 
 const TABS = ['Standings','Schedule','Bracket','Stats','Feed','Gallery','Info'];
@@ -894,12 +896,16 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
                   <span style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{author ? `${author} · ` : ''}{timeAgo(p.created_at)} ago</span>
                 </div>
                 {p.recap_for_game_id && (
-                  <button
-                    onClick={() => navigate(`/game/${p.recap_for_game_id}`)}
-                    style={{background:'transparent',border:'none',color:'#5B9FE2',fontSize:12,fontWeight:600,cursor:'pointer',padding:0}}
-                  >
-                    View game →
-                  </button>
+                  <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+                    <button
+                      onClick={() => navigate(`/game/${p.recap_for_game_id}`)}
+                      style={{background:'transparent',border:'none',color:'#5B9FE2',fontSize:12,fontWeight:600,cursor:'pointer',padding:0}}
+                    >
+                      View game →
+                    </button>
+                    <ShareButton gameId={p.recap_for_game_id} isLeague={false} variant="ghost"
+                      getCard={() => loadGameCardData(p.recap_for_game_id, false)} />
+                  </div>
                 )}
               </div>
             </div>
