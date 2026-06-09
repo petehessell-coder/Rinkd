@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { track } from '../lib/analytics';
 
 const B = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
@@ -79,6 +80,7 @@ export default function InstallButton({ onAction }) {
       deferredPrompt.prompt();
       try {
         const { outcome } = await deferredPrompt.userChoice;
+        track('pwa_install_prompt', { outcome }); // accepted | dismissed (funnel)
         if (outcome === 'dismissed') {
           // Don't permanently hide — they may want to install later
         }

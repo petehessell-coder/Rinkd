@@ -12,6 +12,7 @@ import Tournament from './pages/Tournament';
 import Tournaments from './pages/Tournaments';
 import Landing from './pages/Landing';
 import { setSentryUser } from './lib/sentry';
+import { track } from './lib/analytics';
 import OnboardingModal from './components/OnboardingModal';
 import RouteAnalytics from './components/RouteAnalytics';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -374,6 +375,15 @@ export default function App() {
       clearTimeout(sessionTimeout);
       subscription.unsubscribe();
     };
+  }, []);
+
+  // GROWTH-SHARE-1 — install is the funnel's last step. Track globally (here,
+  // not InstallButton) so an install from the login-less public page — which
+  // never mounts the app chrome — still counts.
+  useEffect(() => {
+    const onInstalled = () => track('pwa_installed');
+    window.addEventListener('appinstalled', onInstalled);
+    return () => window.removeEventListener('appinstalled', onInstalled);
   }, []);
 
   return (

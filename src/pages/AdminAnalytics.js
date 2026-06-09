@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { loadDailyRollup, loadDAU, loadRecentEvents, loadTopPages } from '../lib/analytics';
+import { loadDailyRollup, loadDAU, loadRecentEvents, loadTopPages, loadGrowthFunnel } from '../lib/analytics';
 import { useIsRinkdAdmin } from '../lib/userRole';
 import { supabase } from '../lib/supabase';
 
@@ -28,6 +28,8 @@ const C = {
   steel: '#8BA3BE', dark: '#07111F', card: '#0f2847', border: 'rgba(46,91,140,0.4)',
   green: '#22C55E',
 };
+
+const pct = (a, b) => (b > 0 ? `${Math.round((a / b) * 100)}%` : '—');
 
 function StatBox({ label, value, sub }) {
   return (
@@ -64,6 +66,7 @@ export default function AdminAnalytics({ currentUser, profile }) {
   const [dau, setDau] = useState([]);
   const [recent, setRecent] = useState([]);
   const [topPages, setTopPages] = useState([]);
+  const [funnel, setFunnel] = useState(null); // GROWTH-SHARE-1 share→visit→install
   // ENRICH-1: snapshot of every profile's last_seen_at + handle/name/persona
   // for the cohort tiles + recently-active table below. Sorted server-side
   // so we can also use .slice(0, N) for the visible table without resorting.
@@ -75,7 +78,7 @@ export default function AdminAnalytics({ currentUser, profile }) {
     setLoading(true);
     setError(null);
     try {
-      const [d, u, r, a, tp] = await Promise.all([
+      const [d, u, r, a, tp, gf] = await Promise.all([
         loadDailyRollup(30),
         loadDAU(30),
         loadRecentEvents(80),
@@ -84,8 +87,9 @@ export default function AdminAnalytics({ currentUser, profile }) {
           .select('id, handle, name, persona, last_seen_at')
           .order('last_seen_at', { ascending: false, nullsFirst: false }),
         loadTopPages(40),
+        loadGrowthFunnel(30).catch(() => null),
       ]);
-      setDaily(d); setDau(u); setRecent(r); setTopPages(tp);
+      setDaily(d); setDau(u); setRecent(r); setTopPages(tp); setFunnel(gf);
       setActivity(a?.data || []);
     } catch (e) {
       // Without this catch, the entire useEffect's promise rejects unhandled
@@ -197,6 +201,25 @@ export default function AdminAnalytics({ currentUser, profile }) {
             <StatBox label="Posts created · 7d" value={postsCreated7d} />
             <StatBox label="Articles read · 7d" value={articleReads7d} />
             <StatBox label="Crease paywall views · 7d" value={paywallShown7d} />
+          </div>
+
+          {/* GROWTH-SHARE-1 — the share → visit → install loop (last 30d). Backed
+              by analytics_events: share_recap (every Share), public_game_viewed
+              (login-less /g·/lg open), pwa_installed (appinstalled). Fills in as
+              the loop runs post-deploy. */}
+          <div style={{ fontSize: 11, color: C.steel, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 8 }}>
+            Sharing growth loop · last 30d
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 10 }}>
+            <StatBox label="Shares" value={funnel?.shares ?? '—'} sub="recap · puck · photo" />
+            <StatBox label="Public visits" value={funnel?.visits ?? '—'} sub={funnel ? `${pct(funnel.visits, funnel.shares)} of shares` : 'login-less /g · /lg'} />
+            <StatBox label="Installs" value={funnel?.installs ?? '—'} sub={funnel ? `${pct(funnel.installs, funnel.visits)} of visits` : 'PWA appinstalled'} />
+          </div>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 16px', marginBottom: 22, display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'center', fontSize: 13 }}>
+            <span style={{ color: C.steel, fontWeight: 700, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Shares by card</span>
+            <span style={{ color: C.ice }}>Recap <b>{funnel?.byType?.recap ?? 0}</b></span>
+            <span style={{ color: C.ice }}>Game Puck <b>{funnel?.byType?.gamepuck ?? 0}</b></span>
+            <span style={{ color: C.ice }}>Photo <b>{funnel?.byType?.photo ?? 0}</b></span>
           </div>
 
           {/* DAU sparkline */}

@@ -159,3 +159,23 @@ export async function loadTopPages(limit = 40) {
     .limit(limit);
   return data || [];
 }
+
+// GROWTH-SHARE-1 P2 — the share → visit → install funnel. Counts the three
+// events over `days` plus a per-card-type share breakdown. Head-count queries
+// (no rows fetched). share_recap fires on every Share (recap/gamepuck/photo);
+// public_game_viewed on a login-less /g|/lg open; pwa_installed on appinstalled.
+export async function loadGrowthFunnel(days = 30) {
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  const count = (build) => build(
+    supabase.from('analytics_events').select('id', { count: 'exact', head: true }).gte('created_at', since)
+  ).then((r) => r.count || 0);
+  const [shares, visits, installs, recap, gamepuck, photo] = await Promise.all([
+    count((q) => q.eq('event', 'share_recap')),
+    count((q) => q.eq('event', 'public_game_viewed')),
+    count((q) => q.eq('event', 'pwa_installed')),
+    count((q) => q.eq('event', 'share_recap').eq('properties->>card_type', 'recap')),
+    count((q) => q.eq('event', 'share_recap').eq('properties->>card_type', 'gamepuck')),
+    count((q) => q.eq('event', 'share_recap').eq('properties->>card_type', 'photo')),
+  ]);
+  return { shares, visits, installs, byType: { recap, gamepuck, photo } };
+}
