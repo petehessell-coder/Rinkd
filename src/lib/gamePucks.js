@@ -123,6 +123,20 @@ export async function settleGamePuck(gameId, kind) {
   return data || null;
 }
 
+// The winner's public profile (for the reveal avatar), or null when the winner
+// is nameplate-only (no resolved user). Only the display-safe columns — these
+// are publicly readable; never select email/PII here.
+export async function getGamePuckWinnerProfile(userId) {
+  if (!userId) return null;
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, name, handle, avatar_url, avatar_color, avatar_initials, tier')
+    .eq('id', userId)
+    .maybeSingle();
+  if (error) return null;
+  return data || null;
+}
+
 // How many Game Pucks a user has won (settled) — the "Nx Game Puck" badge.
 export async function getUserGamePuckCount(userId) {
   if (!userId) return 0;

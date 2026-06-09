@@ -21,6 +21,9 @@ const C = {
 };
 
 const WORDMARK_SRC = '/rinkd-wordmark-tape.png'; // same-origin asset in public/
+const PUCK_SRC = '/gamepuck/puck.png';           // RINKD Game Puck mark — PNG so the
+                                                 // canvas decodes it on every browser
+                                                 // (webp isn't universally decodable)
 
 const PORTRAIT = {
   W: 1080, H: 1350, pad: 64, topH: 150, heroPadTop: 64, finalPillW: 230, finalPillH: 64,
@@ -45,6 +48,15 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.arcTo(x, y + h, x, y, r);
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
+}
+
+// Draw an image CONTAINed within a boxW×boxH box centered at (cx, cy), keeping
+// its aspect ratio. Used for the Game Puck brand mark (chip + medallion).
+function drawImageContain(ctx, img, cx, cy, boxW, boxH) {
+  const iw = img.width || 1, ih = img.height || 1;
+  const scale = Math.min(boxW / iw, boxH / ih);
+  const w = iw * scale, h = ih * scale;
+  ctx.drawImage(img, cx - w / 2, cy - h / 2, w, h);
 }
 
 // Load an image for canvas compositing — taint-proof. We fetch the bytes and
@@ -372,8 +384,12 @@ function drawGamePuck(ctx, L, card, assets) {
   ctx.fillStyle = C.strip; ctx.fillRect(0, 0, W, L.topH);
   ctx.fillStyle = C.line; ctx.fillRect(0, L.topH - 2, W, 2);
   const chipR = L.topH * 0.30, chipX = L.pad + chipR, chipY = L.topH / 2;
-  ctx.save(); ctx.beginPath(); ctx.arc(chipX, chipY, chipR, 0, Math.PI * 2);
-  ctx.fillStyle = '#0a0a0a'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(244,247,250,0.4)'; ctx.stroke(); ctx.restore();
+  if (assets.puck) {
+    drawImageContain(ctx, assets.puck, chipX, chipY, chipR * 2.2, chipR * 2.2);
+  } else {
+    ctx.save(); ctx.beginPath(); ctx.arc(chipX, chipY, chipR, 0, Math.PI * 2);
+    ctx.fillStyle = '#0a0a0a'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(244,247,250,0.4)'; ctx.stroke(); ctx.restore();
+  }
   ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
   ctx.fillStyle = C.steel; ctx.font = `700 ${L.topH * 0.19}px 'Barlow'`;
   ctx.fillText('GAME PUCK · PRESENTED BY', chipX + chipR + L.pad * 0.5, chipY - L.topH * 0.13);
@@ -386,16 +402,22 @@ function drawGamePuck(ctx, L, card, assets) {
   ctx.textBaseline = 'alphabetic';
   ctx.fillText("FANS' PICK", W / 2, L.topH + 78);
 
-  // puck medallion + jersey
+  // puck medallion — the RINKD Game Puck brand mark (no jersey number on it;
+  // the player name + # sits directly below). Falls back to the drawn black
+  // puck + number if the image didn't load.
   const cx = W / 2, cy = L.puckCy;
-  ctx.save();
-  ctx.beginPath(); ctx.arc(cx, cy, L.puckR, 0, Math.PI * 2); ctx.fillStyle = '#0a0a0a'; ctx.fill();
-  ctx.lineWidth = L.puckR * 0.09; ctx.strokeStyle = card.player.teamColor || C.blue; ctx.stroke();
-  ctx.beginPath(); ctx.arc(cx, cy, L.puckR * 0.84, 0, Math.PI * 2); ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.stroke();
-  ctx.restore();
-  ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle';
-  ctx.font = `900 italic ${L.jerseySize}px 'Barlow Condensed'`;
-  ctx.fillText(`${card.player.jersey ?? '?'}`, cx, cy + L.jerseySize * 0.03);
+  if (assets.puck) {
+    drawImageContain(ctx, assets.puck, cx, cy, L.puckR * 2.3, L.puckR * 2.3);
+  } else {
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, L.puckR, 0, Math.PI * 2); ctx.fillStyle = '#0a0a0a'; ctx.fill();
+    ctx.lineWidth = L.puckR * 0.09; ctx.strokeStyle = card.player.teamColor || C.blue; ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, L.puckR * 0.84, 0, Math.PI * 2); ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle';
+    ctx.font = `900 italic ${L.jerseySize}px 'Barlow Condensed'`;
+    ctx.fillText(`${card.player.jersey ?? '?'}`, cx, cy + L.jerseySize * 0.03);
+  }
 
   // player name (adult) or "#jersey" (youth-suppressed)
   ctx.textBaseline = 'alphabetic';
@@ -457,11 +479,11 @@ function drawGamePuck(ctx, L, card, assets) {
 export async function composeGamePuckCard(card) {
   const L = PUCK;
   await ensureFonts();
-  const wordmark = await loadImage(WORDMARK_SRC);
+  const [wordmark, puck] = await Promise.all([loadImage(WORDMARK_SRC), loadImage(PUCK_SRC)]);
   const canvas = document.createElement('canvas');
   canvas.width = L.W; canvas.height = L.H;
   const ctx = canvas.getContext('2d');
-  drawGamePuck(ctx, L, card, { wordmark });
+  drawGamePuck(ctx, L, card, { wordmark, puck });
   return new Promise((resolve, reject) => {
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob returned null'))), 'image/png');
   });
