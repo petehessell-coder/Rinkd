@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { getGamePuck, getMyGamePuckVote, castGamePuckVote, getGamePuckResult, getUserGamePuckCount, getGamePuckState, settleGamePuck } from '../lib/gamePucks';
+import { getGamePuck, getMyGamePuckVote, castGamePuckVote, getGamePuckResult, getUserGamePuckCount, getGamePuckState, settleGamePuck, getGamePuckWinnerProfile } from '../lib/gamePucks';
 import ShareButton from './ShareButton';
 import { loadGamePuckCardData } from '../lib/gameCardData';
+import GamePuckReveal, { hasRevealed } from './GamePuckReveal';
 
 // Rinkd Game Puck (SOCIAL-3, Phase 1) — fan "Game Puck" / Fans' Pick vote on a
 // FINAL league or tournament game. Jersey-keyed: candidate players come from the
@@ -38,8 +39,11 @@ export default function GamePuckCard({
   const [err, setErr] = useState(false);
   const [result, setResult] = useState(null);       // SOCIAL-3 P2: settled winner | null
   const [winnerPucks, setWinnerPucks] = useState(0); // the winner's career Game Puck count
+  const [winnerProfile, setWinnerProfile] = useState(null); // winner's avatar profile (for the reveal)
   const [state, setState] = useState(null);          // { phase, opened_at, closes_at, total_votes, is_settled }
   const [settling, setSettling] = useState(false);   // lazy settle-on-view in flight
+  const [revealed, setRevealed] = useState(false);   // GAMEPUCK-2: peeled on this device
+  const [revealOpen, setRevealOpen] = useState(false); // the peel modal is open
 
   const load = useCallback(async () => {
     setErr(false);
@@ -54,7 +58,13 @@ export default function GamePuckCard({
       setMyVote(mine);
       setResult(res);
       setState(st);
-      if (res?.winner_user_id) getUserGamePuckCount(res.winner_user_id).then(setWinnerPucks).catch(() => {});
+      if (res) setRevealed(hasRevealed(kind, gameId));
+      if (res?.winner_user_id) {
+        getUserGamePuckCount(res.winner_user_id).then(setWinnerPucks).catch(() => {});
+        getGamePuckWinnerProfile(res.winner_user_id).then(setWinnerProfile).catch(() => {});
+      } else {
+        setWinnerProfile(null);
+      }
     } catch (e) {
       console.error('[GamePuck] load failed', e);
       setErr(true);
@@ -172,8 +182,46 @@ export default function GamePuckCard({
     return <Wrap><div style={{ color: C.faint, fontSize: 13, textAlign: 'center', padding: '12px 0' }}>Loading…</div></Wrap>;
   }
 
-  // SOCIAL-3 P2 — settled: show the locked winner, no voting.
+  // SOCIAL-3 P2 — settled. GAMEPUCK-2: before the user has peeled the tape on
+  // this device, show a "peel to reveal" teaser that opens the reveal modal;
+  // once revealed, show the locked winner banner.
   if (result) {
+    const revealModal = revealOpen && (
+      <GamePuckReveal
+        gameId={gameId} kind={kind} result={result} winnerProfile={winnerProfile}
+        teamName={teamNameFor(result.team_id)} winnerPucks={winnerPucks} accent={accent}
+        onClose={() => setRevealOpen(false)}
+        onRevealed={() => setRevealed(true)}
+      />
+    );
+
+    if (!revealed) {
+      return (
+        <Wrap>
+          <button
+            onClick={() => setRevealOpen(true)}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', textAlign: 'left',
+              borderRadius: 10, padding: '12px 14px', border: '1px dashed rgba(244,247,250,0.4)',
+              background:
+                'repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0 2px, rgba(255,255,255,0) 2px 12px),' +
+                'linear-gradient(180deg, rgba(233,236,239,0.14), rgba(207,213,220,0.10))',
+            }}
+          >
+            <span aria-hidden style={{ fontSize: 22 }}>🏒</span>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.12em', color: C.faint, textTransform: 'uppercase' }}>Voting closed · winner sealed</div>
+              <div style={{ fontSize: 14.5, fontWeight: 900, fontStyle: 'italic', fontFamily: "'Barlow Condensed', sans-serif", color: C.ice, letterSpacing: '0.02em' }}>
+                Peel the tape to reveal the Fans’ Pick
+              </div>
+            </div>
+            <span style={{ fontSize: 11, fontWeight: 800, color: '#fff', background: accent, borderRadius: 999, padding: '6px 12px', whiteSpace: 'nowrap' }}>Reveal →</span>
+          </button>
+          {revealModal}
+        </Wrap>
+      );
+    }
+
     return (
       <Wrap>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(215,38,56,0.12)', border: `0.5px solid ${accent}`, borderRadius: 9, padding: '10px 12px' }}>
@@ -189,6 +237,10 @@ export default function GamePuckCard({
           <ShareButton gameId={gameId} isLeague={kind === 'league'} cardType="gamepuck" variant="ghost" label="Share"
             getCard={() => loadGamePuckCardData(gameId, kind === 'league')} />
         </div>
+        <button onClick={() => setRevealOpen(true)} style={{ marginTop: 8, background: 'transparent', border: 'none', color: C.faint, fontSize: 11, fontWeight: 600, cursor: 'pointer', padding: 0 }}>
+          ▸ Replay reveal
+        </button>
+        {revealModal}
       </Wrap>
     );
   }
