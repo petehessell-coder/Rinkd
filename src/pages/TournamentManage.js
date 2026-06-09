@@ -1040,6 +1040,13 @@ function SettingsTab({ tournament, currentUser, reload, flash }) {
     overtime_allowed: s0.overtime_allowed ?? true,
     advancement_per_pool: s0.advancement_per_pool ?? 2,
   });
+  // Recap-card sponsor (GROWTH-SHARE-1) — also lives in settings JSONB.
+  const [sponsor, setSponsor] = useState({
+    name: s0.recap_sponsor?.name || '',
+    logo_url: s0.recap_sponsor?.logo_url || '',
+    url: s0.recap_sponsor?.url || '',
+  });
+  const setSp = (k, v) => setSponsor((p) => ({ ...p, [k]: v }));
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const setF = (k, v) => setFmt((prev) => ({ ...prev, [k]: v }));
@@ -1100,6 +1107,10 @@ function SettingsTab({ tournament, currentUser, reload, flash }) {
     // Merge back into the existing settings JSONB so keys we don't edit here
     // (venue_name, venue_address, pool_names, tiebreakers) are never clobbered.
     const mergedSettings = { ...(tournament.settings || {}), ...cleanFmt };
+    // Recap sponsor → null clears it (card falls back to "presented by Rinkd").
+    mergedSettings.recap_sponsor = (sponsor.name || '').trim()
+      ? { name: sponsor.name.trim(), logo_url: (sponsor.logo_url || '').trim() || null, url: (sponsor.url || '').trim() || null }
+      : null;
     // Branding: only store a valid 6-digit hex; anything else clears it so the
     // public page falls back to the default Rinkd look.
     const cleanAccent = /^#[0-9a-fA-F]{6}$/.test((accentColor || '').trim()) ? accentColor.trim() : '';
@@ -1277,6 +1288,28 @@ function SettingsTab({ tournament, currentUser, reload, flash }) {
               onError={(e) => { e.currentTarget.style.display = 'none'; }} />
           </div>
         )}
+      </div>
+
+      {/* Recap Sponsor — GROWTH-SHARE-1 × ADS-1 */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 4 }}>Recap Sponsor</div>
+        <div style={{ fontSize: 12, color: C.steel, marginBottom: 14, lineHeight: 1.5 }}>
+          Shown as “Recap presented by …” on the top strip of every shared recap card and the public game page. Leave the name blank to fall back to “presented by Rinkd.”
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={labelStyle}>Sponsor name</label>
+            <input value={sponsor.name} onChange={(e) => setSp('name', e.target.value)} placeholder="e.g. Little Caesars" maxLength={40} style={inputStyle}/>
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={labelStyle}>Sponsor link (optional)</label>
+            <input value={sponsor.url} onChange={(e) => setSp('url', e.target.value)} placeholder="https://sponsor.com" style={inputStyle}/>
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={labelStyle}>Sponsor logo URL (optional)</label>
+            <input value={sponsor.logo_url} onChange={(e) => setSp('logo_url', e.target.value)} placeholder="https://… (shown on the public page)" style={inputStyle}/>
+          </div>
+        </div>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>

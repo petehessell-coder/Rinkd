@@ -15,6 +15,8 @@ import { MentionInput, MentionText } from '../components/Mentions';
 import { savePostMentions, saveCommentMentions, mentionMapFromRows } from '../lib/mentions';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/authContext';
+import ShareButton from '../components/ShareButton';
+import { loadGameCardData } from '../lib/gameCardData';
 
 // Feed page size — keyset pagination pulls this many chirps per request.
 const PAGE_SIZE = 20;
@@ -213,10 +215,14 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
         {/* Auto-recap posts link straight to the game page — saves the
             spectator from copy/pasting the URL out of the content body. */}
         {post.recap_for_game_id && (
-          <button type="button" onClick={() => navigate(`/game/${post.recap_for_game_id}`)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, marginBottom: 10, background: 'rgba(46,91,140,0.2)', border: '1px solid #2E5B8C', color: '#F4F7FA', fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer' }}>
-            <span style={{ fontSize: 16 }}>🏒</span> View game →
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+            <button type="button" onClick={() => navigate(`/game/${post.recap_for_game_id}`)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: 'rgba(46,91,140,0.2)', border: '1px solid #2E5B8C', color: '#F4F7FA', fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer' }}>
+              <span style={{ fontSize: 16 }}>🏒</span> View game →
+            </button>
+            <ShareButton gameId={post.recap_for_game_id} isLeague={!!post.league_id} variant="ghost"
+              getCard={() => loadGameCardData(post.recap_for_game_id, !!post.league_id)} />
+          </div>
         )}
         {post.livebarn_venue_id && (
           <a href={"https://watch.livebarn.com/en/videoplayer?venueid=" + post.livebarn_venue_id + "&referrer=rinkd"} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, marginBottom: 10, background: 'rgba(46,91,140,0.2)', border: '1px solid #2E5B8C', color: '#F4F7FA', fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', textDecoration: 'none' }}>

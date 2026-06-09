@@ -53,6 +53,7 @@ const Team = lazy(() => import('./pages/Team'));
 const TeamManage = lazy(() => import('./pages/TeamManage'));
 const ScorerView = lazy(() => import('./pages/ScorerView'));
 const GameDetail = lazy(() => import('./pages/GameDetail'));
+const PublicGame = lazy(() => import('./pages/PublicGame'));
 const AdminPanel = lazy(() => import('./pages/AdminPanel'));
 const VolunteerCoordinator = lazy(() => import('./pages/VolunteerCoordinator'));
 const NotFound = lazy(() => import('./pages/NotFound'));
@@ -232,6 +233,12 @@ function AppRoutes() {
       <Route path="/messages/:conversationId" element={<ProtectedRoute><Messages currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/tournament/:id" element={<Tournament currentUser={user} profile={profile} />} />
       <Route path="/scorer/:gameId" element={<ProtectedRoute><ScorerView /></ProtectedRoute>} />
+      {/* GROWTH-SHARE-1 · login-less public game/recap pages — the share deep-link
+          target. PUBLIC by design (outside ProtectedRoute); reads game + box score
+          as the anon role and self-gates on parent-event visibility + the youth
+          public_sharing switch inside PublicGame. /g = tournament, /lg = league. */}
+      <Route path="/g/:gameId" element={<PublicGame />} />
+      <Route path="/lg/:gameId" element={<PublicGame league />} />
       <Route path="/game/:gameId" element={<ProtectedRoute><GameDetail profile={profile} /></ProtectedRoute>} />
       <Route path="/league-game/:gameId" element={<ProtectedRoute><GameDetail profile={profile} /></ProtectedRoute>} />
       <Route path="/league-scorer/:gameId" element={<ProtectedRoute><ScorerView /></ProtectedRoute>} />
