@@ -140,25 +140,104 @@ BEGIN
   RAISE NOTICE 'S7 ok — duplicate routed to claim + guardian notified';
 END $$;
 
--- ── S8: claim decisions — no self-approval, stranger blocked, guardian works ─
+-- ── S8a: TAKEOVER BLOCKED — an org admin who rosters the kid CANNOT approve a
+-- claim while the kid already has a guardian (the headline attack: a forged or
+-- opportunistic roster link must not escalate into guardianship over a child
+-- who already has a family). orgadmin self-rosters the kid, files a claim, then
+-- tries to approve it via a second account; both paths are denied. ───────────
+DO $$
+DECLARE v_team uuid; v_scl uuid;
+BEGIN
+  RESET ROLE;
+  INSERT INTO public.teams (name, manager_id)
+  VALUES ('Forged Roster', '33333333-3333-4333-8333-333333333333') RETURNING id INTO v_team;
+  INSERT INTO public.team_members (team_id, user_id, role, status)
+  VALUES (v_team, current_setting('smoke.kid')::uuid, 'player', 'active');
+  PERFORM pg_temp.impersonate('33333333-3333-4333-8333-333333333333');
+  v_scl := public.request_guardianship(current_setting('smoke.kid')::uuid,
+             public.create_household('Stranger House'), 'takeover attempt');
+  -- stranger (claimant + forged org admin) cannot self-approve
+  BEGIN
+    PERFORM public.decide_guardianship_claim(v_scl, true);
+    RAISE EXCEPTION 'S8a FAILED — claimant self-approved a takeover';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  -- a DIFFERENT org admin who also rosters the kid still cannot approve while a guardian exists
+  RESET ROLE;
+  INSERT INTO public.teams (name, manager_id)
+  VALUES ('OA Roster', '44444444-4444-4444-8444-444444444444') RETURNING id INTO v_team;
+  INSERT INTO public.team_members (team_id, user_id, role, status)
+  VALUES (v_team, current_setting('smoke.kid')::uuid, 'player', 'active');
+  PERFORM pg_temp.impersonate('44444444-4444-4444-8444-444444444444');
+  BEGIN
+    PERFORM public.decide_guardianship_claim(v_scl, true);
+    RAISE EXCEPTION 'S8a FAILED — org admin overrode an existing guardian';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  RAISE NOTICE 'S8a ok — takeover blocked (org admin cannot approve while a guardian exists)';
+END $$;
+
+-- ── S8b: claim decisions — no self-approval, guardian approval works ─────────
 DO $$ BEGIN
   PERFORM pg_temp.impersonate('22222222-2222-4222-8222-222222222222');
   BEGIN
     PERFORM public.decide_guardianship_claim(current_setting('smoke.claim')::uuid, true);
-    RAISE EXCEPTION 'S8 FAILED — claimant approved own claim';
-  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
-  PERFORM pg_temp.impersonate('33333333-3333-4333-8333-333333333333');
-  BEGIN
-    PERFORM public.decide_guardianship_claim(current_setting('smoke.claim')::uuid, true);
-    RAISE EXCEPTION 'S8 FAILED — stranger decided claim';
+    RAISE EXCEPTION 'S8b FAILED — claimant approved own claim';
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
   PERFORM pg_temp.impersonate('11111111-1111-4111-8111-111111111111');
-  PERFORM public.decide_guardianship_claim(current_setting('smoke.claim')::uuid, true);
+  PERFORM public.decide_guardianship_claim(current_setting('smoke.claim')::uuid, true);  -- existing guardian
   RESET ROLE;
   IF NOT public.is_guardian_of(current_setting('smoke.kid')::uuid, '22222222-2222-4222-8222-222222222222') THEN
-    RAISE EXCEPTION 'S8 FAILED — approval did not grant guardianship';
+    RAISE EXCEPTION 'S8b FAILED — approval did not grant guardianship';
   END IF;
-  RAISE NOTICE 'S8 ok — guardian-or-org-admin approval; minor spans households';
+  RAISE NOTICE 'S8b ok — existing-guardian approval grants co-guardianship; minor spans households';
+END $$;
+
+-- ── S8c: managed_adult cannot be claimed as a minor ─────────────────────────
+DO $$
+DECLARE v_ma record;
+BEGIN
+  PERFORM pg_temp.impersonate('11111111-1111-4111-8111-111111111111');
+  SELECT * INTO v_ma FROM public.create_managed_profile(
+    current_setting('smoke.house_a')::uuid, 'Adult Dependent', '1990-01-01', 'managed_adult');
+  PERFORM pg_temp.impersonate('22222222-2222-4222-8222-222222222222');
+  BEGIN
+    PERFORM public.request_guardianship(v_ma.profile_id,
+      (SELECT household_id FROM public.household_members
+       WHERE profile_id = '22222222-2222-4222-8222-222222222222' AND role = 'guardian' LIMIT 1), 'x');
+    RAISE EXCEPTION 'S8c FAILED — guardianship claim allowed on a managed_adult';
+  EXCEPTION WHEN OTHERS THEN IF SQLERRM LIKE '%S8c FAILED%' THEN RAISE; END IF; END;
+  RAISE NOTICE 'S8c ok — managed_adult is not claimable as a minor';
+END $$;
+
+-- ── S8d: co-guardian cannot be evicted; self-removal allowed ────────────────
+DO $$
+DECLARE v_pa uuid; v_pb uuid;
+BEGIN
+  RESET ROLE;  -- add parentB as co-guardian of house A (definer path; UI uses the invite flow)
+  INSERT INTO public.household_members (household_id, profile_id, role, status, added_by, approved_by)
+  VALUES (current_setting('smoke.house_a')::uuid, '22222222-2222-4222-8222-222222222222',
+          'guardian', 'active', '11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111')
+  ON CONFLICT (household_id, profile_id) DO UPDATE SET role = 'guardian', status = 'active';
+  SELECT id INTO v_pa FROM public.household_members
+   WHERE household_id = current_setting('smoke.house_a')::uuid AND profile_id = '11111111-1111-4111-8111-111111111111';
+  SELECT id INTO v_pb FROM public.household_members
+   WHERE household_id = current_setting('smoke.house_a')::uuid AND profile_id = '22222222-2222-4222-8222-222222222222';
+  PERFORM pg_temp.impersonate('11111111-1111-4111-8111-111111111111');
+  BEGIN
+    PERFORM public.remove_household_member(v_pb);   -- evicting a co-guardian
+    RAISE EXCEPTION 'S8d FAILED — co-guardian eviction allowed';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  PERFORM public.remove_household_member(v_pa);     -- stepping down (other guardian remains)
+  RESET ROLE;
+  IF public.is_household_guardian(current_setting('smoke.house_a')::uuid, '11111111-1111-4111-8111-111111111111') THEN
+    RAISE EXCEPTION 'S8d FAILED — guardian still present after self-removal';
+  END IF;
+  -- Restore parentA's guardian membership so later blocks (S13 invite) still
+  -- see parentA as a guardian of house A.
+  INSERT INTO public.household_members (household_id, profile_id, role, status, added_by, approved_by)
+  VALUES (current_setting('smoke.house_a')::uuid, '11111111-1111-4111-8111-111111111111',
+          'guardian', 'active', '11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111')
+  ON CONFLICT (household_id, profile_id) DO UPDATE SET role = 'guardian', status = 'active';
+  RAISE NOTICE 'S8d ok — no co-guardian eviction; self-removal works';
 END $$;
 
 -- ── S9: audit is append-only ─────────────────────────────────────────────────

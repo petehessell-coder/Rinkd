@@ -31,7 +31,10 @@
 CREATE TABLE public.households (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name        text,
-  created_by  uuid NOT NULL REFERENCES public.profiles(id) ON DELETE RESTRICT,
+  -- created_by is informational; SET NULL (not RESTRICT) so deleting the
+  -- creator's account never wedges on the household FK. The household and its
+  -- other members survive a creator's departure.
+  created_by  uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 
@@ -285,12 +288,17 @@ BEGIN
     RAISE EXCEPTION 'name and date of birth are required' USING errcode = '22023';
   END IF;
 
-  -- Duplicate guard (name + DOB, case-insensitive) against existing managed profiles.
+  -- Duplicate guard: match an existing login-less MINOR by normalized name
+  -- (case-insensitive, internal whitespace collapsed) + DOB. NULL DOBs match
+  -- each other so a no-DOB kid (e.g. the migrated Henry) still routes to a
+  -- claim instead of a silent twin. Scoped to account_type='minor' so a
+  -- managed_adult is never swept into a minor claim (see request_guardianship).
   SELECT p.id INTO v_existing
   FROM public.profiles p
   WHERE p.auth_user_id IS NULL
-    AND lower(p.name) = lower(v_name)
-    AND p.date_of_birth = p_date_of_birth
+    AND p.account_type = 'minor'
+    AND lower(regexp_replace(p.name, '\s+', ' ', 'g')) = lower(regexp_replace(v_name, '\s+', ' ', 'g'))
+    AND p.date_of_birth IS NOT DISTINCT FROM p_date_of_birth
   LIMIT 1;
 
   IF v_existing IS NOT NULL THEN
@@ -420,9 +428,12 @@ BEGIN
   IF v_me IS NULL OR NOT public.is_household_guardian(p_household_id, v_me) THEN
     RAISE EXCEPTION 'create your household first' USING errcode = '42501';
   END IF;
+  -- Guardianship claims are for MINORS only. A login-less managed_adult is not
+  -- a dependent and must never be reclassified into a household as a minor.
   IF NOT EXISTS (SELECT 1 FROM public.profiles p
-                 WHERE p.id = p_minor_profile_id AND p.auth_user_id IS NULL) THEN
-    RAISE EXCEPTION 'profile is not a managed profile' USING errcode = '22023';
+                 WHERE p.id = p_minor_profile_id AND p.auth_user_id IS NULL
+                   AND p.account_type = 'minor') THEN
+    RAISE EXCEPTION 'profile is not a managed minor profile' USING errcode = '22023';
   END IF;
   IF public.is_guardian_of(p_minor_profile_id, v_me) THEN
     RAISE EXCEPTION 'you already manage this profile' USING errcode = '23505';
@@ -447,14 +458,28 @@ BEGIN
     WHERE mm.profile_id = v_claim.minor_profile_id AND mm.role = 'minor' AND mm.status = 'active'
       AND gm.role = 'guardian' AND gm.status = 'active');
 
-  -- Guardian-or-org-admin approval. If NO guardian exists at all (orphaned
-  -- managed profile), the org admin who rosters the child is the only
-  -- authority; a claimant can never approve their own claim.
-  IF NOT (
-       public.is_guardian_of(v_claim.minor_profile_id, v_me)
-    OR public.is_org_admin_for_minor(v_claim.minor_profile_id, v_me)
-  ) THEN
-    RAISE EXCEPTION 'only an existing guardian or the rostering org admin can decide this' USING errcode = '42501';
+  -- Authority is scoped by whether the minor ALREADY has a guardian:
+  --   • has a guardian  → adding ANY further guardian needs an EXISTING
+  --     guardian's approval. An org admin (even a legitimate one) may NOT
+  --     override the parents already on file. This is what stops a forged or
+  --     opportunistic roster link from being escalated into guardianship over
+  --     a kid who already has a family (the headline takeover vector).
+  --   • no guardian yet → orphaned managed profile (e.g. a club-rostered kid
+  --     awaiting a parent claim); the rostering org admin is the only
+  --     authority. NOTE: the org-roster anchor (team_members.user_id) is not
+  --     yet write-hardened, so this branch has NO live surface in Phase 1
+  --     (every minor minted here is created with its guardian). Org-roster
+  --     onboarding + roster-write hardening land together in Phase 2 before
+  --     this branch is relied upon.
+  -- A claimant can never decide their own claim, either way.
+  IF v_has_guardian THEN
+    IF NOT public.is_guardian_of(v_claim.minor_profile_id, v_me) THEN
+      RAISE EXCEPTION 'only an existing guardian can approve an additional guardian' USING errcode = '42501';
+    END IF;
+  ELSE
+    IF NOT public.is_org_admin_for_minor(v_claim.minor_profile_id, v_me) THEN
+      RAISE EXCEPTION 'only the rostering org admin can decide a claim on an unclaimed profile' USING errcode = '42501';
+    END IF;
   END IF;
   IF v_me = v_claim.claimant_profile_id THEN
     RAISE EXCEPTION 'you cannot decide your own claim' USING errcode = '42501';
@@ -480,6 +505,25 @@ BEGIN
   END IF;
 END $$;
 
+-- 4.6b Withdraw a pending claim (claimant only) — frees the unique partial
+-- index so they can re-file later.
+CREATE OR REPLACE FUNCTION public.cancel_guardianship_claim(p_claim_id uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_me uuid; v_claim record;
+BEGIN
+  v_me := public.current_profile_id();
+  SELECT * INTO v_claim FROM public.guardianship_claims WHERE id = p_claim_id FOR UPDATE;
+  IF v_claim.id IS NULL THEN RAISE EXCEPTION 'claim not found' USING errcode = '42704'; END IF;
+  IF v_claim.claimant_profile_id <> v_me THEN
+    RAISE EXCEPTION 'only the claimant can withdraw their claim' USING errcode = '42501';
+  END IF;
+  IF v_claim.status <> 'pending' THEN RAISE EXCEPTION 'claim already decided' USING errcode = '22023'; END IF;
+  UPDATE public.guardianship_claims
+  SET status = 'cancelled', decided_by = v_me, decided_at = now() WHERE id = p_claim_id;
+  PERFORM public.log_guardianship_event('guardianship_claim_cancelled', v_me,
+            v_claim.minor_profile_id, v_claim.household_id, p_claim_id);
+END $$;
+
 -- 4.7 Remove a member (guardian-managed; never the last guardian of minors).
 CREATE OR REPLACE FUNCTION public.remove_household_member(p_member_id uuid)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
@@ -492,12 +536,22 @@ BEGIN
     RAISE EXCEPTION 'only a guardian can remove household members' USING errcode = '42501';
   END IF;
   IF v_row.role = 'guardian' THEN
+    -- Removing a guardian is itself a custody action and must not be unilateral
+    -- (mirrors the never-unilateral LINK rule). A guardian may step down
+    -- (remove themselves) but cannot evict a co-guardian; that escalates to
+    -- the co-guardian leaving or to support. Software never adjudicates custody.
+    IF v_row.profile_id <> v_me THEN
+      RAISE EXCEPTION 'a guardian cannot remove a co-guardian; they must remove themselves' USING errcode = '42501';
+    END IF;
     SELECT count(*) INTO v_other_guardians FROM public.household_members
     WHERE household_id = v_row.household_id AND role = 'guardian' AND status = 'active' AND id <> p_member_id;
+    -- Count ALL login-less dependents (minors and managed_adults), since both
+    -- need a guardian to manage them.
     SELECT count(*) INTO v_minors FROM public.household_members
-    WHERE household_id = v_row.household_id AND role = 'minor' AND status = 'active';
+    WHERE household_id = v_row.household_id AND role IN ('minor','adult') AND status = 'active'
+      AND profile_id IN (SELECT id FROM public.profiles WHERE auth_user_id IS NULL);
     IF v_other_guardians = 0 AND v_minors > 0 THEN
-      RAISE EXCEPTION 'a household with minors must keep at least one guardian' USING errcode = '22023';
+      RAISE EXCEPTION 'a household with dependents must keep at least one guardian' USING errcode = '22023';
     END IF;
   END IF;
   DELETE FROM public.household_members WHERE id = p_member_id;
@@ -513,5 +567,6 @@ GRANT EXECUTE ON FUNCTION
   public.accept_household_invite(text),
   public.request_guardianship(uuid,uuid,text),
   public.decide_guardianship_claim(uuid,boolean),
+  public.cancel_guardianship_claim(uuid),
   public.remove_household_member(uuid)
 TO authenticated;

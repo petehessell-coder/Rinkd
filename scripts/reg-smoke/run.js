@@ -162,11 +162,55 @@ async function makeUser(label) {
     check('claimant cannot approve own claim', !!selfErr);
     const { error: strErr } = await stranger.client.rpc('decide_guardianship_claim', { p_claim_id: claimId, p_approve: true });
     check('stranger cannot decide the claim', !!strErr);
+
+    // TAKEOVER BLOCKED: an org admin who rosters the kid must NOT be able to
+    // approve a claim while the kid already has a guardian (forged/opportunistic
+    // roster link cannot escalate into guardianship over a child with a family).
+    const { data: team } = await admin.from('teams')
+      .insert({ name: 'Takeover Roster', manager_id: orgAdmin.id }).select('id').single();
+    await admin.from('team_members').insert({ team_id: team.id, user_id: kidId, role: 'player', status: 'active' });
+    const { error: oaErr } = await orgAdmin.client.rpc('decide_guardianship_claim', { p_claim_id: claimId, p_approve: true });
+    check('org admin cannot approve while a guardian exists (takeover blocked)', !!oaErr);
+
     const { error: okErr } = await parentA.client.rpc('decide_guardianship_claim', { p_claim_id: claimId, p_approve: true });
     check('existing guardian approves the claim', !okErr, okErr?.message);
     const { data: link } = await admin.from('household_members')
       .select('id').eq('profile_id', kidId).eq('status', 'active');
     check('minor now spans both households', (link || []).length === 2, `rows=${(link || []).length}`);
+  }
+
+  // 8b. managed_adult cannot be claimed as a minor
+  {
+    const { data: house } = await admin.from('household_members')
+      .select('household_id').eq('profile_id', parentA.id).eq('role', 'guardian').limit(1).single();
+    const { data: ma } = await parentA.client.rpc('create_managed_profile', {
+      p_household_id: house.household_id, p_name: 'Adult Dependent', p_date_of_birth: '1990-01-01', p_account_type: 'managed_adult',
+    });
+    const maId = (Array.isArray(ma) ? ma[0] : ma)?.profile_id;
+    const { data: hb } = await admin.from('household_members')
+      .select('household_id').eq('profile_id', parentB.id).eq('role', 'guardian').limit(1).single();
+    const { error: maErr } = await parentB.client.rpc('request_guardianship', {
+      p_minor_profile_id: maId, p_household_id: hb.household_id,
+    });
+    check('managed_adult is not claimable as a minor', !!maErr);
+  }
+
+  // 8c. co-guardian cannot be evicted; self-removal allowed
+  {
+    const { data: house } = await admin.from('household_members')
+      .select('household_id').eq('profile_id', parentA.id).eq('role', 'guardian').limit(1).single();
+    await admin.from('household_members').upsert({
+      household_id: house.household_id, profile_id: parentB.id, role: 'guardian', status: 'active',
+      added_by: parentA.id, approved_by: parentA.id,
+    }, { onConflict: 'household_id,profile_id' });
+    const { data: pbMember } = await admin.from('household_members')
+      .select('id').eq('household_id', house.household_id).eq('profile_id', parentB.id).single();
+    const { data: paMember } = await admin.from('household_members')
+      .select('id').eq('household_id', house.household_id).eq('profile_id', parentA.id).single();
+    const { error: evictErr } = await parentA.client.rpc('remove_household_member', { p_member_id: pbMember.id });
+    check('a guardian cannot evict a co-guardian', !!evictErr);
+    const { error: selfErr } = await parentA.client.rpc('remove_household_member', { p_member_id: paMember.id });
+    check('a guardian can step down themselves', !selfErr, selfErr?.message);
   }
 
   // 9. append-only audit
