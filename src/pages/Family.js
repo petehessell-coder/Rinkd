@@ -22,6 +22,7 @@ const B = {
 export default function Family({ profile }) {
   const navigate = useNavigate();
   const { household, managed, coGuardians, claims, refresh, loading } = useFamily();
+  const managedIds = new Set(managed.map(m => m.profile_id));
   const myId = profile?.id;
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState(null); // 'add' | 'invite' | null
@@ -79,7 +80,12 @@ export default function Family({ profile }) {
   }
 
   const myClaims = claims.filter(c => c.claimant_profile_id === myId);
-  const toDecide = claims.filter(c => c.claimant_profile_id !== myId);
+  // I can actually decide a claim only when I'm an existing guardian of the
+  // minor (the minor is in my managed set). Claims surfaced to me purely as a
+  // rostering org admin (minor not in my managed set) show read-only so the UI
+  // never offers Approve/Deny that the RPC would reject with a 42501.
+  const toDecide = claims.filter(c => c.claimant_profile_id !== myId && managedIds.has(c.minor_profile_id));
+  const awaiting = claims.filter(c => c.claimant_profile_id !== myId && !managedIds.has(c.minor_profile_id));
 
   return (
     <Layout profile={profile}>
@@ -92,7 +98,7 @@ export default function Family({ profile }) {
         {err && <Banner text={err} />}
 
         {/* Pending requests */}
-        {(toDecide.length > 0 || myClaims.length > 0) && (
+        {(toDecide.length > 0 || myClaims.length > 0 || awaiting.length > 0) && (
           <Section title="Requests">
             {toDecide.map(c => (
               <div key={c.id} style={claimRow}>
@@ -115,6 +121,17 @@ export default function Family({ profile }) {
                   <div style={{ fontSize: 12, color: B.amber }}>Pending another guardian's approval.</div>
                 </div>
                 <button onClick={() => onCancel(c.id)} disabled={busy} style={miniBtn(B.border)}>Cancel</button>
+              </div>
+            ))}
+            {awaiting.map(c => (
+              <div key={c.id} style={claimRow}>
+                <Avatar profile={c.minor} size={34} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, color: B.ice, fontWeight: 600 }}>
+                    {c.claimant?.name || 'Someone'} wants to manage {c.minor?.name}
+                  </div>
+                  <div style={{ fontSize: 12, color: B.steel }}>Awaiting a guardian's approval.</div>
+                </div>
               </div>
             ))}
           </Section>

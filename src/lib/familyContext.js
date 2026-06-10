@@ -84,6 +84,11 @@ export function FamilyProvider({ children }) {
     const switcher = meEntry ? [meEntry, ...managedEntries] : managedEntries;
     const activeEntry = switcher.find(e => e.profile_id === (actingForId || myId)) || meEntry;
 
+    // Derive the trio (activePerson / actingForId / isSelf) from the VALIDATED
+    // activeEntry, not raw actingForId — so they can never disagree, even for
+    // the single render after a managed person is removed (raw actingForId
+    // would still point at them while activeEntry has already fallen back to me).
+    const resolvedSelf = !activeEntry || activeEntry.isSelf;
     return {
       loading,
       household: data.households[0] || null,
@@ -93,8 +98,8 @@ export function FamilyProvider({ children }) {
       coGuardians: data.coGuardians,
       claims,
       activePerson: activeEntry?.profile || null,
-      actingForId: actingForId || myId,
-      isSelf: !actingForId,
+      actingForId: activeEntry?.profile_id || myId,
+      isSelf: resolvedSelf,
       setActingAs,
       refresh,
     };

@@ -39,11 +39,12 @@ export default function PersonCard({ profile }) {
 
   const iManage = managed.some(m => m.profile_id === profileId);
 
-  // Engage acting-as for people I manage (the banner reflects it). Reset to
-  // self when leaving the card.
+  // Engage acting-as for people I manage. Acting-as is a persistent mode (the
+  // app-wide banner + "RSVPing as X" reflect it); the user leaves it via the
+  // banner's "switch back to you" or by picking You in the switcher — NOT by
+  // navigating away. So we set on mount but deliberately don't reset on unmount.
   useEffect(() => {
     if (iManage) setActingAs(profileId);
-    return () => setActingAs(null);
   }, [iManage, profileId, setActingAs]);
 
   useEffect(() => {

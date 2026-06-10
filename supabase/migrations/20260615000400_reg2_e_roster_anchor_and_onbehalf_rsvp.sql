@@ -44,26 +44,57 @@ $$;
 REVOKE ALL ON FUNCTION public.is_minor_profile(uuid) FROM public;
 GRANT EXECUTE ON FUNCTION public.is_minor_profile(uuid) TO anon, authenticated, service_role;
 
+-- INSERT: the open manager policy may never bind a minor. WITH CHECK is exact
+-- here — an INSERT has no "old" row, so binding a minor is always a new bind.
+-- (A consented Phase-3 minor-roster RPC will be SECURITY DEFINER and bypass
+-- RLS entirely, so this guard doesn't fence it out.)
 DROP POLICY team_members_insert_by_manager ON public.team_members;
 CREATE POLICY team_members_insert_by_manager ON public.team_members
   AS PERMISSIVE FOR INSERT TO public
   WITH CHECK (
     (is_team_manager(team_id, ( SELECT public.current_profile_id() AS uid))
       OR is_league_commissioner_of_team(team_id, ( SELECT public.current_profile_id() AS uid)))
-    -- A minor is never bound to a roster through the open manager policy;
-    -- that requires a consented definer RPC (which bypasses RLS).
     AND (user_id IS NULL OR NOT public.is_minor_profile(user_id))
   );
 
+-- UPDATE: the policy stays as it was (no minor term). A WITH CHECK can't see
+-- the OLD row, so a "user_id is not a minor" term there would wrongly block a
+-- manager from editing an existing legitimate minor roster row (e.g. Henry #17:
+-- changing jersey/position keeps user_id = a minor → would fail). The
+-- minor-BINDING rule — blocking only a *change* of user_id onto a minor, which
+-- is the actual forge-via-update vector — moves to the trigger below, which
+-- CAN compare OLD vs NEW.
 DROP POLICY team_members_manager_update ON public.team_members;
 CREATE POLICY team_members_manager_update ON public.team_members
   AS PERMISSIVE FOR UPDATE TO public
   USING (is_team_manager(team_id, ( SELECT public.current_profile_id() AS uid)))
-  WITH CHECK (
-    is_team_manager(team_id, ( SELECT public.current_profile_id() AS uid))
-    -- ...and an UPDATE can't repoint a ghost slot onto a minor either.
-    AND (user_id IS NULL OR NOT public.is_minor_profile(user_id))
-  );
+  WITH CHECK (is_team_manager(team_id, ( SELECT public.current_profile_id() AS uid)));
+
+-- Closes the repoint-a-ghost-slot-onto-a-minor variant the UPDATE policy can no
+-- longer express. Fires for everyone (incl. definer RPCs), but no current path
+-- legitimately UPDATEs user_id onto a minor (approve_join_request / invite
+-- accepts bind logged-in adults; consented minor rostering will INSERT via a
+-- definer RPC, not UPDATE). A future flow that genuinely must can opt out for
+-- its transaction with: SET LOCAL rinkd.allow_minor_roster = 'on'.
+CREATE OR REPLACE FUNCTION public.tg_block_minor_roster_bind()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF coalesce(current_setting('rinkd.allow_minor_roster', true), '') = 'on' THEN
+    RETURN NEW;
+  END IF;
+  IF NEW.user_id IS NOT NULL
+     AND NEW.user_id IS DISTINCT FROM OLD.user_id
+     AND public.is_minor_profile(NEW.user_id) THEN
+    RAISE EXCEPTION 'a minor can only be rostered through a consented flow'
+      USING errcode = '42501';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS tr_block_minor_roster_bind ON public.team_members;
+CREATE TRIGGER tr_block_minor_roster_bind
+  BEFORE UPDATE OF user_id ON public.team_members
+  FOR EACH ROW EXECUTE FUNCTION public.tg_block_minor_roster_bind();
 
 -- 2 ── On-behalf RSVP ────────────────────────────────────────────────────────
 DROP POLICY rsvp_user_insert ON public.team_game_rsvps;

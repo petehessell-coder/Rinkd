@@ -152,11 +152,25 @@ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS
   );
 $$;
 
--- "May I act for this profile?" — me, or a managed profile I guard.
+-- "May I act for this profile?" — me, or ANY login-less dependent (minor OR
+-- managed_adult) in a household I guard. NOTE: deliberately does NOT route
+-- through is_guardian_of(), which is minor-only on purpose (guardianship claims
+-- are for minors). A managed_adult is still a dependent I manage for RSVP /
+-- credentials / profile edits, so can_manage_profile is the broader predicate.
 CREATE OR REPLACE FUNCTION public.can_manage_profile(p_profile_id uuid)
 RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   SELECT p_profile_id = public.current_profile_id()
-      OR public.is_guardian_of(p_profile_id, public.current_profile_id());
+      OR EXISTS (
+        SELECT 1
+        FROM public.household_members g
+        JOIN public.household_members m ON m.household_id = g.household_id
+        JOIN public.profiles p ON p.id = m.profile_id
+        WHERE g.profile_id = public.current_profile_id()
+          AND g.role = 'guardian' AND g.status = 'active'
+          AND m.profile_id = p_profile_id AND m.status = 'active'
+          AND m.role IN ('minor', 'adult')
+          AND p.auth_user_id IS NULL        -- login-less dependents only
+      );
 $$;
 
 -- Org-roster anchor: the team manager / league commissioner who rosters a
