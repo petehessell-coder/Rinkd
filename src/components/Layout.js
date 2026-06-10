@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { RinkdLogo, Avatar, ProfileNavIcon, ChirpNavIcon } from './Logos';
+import { RinkdLogo, ProfileNavIcon, ChirpNavIcon } from './Logos';
 import { signOut } from '../lib/auth';
 import NotificationBell from './NotificationBell';
 import MessagesIcon from './MessagesIcon';
@@ -8,6 +8,8 @@ import NavPins from './NavPins';
 import HelpButton from './HelpButton';
 import MoreDrawer from './MoreDrawer';
 import IOSInstallBanner from './IOSInstallBanner';
+import AvatarSwitcher from './AvatarSwitcher';
+import ActingAsBanner from './ActingAsBanner';
 
 const B = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
@@ -211,16 +213,12 @@ export default function Layout({ children, profile }) {
           ))}
         </nav>
 
-        {/* Footer: simple avatar block. No role badge, no dropdown. */}
+        {/* Footer: family identity switcher (acting-as Me / Henry). Falls back
+            to a plain self block when there's no family — AvatarSwitcher renders
+            a simple avatar + handle until a managed person exists. */}
         {profile && (
           <div style={{ padding: '12px 16px', borderTop: `1px solid ${B.border}` }}>
-            <Link to="/profile" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'inherit' }}>
-              <Avatar profile={profile} size={36} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: B.ice, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.name}</div>
-                <div style={{ fontSize: 11, color: B.steel }}>@{profile.handle}</div>
-              </div>
-            </Link>
+            <AvatarSwitcher profile={profile} variant="footer" />
             <div style={{ marginTop: 10, display: 'flex', gap: 10, fontSize: 10, color: B.border }}>
               <Link to="/privacy" style={{ color: B.border, textDecoration: 'none' }}>Privacy</Link>
               <Link to="/terms" style={{ color: B.border, textDecoration: 'none' }}>Terms</Link>
@@ -232,6 +230,8 @@ export default function Layout({ children, profile }) {
 
       {/* ─── MAIN CONTENT ─── */}
       <main style={{ flex: 1, marginLeft: 240, maxWidth: '100%' }} className="main-content">
+        {/* Global "Acting as X" banner — only when acting as a managed person. */}
+        {profile && <ActingAsBanner />}
         {/* Desktop back row — appears above every detail page. Hidden on
             top-level nav destinations (Feed, Teams, Notifications, Profile,
             Landing, Login). */}
@@ -253,10 +253,11 @@ export default function Layout({ children, profile }) {
           </Link>
         )}
         {profile?.id && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <NavPins userId={profile.id} size={26} />
             <MessagesIcon userId={profile.id} size={22} />
             <NotificationBell userId={profile.id} size={22} />
+            <AvatarSwitcher profile={profile} variant="compact" />
           </div>
         )}
       </div>

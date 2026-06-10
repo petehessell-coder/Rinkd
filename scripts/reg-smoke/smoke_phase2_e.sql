@@ -1,0 +1,33 @@
+-- ============================================================================
+-- REG-2 Phase 2 / Migration E — smoke checks (roster anchor + on-behalf RSVP)
+--
+-- Run inside an always-abort transaction that has applied Phase-1 A–C plus
+-- migration E (the dry-run harness scaffolds the minimal A/C surface, recreates
+-- the pre-E team_members + team_game_rsvps policies in current_profile_id form,
+-- then applies E). Seeing the final sentinel = GREEN; prod stays untouched.
+--
+-- Verified Jun 10 2026 against prod (all five blocks passed, sentinel observed):
+--   T1  manager CANNOT bind a minor profile to a roster        (forge vector closed)
+--   T2  manager CAN add a ghost slot (user_id NULL)            (RosterUpload intact)
+--   T3  manager CAN bind a non-minor (adult / self)            (TeamManage intact)
+--   T4  guardian CAN RSVP on behalf of a managed minor         (FAMILY-1)
+--   T5  stranger CANNOT RSVP for the minor                     (can_manage_profile gate)
+--
+-- The full executable scaffold is the dry-run run against prod; this file
+-- documents the assertions that matter so they can be re-run post-apply via
+-- real PostgREST/JWT calls (mirror of scripts/reg-smoke/run.js).
+-- ============================================================================
+
+-- T1 — manager bind of a minor is denied (is_minor_profile guard on the
+--      hardened team_members_insert_by_manager WITH CHECK):
+--   SET ROLE authenticated (as the team manager);
+--   INSERT INTO team_members(team_id, user_id=<minor>, role) → 42501 (RLS).
+--
+-- T2 — INSERT INTO team_members(team_id, user_id=NULL, invite_name) → OK.
+-- T3 — INSERT INTO team_members(team_id, user_id=<adult self>, role) → OK.
+--
+-- T4 — manager/guardian, INSERT INTO team_game_rsvps(game_id, user_id=<minor>, 'in')
+--      → OK because rsvp_user_insert WITH CHECK can_manage_profile(<minor>) and
+--        the guardian manages that minor.
+--
+-- T5 — a non-guardian, same INSERT → 42501 (can_manage_profile false).
