@@ -113,4 +113,5 @@ export const KIND_META = {
   team_invite:         { icon: '✉️', label: 'Team invite' },
   league_invite:       { icon: '🏆', label: 'League invite' },
   game_puck_won:       { icon: '🏒', label: 'Game Puck' },
+  guardianship_claim:  { icon: '👪', label: 'Family request' },
 };

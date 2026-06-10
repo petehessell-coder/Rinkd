@@ -8,7 +8,7 @@
 | Phase | Tables / surface | PR | Status |
 |---|---|---|---|
 | 1 | `profiles` decouple (`auth_user_id`, `account_type`) + `current_profile_id()` + full RLS migration; `households`, `household_members`, `household_invites`, `guardianship_claims`, `guardianship_audit`, `profile_credentials` stub; Henry #17 data migration | `feature/reg-1-identity-spine` | **this PR** |
-| 2 | No new tables. Switcher ("acting as"), per-person cards, claim/invite/consent UI, FAMILY-1 under-13 RSVP (RSVP writes act through `can_manage_profile`) | `feature/reg-2-family-ux` | next |
+| 2 | No new tables (migration E = RLS only). Switcher ("acting as"), per-person cards, claim/invite/consent UI, FAMILY-1 under-13 RSVP (RSVP writes act through `can_manage_profile`); roster-anchor hardening (managers can't bind a minor → `is_org_admin_for_minor` trustworthy) | `feature/reg-2-family-ux` | **built Jun 10** |
 | 3 | `registrations`, `payment_plans`, `payment_installments` (one-time = single installment), `waiver_templates`, `waiver_acceptances`; public checkout; Stripe Connect (sandbox) | `feature/reg-3-checkout` | after 2 |
 | 4 | No new tables (lifecycle + dunning columns live in Phase 3 DDL). AR-aging, revenue-by-month, Auto-Pay (`payment_methods` on household), refund ledger | `feature/reg-4-ar-autopay` | after 3 |
 

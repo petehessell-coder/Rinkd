@@ -1,6 +1,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import lazyWithRetry from './lib/lazyWithRetry';
 import { AuthContext, useAuth } from './lib/authContext';
+import { FamilyProvider } from './lib/familyContext';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import { getProfile, ensureProfileForUser, touchLastSeen } from './lib/auth';
@@ -52,6 +53,9 @@ const LeagueRegister = lazyWithRetry(() => import('./pages/LeagueRegister'));
 const TournamentRegister = lazyWithRetry(() => import('./pages/TournamentRegister'));
 const AcceptTeamInvite = lazyWithRetry(() => import('./pages/AcceptTeamInvite'));
 const AcceptLeagueInvite = lazyWithRetry(() => import('./pages/AcceptLeagueInvite'));
+const AcceptHouseholdInvite = lazyWithRetry(() => import('./pages/AcceptHouseholdInvite'));
+const Family = lazyWithRetry(() => import('./pages/Family'));
+const PersonCard = lazyWithRetry(() => import('./pages/PersonCard'));
 const Team = lazyWithRetry(() => import('./pages/Team'));
 const TeamManage = lazyWithRetry(() => import('./pages/TeamManage'));
 const ScorerView = lazyWithRetry(() => import('./pages/ScorerView'));
@@ -182,6 +186,9 @@ function AppRoutes() {
       {/* Magic-link landing for league-MANAGER invites (LEAGUE-MGR-1). Same
           public, self-routing pattern as the team-manager accept page. */}
       <Route path="/accept-league-invite" element={<AcceptLeagueInvite profile={profile} />} />
+      {/* Magic-link landing for household co-guardian invites (REG-2). Same
+          public, self-routing pattern as the team/league accept pages. */}
+      <Route path="/accept-household-invite" element={<AcceptHouseholdInvite profile={profile} />} />
       {/* Survey is public — accessible from auth screen, marketing pages, and embedded in feeds */}
       <Route path="/survey" element={<Survey />} />
       {/* Pricing is public — shareable + indexable; linked from hosting CTAs, activation banners, and More */}
@@ -235,6 +242,11 @@ function AppRoutes() {
       <Route path="/admin/moderation" element={<ProtectedRoute><AdminModeration currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/notifications" element={<ProtectedRoute><Notifications currentUser={user} profile={profile} /></ProtectedRoute>} />
+      {/* REG-2 family surface — household management (add a kid, invite a
+          co-parent, decide claims) + per-person card. Switcher lives in the
+          shell; this is the "Family settings" + acting-as destination. */}
+      <Route path="/family" element={<ProtectedRoute><Family currentUser={user} profile={profile} /></ProtectedRoute>} />
+      <Route path="/family/:profileId" element={<ProtectedRoute><PersonCard currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/messages" element={<ProtectedRoute><Messages currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/messages/:conversationId" element={<ProtectedRoute><Messages currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/tournament/:id" element={<Tournament currentUser={user} profile={profile} />} />
@@ -394,7 +406,9 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AuthContext.Provider value={{ user, profile, setProfile, loading, profileError }}>
-        <BrowserRouter><AppRoutes /></BrowserRouter>
+        <FamilyProvider>
+          <BrowserRouter><AppRoutes /></BrowserRouter>
+        </FamilyProvider>
       </AuthContext.Provider>
     </ErrorBoundary>
   );

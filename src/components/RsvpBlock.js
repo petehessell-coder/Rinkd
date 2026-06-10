@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { getGameRsvps, upsertRsvp, deleteRsvp } from '../lib/rsvp';
+import { useFamily } from '../lib/familyContext';
 
 const B = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
@@ -22,12 +23,21 @@ function dedupeByUser(list) {
   return Array.from(byUser.values());
 }
 
-export default function RsvpBlock({ gameId, compact = false }) {
+export default function RsvpBlock({ gameId, compact = false, actingForProfile = null }) {
   const [rsvps, setRsvps]     = useState([]);   // canonical list for this game
-  const [userId, setUserId]   = useState(null);
+  const [selfId, setSelfId]   = useState(null); // signed-in profile id (auth user)
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
   const mounted = useRef(true);
+
+  // REG-2 — RSVP on behalf of the acting-as person. An explicit
+  // `actingForProfile` prop (PersonCard) wins; otherwise fall back to the
+  // global acting-as context; otherwise it's just me. RLS (migration E) only
+  // permits writes where can_manage_profile(user_id) holds.
+  const fam = useFamily();
+  const actingProfile = actingForProfile || (fam.isSelf ? null : fam.activePerson);
+  const targetId = actingForProfile?.id || (fam.isSelf ? selfId : (fam.actingForId || selfId));
+  const onBehalf = !!targetId && !!selfId && targetId !== selfId;
 
   useEffect(() => {
     mounted.current = true;
@@ -39,7 +49,7 @@ export default function RsvpBlock({ gameId, compact = false }) {
     if (!user) { if (mounted.current) setLoading(false); return; }
     const all = await getGameRsvps(gameId);
     if (!mounted.current) return;
-    setUserId(user.id);
+    setSelfId(user.id);
     setRsvps(dedupeByUser(all));
     setLoading(false);
   }, [gameId]);
@@ -58,10 +68,10 @@ export default function RsvpBlock({ gameId, compact = false }) {
     return () => document.removeEventListener('visibilitychange', onVis);
   }, [load]);
 
-  // Single source of truth: derive myRsvp from rsvps. No separate myRsvp state.
+  // Single source of truth: derive myRsvp from rsvps for the acting-as target.
   const myRsvp = useMemo(
-    () => rsvps.find(r => r.user_id === userId) || null,
-    [rsvps, userId]
+    () => rsvps.find(r => r.user_id === targetId) || null,
+    [rsvps, targetId]
   );
 
   const inCount    = useMemo(() => rsvps.filter(r => r.status === 'in').length,    [rsvps]);
@@ -70,35 +80,38 @@ export default function RsvpBlock({ gameId, compact = false }) {
 
   const handleRsvp = async (status, e) => {
     if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
-    if (!userId || saving) return;
+    if (!targetId || saving) return;
     setSaving(true);
 
     const prevRsvps = rsvps;
     const currentStatus = myRsvp?.status;
     const togglingOff = currentStatus === status;
 
-    // Optimistic update — always operate by user_id, then dedupe.
+    // Optimistic update — always operate by the target user_id, then dedupe.
     if (togglingOff) {
-      setRsvps(prev => prev.filter(r => r.user_id !== userId));
+      setRsvps(prev => prev.filter(r => r.user_id !== targetId));
     } else {
       const optimistic = {
-        id: myRsvp?.id || `temp-${userId}`,
+        id: myRsvp?.id || `temp-${targetId}`,
         game_id: gameId,
-        user_id: userId,
+        user_id: targetId,
         status,
-        profile: myRsvp?.profile,
+        profile: myRsvp?.profile || (actingProfile ? {
+          id: actingProfile.id, name: actingProfile.name,
+          avatar_color: actingProfile.avatar_color, avatar_initials: actingProfile.avatar_initials,
+        } : undefined),
       };
       setRsvps(prev => dedupeByUser([
-        ...prev.filter(r => r.user_id !== userId),
+        ...prev.filter(r => r.user_id !== targetId),
         optimistic,
       ]));
     }
 
     try {
       if (togglingOff) {
-        await deleteRsvp(gameId, userId);
+        await deleteRsvp(gameId, targetId);
       } else {
-        await upsertRsvp(gameId, userId, status);
+        await upsertRsvp(gameId, targetId, status);
       }
       // Refresh from DB to get accurate counts + profiles.
       await load();
@@ -111,7 +124,7 @@ export default function RsvpBlock({ gameId, compact = false }) {
   };
 
   if (loading) return null;
-  if (!userId) return null;
+  if (!selfId) return null;
 
   const btnBase = {
     borderRadius: 999,
@@ -127,6 +140,11 @@ export default function RsvpBlock({ gameId, compact = false }) {
 
   return (
     <div style={{ marginTop: 10 }}>
+      {onBehalf && actingProfile && (
+        <div style={{ fontSize: 11, color: B.amber, fontWeight: 700, marginBottom: 6, fontFamily: 'Barlow, sans-serif' }}>
+          RSVPing as {actingProfile.name?.split(' ')[0] || 'family member'}
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
 
         {/* I'm In */}

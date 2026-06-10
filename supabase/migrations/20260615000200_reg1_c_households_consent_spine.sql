@@ -409,9 +409,10 @@ BEGIN
     WHERE mm.profile_id = p_minor AND mm.role = 'minor' AND mm.status = 'active'
       AND gm.role = 'guardian' AND gm.status = 'active'
   LOOP
-    INSERT INTO public.notifications (recipient_id, actor_id, kind, body, metadata)
+    INSERT INTO public.notifications (recipient_id, actor_id, kind, body, url, metadata)
     VALUES (g.profile_id, p_claimant, 'guardianship_claim',
             'Someone asked to manage a family member''s profile. Review the request.',
+            '/family',
             jsonb_build_object('claim_id', v_claim, 'minor_profile_id', p_minor));
   END LOOP;
 
