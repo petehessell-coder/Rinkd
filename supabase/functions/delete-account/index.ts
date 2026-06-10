@@ -1,10 +1,17 @@
 // Edge Function: delete-account
 //
-// Called by the user's own session token (verify_jwt:true). Deletes the auth.users
-// row for the calling user, which cascades to profiles and from there to all the
-// content tables wired with ON DELETE CASCADE (posts, comments, likes, follows,
+// Called by the user's own session token (verify_jwt:true). Deletes the caller's
+// profiles row explicitly (REG-1 decoupled profiles from auth.users, so the old
+// auth→profiles CASCADE no longer exists — profiles.auth_user_id is ON DELETE
+// SET NULL because a minor's identity must not die with a guardian's login),
+// then deletes the auth.users row. The profile delete cascades to all content
+// tables wired with ON DELETE CASCADE (posts, comments, likes, follows,
 // team_members, etc.). Stewarded entities the user created (leagues, teams,
 // tournaments, articles, etc.) survive with SET NULL on their owner column.
+//
+// Order matters: profile first (while the auth_user_id link still exists),
+// auth user second. If the auth delete fails the user can retry; the profile
+// lookup simply finds nothing and the retry deletes only the auth user.
 //
 // Belt-and-suspenders: we verify the JWT-derived user_id matches the user we're
 // deleting, so a malformed call can't be used to delete someone else.
@@ -49,6 +56,19 @@ serve(async (req) => {
 
     // Service-role admin client does the actual delete.
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
+
+    // REG-1: delete the profile row first (auth→profiles no longer cascades).
+    // Keyed on auth_user_id so it only ever hits the caller's own profile.
+    const { error: profErr } = await admin
+      .from('profiles')
+      .delete()
+      .eq('auth_user_id', user.id);
+    if (profErr) {
+      console.error('[delete-account] profile delete failed', profErr);
+      return new Response(JSON.stringify({ error: profErr.message }),
+        { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } });
+    }
+
     const { error: delErr } = await admin.auth.admin.deleteUser(user.id);
     if (delErr) {
       console.error('[delete-account] admin.deleteUser failed', delErr);
