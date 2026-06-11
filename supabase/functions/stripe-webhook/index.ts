@@ -179,6 +179,37 @@ serve(async (req) => {
         })
       }
 
+      // ---- Player registrations (REG-3 spine) -----------------------------
+      // Individual checkout created by the register-player edge fn. ONE
+      // transactional RPC completes the money trail (installment → plan →
+      // registration), resolves the registration THROUGH the installment's
+      // plan (metadata.registration_id is just a log hint), is idempotent on
+      // the registration (the last write), and any failure returns 500 so
+      // Stripe redelivers.
+      if (session?.metadata?.kind === "player") {
+        // Async payment methods would deliver completed before paid — only
+        // settle the ledger on an actually-paid session. (Card-only today.)
+        if (session.payment_status && session.payment_status !== "paid") {
+          console.warn("[stripe-webhook] player session completed but not paid", { session_id: session.id, payment_status: session.payment_status })
+          return new Response(JSON.stringify({ received: true, deferred: true }), {
+            status: 200, headers: { "Content-Type": "application/json" },
+          })
+        }
+        const { data: outcome, error: payErr } = await svc.rpc("reg3_mark_installment_paid", {
+          p_installment_id: session?.metadata?.installment_id || null,
+          p_session_id: session.id,
+          p_payment_intent: typeof session.payment_intent === "string" ? session.payment_intent : null,
+        })
+        if (payErr) {
+          console.error("[stripe-webhook] reg3_mark_installment_paid failed", { session_id: session.id, error: payErr.message })
+          return new Response("player payment record failed", { status: 500 })
+        }
+        console.log("[stripe-webhook] player registration payment", { session_id: session.id, reg_hint: session?.metadata?.registration_id, outcome })
+        return new Response(JSON.stringify({ received: true, outcome }), {
+          status: 200, headers: { "Content-Type": "application/json" },
+        })
+      }
+
       // ---- Registrations (league / tournament) --------------------------
       const kind = session?.metadata?.kind === "tournament" ? "tournament" : "league"
       const cfg = KINDS[kind]
@@ -203,9 +234,15 @@ serve(async (req) => {
         })
       }
 
-      // 1) mark paid + approved
+      // 1) mark paid + approved. amount_total_cents = what Stripe ACTUALLY
+      // charged (the connected-organizer gross-up only happens sometimes) —
+      // the REG-3 spine mirror prefers it over formula math for ledger truth.
       await svc.from(cfg.regTable)
-        .update({ paid_at: new Date().toISOString(), status: "approved" })
+        .update({
+          paid_at: new Date().toISOString(),
+          status: "approved",
+          amount_total_cents: typeof session.amount_total === "number" ? session.amount_total : null,
+        })
         .eq("id", reg.id)
 
       // 2) create the team row (nameplate)
@@ -226,19 +263,39 @@ serve(async (req) => {
         .eq("id", reg.id)
 
       console.log("[stripe-webhook] registration approved + team created", { kind, reg_id: reg.id, team_id: team.id })
+    } else if (event.type === "checkout.session.expired") {
+      // REG-3: an abandoned player checkout releases its installment
+      // (processing → scheduled) so register-player can resume the SAME
+      // pending registration with a fresh session instead of bricking on the
+      // one-live-registration guard. No-op for store/team-entry sessions.
+      const session = event.data.object as Record<string, any>
+      if (session?.metadata?.kind === "player") {
+        const svc = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+        const { data: outcome } = await svc.rpc("reg3_release_installment", { p_session_id: session.id })
+        console.log("[stripe-webhook] player session expired", { session_id: session.id, outcome })
+      }
     } else if (event.type === "account.updated") {
-      // Connect (Express) onboarding progress — flip the organizer's readiness flags.
+      // Connect (Express) onboarding progress. Stripe doesn't guarantee event
+      // ordering — a stale delivery could flip readiness the wrong way — so we
+      // fetch the CURRENT account state and persist that, using the event only
+      // as the trigger.
       const account = event.data.object as Record<string, any>
       const svc = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+      let fresh = account
+      try {
+        fresh = await stripe.accounts.retrieve(account.id)
+      } catch (e) {
+        console.warn("[stripe-webhook] accounts.retrieve failed; using event payload", { account_id: account.id, error: (e as Error)?.message })
+      }
       await svc.from("stripe_connect_accounts")
         .update({
-          charges_enabled: !!account.charges_enabled,
-          payouts_enabled: !!account.payouts_enabled,
-          details_submitted: !!account.details_submitted,
+          charges_enabled: !!fresh.charges_enabled,
+          payouts_enabled: !!fresh.payouts_enabled,
+          details_submitted: !!fresh.details_submitted,
           updated_at: new Date().toISOString(),
         })
         .eq("stripe_account_id", account.id)
-      console.log("[stripe-webhook] connect account.updated", { account_id: account.id, charges_enabled: !!account.charges_enabled })
+      console.log("[stripe-webhook] connect account.updated", { account_id: account.id, charges_enabled: !!fresh.charges_enabled })
     }
 
     // Ack all other event types.

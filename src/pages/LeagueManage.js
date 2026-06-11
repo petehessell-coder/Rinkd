@@ -20,6 +20,7 @@ import { generateLeagueSchedule } from '../lib/leagueScheduleGenerator';
 import { uploadMedia } from '../lib/posts';
 import { classifyImage } from '../lib/imageModeration';
 import { assignTeamManagerByInput } from '../lib/leagueTeamManagers';
+import PlayerRegistrationsSection from '../components/PlayerRegistrationsSection';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 const inputStyle = { width:'100%', background:'#07111F', border:`0.5px solid ${C.border}`, borderRadius:8, padding:'10px 12px', color:C.ice, fontFamily:'Barlow, sans-serif', fontSize:14, outline:'none' };
@@ -1554,6 +1555,9 @@ function RegistrationsTab({ leagueId, league, registrations, onChanged }) {
           </div>
         );
       })}
+      {/* REG-3: individual player registrations (fee, waiver, link, list,
+          assign-to-roster) — reads the money spine, separate from team entry. */}
+      <PlayerRegistrationsSection kind="league" event={league} />
     </>
   );
 }

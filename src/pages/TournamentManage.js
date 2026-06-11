@@ -23,6 +23,7 @@ import SponsorsManager from '../components/SponsorsManager';
 import { supabase } from '../lib/supabase';
 import { getTournamentRegistrations, updateTournamentRegistrationStatus, approveTournamentRegistration } from '../lib/registrations';
 import { tournamentPayoutsReady, startConnectOnboarding } from '../lib/stripeConnect';
+import PlayerRegistrationsSection from '../components/PlayerRegistrationsSection';
 
 const C = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
@@ -1011,6 +1012,9 @@ function RegistrationsTab({ tournamentId, tournament, reload, flash }) {
           );
         })
       )}
+      {/* REG-3: individual player registrations (fee, waiver, link, list) —
+          reads the money spine, separate from team entry. */}
+      <PlayerRegistrationsSection kind="tournament" event={tournament} />
     </div>
   );
 }

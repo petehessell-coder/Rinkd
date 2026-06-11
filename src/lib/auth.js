@@ -104,6 +104,13 @@ export async function ensureProfileForUser(user) {
 
   const { error: profileError } = await supabase.from('profiles').upsert({
     id: user.id,
+    // REG-1: profiles are decoupled from auth.users. Real users keep
+    // id === auth uid (so existing user.id comparisons stay correct) AND
+    // carry the explicit auth_user_id link that RLS routes through via
+    // current_profile_id(). Managed/minor profiles (auth_user_id NULL) are
+    // only ever minted server-side by create_managed_profile().
+    auth_user_id: user.id,
+    account_type: 'adult',
     email: (user.email || '').toLowerCase(),
     name,
     handle,
