@@ -9,7 +9,7 @@
 |---|---|---|---|
 | 1 | `profiles` decouple (`auth_user_id`, `account_type`) + `current_profile_id()` + full RLS migration; `households`, `household_members`, `household_invites`, `guardianship_claims`, `guardianship_audit`, `profile_credentials` stub; Henry #17 data migration | `feature/reg-1-identity-spine` | **this PR** |
 | 2 | No new tables (migration E = RLS only). Switcher ("acting as"), per-person cards, claim/invite/consent UI, FAMILY-1 under-13 RSVP (RSVP writes act through `can_manage_profile`); roster-anchor hardening (managers can't bind a minor → `is_org_admin_for_minor` trustworthy) | `feature/reg-2-family-ux` | **built Jun 10** |
-| 3 | `registrations`, `payment_plans`, `payment_installments` (one-time = single installment), `waiver_templates`, `waiver_acceptances`; public checkout; Stripe Connect (sandbox) | `feature/reg-3-checkout` | after 2 |
+| 3 | `registrations`, `payment_plans`, `payment_installments` (one-time = single installment), `waiver_templates`, `waiver_acceptances`; player checkout (`register-player` fn); legacy team-entry mirrored into the spine via trigger + backfill; Stripe Connect (sandbox) | `feature/reg-3-checkout` | **built Jun 11** |
 | 4 | No new tables (lifecycle + dunning columns live in Phase 3 DDL). AR-aging, revenue-by-month, Auto-Pay (`payment_methods` on household), refund ledger | `feature/reg-4-ar-autopay` | after 3 |
 
 ## Phase 1 (shipped in this PR — see migrations 20260615000000–000300)
@@ -94,7 +94,9 @@ Notes locked now so Phase 3 starts clean:
 - **AR aging / family invoices read the same rows**: org view aggregates `payment_installments` by `due_date`+`status`; family view filters `registrations.household_id`. No parallel schema.
 - **Fee math** (per `docs/Rinkd_Pricing_Guide.docx`): registrant pays `total = base + processing_fee`; organizer receives `base − platform_fee(1%)` via Connect destination charge with `application_fee_amount = platform_fee + processing_fee`.
 - **Refund sliding scale** (100% >14d / 50% 7–14d / 0% <7d; tech fee non-refundable once event runs) lands in `refunded_cents` + a Phase-4 `refunds` ledger keyed to `stripe_refund_id`. Refund × partially-paid-installments proration = open question #3 in REGISTRATION_PARITY §6 — decide before Phase 4 ships.
-- **Team registrant reference** (open question #2): Phase 3 will point `registrant_id` at the **global `teams.id`** with the event-scoped row (`tournament_teams`/`league_teams`) discoverable via `target_id` join — revisit at Phase 3 kickoff per the sign-off note.
+- **Team registrant reference** (open question #2 — RESOLVED at Phase 3 kickoff, Jun 11): `registrant_id` points at the **event-scoped team row** (`league_teams`/`tournament_teams` id) and is **NULL until the webhook creates it** — nameplate league teams often have no global `teams` row at registration time, so the global-id plan was unimplementable. Enforced by CHECK: profile registrants must have a registrant_id; team registrants may be NULL.
+- **Spine = ledger (locked Jun 11)**: the team-entry flow stays untouched; `tr_mirror_league_registration` / `tr_mirror_tournament_registration` mirror legacy rows into the spine (idempotent on `source_kind`/`source_id`); `reg3_backfill_legacy()` re-syncs at will. Phase 4 reads ONLY the spine.
+- **Assign-to-roster is league-only in v1** — `tournament_teams` has no global `team_id`, so tournament rosters stay manual. `assign_registrant_to_team` uses migration E's consented `rinkd.allow_minor_roster` gate; a paid guardian-created registration is the consent.
 - **RLS sketch**: registrant self-read (`can_manage_profile(registrant_id)` for profile-type, `is_team_manager` for team-type), household roll-up read (`is_household_guardian(household_id, current_profile_id())`), org read/manage (`is_league_commissioner` / `is_tournament_director` on target), writes via checkout RPCs + Stripe webhook (service role).
 
 ## PostgREST embed discipline (P0 footgun — Jun 2 outage)

@@ -148,6 +148,14 @@ export default function TournamentRegister() {
           )}
         </div>
 
+        {/* REG-3: cross-link to individual player registration when open. */}
+        {tournament.player_registration_open && (
+          <button onClick={() => navigate(`/tournament/${id}/register-player`)}
+            style={{ marginTop: 12, background: 'transparent', border: 'none', color: '#5B8CC5', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', padding: 0 }}>
+            Registering a player instead of a team? →
+          </button>
+        )}
+
         {closed ? (
           <div style={{ marginTop: 18, background: 'rgba(245,158,11,0.12)', border: '0.5px solid rgba(245,158,11,0.4)', borderRadius: 10, padding: '14px 16px' }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: C.amber }}>Registration is currently closed</div>

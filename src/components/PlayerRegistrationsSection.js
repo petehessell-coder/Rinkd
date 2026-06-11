@@ -1,0 +1,217 @@
+import React, { useEffect, useState } from 'react';
+import { Avatar } from './Logos';
+import { supabase } from '../lib/supabase';
+import {
+  getEventPlayerRegistrations, assignRegistrantToTeam, saveWaiverTemplate, regPaymentState,
+} from '../lib/playerReg';
+
+// REG-3 — org-side player registrations, dropped into the existing
+// Registrations tab of LeagueManage + TournamentManage:
+//   • settings: per-player fee, open/close toggle, shareable link, waiver editor
+//   • the Players list: paid state, waiver state, assign-to-roster (league only)
+// All money state reads the spine; assignment uses the consented
+// assign_registrant_to_team RPC (migration F).
+
+const B = {
+  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
+  steel: '#8BA3BE', dark: '#07111F', card: '#112236', border: '#1E3A5C',
+  green: '#22C55E', amber: '#F59E0B',
+};
+const fmt$ = (c) => `$${((c || 0) / 100).toFixed(2)}`;
+
+export default function PlayerRegistrationsSection({ kind, event, onEventUpdate }) {
+  const targetId = event?.id;
+  const [regs, setRegs] = useState([]);
+  const [teams, setTeams] = useState([]);          // league teams w/ global team link
+  const [waiver, setWaiver] = useState(null);
+  const [feeDollars, setFeeDollars] = useState(((event?.player_fee_cents || 0) / 100).toString());
+  const [open, setOpen] = useState(!!event?.player_registration_open);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [waiverEditing, setWaiverEditing] = useState(false);
+
+  const load = async () => {
+    if (!targetId) return;
+    try {
+      const [r, w] = await Promise.all([
+        getEventPlayerRegistrations(kind, targetId),
+        supabase.from('waiver_templates').select('id, title, body_md, required, version')
+          .eq('owner_type', kind).eq('owner_id', targetId).maybeSingle().then(x => x.data),
+      ]);
+      setRegs(r); setWaiver(w);
+      if (kind === 'league') {
+        const { data: lt } = await supabase
+          .from('league_teams')
+          .select('id, team_id, team_name, team:teams(id, name)')
+          .eq('league_id', targetId);
+        setTeams((lt || []).filter(t => t.team_id));   // assign needs a global team
+      }
+    } catch (e) {
+      setErr(e?.message || 'Could not load player registrations.');
+    }
+  };
+  // Reload when the event changes. `load` reads only kind/targetId-derived state.
+  useEffect(() => { load(); }, [kind, targetId]); // eslint-disable-line
+
+  const saveSettings = async () => {
+    setBusy(true); setErr('');
+    try {
+      const cents = Math.max(Math.round(parseFloat(feeDollars || '0') * 100) || 0, 0);
+      const table = kind === 'tournament' ? 'tournaments' : 'leagues';
+      const { error } = await supabase.from(table)
+        .update({ player_fee_cents: cents, player_registration_open: open })
+        .eq('id', targetId);
+      if (error) throw error;
+      onEventUpdate?.({ player_fee_cents: cents, player_registration_open: open });
+    } catch (e) { setErr(e?.message || 'Could not save.'); }
+    finally { setBusy(false); }
+  };
+
+  const regLink = `${window.location.origin}/${kind}/${targetId}/register-player`;
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(regLink); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch (_) {}
+  };
+
+  const assign = async (regId, teamId) => {
+    if (!teamId) return;
+    setBusy(true); setErr('');
+    try { await assignRegistrantToTeam(regId, teamId); await load(); }
+    catch (e) { setErr(e?.message || 'Could not assign to team.'); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div style={{ marginTop: 28, fontFamily: "'Barlow', sans-serif" }}>
+      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 20, color: B.ice, marginBottom: 10 }}>
+        Player registration
+      </div>
+      {err && <div style={{ background: 'rgba(215,38,56,0.12)', border: '1px solid rgba(215,38,56,0.4)', color: '#FCA5A5', borderRadius: 10, padding: '8px 12px', fontSize: 13, marginBottom: 10 }}>{err}</div>}
+
+      {/* settings */}
+      <div style={{ background: B.card, border: `1px solid ${B.border}`, borderRadius: 12, padding: 14, marginBottom: 12 }}>
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <label style={{ fontSize: 12, color: B.steel }}>
+            <div style={{ marginBottom: 4, fontWeight: 600 }}>Fee per player ($)</div>
+            <input type="number" min="0" step="0.01" value={feeDollars}
+              onChange={e => setFeeDollars(e.target.value)}
+              style={{ width: 110, background: B.dark, border: `1px solid ${B.border}`, borderRadius: 8, padding: '8px 10px', color: B.ice, fontSize: 14 }} />
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: B.ice, paddingBottom: 8, cursor: 'pointer' }}>
+            <input type="checkbox" checked={open} onChange={e => setOpen(e.target.checked)} />
+            Open for player registration
+          </label>
+          <button onClick={saveSettings} disabled={busy}
+            style={{ background: B.blue, color: '#fff', border: 'none', borderRadius: 999, padding: '9px 18px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+            Save
+          </button>
+          <button onClick={copy}
+            style={{ background: 'transparent', color: B.ice, border: `1px solid ${B.border}`, borderRadius: 999, padding: '9px 18px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+            {copied ? 'Link copied ✓' : 'Copy registration link'}
+          </button>
+        </div>
+
+        {/* waiver */}
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${B.border}` }}>
+          {waiverEditing ? (
+            <WaiverEditor kind={kind} targetId={targetId} waiver={waiver}
+              onDone={async () => { setWaiverEditing(false); await load(); }}
+              onCancel={() => setWaiverEditing(false)} />
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: B.steel }}>
+              {waiver
+                ? <>📄 <strong style={{ color: B.ice }}>{waiver.title}</strong> · v{waiver.version} · {waiver.required ? 'required at checkout' : 'optional'}</>
+                : <>No waiver yet — registrants won't be asked to sign anything.</>}
+              <button onClick={() => setWaiverEditing(true)}
+                style={{ marginLeft: 'auto', background: 'transparent', color: B.blue, border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                {waiver ? 'Edit waiver' : '＋ Add waiver'}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* players */}
+      {regs.length === 0 ? (
+        <div style={{ color: B.steel, fontSize: 13 }}>No player registrations yet. Share the link above to get started.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {regs.map(r => {
+            const pay = regPaymentState(r);
+            const signed = (r.waivers || []).length > 0;
+            return (
+              <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: B.card, border: `1px solid ${B.border}`, borderRadius: 12, padding: 12, flexWrap: 'wrap' }}>
+                <Avatar profile={r.registrant} size={34} />
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: B.ice }}>{r.registrant?.name || 'Player'}</div>
+                  <div style={{ fontSize: 11, color: B.steel }}>
+                    {new Date(r.created_at).toLocaleDateString()} · {fmt$(r.amount_cents)}{signed ? ' · waiver ✓' : ''}
+                  </div>
+                </div>
+                <span style={{
+                  fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '4px 10px',
+                  background: pay === 'paid' || pay === 'free' ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.15)',
+                  color: pay === 'paid' || pay === 'free' ? B.green : B.amber,
+                }}>
+                  {pay === 'paid' ? '✓ Paid' : pay === 'free' ? '✓ Registered' : pay === 'unpaid' ? 'Unpaid' : pay}
+                </span>
+                {kind === 'league' && r.status === 'active' && (
+                  r.rostered_team_id ? (
+                    <span style={{ fontSize: 12, color: B.steel }}>
+                      On {teams.find(t => t.team_id === r.rostered_team_id)?.team?.name
+                        || teams.find(t => t.team_id === r.rostered_team_id)?.team_name || 'a team'} ✓
+                    </span>
+                  ) : teams.length > 0 ? (
+                    <select defaultValue="" disabled={busy} onChange={e => assign(r.id, e.target.value)}
+                      style={{ background: B.dark, color: B.ice, border: `1px solid ${B.border}`, borderRadius: 8, padding: '7px 10px', fontSize: 12 }}>
+                      <option value="" disabled>Assign to team…</option>
+                      {teams.map(t => (
+                        <option key={t.id} value={t.team_id}>{t.team?.name || t.team_name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span style={{ fontSize: 11, color: B.steel }}>No rosterable teams yet</span>
+                  )
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WaiverEditor({ kind, targetId, waiver, onDone, onCancel }) {
+  const [title, setTitle] = useState(waiver?.title || 'Participation Waiver');
+  const [body, setBody] = useState(waiver?.body_md || '');
+  const [required, setRequired] = useState(waiver ? !!waiver.required : true);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const save = async () => {
+    if (!body.trim()) { setErr('Waiver text is required.'); return; }
+    setBusy(true); setErr('');
+    try { await saveWaiverTemplate(kind, targetId, { title: title.trim() || 'Participation Waiver', body_md: body, required }); onDone(); }
+    catch (e) { setErr(e?.message || 'Could not save the waiver.'); setBusy(false); }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {err && <div style={{ color: '#FCA5A5', fontSize: 12 }}>{err}</div>}
+      <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Waiver title"
+        style={{ background: B.dark, border: `1px solid ${B.border}`, borderRadius: 8, padding: '8px 10px', color: B.ice, fontSize: 13 }} />
+      <textarea value={body} onChange={e => setBody(e.target.value)} rows={6}
+        placeholder="Paste your waiver text here. Registrants (or their guardian, for kids) accept it at checkout — each acceptance is recorded with who signed, for whom, and when."
+        style={{ background: B.dark, border: `1px solid ${B.border}`, borderRadius: 8, padding: '8px 10px', color: B.ice, fontSize: 13, fontFamily: "'Barlow', sans-serif", resize: 'vertical' }} />
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: B.ice, cursor: 'pointer' }}>
+        <input type="checkbox" checked={required} onChange={e => setRequired(e.target.checked)} />
+        Required to register {waiver ? `(saving bumps it to v${(waiver.version || 1) + 1})` : ''}
+      </label>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={save} disabled={busy} style={{ background: B.blue, color: '#fff', border: 'none', borderRadius: 999, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Save waiver</button>
+        <button onClick={onCancel} style={{ background: 'transparent', color: B.steel, border: `1px solid ${B.border}`, borderRadius: 999, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+      </div>
+    </div>
+  );
+}

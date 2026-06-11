@@ -179,6 +179,52 @@ serve(async (req) => {
         })
       }
 
+      // ---- Player registrations (REG-3 spine) -----------------------------
+      // Individual checkout created by the register-player edge fn. The money
+      // trail lives in the spine: installment → paid, plan → complete,
+      // registration → active. Idempotent on the installment status.
+      if (session?.metadata?.kind === "player") {
+        const regId = session?.metadata?.registration_id || null
+        const instId = session?.metadata?.installment_id || null
+
+        let iq = svc.from("payment_installments").select("id, status, payment_plan_id")
+        iq = instId ? iq.eq("id", instId) : iq.eq("stripe_session_id", session.id)
+        const { data: inst } = await iq.maybeSingle()
+
+        if (!inst) {
+          console.warn("[stripe-webhook] no installment for player session", { session_id: session.id, regId })
+          return new Response(JSON.stringify({ received: true, matched: false }), {
+            status: 200, headers: { "Content-Type": "application/json" },
+          })
+        }
+        if (inst.status === "paid") {
+          return new Response(JSON.stringify({ received: true, alreadyProcessed: true }), {
+            status: 200, headers: { "Content-Type": "application/json" },
+          })
+        }
+
+        await svc.from("payment_installments").update({
+          status: "paid",
+          paid_at: new Date().toISOString(),
+          stripe_payment_intent_id: typeof session.payment_intent === "string" ? session.payment_intent : null,
+        }).eq("id", inst.id)
+        await svc.from("payment_plans").update({ status: "complete" }).eq("id", inst.payment_plan_id)
+        if (regId) {
+          await svc.from("registrations").update({ status: "active" }).eq("id", regId)
+        } else {
+          const { data: plan } = await svc.from("payment_plans")
+            .select("registration_id").eq("id", inst.payment_plan_id).maybeSingle()
+          if (plan?.registration_id) {
+            await svc.from("registrations").update({ status: "active" }).eq("id", plan.registration_id)
+          }
+        }
+
+        console.log("[stripe-webhook] player registration paid", { reg_id: regId, installment_id: inst.id })
+        return new Response(JSON.stringify({ received: true }), {
+          status: 200, headers: { "Content-Type": "application/json" },
+        })
+      }
+
       // ---- Registrations (league / tournament) --------------------------
       const kind = session?.metadata?.kind === "tournament" ? "tournament" : "league"
       const cfg = KINDS[kind]

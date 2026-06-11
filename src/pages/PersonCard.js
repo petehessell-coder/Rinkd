@@ -6,6 +6,7 @@ import RsvpBlock from '../components/RsvpBlock';
 import { supabase } from '../lib/supabase';
 import { useFamily } from '../lib/familyContext';
 import { getPersonTeams, getPersonUpcomingGames } from '../lib/family';
+import { regPaymentState } from '../lib/playerReg';
 
 // REG-2 — one person = one card that's everything (REGISTRATION_PARITY §3).
 // The acting-as destination: a managed person's teams + upcoming games, each
@@ -34,6 +35,7 @@ export default function PersonCard({ profile }) {
   const [person, setPerson] = useState(null);
   const [teams, setTeams] = useState([]);
   const [games, setGames] = useState([]);
+  const [regs, setRegs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
@@ -65,6 +67,17 @@ export default function PersonCard({ profile }) {
         const g = await getPersonUpcomingGames(t.map(x => x.team_id));
         if (cancelled) return;
         setGames(g);
+        // Registrations (money woven in) — RLS scopes to rows I'm involved in;
+        // returns [] cleanly before the Phase-3 migration lands.
+        const { data: rr } = await supabase
+          .from('registrations')
+          .select(`id, target_type, target_id, status, amount_cents, created_at,
+                   plan:payment_plans(total_cents, status,
+                     installments:payment_installments(status, paid_at))`)
+          .eq('registrant_type', 'profile')
+          .eq('registrant_id', profileId)
+          .order('created_at', { ascending: false });
+        if (!cancelled) setRegs(rr || []);
       } catch (_) {
         if (!cancelled) setNotFound(true);
       } finally {
@@ -121,6 +134,38 @@ export default function PersonCard({ profile }) {
               </button>
             ))}
           </div>
+        )}
+
+        {/* Registrations — money woven into the person card */}
+        {regs.length > 0 && (
+          <>
+            <SectionLabel>Registrations</SectionLabel>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 }}>
+              {regs.map(r => {
+                const pay = regPaymentState(r);
+                const paid = pay === 'paid' || pay === 'free';
+                return (
+                  <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: B.card, border: `1px solid ${B.border}`, borderRadius: 12, padding: '10px 14px' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: B.ice }}>
+                        {r.target_type === 'league' ? 'League' : r.target_type === 'tournament' ? 'Tournament' : 'Program'} registration
+                      </div>
+                      <div style={{ fontSize: 11, color: B.steel }}>
+                        {new Date(r.created_at).toLocaleDateString()} · ${((r.amount_cents || 0) / 100).toFixed(2)}
+                      </div>
+                    </div>
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '4px 10px',
+                      background: paid ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.15)',
+                      color: paid ? '#22C55E' : '#F59E0B',
+                    }}>
+                      {pay === 'paid' ? '✓ Paid' : pay === 'free' ? '✓ Registered' : pay === 'unpaid' ? 'Payment pending' : r.status}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
 
         {/* Upcoming games with RSVP-on-behalf */}

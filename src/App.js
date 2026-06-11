@@ -56,6 +56,7 @@ const AcceptLeagueInvite = lazyWithRetry(() => import('./pages/AcceptLeagueInvit
 const AcceptHouseholdInvite = lazyWithRetry(() => import('./pages/AcceptHouseholdInvite'));
 const Family = lazyWithRetry(() => import('./pages/Family'));
 const PersonCard = lazyWithRetry(() => import('./pages/PersonCard'));
+const RegisterPlayer = lazyWithRetry(() => import('./pages/RegisterPlayer'));
 const Team = lazyWithRetry(() => import('./pages/Team'));
 const TeamManage = lazyWithRetry(() => import('./pages/TeamManage'));
 const ScorerView = lazyWithRetry(() => import('./pages/ScorerView'));
@@ -230,6 +231,11 @@ function AppRoutes() {
           may have no Rinkd account. Must stay outside ProtectedRoute. */}
       <Route path="/league/:id/register" element={<LeagueRegister />} />
       <Route path="/tournament/:id/register" element={<TournamentRegister />} />
+      {/* REG-3 — individual (player/kid) registration. Sign-in IS required (the
+          household/consent model needs an identity), but the route stays public
+          so the shared link self-handles the login bounce with returnTo. */}
+      <Route path="/league/:id/register-player" element={<RegisterPlayer profile={profile} kind="league" />} />
+      <Route path="/tournament/:id/register-player" element={<RegisterPlayer profile={profile} kind="tournament" />} />
       <Route path="/league/:id" element={<League currentUser={user} profile={profile} />} />
       <Route path="/team/create" element={<ProtectedRoute><TeamManage profile={profile} /></ProtectedRoute>} />
       <Route path="/team/:id/manage" element={<ProtectedRoute><TeamManage profile={profile} /></ProtectedRoute>} />
