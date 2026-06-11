@@ -7,6 +7,7 @@ import {
   createHousehold, createManagedProfile, createHouseholdInvite,
   decideGuardianshipClaim, cancelGuardianshipClaim, removeHouseholdMember,
 } from '../lib/family';
+import FamilyMoney from '../components/FamilyMoney';
 
 // REG-2 — the family surface. Household plumbing reached from the switcher's
 // "Family settings": per-person cards, add a kid, invite a co-parent, decide
@@ -157,6 +158,9 @@ export default function Family({ profile }) {
           <button onClick={() => setModal('add')} style={primaryBtn(false)}>＋ Add a family member</button>
           <button onClick={() => setModal('invite')} style={ghostBtn}>Invite a co-parent</button>
         </div>
+
+        {/* REG-4: invoices (Pay now / Auto-Pay) + receipts — money woven in. */}
+        <FamilyMoney />
       </div>
 
       {modal === 'add' && (

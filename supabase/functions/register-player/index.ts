@@ -22,7 +22,9 @@ import Stripe from "https://esm.sh/stripe@16.12.0?target=deno"
 //   processing grossed up to the registrant; destination charge when the
 //   organizer has Connect payouts enabled, plain platform charge otherwise.
 
-const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY")
+// REG-4 secret split: registrations run on their own key (sandbox until paid
+// launch); fallback keeps pre-split behavior until the secret is set.
+const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_REG_SECRET_KEY") ?? Deno.env.get("STRIPE_SECRET_KEY")
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
@@ -114,11 +116,19 @@ serve(async (req) => {
     // ── Event state (server-side truth) ──
     const { data: parent, error: pErr } = await svc
       .from(cfg.parentTable)
-      .select(`id, name, ${cfg.ownerCol}, player_fee_cents, player_registration_open`)
+      .select(`id, name, ${cfg.ownerCol}, player_fee_cents, player_registration_open, player_installments_max`)
       .eq("id", parentId)
       .single()
     if (pErr || !parent) return json({ error: "event not found" }, 404)
     if (!parent.player_registration_open) return json({ error: "closed", reason: "closed" }, 409)
+
+    // ── Installments (REG-4): N monthly payments when the organizer offers
+    //    them. Each charge pays its own Stripe fee (per-installment gross-up);
+    //    the first installment is due NOW and goes through this checkout, the
+    //    rest are scheduled monthly (Auto-Pay or dunning reminders collect them).
+    const maxN = Math.max(Number(parent.player_installments_max) || 1, 1)
+    const askedN = Math.max(Number(body.installmentsCount) || 1, 1)
+    const nInstallments = Math.min(askedN, maxN)
 
     // ── Waiver (LA-2): required waivers must be accepted, and the acceptance
     //    is recorded against the guardian who consented. The client sends the
@@ -143,9 +153,20 @@ serve(async (req) => {
       return json({ error: "this event's player fee is set below $1 — ask the organizer to fix it", reason: "fee_too_small" }, 409)
     }
     const ownerId = parent[cfg.ownerCol]
-    const total = feeCents > 0 ? Math.round((feeCents + 30) / 0.971) : 0
+
+    // Per-installment money: split the base into N parts (remainder on the
+    // first), gross up EACH part (every charge pays its own Stripe fee).
+    // Each part must stay ≥ $1 (the same floor as a one-time fee).
+    const grossUp = (b: number) => Math.round((b + 30) / 0.971)
+    const n = feeCents > 0 ? Math.min(nInstallments, Math.max(Math.floor(feeCents / 100), 1)) : 1
+    const baseShare = feeCents > 0 ? Math.floor(feeCents / n) : 0
+    const bases = feeCents > 0
+      ? Array.from({ length: n }, (_, i) => baseShare + (i === 0 ? feeCents - baseShare * n : 0))
+      : []
+    const amounts = bases.map(grossUp)
+    const total = amounts.reduce((s, a) => s + a, 0)
     // Recorded platform fee = base − round(base*0.99): the EXACT amount the
-    // destination charge keeps after the processing passthrough, so the
+    // destination charges keep after the processing passthrough, so the
     // ledger equals Stripe to the cent.
     const platformFee = feeCents > 0 ? feeCents - Math.round(feeCents * 0.99) : 0
 
@@ -155,22 +176,28 @@ serve(async (req) => {
     //    of bricking the kid's registration. ──
     const { data: dup } = await svc
       .from("registrations")
-      .select("id, status, amount_cents, plan:payment_plans(id, installments:payment_installments(id, status))")
+      .select("id, status, amount_cents, plan:payment_plans(id, installments:payment_installments(id, status, due_date, amount_cents, base_cents))")
       .eq("registrant_type", "profile").eq("registrant_id", profileId)
       .eq("target_type", kind).eq("target_id", parentId)
       .in("status", ["pending", "active", "waitlisted"])
       .maybeSingle()
     let resumeRegId: string | null = null
     let resumeInstId: string | null = null
+    let resumeAmount = 0
+    let resumeBase = 0
     if (dup) {
-      const dupInst = dup.plan?.installments?.[0]
-      const resumable = dup.status === "pending" && feeCents > 0
-        && dupInst && dupInst.status !== "paid"
+      // Resume the EARLIEST unpaid, uncancelled installment of a pending plan.
+      const unpaid = (dup.plan?.installments || [])
+        .filter((i: any) => !["paid", "refunded", "cancelled"].includes(i.status))
+        .sort((a: any, b: any) => String(a.due_date).localeCompare(String(b.due_date)))
+      const resumable = dup.status === "pending" && feeCents > 0 && unpaid.length > 0
       if (!resumable) {
         return json({ error: `${registrant.name} is already registered`, reason: "duplicate", registrationId: dup.id }, 409)
       }
       resumeRegId = dup.id
-      resumeInstId = dupInst.id
+      resumeInstId = unpaid[0].id
+      resumeAmount = unpaid[0].amount_cents
+      resumeBase = unpaid[0].base_cents
     }
 
     // ── Household for the family roll-up: a household where the caller is a
@@ -249,7 +276,8 @@ serve(async (req) => {
         return json({ free: true, registrationId: regId })
       }
 
-      // ── Money objects (one-time = one installment due now) ──
+      // ── Money objects: N installments, first due NOW (this checkout pays
+      //    it), the rest scheduled monthly. n===1 is the one-time plan. ──
       const { data: plan, error: planErr } = await svc
         .from("payment_plans")
         .insert({
@@ -257,19 +285,29 @@ serve(async (req) => {
           total_cents: total,
           platform_fee_cents: platformFee,
           processing_fee_cents: total - feeCents,
-          plan_type: "one_time",
+          plan_type: n > 1 ? "installments" : "one_time",
           status: "active",
         })
         .select("id")
         .single()
       if (planErr || !plan) throw new Error("could not create payment plan")
-      const { data: inst, error: instErr } = await svc
+      const today = new Date()
+      const rows = bases.map((b, i) => {
+        const due = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + i, today.getUTCDate()))
+        return {
+          payment_plan_id: plan.id,
+          amount_cents: amounts[i],
+          base_cents: b,
+          status: "scheduled",
+          due_date: due.toISOString().slice(0, 10),
+        }
+      })
+      const { data: insts, error: instErr } = await svc
         .from("payment_installments")
-        .insert({ payment_plan_id: plan.id, amount_cents: total, status: "scheduled" })
-        .select("id")
-        .single()
-      if (instErr || !inst) throw new Error("could not create installment")
-      instId = inst.id
+        .insert(rows)
+        .select("id, due_date")
+      if (instErr || !insts || insts.length !== rows.length) throw new Error("could not create installments")
+      instId = insts.sort((a: any, b: any) => String(a.due_date).localeCompare(String(b.due_date)))[0].id
     }
 
     // ── Connect (optional, same as team-entry) ──
@@ -289,19 +327,25 @@ serve(async (req) => {
       apiVersion: "2024-06-20",
     })
 
+    // This checkout charges exactly ONE installment: the first of a new plan,
+    // or the earliest unpaid one when resuming. Later installments collect via
+    // Auto-Pay / pay-installment.
+    const chargeBase = resumeRegId ? resumeBase : bases[0]
+    const chargeAmount = resumeRegId ? resumeAmount : amounts[0]
+    const nLabel = !resumeRegId && n > 1 ? ` (1 of ${n})` : ""
     const lineItems: Record<string, any>[] = [{
       quantity: 1,
       price_data: {
         currency: "usd",
-        unit_amount: feeCents,
+        unit_amount: chargeBase,
         product_data: {
-          name: `${parent.name} — Player Registration`,
+          name: `${parent.name} — Player Registration${nLabel}`,
           description: registrant.name,
         },
       },
     }, {
       quantity: 1,
-      price_data: { currency: "usd", unit_amount: total - feeCents, product_data: { name: "Processing fee" } },
+      price_data: { currency: "usd", unit_amount: chargeAmount - chargeBase, product_data: { name: "Processing fee" } },
     }]
 
     const sessionParams: Record<string, any> = {
@@ -315,7 +359,7 @@ serve(async (req) => {
     }
     if (connectedAccountId) {
       sessionParams.payment_intent_data = {
-        application_fee_amount: total - Math.round(feeCents * 0.99),
+        application_fee_amount: chargeAmount - Math.round(chargeBase * 0.99),
         transfer_data: { destination: connectedAccountId },
       }
     }

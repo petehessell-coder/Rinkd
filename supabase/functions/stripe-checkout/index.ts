@@ -14,7 +14,9 @@ import Stripe from "https://esm.sh/stripe@16.12.0?target=deno"
 // Rinkd, Stripe processing grossed up to the registrant. If not, the fee collects
 // into the Rinkd platform account and is settled manually.
 
-const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY")
+// REG-4 secret split: registrations run on their own key (sandbox until paid
+// launch); fallback keeps pre-split behavior until the secret is set.
+const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_REG_SECRET_KEY") ?? Deno.env.get("STRIPE_SECRET_KEY")
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
 

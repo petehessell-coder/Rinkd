@@ -28,5 +28,32 @@
 7. Team-entry mirror: run one legacy team registration (register page) → confirm a spine row appears with matching installment.
 8. **Restore the live `STRIPE_SECRET_KEY`** and re-run one merch-store load to confirm the store is unaffected.
 
-## 4. Recommended follow-up (Phase 4): split secrets
-Give registrations their own `STRIPE_REG_SECRET_KEY` so the merch store (live) and registrations (sandbox until launch) never share a key. One-line change in `register-player`/`stripe-checkout`/`stripe-webhook` once Phase 4 lands.
+## 4. Phase 4 additions (apply with migration G, `20260615000600`)
+
+### 4a. Secret split (SHIPPED in Phase 4 — set these instead of touching STRIPE_SECRET_KEY)
+Registrations and the merch store no longer share a key. Set:
+- `STRIPE_REG_SECRET_KEY` = the **sandbox** secret key (`sk_test_…`)
+- `STRIPE_REG_WEBHOOK_SECRET` = the sandbox webhook signing secret
+- `CRON_KEY` already exists (shared cron bearer)
+
+The store's `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` stay LIVE and untouched — **§2's "flip the secret" step is superseded**; never flip it. The webhook verifies signatures against both secrets and uses the matching environment's API key. All registration fns (`register-player`, `stripe-checkout`, `stripe-connect`, `pay-installment`, `setup-autopay`, `registration-admin`, `process-dunning`) read `STRIPE_REG_SECRET_KEY ?? STRIPE_SECRET_KEY`.
+
+### 4b. Deploy + cron
+1. Deploy new fns: `registration-admin`, `process-dunning`, `pay-installment`, `setup-autopay` (+ redeploy `stripe-webhook`, `register-player`, `stripe-checkout`, `stripe-connect`).
+2. Migration G self-schedules the two SQL crons (`rinkd-reg4-mark-past-due` 07:05 UTC, `rinkd-reg4-reconcile-nightly` 07:10 UTC). Schedule the Stripe-touching dunning worker manually (same pattern as the other fn crons, with the real cron token):
+```sql
+SELECT cron.schedule('rinkd-reg4-dunning-daily', '20 7 * * *', $$
+  select net.http_post(
+    url := 'https://tbpoopsyhfuqcbugrjbh.supabase.co/functions/v1/process-dunning',
+    headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer <CRON_KEY>'),
+    body := '{}'::jsonb, timeout_milliseconds := 120000) as request_id;
+$$);
+```
+3. Add Stripe webhook events in the SANDBOX endpoint: `checkout.session.expired` (Phase 3) — setup-mode sessions already arrive via `checkout.session.completed`.
+
+### 4c. Phase 4 sandbox end-to-end (≈10 min, after §3)
+1. Set the league's player fee to $30 with **Max installments 3**; register a kid choosing "3 payments" → pay 1 of 3 ($10.33 test card). Verify: registration `active`, installments 1 paid / 2 scheduled (monthly), PersonCard shows it, **Feed shows "You owe $10.33 for <kid>"**.
+2. `/family` → Pay now on installment 2 → test card → receipt appears; **Set up Auto-Pay** on the plan → hosted card entry → `payment_methods` row + plan bound.
+3. Backdate installment 3's `due_date` to yesterday; run `SELECT reg4_mark_past_due();` then invoke `process-dunning` with the cron token → installment charged off-session via the saved card → paid; plan `complete`.
+4. Org money view: tiles/aging/by-month reflect the above. **Refund** the registration → confirm 50%-window math (or override), Stripe refund visible in sandbox, unpaid rows `cancelled`, kid removed from roster.
+5. `SELECT reg4_reconcile();` → run row `ok`; check `/admin` notification path by inserting a bogus orphan spine row and re-running (then delete it).

@@ -33,6 +33,7 @@ export default function RegisterPlayer({ profile, kind = 'league' }) {
   const [ctx, setCtx] = useState(null);          // { event, waiver }
   const [loading, setLoading] = useState(true);
   const [who, setWho] = useState(null);          // profile id
+  const [nInst, setNInst] = useState(1);         // 1 = pay in full
   const [agree, setAgree] = useState(false);
   const [waiverOpen, setWaiverOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -66,9 +67,23 @@ export default function RegisterPlayer({ profile, kind = 'league' }) {
   const people = fam.members; // me-first + managed
   const chosen = useMemo(() => people.find(p => p.profile_id === who) || null, [people, who]);
   const fee = ctx?.event?.player_fee_cents || 0;
-  const total = fee > 0 ? Math.round((fee + 30) / 0.971) : 0;
   const waiver = ctx?.waiver;
   const needsAgree = !!waiver?.required;
+
+  // Mirror of the server's installment math (split base, remainder first,
+  // gross up each charge) so the displayed numbers match to the cent.
+  const maxInst = Math.min(Math.max(ctx?.event?.player_installments_max || 1, 1), fee > 0 ? Math.max(Math.floor(fee / 100), 1) : 1);
+  const n = Math.min(nInst, maxInst);
+  const grossUp = (b) => Math.round((b + 30) / 0.971);
+  const breakdown = useMemo(() => {
+    if (fee <= 0) return { bases: [], amounts: [], total: 0 };
+    const share = Math.floor(fee / n);
+    const bases = Array.from({ length: n }, (_, i) => share + (i === 0 ? fee - share * n : 0));
+    const amounts = bases.map(grossUp);
+    return { bases, amounts, total: amounts.reduce((s, a) => s + a, 0) };
+  }, [fee, n]);
+  const total = breakdown.total;
+  const firstCharge = breakdown.amounts[0] || 0;
 
   const submit = async () => {
     if (!who) { setErr('Pick who you\'re registering.'); return; }
@@ -78,6 +93,7 @@ export default function RegisterPlayer({ profile, kind = 'league' }) {
       const res = await startPlayerRegistration({
         kind, targetId: id, profileId: who, waiverAccepted: agree,
         waiverVersion: waiver?.version ?? null,
+        installmentsCount: n,
       });
       if (res?.url) { window.location.href = res.url; return; }
       if (res?.free) { navigate(`/${kind}/${id}/register-player?success=1`, { replace: true }); }
@@ -195,18 +211,36 @@ export default function RegisterPlayer({ profile, kind = 'league' }) {
 
         {/* 3 ── pay */}
         <div style={label}>{waiver ? '3' : '2'} · {fee > 0 ? 'Payment' : 'Finish'}</div>
+        {fee > 0 && maxInst > 1 && (
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+            <PlanChip active={n === 1} onClick={() => setNInst(1)} title="Pay in full" sub="one payment" />
+            {Array.from({ length: maxInst - 1 }, (_, i) => i + 2).map(k => (
+              <PlanChip key={k} active={n === k} onClick={() => setNInst(k)}
+                title={`${k} payments`} sub={`≈ ${fmt$(Math.round((Math.floor(fee / k) + 30) / 0.971))}/mo`} />
+            ))}
+          </div>
+        )}
         {fee > 0 && (
           <div style={{ background: B.card, border: `1px solid ${B.border}`, borderRadius: 12, padding: 14, fontSize: 13, color: B.steel }}>
             <Row k="Registration" v={fmt$(fee)} />
             <Row k="Processing fee" v={fmt$(total - fee)} />
             <div style={{ height: 1, background: B.border, margin: '8px 0' }} />
-            <Row k={<strong style={{ color: B.ice }}>Total today</strong>} v={<strong style={{ color: B.ice }}>{fmt$(total)}</strong>} />
+            {n > 1 ? (
+              <>
+                <Row k={<strong style={{ color: B.ice }}>Due today (1 of {n})</strong>} v={<strong style={{ color: B.ice }}>{fmt$(firstCharge)}</strong>} />
+                <div style={{ fontSize: 11, color: B.steel, marginTop: 6 }}>
+                  Then {n - 1} monthly payment{n > 2 ? 's' : ''} of ≈{fmt$(breakdown.amounts[1] || 0)} — pay each from your family page, or turn on Auto-Pay after checkout.
+                </div>
+              </>
+            ) : (
+              <Row k={<strong style={{ color: B.ice }}>Total today</strong>} v={<strong style={{ color: B.ice }}>{fmt$(total)}</strong>} />
+            )}
           </div>
         )}
         <button onClick={submit}
           disabled={busy || !ctx.event.player_registration_open || !who || (needsAgree && !agree)}
           style={{ ...primaryBtn(busy || !ctx.event.player_registration_open || !who || (needsAgree && !agree)), width: '100%', marginTop: 12, padding: '14px 22px', fontSize: 15 }}>
-          {busy ? 'One sec…' : fee > 0 ? `Pay ${fmt$(total)} →` : 'Complete registration'}
+          {busy ? 'One sec…' : fee > 0 ? `Pay ${fmt$(n > 1 ? firstCharge : total)} →` : 'Complete registration'}
         </button>
         <div style={{ fontSize: 11, color: B.steel, marginTop: 8, textAlign: 'center' }}>
           {fee > 0 ? 'Secure checkout by Stripe. ' : ''}You'll get a confirmation right after.
@@ -272,6 +306,18 @@ function AddChildInline({ onClose, fam, onAdded }) {
 
 function Row({ k, v }) {
   return <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}><span>{k}</span><span>{v}</span></div>;
+}
+function PlanChip({ active, onClick, title, sub }) {
+  return (
+    <button onClick={onClick} style={{
+      background: active ? '#2E5B8C33' : '#112236', border: `1px solid ${active ? '#2E5B8C' : '#1E3A5C'}`,
+      borderRadius: 12, padding: '8px 14px', cursor: 'pointer', textAlign: 'left',
+      fontFamily: "'Barlow', sans-serif",
+    }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: '#F4F7FA' }}>{title}</div>
+      <div style={{ fontSize: 11, color: '#8BA3BE' }}>{sub}</div>
+    </button>
+  );
 }
 function Banner({ color, text }) {
   return (

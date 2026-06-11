@@ -4,16 +4,25 @@ import Stripe from "https://esm.sh/stripe@16.12.0?target=deno"
 
 // Stripe → Rinkd webhook. Stripe POSTs here server-to-server, so it CANNOT send a
 // Supabase JWT — this function MUST be deployed with verify_jwt=false. Auth comes
-// from the Stripe signature (constructEventAsync + STRIPE_WEBHOOK_SECRET).
+// from the Stripe signature (constructEventAsync).
 //
-// checkout.session.completed: mark the registration paid + approved and create the
-// team row — for BOTH leagues and tournaments (branch on metadata.kind). IDEMPOTENT:
-// skip if paid_at OR the team-link is already set, so a retry/double-delivery can't
-// double-insert the team.
-// account.updated: flip a connected organizer's Stripe Connect readiness flags.
+// TWO Stripe environments share this endpoint (REG-4 secret split): the merch
+// store runs LIVE (STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET) while registrations
+// run in the SANDBOX until paid-registration launch (STRIPE_REG_SECRET_KEY/
+// STRIPE_REG_WEBHOOK_SECRET). Signature verification tries the store secret
+// first, then the reg secret; whichever verifies decides which API key any
+// follow-up Stripe calls use. Until the reg secrets are set, the fallbacks
+// keep Phase-3 single-secret behavior byte-identical.
+//
+// checkout.session.completed: store orders → Printful; player registrations →
+// the transactional spine RPC; team-entry → mark paid + create the team row.
+// checkout.session.expired: release a player installment for resume.
+// account.updated: refresh a connected organizer's readiness flags.
 
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY")
 const STRIPE_WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET")
+const STRIPE_REG_SECRET_KEY = Deno.env.get("STRIPE_REG_SECRET_KEY") ?? Deno.env.get("STRIPE_SECRET_KEY")
+const STRIPE_REG_WEBHOOK_SECRET = Deno.env.get("STRIPE_REG_WEBHOOK_SECRET") ?? Deno.env.get("STRIPE_WEBHOOK_SECRET")
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
 const PRINTFUL_API_KEY = Deno.env.get("PRINTFUL_API_KEY")
@@ -104,19 +113,30 @@ serve(async (req) => {
   if (!sig) return new Response("missing signature", { status: 400 })
 
   const body = await req.text() // raw body required for signature verification
-  const stripe = new Stripe(STRIPE_SECRET_KEY, {
-    httpClient: Stripe.createFetchHttpClient(),
-    apiVersion: "2024-06-20",
-  })
 
+  // Dual-environment verification: store (live) secret first, then reg
+  // (sandbox) secret. The environment that verifies provides the API key for
+  // any follow-up Stripe calls in this request.
   let event
+  let stripe: Stripe
+  const crypto = Stripe.createSubtleCryptoProvider()
+  const storeStripe = new Stripe(STRIPE_SECRET_KEY, {
+    httpClient: Stripe.createFetchHttpClient(), apiVersion: "2024-06-20",
+  })
   try {
-    event = await stripe.webhooks.constructEventAsync(
-      body, sig, STRIPE_WEBHOOK_SECRET, undefined, Stripe.createSubtleCryptoProvider(),
-    )
-  } catch (err) {
-    console.error("[stripe-webhook] signature verify failed", { error: err?.message })
-    return new Response(`signature verification failed: ${err?.message}`, { status: 400 })
+    event = await storeStripe.webhooks.constructEventAsync(body, sig, STRIPE_WEBHOOK_SECRET, undefined, crypto)
+    stripe = storeStripe
+  } catch (_storeErr) {
+    try {
+      const regStripe = new Stripe(STRIPE_REG_SECRET_KEY, {
+        httpClient: Stripe.createFetchHttpClient(), apiVersion: "2024-06-20",
+      })
+      event = await regStripe.webhooks.constructEventAsync(body, sig, STRIPE_REG_WEBHOOK_SECRET, undefined, crypto)
+      stripe = regStripe
+    } catch (err) {
+      console.error("[stripe-webhook] signature verify failed (both secrets)", { error: err?.message })
+      return new Response(`signature verification failed: ${err?.message}`, { status: 400 })
+    }
   }
 
   try {
@@ -174,6 +194,53 @@ serve(async (req) => {
           console.error("[stripe-webhook] Printful submit failed", { order_id: order.id, error: (subErr as Error)?.message })
         }
 
+        return new Response(JSON.stringify({ received: true }), {
+          status: 200, headers: { "Content-Type": "application/json" },
+        })
+      }
+
+      // ---- Auto-Pay enrollment (REG-4, mode='setup') -----------------------
+      // setup-autopay created this session; save the card + bind it to the plan.
+      if (session?.mode === "setup" && session?.metadata?.kind === "autopay_setup") {
+        const planId = session?.metadata?.plan_id || null
+        const ownerProfileId = session?.metadata?.owner_profile_id || null
+        const setupIntentId = typeof session.setup_intent === "string" ? session.setup_intent : null
+        if (!planId || !ownerProfileId || !setupIntentId) {
+          console.warn("[stripe-webhook] autopay_setup missing metadata", { session_id: session.id })
+          return new Response(JSON.stringify({ received: true, matched: false }), {
+            status: 200, headers: { "Content-Type": "application/json" },
+          })
+        }
+        const si = await stripe.setupIntents.retrieve(setupIntentId)
+        const pmId = typeof si.payment_method === "string" ? si.payment_method : (si.payment_method as any)?.id
+        if (!pmId) return new Response("setup intent has no payment method", { status: 500 })
+        const pm = await stripe.paymentMethods.retrieve(pmId)
+
+        // Upsert the saved card (idempotent on stripe_payment_method_id)…
+        const { data: pmRow, error: pmErr } = await svc.from("payment_methods")
+          .upsert({
+            owner_profile_id: ownerProfileId,
+            stripe_customer_id: typeof session.customer === "string" ? session.customer : si.customer,
+            stripe_payment_method_id: pmId,
+            brand: pm.card?.brand || null,
+            last4: pm.card?.last4 || null,
+            exp_month: pm.card?.exp_month || null,
+            exp_year: pm.card?.exp_year || null,
+          }, { onConflict: "stripe_payment_method_id" })
+          .select("id").single()
+        if (pmErr || !pmRow) {
+          console.error("[stripe-webhook] payment_methods upsert failed", { error: pmErr?.message })
+          return new Response("payment method save failed", { status: 500 })
+        }
+        // …and bind it to the plan (Auto-Pay = plan has a payment method).
+        const { error: planErr } = await svc.from("payment_plans")
+          .update({ autopay_payment_method_id: pmRow.id })
+          .eq("id", planId)
+        if (planErr) {
+          console.error("[stripe-webhook] plan autopay bind failed", { plan_id: planId, error: planErr.message })
+          return new Response("plan autopay bind failed", { status: 500 })
+        }
+        console.log("[stripe-webhook] autopay enrolled", { plan_id: planId, pm: pmId })
         return new Response(JSON.stringify({ received: true }), {
           status: 200, headers: { "Content-Type": "application/json" },
         })

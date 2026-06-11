@@ -10,7 +10,7 @@
 | 1 | `profiles` decouple (`auth_user_id`, `account_type`) + `current_profile_id()` + full RLS migration; `households`, `household_members`, `household_invites`, `guardianship_claims`, `guardianship_audit`, `profile_credentials` stub; Henry #17 data migration | `feature/reg-1-identity-spine` | **this PR** |
 | 2 | No new tables (migration E = RLS only). Switcher ("acting as"), per-person cards, claim/invite/consent UI, FAMILY-1 under-13 RSVP (RSVP writes act through `can_manage_profile`); roster-anchor hardening (managers can't bind a minor → `is_org_admin_for_minor` trustworthy) | `feature/reg-2-family-ux` | **built Jun 10** |
 | 3 | `registrations`, `payment_plans`, `payment_installments` (one-time = single installment), `waiver_templates`, `waiver_acceptances`; player checkout (`register-player` fn); legacy team-entry mirrored into the spine via trigger + backfill; Stripe Connect (sandbox) | `feature/reg-3-checkout` | **built Jun 11** |
-| 4 | No new tables (lifecycle + dunning columns live in Phase 3 DDL). AR-aging, revenue-by-month, Auto-Pay (`payment_methods` on household), refund ledger | `feature/reg-4-ar-autopay` | after 3 |
+| 4 | `payment_methods`, `refunds` (append-only), `reg_reconciliation_runs`; installments at checkout (per-event `player_installments_max`, per-installment gross-up + `base_cents`); dunning (past-due cron + autopay worker + reminders); refund RPCs (locked: scale% of PAID base, cancel the rest, fees never refunded); `reg4_money_summary` AR/aging/by-month; nightly self-heal reconciliation; STRIPE_REG secret split | `feature/reg-4-ar-autopay` | **built Jun 11** |
 
 ## Phase 1 (shipped in this PR — see migrations 20260615000000–000300)
 

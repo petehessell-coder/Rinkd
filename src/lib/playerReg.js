@@ -64,7 +64,7 @@ export async function getMyFamilyRegistrations(profileIds) {
   const { data, error } = await supabase
     .from('registrations')
     .select(`id, registrant_type, registrant_id, target_type, target_id, status, amount_cents, created_at,
-             plan:payment_plans(id, total_cents, status,
+             plan:payment_plans(id, total_cents, status, autopay_payment_method_id,
                installments:payment_installments(id, amount_cents, status, due_date, paid_at))`)
     .eq('registrant_type', 'profile')
     .in('registrant_id', profileIds)
@@ -114,6 +114,85 @@ export async function saveWaiverTemplate(kind, targetId, { title, body_md, requi
     .select('id').single();
   if (error) throw error;
   return data.id;
+}
+
+// ── REG-4: CROSSBAR money view + family invoices + Auto-Pay ──────────────────
+
+// Org money summary (tiles, AR aging, revenue by month). Org-admin gated in SQL.
+export async function getMoneySummary(kind, targetId) {
+  const { data, error } = await supabase.rpc('reg4_money_summary', { p_kind: kind, p_target: targetId });
+  if (error) throw error;
+  return data || {};
+}
+
+// Org: refund + cancel a registration per the locked sliding-scale policy.
+// overridePct (0|50|100) is required when the event has no start date.
+export async function refundRegistration(registrationId, { overridePct = null, reason = null } = {}) {
+  const { data, error } = await supabase.functions.invoke('registration-admin', {
+    body: { action: 'refund', registrationId, overridePct, reason },
+  });
+  if (error) {
+    let msg = error.message || 'Refund failed.';
+    try {
+      const ctx = await error.context?.json?.();
+      if (ctx?.error) msg = ctx.error;
+      if (ctx?.reason) return Promise.reject(Object.assign(new Error(msg), { reason: ctx.reason }));
+    } catch (_) {}
+    throw new Error(msg);
+  }
+  if (data?.error) throw new Error(data.error);
+  return data; // { ok, refundedCents, items }
+}
+
+// Family: "Pay now" for one installment → Stripe Checkout.
+export async function payInstallment(installmentId) {
+  const { data, error } = await supabase.functions.invoke('pay-installment', {
+    body: { installmentId, appUrl: window.location.origin },
+  });
+  if (error) {
+    let msg = error.message || 'Could not start payment.';
+    try { const ctx = await error.context?.json?.(); if (ctx?.error) msg = ctx.error; } catch (_) {}
+    throw new Error(msg);
+  }
+  if (data?.error) throw new Error(data.error);
+  return data; // { url }
+}
+
+// Family: enroll a plan in Auto-Pay → hosted card entry (Checkout setup mode).
+export async function setupAutopay(planId) {
+  const { data, error } = await supabase.functions.invoke('setup-autopay', {
+    body: { planId, appUrl: window.location.origin },
+  });
+  if (error) {
+    let msg = error.message || 'Could not start Auto-Pay setup.';
+    try { const ctx = await error.context?.json?.(); if (ctx?.error) msg = ctx.error; } catch (_) {}
+    throw new Error(msg);
+  }
+  if (data?.error) throw new Error(data.error);
+  return data; // { url }
+}
+
+// Flatten a family's registrations into invoice rows (unpaid + receipts).
+export function familyInvoices(regs) {
+  const unpaid = [];
+  const receipts = [];
+  for (const r of regs || []) {
+    if (r.status === 'cancelled') continue;
+    const plan = r.plan;
+    for (const i of plan?.installments || []) {
+      const row = {
+        installmentId: i.id, planId: plan.id, registrationId: r.id,
+        registrant: r.registrant, targetType: r.target_type, targetId: r.target_id,
+        amountCents: i.amount_cents, dueDate: i.due_date, paidAt: i.paid_at,
+        status: i.status, autopay: !!plan.autopay_payment_method_id,
+      };
+      if (i.status === 'paid' || i.status === 'partially_refunded' || i.status === 'refunded') receipts.push(row);
+      else if (i.status !== 'cancelled') unpaid.push(row);
+    }
+  }
+  unpaid.sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
+  receipts.sort((a, b) => String(b.paidAt || '').localeCompare(String(a.paidAt || '')));
+  return { unpaid, receipts };
 }
 
 export function regPaymentState(reg) {
