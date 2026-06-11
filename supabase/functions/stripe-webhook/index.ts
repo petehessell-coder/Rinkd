@@ -216,6 +216,15 @@ serve(async (req) => {
         if (!pmId) return new Response("setup intent has no payment method", { status: 500 })
         const pm = await stripe.paymentMethods.retrieve(pmId)
 
+        // A payment method belongs to exactly one Customer (and so one
+        // profile); an upsert must never flip ownership to someone else.
+        const { data: existingPm } = await svc.from("payment_methods")
+          .select("id, owner_profile_id").eq("stripe_payment_method_id", pmId).maybeSingle()
+        if (existingPm && existingPm.owner_profile_id !== ownerProfileId) {
+          console.error("[stripe-webhook] payment method ownership conflict", { pm: pmId, existing: existingPm.owner_profile_id, incoming: ownerProfileId })
+          return new Response("payment method ownership conflict", { status: 500 })
+        }
+
         // Upsert the saved card (idempotent on stripe_payment_method_id)…
         const { data: pmRow, error: pmErr } = await svc.from("payment_methods")
           .upsert({
@@ -330,6 +339,26 @@ serve(async (req) => {
         .eq("id", reg.id)
 
       console.log("[stripe-webhook] registration approved + team created", { kind, reg_id: reg.id, team_id: team.id })
+    } else if (event.type === "payment_intent.succeeded") {
+      // REG-4 recovery path for OFF-SESSION dunning charges (they have no
+      // checkout session, so this is their only webhook). process-dunning sets
+      // metadata.installment_id on the PaymentIntent; checkout-session flows
+      // don't put metadata on the PI, so they fall through harmlessly. The
+      // mark-paid RPC is idempotent — double delivery / already-recorded
+      // charges are no-ops.
+      const pi = event.data.object as Record<string, any>
+      const instId = pi?.metadata?.installment_id || null
+      if (instId && pi?.metadata?.kind === "player") {
+        const svc = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+        const { data: outcome, error: payErr } = await svc.rpc("reg3_mark_installment_paid", {
+          p_installment_id: instId, p_session_id: null, p_payment_intent: pi.id,
+        })
+        if (payErr) {
+          console.error("[stripe-webhook] pi.succeeded ledger write failed", { intent: pi.id, error: payErr.message })
+          return new Response("installment record failed", { status: 500 })
+        }
+        console.log("[stripe-webhook] off-session installment recorded", { intent: pi.id, outcome })
+      }
     } else if (event.type === "checkout.session.expired") {
       // REG-3: an abandoned player checkout releases its installment
       // (processing → scheduled) so register-player can resume the SAME

@@ -56,7 +56,9 @@ function useFamilyInvoices() {
     })();
     return () => { cancelled = true; };
   }, [ids]);
-  return { ...familyInvoices(regs), loaded, refresh: () => setLoaded(false) };
+  // No refresh handle on purpose: every mutation (Pay now / Auto-Pay) redirects
+  // to Stripe and remounts on return, which refetches.
+  return { ...familyInvoices(regs), loaded };
 }
 
 export default function FamilyMoney() {

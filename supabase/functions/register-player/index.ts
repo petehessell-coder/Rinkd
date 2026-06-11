@@ -176,7 +176,7 @@ serve(async (req) => {
     //    of bricking the kid's registration. ──
     const { data: dup } = await svc
       .from("registrations")
-      .select("id, status, amount_cents, plan:payment_plans(id, installments:payment_installments(id, status, due_date, amount_cents, base_cents))")
+      .select("id, status, amount_cents, plan:payment_plans(id, installments:payment_installments(id, status, due_date, amount_cents, base_cents, stripe_session_id))")
       .eq("registrant_type", "profile").eq("registrant_id", profileId)
       .eq("target_type", kind).eq("target_id", parentId)
       .in("status", ["pending", "active", "waitlisted"])
@@ -185,6 +185,7 @@ serve(async (req) => {
     let resumeInstId: string | null = null
     let resumeAmount = 0
     let resumeBase = 0
+    let resumeStaleSession: string | null = null
     if (dup) {
       // Resume the EARLIEST unpaid, uncancelled installment of a pending plan.
       const unpaid = (dup.plan?.installments || [])
@@ -198,6 +199,7 @@ serve(async (req) => {
       resumeInstId = unpaid[0].id
       resumeAmount = unpaid[0].amount_cents
       resumeBase = unpaid[0].base_cents
+      resumeStaleSession = unpaid[0].status === "processing" ? unpaid[0].stripe_session_id : null
     }
 
     // ── Household for the family roll-up: a household where the caller is a
@@ -326,6 +328,14 @@ serve(async (req) => {
       httpClient: Stripe.createFetchHttpClient(),
       apiVersion: "2024-06-20",
     })
+
+    // Resume with a still-open prior session: expire it first so there's only
+    // ever ONE live checkout per installment (two open sessions = a manual
+    // double-charge path).
+    if (resumeStaleSession) {
+      try { await stripe.checkout.sessions.expire(resumeStaleSession) }
+      catch (_e) { /* already expired/completed — fine */ }
+    }
 
     // This checkout charges exactly ONE installment: the first of a new plan,
     // or the earliest unpaid one when resuming. Later installments collect via

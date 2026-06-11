@@ -56,12 +56,14 @@ serve(async (req) => {
     if (plan.status === "cancelled" || plan.status === "complete") {
       return json({ error: "this plan has no upcoming payments" }, 409)
     }
-    // Family-side authority: the caller must be involved in the registration
-    // (guardian / creator) — decided under their JWT.
-    const { data: mayView, error: vErr } = await asCaller.rpc("can_view_registration", {
+    // FAMILY-side authority only (creator / guardian of the registrant /
+    // household guardian) — can_view_registration would also admit the org
+    // admin, whose card must never end up bound to (and dunned for) a
+    // family's plan.
+    const { data: mayPay, error: vErr } = await asCaller.rpc("can_manage_registration_money", {
       p_registration_id: plan.registration_id,
     })
-    if (vErr || mayView !== true) return json({ error: "not your registration" }, 403)
+    if (vErr || mayPay !== true) return json({ error: "only the family can set up Auto-Pay for this plan" }, 403)
 
     const stripe = new Stripe(STRIPE_KEY, {
       httpClient: Stripe.createFetchHttpClient(),

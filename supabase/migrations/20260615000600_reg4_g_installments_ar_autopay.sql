@@ -76,7 +76,7 @@ CREATE TABLE public.refunds (
   payment_installment_id  uuid NOT NULL REFERENCES public.payment_installments(id) ON DELETE CASCADE,
   stripe_refund_id        text,
   amount_cents            int NOT NULL CHECK (amount_cents > 0),
-  policy_pct              int NOT NULL CHECK (policy_pct IN (50,100)),
+  policy_pct              int NOT NULL CHECK (policy_pct IN (0,50,100)),
   initiated_by            uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
   reason                  text,
   created_at              timestamptz NOT NULL DEFAULT now()
@@ -130,6 +130,26 @@ $$;
 REVOKE ALL ON FUNCTION public.can_admin_registration(uuid) FROM public;
 GRANT EXECUTE ON FUNCTION public.can_admin_registration(uuid) TO authenticated, service_role;
 
+-- FAMILY-side money authority: who may pay an installment or enroll the plan
+-- in Auto-Pay. Deliberately EXCLUDES the org-admin branch of
+-- can_view_registration — a commissioner must never end up with their own
+-- card bound to (and dunned for) a family's plan.
+CREATE OR REPLACE FUNCTION public.can_manage_registration_money(p_registration_id uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.registrations r
+    WHERE r.id = p_registration_id
+      AND (
+        (r.created_by IS NOT NULL AND r.created_by = public.current_profile_id())
+        OR (r.registrant_type = 'profile' AND public.can_manage_profile(r.registrant_id))
+        OR (r.household_id IS NOT NULL
+            AND public.is_household_guardian(r.household_id, public.current_profile_id()))
+      )
+  );
+$$;
+REVOKE ALL ON FUNCTION public.can_manage_registration_money(uuid) FROM public;
+GRANT EXECUTE ON FUNCTION public.can_manage_registration_money(uuid) TO authenticated, service_role;
+
 -- ────────────────────────────────────────────────────────────────────────────
 -- 3 ── Refund (locked policy). Two halves:
 --      prepare → validates + computes per-installment refunds (NO side effects)
@@ -153,11 +173,18 @@ CREATE OR REPLACE FUNCTION public.reg4_prepare_refund(
   p_registration_id uuid,
   p_actor uuid,                 -- caller profile id (edge fn passes verified identity)
   p_override_pct int DEFAULT NULL
-) RETURNS TABLE (installment_id uuid, payment_intent text, refund_cents int, pct int)
-LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+) RETURNS TABLE (installment_id uuid, payment_intent text, refund_cents int, pct int,
+                 prior_refunded_cents int)
+-- VOLATILE: takes a registration row lock so two concurrent refund calls
+-- serialize at prepare. The lock alone can't span the edge fn's multi-call
+-- flow, so the real double-spend guards are (a) the Stripe idempotency key in
+-- registration-admin and (b) reg4_record_refund's compare-and-set on
+-- prior_refunded_cents — together a concurrent duplicate refunds Stripe ONCE
+-- and records ONCE.
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
 DECLARE v_reg record; v_pct int; v_start date;
 BEGIN
-  SELECT * INTO v_reg FROM public.registrations WHERE id = p_registration_id;
+  SELECT * INTO v_reg FROM public.registrations WHERE id = p_registration_id FOR UPDATE;
   IF v_reg.id IS NULL THEN RAISE EXCEPTION 'registration not found' USING errcode = '42704'; END IF;
   IF v_reg.status = 'cancelled' THEN RAISE EXCEPTION 'already cancelled' USING errcode = '22023'; END IF;
 
@@ -178,7 +205,8 @@ BEGIN
   RETURN QUERY
   SELECT pi.id, pi.stripe_payment_intent_id,
          (pi.base_cents * v_pct / 100)::int - pi.refunded_cents,
-         v_pct
+         v_pct,
+         pi.refunded_cents
   FROM public.payment_installments pi
   JOIN public.payment_plans pp ON pp.id = pi.payment_plan_id
   WHERE pp.registration_id = p_registration_id
@@ -187,6 +215,9 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION public.reg4_prepare_refund(uuid,uuid,int) FROM public, anon, authenticated;
 
+-- Compare-and-set on prior_refunded_cents: a concurrent duplicate (both calls
+-- prepared the same refund; Stripe deduped via idempotency key) records ONCE —
+-- the loser sees refunded_cents already advanced and returns 'stale'.
 CREATE OR REPLACE FUNCTION public.reg4_record_refund(
   p_registration_id uuid,
   p_installment_id uuid,
@@ -194,20 +225,26 @@ CREATE OR REPLACE FUNCTION public.reg4_record_refund(
   p_amount_cents int,
   p_pct int,
   p_actor uuid,
+  p_prior_refunded_cents int,
   p_reason text DEFAULT NULL
-) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+) RETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_n int;
 BEGIN
-  INSERT INTO public.refunds (registration_id, payment_installment_id, stripe_refund_id,
-                              amount_cents, policy_pct, initiated_by, reason)
-  VALUES (p_registration_id, p_installment_id, p_stripe_refund_id, p_amount_cents,
-          CASE WHEN p_pct = 0 THEN 100 ELSE p_pct END, p_actor, p_reason);
   UPDATE public.payment_installments
   SET refunded_cents = refunded_cents + p_amount_cents,
       status = CASE WHEN refunded_cents + p_amount_cents >= base_cents
                     THEN 'refunded' ELSE 'partially_refunded' END
-  WHERE id = p_installment_id;
+  WHERE id = p_installment_id
+    AND refunded_cents = p_prior_refunded_cents;
+  GET DIAGNOSTICS v_n = ROW_COUNT;
+  IF v_n = 0 THEN RETURN 'stale'; END IF;
+  INSERT INTO public.refunds (registration_id, payment_installment_id, stripe_refund_id,
+                              amount_cents, policy_pct, initiated_by, reason)
+  VALUES (p_registration_id, p_installment_id, p_stripe_refund_id, p_amount_cents,
+          p_pct, p_actor, p_reason);
+  RETURN 'recorded';
 END $$;
-REVOKE ALL ON FUNCTION public.reg4_record_refund(uuid,uuid,text,int,int,uuid,text) FROM public, anon, authenticated;
+REVOKE ALL ON FUNCTION public.reg4_record_refund(uuid,uuid,text,int,int,uuid,int,text) FROM public, anon, authenticated;
 
 -- Finalize: cancel everything still owed + the registration itself. Runs even
 -- for a 0% refund (cancel without money movement). Also reverses the roster
@@ -280,6 +317,9 @@ RETURNS TABLE (
   LEFT JOIN public.profiles p ON p.id = r.registrant_id AND r.registrant_type = 'profile'
   WHERE pi.status IN ('past_due')
     AND r.status IN ('pending','active')
+    AND r.registrant_type = 'profile'   -- native player plans only; legacy
+                                        -- team-entry mirror rows have nobody
+                                        -- to notify and no autopay
     AND pi.dunning_attempts < 4
     AND (pi.last_dunning_at IS NULL OR pi.last_dunning_at < now() - interval '3 days');
 $$;
@@ -340,6 +380,7 @@ BEGIN
           'past_due', sum(amount_cents) FILTER (WHERE status = 'past_due' AND reg_status <> 'cancelled')
         ) AS m
         FROM inst
+        WHERE status <> 'cancelled'   -- a lone cancelled row must not emit an all-null month
         GROUP BY to_char(coalesce(paid_at::date, due_date), 'YYYY-MM')
       ) months)
   ) INTO v_out FROM inst;

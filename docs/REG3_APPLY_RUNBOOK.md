@@ -49,7 +49,7 @@ SELECT cron.schedule('rinkd-reg4-dunning-daily', '20 7 * * *', $$
     body := '{}'::jsonb, timeout_milliseconds := 120000) as request_id;
 $$);
 ```
-3. Add Stripe webhook events in the SANDBOX endpoint: `checkout.session.expired` (Phase 3) — setup-mode sessions already arrive via `checkout.session.completed`.
+3. Add Stripe webhook events in the SANDBOX endpoint: `checkout.session.expired` (resume path) and `payment_intent.succeeded` (off-session dunning recovery — its ONLY webhook). Setup-mode sessions already arrive via `checkout.session.completed`.
 
 ### 4c. Phase 4 sandbox end-to-end (≈10 min, after §3)
 1. Set the league's player fee to $30 with **Max installments 3**; register a kid choosing "3 payments" → pay 1 of 3 ($10.33 test card). Verify: registration `active`, installments 1 paid / 2 scheduled (monthly), PersonCard shows it, **Feed shows "You owe $10.33 for <kid>"**.

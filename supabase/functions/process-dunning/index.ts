@@ -54,6 +54,10 @@ serve(async (req) => {
           if (acct?.stripe_account_id && acct.charges_enabled) connected = acct.stripe_account_id
         }
         const base = item.base_cents
+        // Idempotency key scoped to (installment, attempt count): a re-run
+        // after a crash or a ledger failure returns the SAME PaymentIntent —
+        // the card can never be charged twice for one attempt. A legitimate
+        // later retry (attempts incremented after a failure) gets a new key.
         const intent = await stripe.paymentIntents.create({
           amount: item.amount_cents,
           currency: "usd",
@@ -66,17 +70,21 @@ serve(async (req) => {
             application_fee_amount: item.amount_cents - Math.round(base * 0.99),
             transfer_data: { destination: connected },
           } : {}),
-        })
+        }, { idempotencyKey: `reg4-dun-${item.installment_id}-${item.dunning_attempts}` })
         if (intent.status === "succeeded") {
           const { error: payErr } = await svc.rpc("reg3_mark_installment_paid", {
             p_installment_id: item.installment_id, p_session_id: null, p_payment_intent: intent.id,
           })
           if (payErr) {
-            // Charged but ledger failed — webhook redelivery can't save us here
-            // (no checkout session). Flag loudly; the recon run + Stripe
-            // dashboard make it findable. Do NOT count an attempt (no re-charge:
-            // mark-paid is idempotent and a manual rerun fixes the ledger).
-            console.error("[process-dunning] CHARGED BUT LEDGER FAILED", { installment: item.installment_id, intent: intent.id, error: payErr.message })
+            // Charged but the ledger write failed. Three layers stop a
+            // double-charge and heal the ledger:
+            //  1. record an attempt WITHOUT burning a retry (p_ok=true) so
+            //     last_dunning_at gives a 3-day buffer;
+            //  2. the idempotency key returns this same PI on any re-run;
+            //  3. the payment_intent.succeeded webhook branch re-runs
+            //     reg3_mark_installment_paid on Stripe's redelivery.
+            await svc.rpc("reg4_record_dunning_attempt", { p_installment_id: item.installment_id, p_ok: true })
+            console.error("[process-dunning] CHARGED BUT LEDGER FAILED — webhook redelivery will heal", { installment: item.installment_id, intent: intent.id, error: payErr.message })
           } else {
             charged++
             await notify(svc, item, `Auto-Pay charged $${(item.amount_cents / 100).toFixed(2)} for ${item.registrant_name || "your registration"}. You're all set.`)

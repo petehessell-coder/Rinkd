@@ -47,17 +47,19 @@ serve(async (req) => {
     const svc = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
     const { data: inst } = await svc
       .from("payment_installments")
-      .select("id, amount_cents, base_cents, status, payment_plan_id, plan:payment_plans(registration_id)")
+      .select("id, amount_cents, base_cents, status, stripe_session_id, payment_plan_id, plan:payment_plans(registration_id)")
       .eq("id", installmentId).maybeSingle()
     if (!inst) return json({ error: "installment not found" }, 404)
     if (inst.status === "paid" || inst.status === "refunded") return json({ error: "already paid" }, 409)
     if (inst.status === "cancelled") return json({ error: "this payment was cancelled" }, 409)
 
     const registrationId = (inst.plan as any)?.registration_id
-    const { data: mayView, error: vErr } = await asCaller.rpc("can_view_registration", {
+    // FAMILY-side authority only (creator / guardian) — the organizer's tool
+    // for a delinquent registration is Refund, not paying it themselves.
+    const { data: mayPay, error: vErr } = await asCaller.rpc("can_manage_registration_money", {
       p_registration_id: registrationId,
     })
-    if (vErr || mayView !== true) return json({ error: "not your registration" }, 403)
+    if (vErr || mayPay !== true) return json({ error: "only the family can pay this installment" }, 403)
 
     const { data: reg } = await svc
       .from("registrations")
@@ -82,6 +84,17 @@ serve(async (req) => {
       httpClient: Stripe.createFetchHttpClient(),
       apiVersion: "2024-06-20",
     })
+
+    // One live session per installment: if a prior checkout is still open
+    // (status 'processing' with a session), expire it before minting a new
+    // one — two open sessions for the same installment = a manual
+    // double-charge path (the second payment would record 'already_processed'
+    // but the card was still hit twice).
+    if (inst.status === "processing" && inst.stripe_session_id) {
+      try { await stripe.checkout.sessions.expire(inst.stripe_session_id) }
+      catch (_e) { /* already expired/completed — fine */ }
+    }
+
     const base = safeBase(body.appUrl)
     const processing = inst.amount_cents - inst.base_cents
     const lineItems: Record<string, any>[] = [{

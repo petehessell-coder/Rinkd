@@ -85,41 +85,73 @@ serve(async (req) => {
 
     let refundedCents = 0
     for (const it of (items || [])) {
+      // Double-spend protocol (see reg4_prepare_refund/record_refund):
+      //  • the Stripe refund carries an idempotency key derived from the
+      //    installment + its pre-refund state, so a concurrent duplicate or a
+      //    retry returns the SAME refund object instead of refunding twice;
+      //  • the ledger record is a compare-and-set on prior_refunded_cents —
+      //    the duplicate's record comes back 'stale' and is skipped.
+      const idemKey = `reg4-refund-${it.installment_id}-${it.prior_refunded_cents}-${it.refund_cents}`
+
       if (!it.payment_intent) {
         // Paid outside Stripe (manual mark-paid, future) — record ledger-only.
-        await svc.rpc("reg4_record_refund", {
+        const { data: rec } = await svc.rpc("reg4_record_refund", {
           p_registration_id: registrationId, p_installment_id: it.installment_id,
           p_stripe_refund_id: null, p_amount_cents: it.refund_cents, p_pct: it.pct,
-          p_actor: callerProfile.id, p_reason: body.reason || null,
+          p_actor: callerProfile.id, p_prior_refunded_cents: it.prior_refunded_cents,
+          p_reason: body.reason || null,
         })
-        refundedCents += it.refund_cents
+        if (rec !== "stale") refundedCents += it.refund_cents
         continue
       }
-      // Destination charges: reverse_transfer pulls the refund back from the
-      // organizer proportionally to the charge; refund_application_fee stays
-      // false (Rinkd's 1% is non-refundable by policy). Plain charges (org not
-      // connected at payment time) take a plain refund — Stripe rejects the
-      // transfer params on those, so detect from the intent.
-      const intent = await stripe.paymentIntents.retrieve(it.payment_intent)
+
+      // The customer gets pct×base back. On destination charges that money is
+      // sourced per the locked split: the organizer reverses their 99% pro-rata
+      // share via an EXPLICIT transfer reversal (Stripe's reverse_transfer:true
+      // is proportional to the grossed-up charge and would make Rinkd eat ~4%
+      // of every refunded base — measured, rejected); Rinkd funds the
+      // remaining 1% slice, i.e. gives back its platform fee on the refunded
+      // portion. Processing fees are never refunded to anyone (Stripe keeps
+      // its cut regardless).
+      const intent = await stripe.paymentIntents.retrieve(it.payment_intent, {
+        expand: ["latest_charge"],
+      })
       const isDestination = !!(intent as any)?.transfer_data
       const refund = await stripe.refunds.create({
         payment_intent: it.payment_intent,
         amount: it.refund_cents,
-        ...(isDestination ? { reverse_transfer: true, refund_application_fee: false } : {}),
-      })
-      const { error: recErr } = await svc.rpc("reg4_record_refund", {
+      }, { idempotencyKey: idemKey })
+
+      if (isDestination) {
+        const transferId = (intent as any)?.latest_charge?.transfer
+        if (transferId) {
+          const reversal = Math.round(it.refund_cents * 0.99)
+          try {
+            await stripe.transfers.createReversal(transferId, { amount: reversal },
+              { idempotencyKey: `${idemKey}-rev` })
+          } catch (revErr) {
+            // Refund went out but the organizer clawback failed (e.g. already
+            // fully reversed). Record the refund anyway — the ledger must
+            // reflect the customer's money — and flag for manual follow-up.
+            console.error("[registration-admin] transfer reversal failed", { transfer: transferId, error: (revErr as Error)?.message })
+          }
+        }
+      }
+
+      const { data: rec, error: recErr } = await svc.rpc("reg4_record_refund", {
         p_registration_id: registrationId, p_installment_id: it.installment_id,
         p_stripe_refund_id: refund.id, p_amount_cents: it.refund_cents, p_pct: it.pct,
-        p_actor: callerProfile.id, p_reason: body.reason || null,
+        p_actor: callerProfile.id, p_prior_refunded_cents: it.prior_refunded_cents,
+        p_reason: body.reason || null,
       })
       if (recErr) {
-        // Stripe refunded but our ledger write failed — surface loudly; the
-        // re-run is safe (prepare subtracts refunded_cents only after record,
-        // so this installment would double-refund — STOP and flag instead).
-        console.error("[registration-admin] LEDGER WRITE FAILED AFTER STRIPE REFUND", { refund: refund.id, error: recErr.message })
-        return json({ error: `refund ${refund.id} succeeded at Stripe but ledger write failed — do NOT retry; fix the ledger row manually`, refundId: refund.id }, 500)
+        // Stripe refunded but the ledger write errored. SAFE TO RETRY: the
+        // idempotency key returns the same refund and the compare-and-set
+        // makes the record exactly-once.
+        console.error("[registration-admin] ledger write failed after Stripe refund — retry is safe", { refund: refund.id, error: recErr.message })
+        return json({ error: `refund ${refund.id} succeeded at Stripe but the ledger write failed — retry this refund (it is idempotent)`, refundId: refund.id, retryable: true }, 500)
       }
-      refundedCents += it.refund_cents
+      if (rec !== "stale") refundedCents += it.refund_cents
     }
 
     // Cancel everything still owed + the registration (runs for 0% too).

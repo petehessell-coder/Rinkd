@@ -105,10 +105,13 @@ export default function PlayerRegistrationsSection({ kind, event, onEventUpdate 
     } catch (e) {
       if (e?.reason === 'needs_pct') {
         const raw = window.prompt('This event has no start date, so pick the refund percentage: 0, 50 or 100');
+        if (raw === null) { setBusy(false); return; }   // cancelled — quiet
         const pct = parseInt(raw, 10);
         if ([0, 50, 100].includes(pct)) {
           try { await refundRegistration(reg.id, { overridePct: pct }); await load(); }
           catch (e2) { setErr(e2?.message || 'Refund failed.'); }
+        } else {
+          setErr(`"${raw}" isn't a valid refund percentage — use 0, 50 or 100.`);
         }
       } else {
         setErr(e?.message || 'Refund failed.');
