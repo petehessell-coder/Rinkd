@@ -77,13 +77,21 @@ export default function RegisterPlayer({ profile, kind = 'league' }) {
     try {
       const res = await startPlayerRegistration({
         kind, targetId: id, profileId: who, waiverAccepted: agree,
+        waiverVersion: waiver?.version ?? null,
       });
       if (res?.url) { window.location.href = res.url; return; }
       if (res?.free) { navigate(`/${kind}/${id}/register-player?success=1`, { replace: true }); }
     } catch (e) {
-      setErr(e?.reason === 'duplicate'
-        ? e.message
-        : (e?.message || 'Could not start the registration.'));
+      if (e?.reason === 'waiver_changed') {
+        // Organizer edited the waiver mid-flow — reload it and re-ask.
+        setAgree(false);
+        try { const c = await getPlayerRegContext(kind, id); setCtx(c); } catch (_) {}
+        setErr('The waiver was just updated — please read the new version and accept again.');
+      } else {
+        setErr(e?.reason === 'duplicate'
+          ? e.message
+          : (e?.message || 'Could not start the registration.'));
+      }
     } finally {
       setBusy(false);
     }

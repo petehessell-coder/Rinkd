@@ -58,6 +58,11 @@ export default function PlayerRegistrationsSection({ kind, event, onEventUpdate 
     setBusy(true); setErr('');
     try {
       const cents = Math.max(Math.round(parseFloat(feeDollars || '0') * 100) || 0, 0);
+      if (cents > 0 && cents < 100) {
+        setErr('Player fee must be $0 (free) or at least $1.00 — card processing can\'t charge less.');
+        setBusy(false);
+        return;
+      }
       const table = kind === 'tournament' ? 'tournaments' : 'leagues';
       const { error } = await supabase.from(table)
         .update({ player_fee_cents: cents, player_registration_open: open })

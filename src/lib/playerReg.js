@@ -23,9 +23,11 @@ export async function getPlayerRegContext(kind, targetId) {
 
 // Starts checkout (or completes a free registration) via the edge fn.
 // Returns { url } (redirect to Stripe) or { free: true, registrationId }.
-export async function startPlayerRegistration({ kind, targetId, profileId, waiverAccepted }) {
+// waiverVersion = the version the user was SHOWN; the server 409s
+// (reason 'waiver_changed') if the organizer edited it in between.
+export async function startPlayerRegistration({ kind, targetId, profileId, waiverAccepted, waiverVersion }) {
   const { data, error } = await supabase.functions.invoke('register-player', {
-    body: { kind, targetId, profileId, waiverAccepted, appUrl: window.location.origin },
+    body: { kind, targetId, profileId, waiverAccepted, waiverVersion, appUrl: window.location.origin },
   });
   if (error) {
     // functions.invoke buries the response body on non-2xx — surface it.
@@ -41,19 +43,34 @@ export async function startPlayerRegistration({ kind, targetId, profileId, waive
   return data;
 }
 
-// My family's registrations (parent view): spine rows for people I can see,
-// payment state embedded. RLS scopes this to involved rows.
-export async function getMyFamilyRegistrations() {
+// registrations.registrant_id is POLYMORPHIC (profile id or event-team id) and
+// deliberately has NO foreign key — so a PostgREST embed hint can't resolve it
+// (the Jun 2 embed-footgun class). Registrant profiles are fetched in a second
+// query and stitched client-side.
+async function attachRegistrantProfiles(rows) {
+  const ids = [...new Set((rows || []).map(r => r.registrant_id).filter(Boolean))];
+  if (ids.length === 0) return rows || [];
+  const { data: profiles } = await supabase
+    .from('profiles').select(PROFILE_COLS).in('id', ids);
+  const byId = Object.fromEntries((profiles || []).map(p => [p.id, p]));
+  return (rows || []).map(r => ({ ...r, registrant: byId[r.registrant_id] || null }));
+}
+
+// My family's registrations (parent view): spine rows for the people I manage
+// (pass profileIds = [me, ...managed] — RLS also grants org-admin reads, so an
+// unfiltered query would show a commissioner their whole league here).
+export async function getMyFamilyRegistrations(profileIds) {
+  if (!profileIds || profileIds.length === 0) return [];
   const { data, error } = await supabase
     .from('registrations')
     .select(`id, registrant_type, registrant_id, target_type, target_id, status, amount_cents, created_at,
-             registrant:profiles!registrations_registrant_id_fkey(${PROFILE_COLS}),
              plan:payment_plans(id, total_cents, status,
                installments:payment_installments(id, amount_cents, status, due_date, paid_at))`)
     .eq('registrant_type', 'profile')
+    .in('registrant_id', profileIds)
     .order('created_at', { ascending: false });
   if (error) throw error;
-  return data || [];
+  return attachRegistrantProfiles(data);
 }
 
 // Org view: player registrations for an event (commissioner/director only via RLS).
@@ -61,7 +78,6 @@ export async function getEventPlayerRegistrations(kind, targetId) {
   const { data, error } = await supabase
     .from('registrations')
     .select(`id, registrant_id, status, amount_cents, created_at, rostered_team_id, rostered_at,
-             registrant:profiles!registrations_registrant_id_fkey(${PROFILE_COLS}),
              plan:payment_plans(total_cents, status,
                installments:payment_installments(status, paid_at)),
              waivers:waiver_acceptances(id, accepted_at, accepted_by)`)
@@ -70,7 +86,7 @@ export async function getEventPlayerRegistrations(kind, targetId) {
     .eq('target_id', targetId)
     .order('created_at', { ascending: false });
   if (error) throw error;
-  return data || [];
+  return attachRegistrantProfiles(data);
 }
 
 // Org: assign a paid registrant to a league roster (consented path, league-only v1).

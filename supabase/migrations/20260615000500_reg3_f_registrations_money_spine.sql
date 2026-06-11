@@ -128,6 +128,11 @@ CREATE TABLE public.waiver_acceptances (
   subject_profile_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,  -- whom it covers
   accepted_by        uuid REFERENCES public.profiles(id) ON DELETE SET NULL,  -- who consented (guardian for minors)
   waiver_version     int NOT NULL DEFAULT 1,
+  -- The IMMUTABLE consent record: templates are editable in place (version
+  -- bumps), so the exact text the guardian agreed to is snapshotted here at
+  -- accept time. The legal record survives any later template edit.
+  accepted_title     text,
+  accepted_body_md   text,
   accepted_at        timestamptz NOT NULL DEFAULT now(),
   ip                 text,
   user_agent         text,
@@ -143,6 +148,13 @@ ALTER TABLE public.leagues
 ALTER TABLE public.tournaments
   ADD COLUMN player_fee_cents int NOT NULL DEFAULT 0 CHECK (player_fee_cents >= 0),
   ADD COLUMN player_registration_open boolean NOT NULL DEFAULT false;
+
+-- The legacy team-entry charge only grosses up processing when the organizer
+-- has Connect payouts (see stripe-checkout); an unconnected organizer's
+-- registrant pays exactly fee_cents. The webhook now stamps what Stripe
+-- ACTUALLY charged so the mirror records ledger truth, not a formula guess.
+ALTER TABLE public.league_registrations     ADD COLUMN amount_total_cents int;
+ALTER TABLE public.tournament_registrations ADD COLUMN amount_total_cents int;
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- 3 ── Visibility helper + RLS (writes are definer/service-role only)
@@ -214,11 +226,15 @@ CREATE POLICY waiver_acceptances_involved_read ON public.waiver_acceptances
 -- ────────────────────────────────────────────────────────────────────────────
 -- 4 ── Fee math (single source of truth, mirrors stripe-checkout)
 -- ────────────────────────────────────────────────────────────────────────────
+-- platform fee is recorded as base − round(base*0.99) — the EXACT amount the
+-- destination charge keeps (application_fee − processing passthrough), so the
+-- ledger always equals Stripe to the cent (round(base*0.01) drifts 1¢ on
+-- bases ending in 50¢).
 CREATE OR REPLACE FUNCTION public.reg_fee_breakdown(p_base_cents int)
 RETURNS TABLE (total_cents int, platform_fee_cents int, processing_fee_cents int)
 LANGUAGE sql IMMUTABLE AS $$
   SELECT CASE WHEN p_base_cents <= 0 THEN 0 ELSE round((p_base_cents + 30) / 0.971)::int END,
-         CASE WHEN p_base_cents <= 0 THEN 0 ELSE round(p_base_cents * 0.01)::int END,
+         CASE WHEN p_base_cents <= 0 THEN 0 ELSE p_base_cents - round(p_base_cents * 0.99)::int END,
          CASE WHEN p_base_cents <= 0 THEN 0 ELSE round((p_base_cents + 30) / 0.971)::int - p_base_cents END;
 $$;
 GRANT EXECUTE ON FUNCTION public.reg_fee_breakdown(int) TO anon, authenticated, service_role;
@@ -239,13 +255,15 @@ CREATE OR REPLACE FUNCTION public.reg3_sync_legacy_registration(
   p_paid_at timestamptz,
   p_event_team_id uuid,   -- league_team_id / tournament_team_id (nullable)
   p_session_id text,
-  p_created_at timestamptz
+  p_created_at timestamptz,
+  p_amount_total int      -- what Stripe ACTUALLY charged (nullable)
 ) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   v_reg uuid; v_plan uuid; v_fee int := greatest(coalesce(p_fee_cents, 0), 0);
   v_total int; v_platform int; v_processing int;
   v_status text;
   v_source_kind text := p_kind || '_registration';
+  v_paid boolean;
 BEGIN
   v_status := CASE p_status
     WHEN 'approved' THEN 'active'
@@ -260,19 +278,46 @@ BEGIN
           v_fee, v_source_kind, p_source_id, coalesce(p_created_at, now()))
   ON CONFLICT (source_kind, source_id) WHERE source_id IS NOT NULL
   DO UPDATE SET status = EXCLUDED.status,
-                amount_cents = EXCLUDED.amount_cents,
                 registrant_id = coalesce(EXCLUDED.registrant_id, registrations.registrant_id)
   RETURNING id INTO v_reg;
 
+  -- amount_cents tracks legacy fee edits ONLY while nothing has been paid —
+  -- after payment the plan/installment reflect the actual charge and the
+  -- registration must not drift away from them.
+  SELECT EXISTS (
+    SELECT 1 FROM public.payment_plans pp
+    JOIN public.payment_installments pi ON pi.payment_plan_id = pp.id
+    WHERE pp.registration_id = v_reg AND pi.status = 'paid'
+  ) INTO v_paid;
+  IF NOT v_paid THEN
+    UPDATE public.registrations SET amount_cents = v_fee WHERE id = v_reg;
+  END IF;
+
   IF v_fee > 0 THEN
-    SELECT total_cents, platform_fee_cents, processing_fee_cents
-      INTO v_total, v_platform, v_processing FROM public.reg_fee_breakdown(v_fee);
+    -- Money truth: prefer what Stripe actually charged. The legacy flow only
+    -- grosses up processing for Connect-enabled organizers; an unconnected
+    -- organizer's registrant pays exactly the fee (processing 0, platform 0 —
+    -- the whole amount lands in the platform account for manual settlement).
+    IF p_amount_total IS NOT NULL THEN
+      v_total := p_amount_total;
+      v_processing := greatest(v_total - v_fee, 0);
+      v_platform := CASE WHEN v_processing > 0 THEN v_fee - round(v_fee * 0.99)::int ELSE 0 END;
+    ELSE
+      -- Unknown actual charge (unpaid yet, or pre-stamp history): conservative
+      -- no-gross-up assumption; corrected when the webhook stamps the total.
+      v_total := v_fee; v_processing := 0; v_platform := 0;
+    END IF;
+
     INSERT INTO public.payment_plans
       (registration_id, total_cents, platform_fee_cents, processing_fee_cents, plan_type, status)
     VALUES (v_reg, v_total, v_platform, v_processing, 'one_time',
             CASE WHEN p_paid_at IS NOT NULL THEN 'complete' ELSE 'active' END)
     ON CONFLICT (registration_id)
-    DO UPDATE SET status = EXCLUDED.status
+    DO UPDATE SET status = EXCLUDED.status,
+                  -- refine totals as better truth arrives, but never after paid
+                  total_cents = CASE WHEN payment_plans.status = 'complete' THEN payment_plans.total_cents ELSE EXCLUDED.total_cents END,
+                  platform_fee_cents = CASE WHEN payment_plans.status = 'complete' THEN payment_plans.platform_fee_cents ELSE EXCLUDED.platform_fee_cents END,
+                  processing_fee_cents = CASE WHEN payment_plans.status = 'complete' THEN payment_plans.processing_fee_cents ELSE EXCLUDED.processing_fee_cents END
     RETURNING id INTO v_plan;
 
     -- one-time = exactly one installment
@@ -285,13 +330,14 @@ BEGIN
     ELSE
       UPDATE public.payment_installments
       SET status = CASE WHEN p_paid_at IS NOT NULL THEN 'paid' ELSE status END,
+          amount_cents = CASE WHEN status = 'paid' THEN amount_cents ELSE v_total END,
           paid_at = coalesce(p_paid_at, paid_at),
           stripe_session_id = coalesce(p_session_id, stripe_session_id)
       WHERE payment_plan_id = v_plan;
     END IF;
   END IF;
 END $$;
-REVOKE ALL ON FUNCTION public.reg3_sync_legacy_registration(text,uuid,uuid,int,text,timestamptz,uuid,text,timestamptz)
+REVOKE ALL ON FUNCTION public.reg3_sync_legacy_registration(text,uuid,uuid,int,text,timestamptz,uuid,text,timestamptz,int)
   FROM public, anon, authenticated;
 
 CREATE OR REPLACE FUNCTION public.tg_mirror_legacy_registration()
@@ -300,10 +346,10 @@ BEGIN
   BEGIN
     IF TG_ARGV[0] = 'league' THEN
       PERFORM public.reg3_sync_legacy_registration('league', NEW.id, NEW.league_id,
-        NEW.fee_cents, NEW.status, NEW.paid_at, NEW.league_team_id, NEW.stripe_session_id, NEW.created_at);
+        NEW.fee_cents, NEW.status, NEW.paid_at, NEW.league_team_id, NEW.stripe_session_id, NEW.created_at, NEW.amount_total_cents);
     ELSE
       PERFORM public.reg3_sync_legacy_registration('tournament', NEW.id, NEW.tournament_id,
-        NEW.fee_cents, NEW.status, NEW.paid_at, NEW.tournament_team_id, NEW.stripe_session_id, NEW.created_at);
+        NEW.fee_cents, NEW.status, NEW.paid_at, NEW.tournament_team_id, NEW.stripe_session_id, NEW.created_at, NEW.amount_total_cents);
     END IF;
   EXCEPTION WHEN OTHERS THEN
     -- The ledger mirror must never break a live payment write. Recover later
@@ -327,12 +373,12 @@ DECLARE r record; n int := 0;
 BEGIN
   FOR r IN SELECT * FROM public.league_registrations LOOP
     PERFORM public.reg3_sync_legacy_registration('league', r.id, r.league_id,
-      r.fee_cents, r.status, r.paid_at, r.league_team_id, r.stripe_session_id, r.created_at);
+      r.fee_cents, r.status, r.paid_at, r.league_team_id, r.stripe_session_id, r.created_at, r.amount_total_cents);
     n := n + 1;
   END LOOP;
   FOR r IN SELECT * FROM public.tournament_registrations LOOP
     PERFORM public.reg3_sync_legacy_registration('tournament', r.id, r.tournament_id,
-      r.fee_cents, r.status, r.paid_at, r.tournament_team_id, r.stripe_session_id, r.created_at);
+      r.fee_cents, r.status, r.paid_at, r.tournament_team_id, r.stripe_session_id, r.created_at, r.amount_total_cents);
     n := n + 1;
   END LOOP;
   RETURN n;
@@ -345,6 +391,59 @@ BEGIN
   n := public.reg3_backfill_legacy();
   RAISE NOTICE 'reg3_f: backfilled % legacy registrations into the spine', n;
 END $$;
+
+-- ────────────────────────────────────────────────────────────────────────────
+-- 5b ── Webhook money-trail completion — ONE transaction, idempotent on the
+-- REGISTRATION (the last thing written), so a crash mid-sequence is always
+-- repairable by a Stripe redelivery. The registration is resolved through the
+-- installment's plan — never trusted from metadata.
+-- ────────────────────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION public.reg3_mark_installment_paid(
+  p_installment_id uuid, p_session_id text, p_payment_intent text)
+RETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_inst record; v_reg_id uuid; v_reg_status text;
+BEGIN
+  SELECT pi.*, pp.registration_id INTO v_inst
+  FROM public.payment_installments pi
+  JOIN public.payment_plans pp ON pp.id = pi.payment_plan_id
+  WHERE (p_installment_id IS NOT NULL AND pi.id = p_installment_id)
+     OR (p_installment_id IS NULL AND pi.stripe_session_id = p_session_id)
+  ORDER BY pi.created_at LIMIT 1
+  FOR UPDATE OF pi;
+  IF v_inst.id IS NULL THEN RETURN 'not_found'; END IF;
+
+  v_reg_id := v_inst.registration_id;
+  SELECT status INTO v_reg_status FROM public.registrations WHERE id = v_reg_id FOR UPDATE;
+  IF v_inst.status = 'paid' AND v_reg_status = 'active' THEN RETURN 'already_processed'; END IF;
+
+  UPDATE public.payment_installments
+  SET status = 'paid', paid_at = coalesce(paid_at, now()),
+      stripe_payment_intent_id = coalesce(p_payment_intent, stripe_payment_intent_id),
+      stripe_session_id = coalesce(stripe_session_id, p_session_id)
+  WHERE id = v_inst.id;
+  UPDATE public.payment_plans SET status = 'complete'
+  WHERE id = v_inst.payment_plan_id
+    AND NOT EXISTS (SELECT 1 FROM public.payment_installments
+                    WHERE payment_plan_id = v_inst.payment_plan_id AND status <> 'paid');
+  UPDATE public.registrations SET status = 'active' WHERE id = v_reg_id AND status = 'pending';
+  RETURN 'paid';
+END $$;
+REVOKE ALL ON FUNCTION public.reg3_mark_installment_paid(uuid,text,text) FROM public, anon, authenticated;
+
+-- Abandoned/expired checkout: release the installment so the registration is
+-- resumable (register-player reuses a pending registration + unpaid
+-- installment and mints a fresh session).
+CREATE OR REPLACE FUNCTION public.reg3_release_installment(p_session_id text)
+RETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_n int;
+BEGIN
+  UPDATE public.payment_installments
+  SET status = 'scheduled'
+  WHERE stripe_session_id = p_session_id AND status = 'processing';
+  GET DIAGNOSTICS v_n = ROW_COUNT;
+  RETURN CASE WHEN v_n > 0 THEN 'released' ELSE 'noop' END;
+END $$;
+REVOKE ALL ON FUNCTION public.reg3_release_installment(text) FROM public, anon, authenticated;
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- 6 ── Org-side: assign a paid registrant to a league roster (consented path)
@@ -373,6 +472,18 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.league_teams lt
                  WHERE lt.league_id = v_reg.target_id AND lt.team_id = p_team_id) THEN
     RAISE EXCEPTION 'team is not in this league' USING errcode = '23503';
+  END IF;
+
+  -- Re-assignment moves the player: the old roster row goes away so the spine
+  -- and the rosters can never disagree (DELETE isn't gated by the minor-bind
+  -- trigger, which fires only on UPDATE OF user_id).
+  IF v_reg.rostered_team_id IS NOT NULL AND v_reg.rostered_team_id <> p_team_id THEN
+    DELETE FROM public.team_members
+    WHERE team_id = v_reg.rostered_team_id AND user_id = v_reg.registrant_id;
+    PERFORM public.log_guardianship_event('registrant_reassigned', v_me, v_reg.registrant_id,
+              v_reg.household_id, NULL,
+              jsonb_build_object('registration_id', p_registration_id,
+                                 'from_team_id', v_reg.rostered_team_id, 'to_team_id', p_team_id));
   END IF;
 
   -- The PAID registration created by the guardian IS the consent that the

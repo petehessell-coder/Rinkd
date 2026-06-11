@@ -83,6 +83,7 @@ serve(async (req) => {
     const parentId = body.targetId
     const profileId = body.profileId
     const waiverAccepted = body.waiverAccepted === true
+    const waiverVersionSeen = Number.isInteger(body.waiverVersion) ? body.waiverVersion : null
     const appUrl = body.appUrl
     if (!parentId || !profileId) return json({ error: "missing required fields" }, 400)
 
@@ -103,6 +104,12 @@ serve(async (req) => {
     const { data: registrant } = await svc
       .from("profiles").select("id, name, account_type").eq("id", profileId).maybeSingle()
     if (!registrant) return json({ error: "player profile not found" }, 404)
+    // A minor can never self-register / self-consent. Unreachable today
+    // (minors are login-less), but teen logins are a planned later add —
+    // this assert keeps the consent model honest when they arrive.
+    if (registrant.account_type === "minor" && profileId === callerProfile.id) {
+      return json({ error: "a minor's registration must be completed by their guardian" }, 403)
+    }
 
     // ── Event state (server-side truth) ──
     const { data: parent, error: pErr } = await svc
@@ -114,30 +121,57 @@ serve(async (req) => {
     if (!parent.player_registration_open) return json({ error: "closed", reason: "closed" }, 409)
 
     // ── Waiver (LA-2): required waivers must be accepted, and the acceptance
-    //    is recorded against the guardian who consented. ──
+    //    is recorded against the guardian who consented. The client sends the
+    //    version it DISPLAYED — if the organizer edited the waiver in between,
+    //    we 409 so the guardian re-reads rather than "accepting" unseen text. ──
     const { data: waiver } = await svc
       .from("waiver_templates")
-      .select("id, version, required, title")
+      .select("id, version, required, title, body_md")
       .eq("owner_type", kind).eq("owner_id", parentId)
       .maybeSingle()
     if (waiver?.required && !waiverAccepted) {
       return json({ error: "waiver must be accepted", reason: "waiver" }, 409)
     }
+    if (waiver && waiverAccepted && waiverVersionSeen !== null && waiverVersionSeen !== waiver.version) {
+      return json({ error: "the waiver was updated — please review it again", reason: "waiver_changed" }, 409)
+    }
 
-    // ── Duplicate guard: one live registration per (person, event) ──
+    const feeCents = Math.max(Number(parent.player_fee_cents) || 0, 0)
+    // Stripe's charge minimum is 50¢; the gross-up needs headroom on top.
+    // A sub-$1 fee is a misconfiguration, not a price.
+    if (feeCents > 0 && feeCents < 100) {
+      return json({ error: "this event's player fee is set below $1 — ask the organizer to fix it", reason: "fee_too_small" }, 409)
+    }
+    const ownerId = parent[cfg.ownerCol]
+    const total = feeCents > 0 ? Math.round((feeCents + 30) / 0.971) : 0
+    // Recorded platform fee = base − round(base*0.99): the EXACT amount the
+    // destination charge keeps after the processing passthrough, so the
+    // ledger equals Stripe to the cent.
+    const platformFee = feeCents > 0 ? feeCents - Math.round(feeCents * 0.99) : 0
+
+    // ── Duplicate guard / RESUME: one LIVE registration per (person, event).
+    //    A pending one with an unpaid installment is a half-finished checkout
+    //    (declined card, closed tab) — resume it with a fresh session instead
+    //    of bricking the kid's registration. ──
     const { data: dup } = await svc
       .from("registrations")
-      .select("id, status")
+      .select("id, status, amount_cents, plan:payment_plans(id, installments:payment_installments(id, status))")
       .eq("registrant_type", "profile").eq("registrant_id", profileId)
       .eq("target_type", kind).eq("target_id", parentId)
       .in("status", ["pending", "active", "waitlisted"])
       .maybeSingle()
+    let resumeRegId: string | null = null
+    let resumeInstId: string | null = null
     if (dup) {
-      return json({ error: `${registrant.name} is already registered`, reason: "duplicate", registrationId: dup.id }, 409)
+      const dupInst = dup.plan?.installments?.[0]
+      const resumable = dup.status === "pending" && feeCents > 0
+        && dupInst && dupInst.status !== "paid"
+      if (!resumable) {
+        return json({ error: `${registrant.name} is already registered`, reason: "duplicate", registrationId: dup.id }, 409)
+      }
+      resumeRegId = dup.id
+      resumeInstId = dupInst.id
     }
-
-    const feeCents = Math.max(Number(parent.player_fee_cents) || 0, 0)
-    const ownerId = parent[cfg.ownerCol]
 
     // ── Household for the family roll-up: a household where the caller is a
     //    guardian and the registrant is a member (self-registration: the
@@ -158,65 +192,85 @@ serve(async (req) => {
         || (profileId === callerProfile.id ? (guardianOf.values().next().value ?? null) : null)
     }
 
-    // ── Spine rows (service role — the only write path in) ──
-    const { data: reg, error: rErr } = await svc
-      .from("registrations")
-      .insert({
-        registrant_type: "profile",
-        registrant_id: profileId,
-        target_type: kind,
-        target_id: parentId,
-        household_id: householdId,
-        status: feeCents > 0 ? "pending" : "active",
-        amount_cents: feeCents,
-        created_by: callerProfile.id,
-        source_kind: "native",
-      })
-      .select("id")
-      .single()
-    if (rErr || !reg) return json({ error: "could not create registration" }, 500)
-    createdRegId = reg.id
+    // ── Spine rows (service role — the only write path in). Skipped when
+    //    resuming a half-finished checkout: those rows already exist, incl.
+    //    the waiver acceptance recorded on the first attempt. ──
+    let regId: string
+    let instId: string | null = null
+    if (resumeRegId) {
+      regId = resumeRegId
+      instId = resumeInstId
+    } else {
+      const { data: reg, error: rErr } = await svc
+        .from("registrations")
+        .insert({
+          registrant_type: "profile",
+          registrant_id: profileId,
+          target_type: kind,
+          target_id: parentId,
+          household_id: householdId,
+          status: feeCents > 0 ? "pending" : "active",
+          amount_cents: feeCents,
+          created_by: callerProfile.id,
+          source_kind: "native",
+        })
+        .select("id")
+        .single()
+      if (rErr) {
+        // Unique-index race (double-tap / two tabs): the other request won —
+        // surface the friendly duplicate instead of a generic 500.
+        if ((rErr as any).code === "23505") {
+          return json({ error: `${registrant.name} is already registered`, reason: "duplicate" }, 409)
+        }
+        return json({ error: "could not create registration" }, 500)
+      }
+      regId = reg.id
+      createdRegId = reg.id
 
-    if (waiver && (waiver.required || waiverAccepted)) {
-      const { error: wErr } = await svc.from("waiver_acceptances").insert({
-        waiver_template_id: waiver.id,
-        registration_id: reg.id,
-        subject_profile_id: profileId,
-        accepted_by: callerProfile.id,
-        waiver_version: waiver.version,
-        ip: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
-        user_agent: req.headers.get("user-agent") || null,
-      })
-      if (wErr) throw new Error(`waiver record failed: ${wErr.message}`)
+      if (waiver && (waiver.required || waiverAccepted)) {
+        // Snapshot the exact text consented to — templates are editable in
+        // place, so the acceptance row is the immutable legal record.
+        const { error: wErr } = await svc.from("waiver_acceptances").insert({
+          waiver_template_id: waiver.id,
+          registration_id: regId,
+          subject_profile_id: profileId,
+          accepted_by: callerProfile.id,
+          waiver_version: waiver.version,
+          accepted_title: waiver.title,
+          accepted_body_md: waiver.body_md,
+          ip: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
+          user_agent: req.headers.get("user-agent") || null,
+        })
+        if (wErr) throw new Error(`waiver record failed: ${wErr.message}`)
+      }
+
+      // ── Free event: active immediately, no money objects. ──
+      if (feeCents <= 0) {
+        return json({ free: true, registrationId: regId })
+      }
+
+      // ── Money objects (one-time = one installment due now) ──
+      const { data: plan, error: planErr } = await svc
+        .from("payment_plans")
+        .insert({
+          registration_id: regId,
+          total_cents: total,
+          platform_fee_cents: platformFee,
+          processing_fee_cents: total - feeCents,
+          plan_type: "one_time",
+          status: "active",
+        })
+        .select("id")
+        .single()
+      if (planErr || !plan) throw new Error("could not create payment plan")
+      const { data: inst, error: instErr } = await svc
+        .from("payment_installments")
+        .insert({ payment_plan_id: plan.id, amount_cents: total, status: "scheduled" })
+        .select("id")
+        .single()
+      if (instErr || !inst) throw new Error("could not create installment")
+      instId = inst.id
     }
-
-    // ── Free event: active immediately, no money objects. ──
-    if (feeCents <= 0) {
-      return json({ free: true, registrationId: reg.id })
-    }
-
-    // ── Money objects (one-time = one installment due now) ──
-    const total = Math.round((feeCents + 30) / 0.971)
-    const platformFee = Math.round(feeCents * 0.01)
-    const { data: plan, error: planErr } = await svc
-      .from("payment_plans")
-      .insert({
-        registration_id: reg.id,
-        total_cents: total,
-        platform_fee_cents: platformFee,
-        processing_fee_cents: total - feeCents,
-        plan_type: "one_time",
-        status: "active",
-      })
-      .select("id")
-      .single()
-    if (planErr || !plan) throw new Error("could not create payment plan")
-    const { data: inst, error: instErr } = await svc
-      .from("payment_installments")
-      .insert({ payment_plan_id: plan.id, amount_cents: total, status: "scheduled" })
-      .select("id")
-      .single()
-    if (instErr || !inst) throw new Error("could not create installment")
 
     // ── Connect (optional, same as team-entry) ──
     let connectedAccountId: string | null = null
@@ -255,7 +309,7 @@ serve(async (req) => {
       payment_method_types: ["card"],
       customer_email: callerProfile.email || user.email,
       line_items: lineItems,
-      metadata: { registration_id: reg.id, installment_id: inst.id, kind: "player" },
+      metadata: { registration_id: regId, installment_id: instId, kind: "player" },
       success_url: `${base}${cfg.path(parentId)}?success=1`,
       cancel_url: `${base}${cfg.path(parentId)}?canceled=1`,
     }
@@ -269,9 +323,9 @@ serve(async (req) => {
     const session = await stripe.checkout.sessions.create(sessionParams)
     await svc.from("payment_installments")
       .update({ stripe_session_id: session.id, status: "processing" })
-      .eq("id", inst.id)
+      .eq("id", instId)
 
-    return json({ url: session.url })
+    return json({ url: session.url, resumed: !!resumeRegId })
   } catch (err) {
     // Roll back the pending spine rows if we never handed off to Stripe
     // (CASCADE removes plan/installments/acceptances with the registration).
