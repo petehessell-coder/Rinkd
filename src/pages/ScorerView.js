@@ -5,6 +5,16 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 // of the main bundle so it doesn't slow first paint for every player.
 const Scoresheet = React.lazy(() => import('../components/Scoresheet'));
 import { supabase } from '../lib/supabase';
+// GS-1 Offline Mode — every scoring write goes through queuedWrite (queue +
+// replay on connectivity loss); game setup + event state are mirrored to
+// IndexedDB so an offline reload re-opens exactly where the scorer left off.
+import {
+  queuedWrite, drainQueue, subscribeQueue, retryDeadWrites, discardDeadWrites,
+  storeAuthMeta, getPendingOpsForGame, uuid,
+} from '../lib/syncQueue';
+import {
+  cacheGameSetup, readGameCache, updateCachedEvents, clearGameCache,
+} from '../lib/offlineCache';
 import { useWakeLock } from '../lib/useWakeLock';
 import { createGameRecapPost } from '../lib/posts';
 import { resolveBracketSlotsFromSemis } from '../lib/tournamentManage';
@@ -175,8 +185,73 @@ export default function ScorerView() {
   const [penaltyForm, setPenaltyForm] = useState({ team_id: '', player_number: '', severity: 'Minor (2 min)', penalty_type: 'Hooking', period: 1, time_in_period: '' });
   const [goalieForm, setGoalieForm] = useState({ goalie_out_number: '', goalie_in_number: '', period: 1, time_in_period: '' });
 
+  // GS-1 offline state. `queueState.pending` drives the "N writes pending"
+  // counter and the Finalize gate; `queueState.dead` rows exhausted their
+  // retries (or were rejected server-side) and need the manual Retry button.
+  // `fromCache` marks a boot served from IndexedDB because the network load
+  // failed — queue-only mode until connectivity returns.
+  const [isOnline, setIsOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine !== false);
+  const [queueState, setQueueState] = useState({ pending: 0, dead: 0 });
+  const [justSynced, setJustSynced] = useState(false);
+  const [fromCache, setFromCache] = useState(false);
+  // Synchronous mirror for the realtime handler — while writes are pending,
+  // a realtime refresh would overwrite the lists with server state that
+  // doesn't include them yet, making queued goals "vanish" from the log.
+  const pendingRef = useRef(0);
+  const fromCacheRef = useRef(false);
+  // Stable event id across retries of the SAME modal save: if a write
+  // actually committed but came back as an error (e.g. a 5xx after commit),
+  // the retry reuses the id and the server dedupes instead of double-counting.
+  const pendingEventIdRef = useRef(null);
+
+  // Boot from the IndexedDB cache when the network load fails (offline open /
+  // mid-game reload on dead rink WiFi). Cached events were mirrored from the
+  // scorer's live state on every change, so no pending-op merge is needed.
+  const hydrateFromCache = useCallback(async () => {
+    const cached = await readGameCache(gameId);
+    if (!cached?.setup?.authorized || !!cached.setup.isLeague !== isLeague) return false;
+    // If a DIFFERENT account signed in on this device since the cache was
+    // written, refuse it. A missing/unrefreshable local session is fine:
+    // IndexedDB is device+origin scoped (same trust as a tab that simply
+    // stayed open through the outage), and the sync edge fn re-authorizes
+    // every queued write server-side at drain time regardless.
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.id && session.user.id !== cached.setup.userId) return false;
+    } catch { /* offline refresh failure — proceed on cached authz */ }
+    const g = cached.setup.game;
+    const ev = cached.events || {};
+    setGame(g);
+    teamIdsRef.current = { home: g.home_team?.id || null, away: g.away_team?.id || null };
+    setIsDirector(!!cached.setup.isDirector);
+    setHomeScore(ev.homeScore ?? g.home_score ?? 0);
+    setAwayScore(ev.awayScore ?? g.away_score ?? 0);
+    setPeriod(ev.period ?? g.period ?? 1);
+    setStatus(ev.status ?? g.status ?? 'scheduled');
+    if (isLeague) {
+      setShootoutWinner(ev.shootoutWinner ?? (g.shootout_winner === g.home_team_id ? 'home' : g.shootout_winner === g.away_team_id ? 'away' : null));
+      setLeagueResult(ev.leagueResult ?? g.decided_in ?? 'regulation');
+    } else {
+      setShootoutWinner(ev.shootoutWinner ?? g.shootout_winner ?? null);
+    }
+    setGoalForm(prev => ({ ...prev, team_id: g.home_team?.id || '', period: ev.period ?? g.period ?? 1 }));
+    setPenaltyForm(prev => ({ ...prev, team_id: g.home_team?.id || '', period: ev.period ?? g.period ?? 1 }));
+    setGoals(ev.goals || []);
+    setPenalties(ev.penalties || []);
+    setShotRows(ev.shotRows || []);
+    setGoalieChanges(ev.goalieChanges || []);
+    setFromCache(true);
+    setLoading(false);
+    return true;
+  }, [gameId, isLeague]);
+
   const load = useCallback(async () => {
     setLoadError(false);
+    // Drain BEFORE reading server state, so anything queued from a previous
+    // session is already applied and shows up in the lists below.
+    if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+      try { await drainQueue(); } catch { /* drain is best-effort here */ }
+    }
     const { data: g, error: gErr } = isLeague
       ? await supabase.from('league_games')
           .select('*, home_team:league_teams!home_team_id(id, team_name, team:teams(id,name)), away_team:league_teams!away_team_id(id, team_name, team:teams(id,name)), rink:rinks(name,sub_rink), league:leagues(name,commissioner_id,is_activated)')
@@ -189,8 +264,13 @@ export default function ScorerView() {
           .select('*, home_team:tournament_teams!home_team_id(id,team_name), away_team:tournament_teams!away_team_id(id,team_name), rink:rinks(name,sub_rink), tournament:tournaments(name,director_id,settings,is_activated)')
           .eq('id', gameId).single();
     // A transient fetch failure (flaky rink wifi) must NOT eject the scorer
-    // mid-game. Distinguish a real error (show retry) from a genuine not-found.
-    if (gErr) { setLoadError(true); setLoading(false); return; }
+    // mid-game. Serve the cached setup in queue-only mode if we have one;
+    // otherwise distinguish a real error (show retry) from a genuine not-found.
+    if (gErr) {
+      const hydrated = await hydrateFromCache();
+      if (!hydrated) { setLoadError(true); setLoading(false); }
+      return;
+    }
     if (!g) { navigate(-1); return; }
 
     // Authorization — only the director / assigned scorer (tournament) or the
@@ -244,20 +324,122 @@ export default function ScorerView() {
     }
     setGoalForm(prev => ({ ...prev, team_id: g.home_team?.id || '', period: g.period || 1 }));
     setPenaltyForm(prev => ({ ...prev, team_id: g.home_team?.id || '', period: g.period || 1 }));
-    const [{ data: gl }, { data: pl }, { data: sl }, { data: gc }] = await Promise.all([
+    const [{ data: gl }, { data: pl }, { data: sl }, { data: gc }, { data: lineups }] = await Promise.all([
       supabase.from('game_goals').select('*').eq('game_id', gameId).order('created_at', { ascending: false }),
       supabase.from('game_penalties').select('*').eq('game_id', gameId).order('created_at', { ascending: false }),
       supabase.from('game_shots').select('*').eq('game_id', gameId),
       supabase.from('game_goalie_changes').select('*').eq('game_id', gameId).order('created_at', { ascending: false }),
+      // Prefetched purely for the offline cache (scoresheet rosters).
+      supabase.from('game_lineups').select('*').eq('game_id', gameId),
     ]);
-    setGoals(gl || []);
-    setPenalties(pl || []);
-    setShotRows(sl || []);
-    setGoalieChanges(gc || []);
+
+    // Merge queued-but-unsynced writes over the server lists, in replay
+    // order. This covers "online but the drain didn't finish" (server
+    // unreachable, mid-drain, dead-lettered rows): if a queued goal silently
+    // vanished from the log here, the scorer would re-enter it and it would
+    // double-count once the queue drains.
+    let goalsList = gl || [], pensList = pl || [], shotsList = sl || [], gcList = gc || [];
+    let gamePatch = null;
+    const pendingOps = await getPendingOpsForGame(gameId).catch(() => []);
+    for (const op of pendingOps) {
+      const p = op.payload || {};
+      if (op.table === 'game_goals') {
+        if (op.operation === 'insert' && !goalsList.some(x => x.id === p.id)) goalsList = [p, ...goalsList];
+        else if (op.operation === 'delete') goalsList = goalsList.filter(x => x.id !== op.match?.id);
+      } else if (op.table === 'game_penalties') {
+        if (op.operation === 'insert' && !pensList.some(x => x.id === p.id)) pensList = [p, ...pensList];
+        else if (op.operation === 'delete') pensList = pensList.filter(x => x.id !== op.match?.id);
+      } else if (op.table === 'game_goalie_changes' && op.operation === 'insert') {
+        if (!gcList.some(x => x.id === p.id)) gcList = [p, ...gcList];
+      } else if (op.table === 'game_shots') {
+        shotsList = [...shotsList.filter(s => !(s.team_id === p.team_id && s.period === p.period)), p];
+      } else if (op.table === 'games' || op.table === 'league_games') {
+        gamePatch = { ...(gamePatch || {}), ...p };
+      }
+    }
+    if (gamePatch) {
+      // Queued game updates are newer than the server row we just read.
+      if (gamePatch.home_score != null) setHomeScore(gamePatch.home_score);
+      if (gamePatch.away_score != null) setAwayScore(gamePatch.away_score);
+      if (gamePatch.period != null) setPeriod(gamePatch.period);
+      if (gamePatch.status != null) setStatus(gamePatch.status);
+    }
+    setGoals(goalsList);
+    setPenalties(pensList);
+    setShotRows(shotsList);
+    setGoalieChanges(gcList);
+    setFromCache(false);
     setLoading(false);
-  }, [gameId, navigate]);
+
+    // Refresh the offline cache with everything an offline boot needs, and
+    // keep the SW's drain token current. Both are fire-and-forget.
+    cacheGameSetup(gameId, {
+      game: g, lineups: lineups || [], userId: user.id,
+      authorized: true, isDirector: director, isLeague,
+    }).then(() => updateCachedEvents(gameId, {
+      goals: goalsList, penalties: pensList, shotRows: shotsList, goalieChanges: gcList,
+      homeScore: gamePatch?.home_score ?? (g.home_score || 0),
+      awayScore: gamePatch?.away_score ?? (g.away_score || 0),
+      period: gamePatch?.period ?? (g.period || 1),
+      status: gamePatch?.status ?? (g.status || 'scheduled'),
+    })).catch(() => {});
+    storeAuthMeta();
+  }, [gameId, navigate, isLeague, hydrateFromCache]);
 
   useEffect(() => { load(); }, [load]);
+
+  // GS-1 — connectivity + queue wiring. The 'online' handler drains; the
+  // queue subscription drives the banner counter, and the pending→0 edge
+  // flashes "Synced" + reloads server truth (covers SW-driven drains too).
+  useEffect(() => { fromCacheRef.current = fromCache; }, [fromCache]);
+
+  useEffect(() => {
+    const goOnline = () => {
+      setIsOnline(true);
+      // A cache-hydrated boot needs full server truth, not just a drain —
+      // load() drains first, then replaces cached state.
+      if (fromCacheRef.current) load();
+      else drainQueue().catch(() => {});
+    };
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    const unsub = subscribeQueue(async () => {
+      // Per-GAME counts — pending or failed writes for some OTHER game on
+      // this device must not gate (or alarm) this one.
+      const ops = await getPendingOpsForGame(gameId).catch(() => []);
+      const qs = { pending: ops.filter((o) => !o.dead).length, dead: ops.filter((o) => o.dead).length };
+      const prev = pendingRef.current;
+      pendingRef.current = qs.pending;
+      setQueueState(qs);
+      if (prev > 0 && qs.pending === 0 && qs.dead === 0) {
+        setJustSynced(true);
+        load();
+      }
+    });
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+      unsub();
+    };
+  }, [load, gameId]);
+
+  useEffect(() => {
+    if (!justSynced) return undefined;
+    const t = setTimeout(() => setJustSynced(false), 4000);
+    return () => clearTimeout(t);
+  }, [justSynced]);
+
+  // Mirror live event state into the offline cache after every change so an
+  // offline tab reload re-opens exactly where the scorer left off (an empty
+  // goal log after a reload would tempt them to re-enter — and double — it).
+  useEffect(() => {
+    if (!game || loading) return;
+    updateCachedEvents(gameId, {
+      goals, penalties, shotRows, goalieChanges,
+      homeScore, awayScore, period, status, shootoutWinner, leagueResult,
+    });
+  }, [game, loading, gameId, goals, penalties, shotRows, goalieChanges, homeScore, awayScore, period, status, shootoutWinner, leagueResult]);
 
   // Realtime — if two scorekeepers (or a director watching alongside the
   // scorer) are entering events on the same game (the common BLPA case),
@@ -273,6 +455,11 @@ export default function ScorerView() {
     try {
       const name = `scorer:${gameId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
       const refresh = async () => {
+        // While our own writes are queued (offline recovery in progress), a
+        // realtime refresh would overwrite the lists with server state that
+        // doesn't include them yet — queued goals would "vanish" from the
+        // log. Skip; the post-drain load() reconciles everything.
+        if (pendingRef.current > 0) return;
         const [{ data: gl }, { data: pl }] = await Promise.all([
           supabase.from('game_goals').select('*').eq('game_id', gameId).order('created_at', { ascending: false }),
           supabase.from('game_penalties').select('*').eq('game_id', gameId).order('created_at', { ascending: false }),
@@ -327,15 +514,28 @@ export default function ScorerView() {
       patch.decided_in = opts.leagueDecidedIn;
       patch.shootout_winner = opts.leagueShootoutWinner ?? null;
     }
-    const { error } = await supabase.from(isLeague ? 'league_games' : 'games').update(patch).eq('id', gameId);
+    const { error, queued } = await queuedWrite(
+      isLeague ? 'league_games' : 'games', 'update', patch,
+      { gameId, isLeague, match: { id: gameId } },
+    );
     savingRef.current = false;
     setSaving(false);
+    // A queued write is NOT an error — it's saved on-device and will replay.
     if (error) setErrorMsg('Could not save the score — check your connection and try again.');
-    return { error };
+    return { error, queued };
   };
 
   const reopenGame = async () => {
     if (!isDirector) return;
+    // Reopen is a correction flow on an already-synced game — require a live
+    // connection, confirmed server state, and a drained queue. A queued
+    // reopen would be skipped by the sync fn's finalized-game protection
+    // anyway (it refuses to un-finalize from a stale replay), so don't let
+    // the director think it worked.
+    if (!isOnline || fromCache || queueState.pending > 0 || queueState.dead > 0) {
+      setErrorMsg('Reconnect and finish syncing before reopening a finalized game.');
+      return;
+    }
     setErrorMsg('');
     const ok = window.confirm('Reopen this game for editing?\n\nStandings already reflect the current score. Any new edits will overwrite them when you finalize again.');
     if (!ok) return;
@@ -366,6 +566,12 @@ export default function ScorerView() {
         setAwayScore(prevAway);
         setStatus(prevStatus);
       }
+    }).catch(() => {
+      // queuedWrite shouldn't reject, but an unexpected throw must still
+      // roll back the optimistic score rather than letting it drift.
+      setHomeScore(prevHome);
+      setAwayScore(prevAway);
+      setStatus(prevStatus);
     });
   };
 
@@ -412,6 +618,25 @@ export default function ScorerView() {
     // to every subscriber, and re-run bracket auto-fill. updateScore flips
     // savingRef for the duration of its write, so the second tap bails here.
     if (savingRef.current) return;
+    // GS-1 finalize gate: finalizing writes standings, posts the recap, and
+    // fires push — it must never run on top of an unsynced local state. The
+    // button is disabled in this state too; this guard covers the period
+    // selector's "Final" button and any race that slipped past the disable.
+    // The queue check reads IndexedDB directly (not React state, which can
+    // lag an enqueue by a tick); fromCache means we haven't confirmed server
+    // truth since boot, so it blocks too.
+    if (p === 'final') {
+      const pendingOps = await getPendingOpsForGame(gameId).catch(() => []);
+      // Re-check after the await — a second Finalize tap can race the IDB
+      // read above, and savingRef was only checked before it.
+      if (savingRef.current) return;
+      if (!isOnline || fromCache || pendingOps.length > 0) {
+        setErrorMsg((!isOnline || fromCache)
+          ? 'You\'re offline — Finalize unlocks once you reconnect and all scoring syncs.'
+          : 'Still syncing your scoring — Finalize unlocks when everything is saved to the server.');
+        return;
+      }
+    }
     setErrorMsg('');
     // Pre-finalize sanity check — make sure the goal log matches the score.
     // Score is derived from goals on every saveGoal/deleteGoal, but the
@@ -456,7 +681,20 @@ export default function ScorerView() {
         opts = { leagueDecidedIn: decided, leagueShootoutWinner: soWinnerId };
       }
     }
-    const { error } = await updateScore(homeScore, awayScore, newPeriod, newStatus, opts);
+    const { error, queued } = await updateScore(homeScore, awayScore, newPeriod, newStatus, opts);
+
+    // Narrow race: the finalize gate passed (online, queue drained) but the
+    // connection died in the exact moment of the write, so it queued. The
+    // game is finalized locally and the status write will replay — but skip
+    // the recap/push/bracket side effects (they need the server state to be
+    // real). The director can Reopen + re-finalize to fire them later.
+    if (queued && newStatus === 'final') {
+      setErrorMsg('Connection dropped mid-finalize — the result is saved on this device and will sync. The recap post was skipped.');
+      return;
+    }
+
+    // The cache served its purpose once the game is truly finalized server-side.
+    if (!error && newStatus === 'final') clearGameCache(gameId);
 
     // Auto-recap post — fire once the score save succeeds and we just
     // transitioned to 'final'. Failure to post the recap should never block
@@ -532,9 +770,11 @@ export default function ScorerView() {
     // cross-period total — so we don't write an inflated count into one row.
     const existing = shotRows.find(s => s.team_id === teamId && s.period === period);
     const newCount = Math.max(0, (existing ? existing.count : 0) + delta);
-    const { data, error } = await supabase.from('game_shots')
-      .upsert({ game_id: gameId, team_id: teamId, period, count: newCount }, { onConflict: 'game_id,team_id,period' })
-      .select().single();
+    // Absolute count (not a delta) so an offline replay is last-write-wins —
+    // the final queued upsert lands on exactly the number the scorer saw.
+    const { data, error } = await queuedWrite('game_shots', 'upsert',
+      { game_id: gameId, team_id: teamId, period, count: newCount },
+      { gameId, isLeague });
     if (error || !data) { setErrorMsg('Could not save shots — check your connection and try again.'); return; }
     setShotRows(prev => [...prev.filter(s => !(s.team_id === teamId && s.period === period)), data]);
   };
@@ -546,14 +786,16 @@ export default function ScorerView() {
     modalBusyRef.current = true; setModalBusy(true);
     setErrorMsg('');
     try {
-      const { data, error } = await supabase.from('game_goals').insert({
+      if (!pendingEventIdRef.current) pendingEventIdRef.current = uuid();
+      const { data, error } = await queuedWrite('game_goals', 'insert', {
+        id: pendingEventIdRef.current,
         game_id: gameId, team_id: goalForm.team_id,
         scorer_number: goalForm.scorer_number ? parseInt(goalForm.scorer_number) : null,
         assist1_number: goalForm.assist1_number ? parseInt(goalForm.assist1_number) : null,
         assist2_number: goalForm.assist2_number ? parseInt(goalForm.assist2_number) : null,
         period: goalForm.period, time_in_period: goalForm.time_in_period || null,
         is_shootout: goalForm.is_shootout,
-      }).select().single();
+      }, { gameId, isLeague });
       // Keep the modal open and the score untouched if the write failed — the
       // goal was NOT recorded, and the scorer needs to know so they can retry.
       if (error || !data) { setErrorMsg('Could not save the goal — check your connection and try again. The goal was NOT recorded.'); return; }
@@ -561,6 +803,7 @@ export default function ScorerView() {
       // score on the games table stays in lock-step with the goal log. Eliminates
       // the drift that could happen when the goal insert succeeded but the
       // separate score update failed (the pre-refactor pattern).
+      pendingEventIdRef.current = null;
       const nextGoals = [data, ...goals];
       setGoals(nextGoals);
       syncScoreFromGoals(nextGoals);
@@ -578,14 +821,17 @@ export default function ScorerView() {
     modalBusyRef.current = true; setModalBusy(true);
     setErrorMsg('');
     try {
-      const { data, error } = await supabase.from('game_penalties').insert({
+      if (!pendingEventIdRef.current) pendingEventIdRef.current = uuid();
+      const { data, error } = await queuedWrite('game_penalties', 'insert', {
+        id: pendingEventIdRef.current,
         game_id: gameId, team_id: penaltyForm.team_id,
         player_number: penaltyForm.player_number ? parseInt(penaltyForm.player_number) : null,
         penalty_type: penaltyForm.penalty_type, severity: penaltyForm.severity,
         duration_minutes: PENALTY_DURATIONS[penaltyForm.severity] || 2,
         period: penaltyForm.period, time_in_period: penaltyForm.time_in_period || null,
-      }).select().single();
+      }, { gameId, isLeague });
       if (error || !data) { setErrorMsg('Could not save the penalty — check your connection and try again. It was NOT recorded.'); return; }
+      pendingEventIdRef.current = null;
       setPenalties(prev => [data, ...prev]);
       setPenaltyModal(false);
       setPenaltyForm(prev => ({ ...prev, player_number: '', time_in_period: '' }));
@@ -601,13 +847,16 @@ export default function ScorerView() {
     modalBusyRef.current = true; setModalBusy(true);
     setErrorMsg('');
     try {
-      const { data, error } = await supabase.from('game_goalie_changes').insert({
+      if (!pendingEventIdRef.current) pendingEventIdRef.current = uuid();
+      const { data, error } = await queuedWrite('game_goalie_changes', 'insert', {
+        id: pendingEventIdRef.current,
         game_id: gameId, team_id: goalieModal,
         goalie_out_number: goalieForm.goalie_out_number ? parseInt(goalieForm.goalie_out_number) : null,
         goalie_in_number: goalieForm.goalie_in_number ? parseInt(goalieForm.goalie_in_number) : null,
         period: goalieForm.period, time_in_period: goalieForm.time_in_period || null,
-      }).select().single();
+      }, { gameId, isLeague });
       if (error || !data) { setErrorMsg('Could not save the goalie change — check your connection and try again.'); return; }
+      pendingEventIdRef.current = null;
       setGoalieChanges(prev => [data, ...prev]);
       setGoalieModal(null);
       setGoalieForm({ goalie_out_number: '', goalie_in_number: '', period, time_in_period: '' });
@@ -619,7 +868,9 @@ export default function ScorerView() {
   const deleteGoal = async (id) => {
     if (isLocked) return;
     setErrorMsg('');
-    const { error } = await supabase.from('game_goals').delete().eq('id', id);
+    // game_id in the match keeps the replay scoped server-side; if the goal's
+    // own insert is still queued, replay order (insert → delete) nets zero.
+    const { error } = await queuedWrite('game_goals', 'delete', {}, { gameId, isLeague, match: { id, game_id: gameId } });
     if (error) { setErrorMsg('Could not delete the goal — check your connection and try again.'); return; }
     const nextGoals = goals.filter(g => g.id !== id);
     setGoals(nextGoals);
@@ -629,7 +880,7 @@ export default function ScorerView() {
   const deletePenalty = async (id) => {
     if (isLocked) return;
     setErrorMsg('');
-    const { error } = await supabase.from('game_penalties').delete().eq('id', id);
+    const { error } = await queuedWrite('game_penalties', 'delete', {}, { gameId, isLeague, match: { id, game_id: gameId } });
     if (error) { setErrorMsg('Could not delete the penalty — check your connection and try again.'); return; }
     setPenalties(prev => prev.filter(p => p.id !== id));
   };
@@ -715,7 +966,12 @@ export default function ScorerView() {
   const needsShootoutPick = requiresShootoutResolution && !shootoutWinner;
   // League: if the scorer marked a tied game as shootout-decided, they must pick the winner.
   const leagueNeedsSoPick = isLeague && isTied && leagueResult === 'so' && !shootoutWinner;
-  const finalizeBlocked = needsShootoutPick || leagueNeedsSoPick;
+  // GS-1 — Finalize stays locked until we're online with a fully drained
+  // queue AND state confirmed against the server (not a cache boot):
+  // finalizing writes standings + fires recap/push off server state, so it
+  // must never run on top of unsynced or unconfirmed local scoring.
+  const syncBlocked = !isOnline || fromCache || queueState.pending > 0 || queueState.dead > 0;
+  const finalizeBlocked = needsShootoutPick || leagueNeedsSoPick || syncBlocked;
   const resultBtn = (on) => ({ padding: 12, border: `1px solid ${on ? C.red : C.border}`, background: on ? 'rgba(215,38,56,0.18)' : 'rgba(46,91,140,0.15)', color: C.ice, borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' });
   const numPeriods = settings.num_periods ?? 3;
   const periodOptions = [
@@ -745,6 +1001,46 @@ export default function ScorerView() {
           {status === 'live' ? '● LIVE' : status === 'final' ? 'FINAL' : 'SCHEDULED'}
         </span>
       </div>
+
+      {/* GS-1 — connectivity / sync status. Amber while offline (with queue
+          depth), while syncing, red when writes exhausted their retries,
+          green flash once everything drains. */}
+      {!isOnline && (
+        <div style={{ background: 'rgba(245,158,11,0.14)', borderBottom: '0.5px solid rgba(245,158,11,0.5)', color: '#F4F7FA', padding: '11px 16px', fontSize: 13, fontWeight: 600, textAlign: 'center', lineHeight: 1.45 }}>
+          📡 Offline — scoring is saved on this device and will sync when the connection returns.
+          {queueState.pending > 0 && <span style={{ opacity: 0.75, fontWeight: 400 }}> · {queueState.pending} write{queueState.pending === 1 ? '' : 's'} pending</span>}
+          {fromCache && <span style={{ opacity: 0.75, fontWeight: 400 }}> · running from device cache</span>}
+        </div>
+      )}
+      {isOnline && queueState.pending > 0 && (
+        <div style={{ background: 'rgba(245,158,11,0.14)', borderBottom: '0.5px solid rgba(245,158,11,0.5)', color: '#F4F7FA', padding: '11px 16px', fontSize: 13, fontWeight: 600, textAlign: 'center' }}>
+          ⏳ Syncing — {queueState.pending} write{queueState.pending === 1 ? '' : 's'} pending…
+        </div>
+      )}
+      {isOnline && fromCache && (
+        <div style={{ background: 'rgba(245,158,11,0.14)', borderBottom: '0.5px solid rgba(245,158,11,0.5)', color: '#F4F7FA', padding: '11px 16px', fontSize: 13, fontWeight: 600, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span>📡 Running from device cache — waiting for the server.</span>
+          <button onClick={() => { setLoading(true); load(); }}
+            style={{ background: C.blue, color: '#fff', border: 'none', borderRadius: 999, padding: '6px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>↻ Retry</button>
+        </div>
+      )}
+      {isOnline && queueState.dead > 0 && (
+        <div style={{ background: 'rgba(215,38,56,0.18)', borderBottom: '0.5px solid rgba(215,38,56,0.6)', color: '#F4F7FA', padding: '11px 16px', fontSize: 13, fontWeight: 600, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span>⚠ {queueState.dead} write{queueState.dead === 1 ? '' : 's'} failed to sync.</span>
+          <button onClick={() => { setErrorMsg(''); retryDeadWrites().catch(() => {}); }}
+            style={{ background: C.red, color: '#fff', border: 'none', borderRadius: 999, padding: '6px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>↻ Retry Sync</button>
+          <button onClick={() => {
+            const ok = window.confirm(`Discard ${queueState.dead} failed write${queueState.dead === 1 ? '' : 's'}?\n\nThe server refused them (or retries ran out). The scoring they contain will be permanently lost on this device — check the goal log against the scoresheet afterwards.`);
+            if (ok) discardDeadWrites(gameId).then(() => load()).catch(() => {});
+          }}
+            style={{ background: 'rgba(244,247,250,0.12)', color: '#F4F7FA', border: 'none', borderRadius: 999, padding: '6px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>🗑 Discard</button>
+        </div>
+      )}
+      {isOnline && queueState.pending === 0 && queueState.dead === 0 && justSynced && (
+        <div style={{ background: 'rgba(34,197,94,0.14)', borderBottom: '0.5px solid rgba(34,197,94,0.5)', color: '#F4F7FA', padding: '11px 16px', fontSize: 13, fontWeight: 600, textAlign: 'center' }}>
+          ✅ Synced — all scoring saved.
+        </div>
+      )}
 
       {errorMsg && (
         <div onClick={() => setErrorMsg('')}
@@ -989,7 +1285,11 @@ export default function ScorerView() {
               style={{ width: '100%', padding: 14, background: (finalizeBlocked || saving) ? C.border : C.red, border: 'none', borderRadius: 999, color: '#fff', fontSize: 15, fontWeight: 700, cursor: (finalizeBlocked || saving) ? 'not-allowed' : 'pointer', fontFamily: 'Barlow, sans-serif', marginTop: 4, transition: 'all 0.15s', opacity: (finalizeBlocked || saving) ? 0.6 : 1 }}
               onMouseEnter={e => { if (!(finalizeBlocked || saving)) { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; } }}
               onMouseLeave={e => { e.currentTarget.style.background = C.red; e.currentTarget.style.color = '#fff'; }}>
-              {saving ? '⏳ Finalizing…' : '🏒 Finalize Game'}
+              {saving ? '⏳ Finalizing…'
+                : !isOnline ? '📡 Offline — Finalize locked until synced'
+                : fromCache ? '📡 Waiting for server — Finalize locked'
+                : (queueState.pending > 0 || queueState.dead > 0) ? '⏳ Syncing — Finalize locked until synced'
+                : '🏒 Finalize Game'}
             </button>
           : <div style={{ textAlign: 'center', padding: 14, background: 'rgba(215,38,56,0.1)', border: '0.5px solid rgba(215,38,56,0.3)', borderRadius: 999, fontSize: 14, fontWeight: 700, color: C.red }}>✓ Game Finalized — Standings Updated</div>
         }
@@ -1011,7 +1311,7 @@ export default function ScorerView() {
 
       {/* GOAL MODAL */}
       {goalModal && (
-        <Modal title="Log Goal" onClose={() => setGoalModal(false)} onSave={saveGoal} saveLabel="Save Goal" busy={modalBusy}>
+        <Modal title="Log Goal" onClose={() => { setGoalModal(false); pendingEventIdRef.current = null; }} onSave={saveGoal} saveLabel="Save Goal" busy={modalBusy}>
           <MField label="Team">
             <select style={selectStyle} value={goalForm.team_id} onChange={e => setGoalForm(p => ({ ...p, team_id: e.target.value }))}>
               <option value={homeTeam?.id}>{homeTeam?.team_name}</option>
@@ -1044,7 +1344,7 @@ export default function ScorerView() {
 
       {/* PENALTY MODAL */}
       {penaltyModal && (
-        <Modal title="Add Penalty" onClose={() => setPenaltyModal(false)} onSave={savePenalty} saveLabel="Save Penalty" busy={modalBusy}>
+        <Modal title="Add Penalty" onClose={() => { setPenaltyModal(false); pendingEventIdRef.current = null; }} onSave={savePenalty} saveLabel="Save Penalty" busy={modalBusy}>
           <MField label="Team">
             <select style={selectStyle} value={penaltyForm.team_id} onChange={e => setPenaltyForm(p => ({ ...p, team_id: e.target.value }))}>
               <option value={homeTeam?.id}>{homeTeam?.team_name}</option>
@@ -1075,7 +1375,7 @@ export default function ScorerView() {
 
       {/* GOALIE MODAL */}
       {goalieModal && (
-        <Modal title={`Goalie Change — ${teamName(goalieModal)}`} onClose={() => setGoalieModal(null)} onSave={saveGoalie} saveLabel="Save Change" busy={modalBusy}>
+        <Modal title={`Goalie Change — ${teamName(goalieModal)}`} onClose={() => { setGoalieModal(null); pendingEventIdRef.current = null; }} onSave={saveGoalie} saveLabel="Save Change" busy={modalBusy}>
           <Row2>
             <MField label="Out #"><input style={inputStyle} type="number" placeholder="Jersey #" value={goalieForm.goalie_out_number} onChange={e => setGoalieForm(p => ({ ...p, goalie_out_number: e.target.value }))} /></MField>
             <MField label="In #"><input style={inputStyle} type="number" placeholder="Jersey #" value={goalieForm.goalie_in_number} onChange={e => setGoalieForm(p => ({ ...p, goalie_in_number: e.target.value }))} /></MField>
