@@ -20,7 +20,7 @@
 | **GitHub** | Code repository | Free | $0 | Fine — unlimited private repos |
 | **Domain (rinkd.app)** | Domain registration | registrar | ~$15–30/yr | renewal only |
 | **AvantLink** | Affiliate feed (Pure Hockey) | — | $0 | **DENIED / inactive** — not in use |
-| **Stripe** | Payments / registration | **not wired yet** | per-txn later (2.9% + $0.30) | N/A until TOURN-REG-1 / LA-1 ship (post-pilot) |
+| **Stripe** | Payments / registration | **scaffolded — live-mode account active** (acct Rinkd LLC; `stripe-checkout`/`stripe-webhook`/`stripe-connect` edge fns deployed + ACTIVE as of Jun 10 2026). Connect platform enable + full REG build (TOURN-REG-1/LA-1) still post-pilot. | per-txn (2.9% + $0.30) once live registration ships | Verify which key the edge fns use (Supabase secret `STRIPE_SECRET_KEY` live vs test) before taking customer money. |
 | jsPDF / jspdf-autotable | Client-side scoresheet PDF | npm lib | $0 | not a service |
 | LiveBarn | Stream link-out / venue IDs (partnership) | partnership | $0 to Rinkd | not a billable Rinkd service |
 

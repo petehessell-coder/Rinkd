@@ -1,6 +1,7 @@
 {
   "_comment": "Seed list of ChillerStats LeagueIDs to crawl. Each ID points to one /dashboard.cfm?LeagueID=<GUID> page that lists every team in that league/season. Add more as you discover them — easiest way: open chillerstats.com, click around the active leagues, copy the LeagueID GUIDs from the URLs.",
   "leagueIds": [
-    "BF93DA81-A09D-FE6D-2ABF2E1E3E9C0A77"
+    "BF93DA81-A09D-FE6D-2ABF2E1E3E9C0A77",
+    "7AC55E0C-A255-1EF1-0E29FD3B85A28C54"
   ]
 }
