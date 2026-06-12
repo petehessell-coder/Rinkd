@@ -459,6 +459,7 @@ export default function GameDetail({ profile }) {
                         {g.assist1_number ? ` — assist: ${playerLabel(g.team_id, g.assist1_number)}` : ' — unassisted'}
                         {g.assist2_number ? `, ${playerLabel(g.team_id, g.assist2_number)}` : ''}
                         {g.is_shootout ? ' (SO)' : ''}
+                        {g.empty_net ? ' (EN)' : ''}
                       </div>
                       <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>
                         {teamName(g.team_id)} · {periodLabel(g.period)}{g.time_in_period ? ` · ${g.time_in_period}` : ''}

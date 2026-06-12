@@ -185,7 +185,7 @@ export default function ScorerView() {
   const [penaltyModal, setPenaltyModal] = useState(false);
   const [goalieModal, setGoalieModal] = useState(null);
   const [showScoresheet, setShowScoresheet] = useState(false);
-  const [goalForm, setGoalForm] = useState({ team_id: '', scorer_number: '', assist1_number: '', assist2_number: '', period: 1, time_in_period: '', is_shootout: false });
+  const [goalForm, setGoalForm] = useState({ team_id: '', scorer_number: '', assist1_number: '', assist2_number: '', period: 1, time_in_period: '', is_shootout: false, empty_net: false });
   const [penaltyForm, setPenaltyForm] = useState({ team_id: '', player_number: '', severity: 'Minor (2 min)', penalty_type: 'Hooking', period: 1, time_in_period: '' });
   const [goalieForm, setGoalieForm] = useState({ goalie_out_number: '', goalie_in_number: '', period: 1, time_in_period: '' });
 
@@ -205,6 +205,8 @@ export default function ScorerView() {
   const suspensionIdRef = useRef(null);
   const [suspensionFiledMsg, setSuspensionFiledMsg] = useState('');
   const [verifyBusy, setVerifyBusy] = useState(false);
+  // GOALIE-1 — in-flight lock for the "who's starting in net?" nudge taps.
+  const starterNudgeBusyRef = useRef(false);
 
   // GS-1 offline state. `queueState.pending` drives the "N writes pending"
   // counter and the Finalize gate; `queueState.dead` rows exhausted their
@@ -626,7 +628,7 @@ export default function ScorerView() {
     setErrorMsg('');
     const teamId = side === 'home' ? game?.home_team?.id : game?.away_team?.id;
     if (!teamId) return;
-    setGoalForm(prev => ({ ...prev, team_id: teamId, period, scorer_number: '', assist1_number: '', assist2_number: '', time_in_period: '', is_shootout: false }));
+    setGoalForm(prev => ({ ...prev, team_id: teamId, period, scorer_number: '', assist1_number: '', assist2_number: '', time_in_period: '', is_shootout: false, empty_net: false }));
     setGoalModal(true);
   };
 
@@ -813,7 +815,7 @@ export default function ScorerView() {
     // Absolute count (not a delta) so an offline replay is last-write-wins —
     // the final queued upsert lands on exactly the number the scorer saw.
     const { data, error } = await queuedWrite('game_shots', 'upsert',
-      { game_id: gameId, team_id: teamId, period, count: newCount },
+      { game_id: gameId, team_id: teamId, period, count: newCount, game_source: isLeague ? 'league' : 'tournament' },
       { gameId, isLeague });
     if (error || !data) { setErrorMsg('Could not save shots — check your connection and try again.'); return; }
     setShotRows(prev => [...prev.filter(s => !(s.team_id === teamId && s.period === period)), data]);
@@ -835,6 +837,9 @@ export default function ScorerView() {
         assist2_number: goalForm.assist2_number ? parseInt(goalForm.assist2_number) : null,
         period: goalForm.period, time_in_period: goalForm.time_in_period || null,
         is_shootout: goalForm.is_shootout,
+        // GOALIE-1 — authoritative "no goalie charged" signal for goalie stats.
+        empty_net: goalForm.empty_net,
+        game_source: isLeague ? 'league' : 'tournament',
       }, { gameId, isLeague });
       // Keep the modal open and the score untouched if the write failed — the
       // goal was NOT recorded, and the scorer needs to know so they can retry.
@@ -848,7 +853,7 @@ export default function ScorerView() {
       setGoals(nextGoals);
       syncScoreFromGoals(nextGoals);
       setGoalModal(false);
-      setGoalForm(prev => ({ ...prev, scorer_number: '', assist1_number: '', assist2_number: '', time_in_period: '' }));
+      setGoalForm(prev => ({ ...prev, scorer_number: '', assist1_number: '', assist2_number: '', time_in_period: '', empty_net: false }));
     } finally {
       modalBusyRef.current = false; setModalBusy(false);
     }
@@ -869,6 +874,7 @@ export default function ScorerView() {
         penalty_type: penaltyForm.penalty_type, severity: penaltyForm.severity,
         duration_minutes: PENALTY_DURATIONS[penaltyForm.severity] || 2,
         period: penaltyForm.period, time_in_period: penaltyForm.time_in_period || null,
+        game_source: isLeague ? 'league' : 'tournament',
       }, { gameId, isLeague });
       if (error || !data) { setErrorMsg('Could not save the penalty — check your connection and try again. It was NOT recorded.'); return; }
       pendingEventIdRef.current = null;
@@ -980,6 +986,7 @@ export default function ScorerView() {
         goalie_out_number: goalieForm.goalie_out_number ? parseInt(goalieForm.goalie_out_number) : null,
         goalie_in_number: goalieForm.goalie_in_number ? parseInt(goalieForm.goalie_in_number) : null,
         period: goalieForm.period, time_in_period: goalieForm.time_in_period || null,
+        game_source: isLeague ? 'league' : 'tournament',
       }, { gameId, isLeague });
       if (error || !data) { setErrorMsg('Could not save the goalie change — check your connection and try again.'); return; }
       pendingEventIdRef.current = null;
@@ -988,6 +995,42 @@ export default function ScorerView() {
       setGoalieForm({ goalie_out_number: '', goalie_in_number: '', period, time_in_period: '' });
     } finally {
       modalBusyRef.current = false; setModalBusy(false);
+    }
+  };
+
+  // GOALIE-1 — "who's starting in net?" nudge. With 2+ goalies dressed and no
+  // designated starter (LineupModal leaves every goalie is_starter=true when
+  // the net was never assigned), the in-net timeline has no Segment 0 and
+  // pre-change events charge no one. One tap logs the starter as a goalie
+  // change at the top of P1 (out=null, in=#, no clock = period start) — it
+  // rides the existing offline queue + sync whitelist, no new write surface.
+  const dressedGoalies = (teamId) =>
+    lineups.filter(l => l.team_id === teamId && l.is_goalie && l.jersey_number != null);
+  const needsStarterNudge = (teamId) => {
+    if (!teamId || isLocked) return false;
+    if (goalieChanges.some(c => c.team_id === teamId)) return false;
+    const gs = dressedGoalies(teamId);
+    if (gs.length < 2) return false; // 0–1 dressed: the timeline resolves it
+    if (gs.filter(g => g.line === 1).length === 1) return false; // explicit starter
+    if (gs.filter(g => g.is_starter !== false).length === 1) return false; // unique flagged starter
+    return true;
+  };
+  const logStartingGoalie = async (teamId, jersey) => {
+    if (starterNudgeBusyRef.current) return;
+    starterNudgeBusyRef.current = true;
+    setErrorMsg('');
+    try {
+      const { data, error } = await queuedWrite('game_goalie_changes', 'insert', {
+        id: uuid(),
+        game_id: gameId, team_id: teamId,
+        goalie_out_number: null, goalie_in_number: jersey,
+        period: 1, time_in_period: null,
+        game_source: isLeague ? 'league' : 'tournament',
+      }, { gameId, isLeague });
+      if (error || !data) { setErrorMsg('Could not save the starting goalie — check your connection and try again.'); return; }
+      setGoalieChanges(prev => [data, ...prev]);
+    } finally {
+      starterNudgeBusyRef.current = false;
     }
   };
 
@@ -1338,6 +1381,7 @@ export default function ScorerView() {
                     {g.assist1_number ? ` — assist: #${g.assist1_number}` : ' — unassisted'}
                     {g.assist2_number ? `, #${g.assist2_number}` : ''}
                     {g.is_shootout ? ' (SO)' : ''}
+                    {g.empty_net ? ' (EN)' : ''}
                   </div>
                   <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>{teamName(g.team_id)} · {periodLabel(g.period)}{g.time_in_period ? ` · ${g.time_in_period}` : ''}</div>
                 </div>
@@ -1419,10 +1463,33 @@ export default function ScorerView() {
             <div key={team?.id}>
               {ti > 0 && <div style={{ height: '0.5px', background: 'rgba(244,247,250,0.06)', margin: '12px 0' }} />}
               <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(244,247,250,0.35)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>{team?.team_name}</div>
+              {/* GOALIE-1 — starter nudge: only when 2+ goalies are dressed
+                  with no designated starter and no change logged yet. */}
+              {!isLocked && needsStarterNudge(team?.id) && (
+                <div style={{ background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.4)', borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: '#F59E0B', marginBottom: 4 }}>🥅 Who's starting in net?</div>
+                  <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.45)', marginBottom: 8, lineHeight: 1.4 }}>
+                    More than one goalie is dressed — one tap logs the starter so each goalie's stats stay exact.
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {dressedGoalies(team?.id).map(g => (
+                      <button key={g.id} onClick={() => logStartingGoalie(team?.id, g.jersey_number)}
+                        style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.45)', color: '#F59E0B', borderRadius: 999, padding: '6px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>
+                        #{g.jersey_number}{g.invite_name ? ` ${g.invite_name}` : ''}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {goalieChanges.filter(g => g.team_id === team?.id).map(c => (
                 <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#F4F7FA' }}>{c.goalie_out_number ? `#${c.goalie_out_number}` : '?'} → {c.goalie_in_number ? `#${c.goalie_in_number}` : '?'}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#F4F7FA' }}>
+                      {c.goalie_out_number && c.goalie_in_number ? `#${c.goalie_out_number} → #${c.goalie_in_number}`
+                        : c.goalie_in_number ? `#${c.goalie_in_number} in net`
+                        : c.goalie_out_number ? `#${c.goalie_out_number} pulled — empty net`
+                        : '?'}
+                    </div>
                     <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>{periodLabel(c.period)}{c.time_in_period ? ` · ${c.time_in_period}` : ''}</div>
                   </div>
                 </div>
@@ -1564,6 +1631,15 @@ export default function ScorerView() {
               </select>
             </MField>
           </Row2>
+          {/* GOALIE-1 — empty-net flag: the authoritative signal that no
+              goalie is charged with this goal (more reliable than inferring
+              from a pull that may never get logged). */}
+          <MField label="Empty net?">
+            <select style={selectStyle} value={goalForm.empty_net ? 'yes' : 'no'} onChange={e => setGoalForm(p => ({ ...p, empty_net: e.target.value === 'yes' }))}>
+              <option value="no">No</option>
+              <option value="yes">Yes — goalie was pulled (no goalie charged)</option>
+            </select>
+          </MField>
         </Modal>
       )}
 
