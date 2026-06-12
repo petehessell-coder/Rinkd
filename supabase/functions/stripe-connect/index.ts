@@ -11,7 +11,9 @@ import Stripe from "https://esm.sh/stripe@16.12.0?target=deno"
 // Returns { url } — a Stripe-hosted onboarding link the client redirects to. The
 // account.updated webhook flips charges_enabled when KYC completes.
 
-const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY")
+// REG-4 secret split: registrations run on their own key (sandbox until paid
+// launch); fallback keeps pre-split behavior until the secret is set.
+const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_REG_SECRET_KEY") ?? Deno.env.get("STRIPE_SECRET_KEY")
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")

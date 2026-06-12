@@ -16,6 +16,7 @@ import { savePostMentions, saveCommentMentions, mentionMapFromRows } from '../li
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/authContext';
 import ShareButton from '../components/ShareButton';
+import { UpNextPayment } from '../components/FamilyMoney';
 import { loadGameCardData } from '../lib/gameCardData';
 
 // Feed page size — keyset pagination pulls this many chirps per request.
@@ -646,6 +647,11 @@ export default function Feed({ currentUser, profile }) {
         {/* ONBOARD-1 progressive-disclosure nudge — only renders for users who
             skipped the OnboardingModal (welcome_seen=true, profile_complete=false). */}
         <ProfileNudgeBanner />
+
+        {/* REG-4 up-next: "you owe $X for Henry, due Friday" — the one money
+            widget atop the feed (REGISTRATION_PARITY §3). Renders nothing when
+            nothing is owed. */}
+        <UpNextPayment />
 
         <PushPrompt userId={currentUser?.id} />
         
