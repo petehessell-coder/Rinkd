@@ -514,6 +514,89 @@ async function makeMinor(label) {
       dirErr?.message || JSON.stringify(dirRes));
   }
 
+  // ── 11. P3 subs pools (Migration K) ────────────────────────────────────
+  // `manager` is the league commissioner (§ fixtures); lt/ltOpp are its
+  // playing teams.
+  {
+    const { error } = await adultPlayer.client.rpc('create_league_sub_pools', { p_league_id: league.id });
+    check('non-commissioner cannot create sub pools (42501)', !!error && /commissioner|42501/i.test(`${error.code} ${error.message}`),
+      error?.message || 'create was allowed!');
+  }
+  let pools = [];
+  {
+    const { data, error } = await manager.client.rpc('create_league_sub_pools', { p_league_id: league.id });
+    pools = data || [];
+    check('commissioner creates skaters + goalies pools', !error && pools.length === 2 && pools.every(p => p.is_sub_pool),
+      error?.message || JSON.stringify(pools.map(p => p.sub_pool_kind)));
+    const { data: again } = await manager.client.rpc('create_league_sub_pools', { p_league_id: league.id });
+    check('pool creation is idempotent', (again || []).length === 0, `created ${(again || []).length}`);
+  }
+  const skatersPool = pools.find(p => p.sub_pool_kind === 'skaters');
+  {
+    // The trigger binds even the service role — pools are unschedulable, period.
+    const { error } = await admin.from('league_games').insert({
+      league_id: league.id, home_team_id: skatersPool.id, away_team_id: ltOpp.id,
+      start_time: new Date(Date.now() + 4 * 86400000).toISOString(), status: 'scheduled',
+    });
+    check('a pool cannot be scheduled (service role, trigger)', !!error && /cannot be scheduled/i.test(error.message),
+      error?.message || 'insert was allowed!');
+  }
+
+  {
+    // The flag guard: league_teams INSERT is any-authed (pre-existing loose
+    // policy), so without the trigger anyone could mint a fake "pool".
+    const { error } = await adultPlayer.client.from('league_teams').insert({
+      league_id: league.id, team_id: oppTeam.id, team_name: 'Fake Pool',
+      is_sub_pool: true, sub_pool_kind: 'goalies',
+    });
+    check('non-commissioner cannot insert a pool-flagged league_team (trigger)',
+      !!error && /commissioner|42501/i.test(`${error.code} ${error.message}`),
+      error?.message || 'insert was allowed!');
+  }
+
+  // Day-of pull through the consent gate + identity-keyed stats.
+  const subAdult = await makeAuthedUser('lrssub');
+  await admin.from('team_members').insert(
+    { team_id: skatersPool.team_id, user_id: subAdult.id, role: 'player', jersey_number: 77, status: 'active' });
+  const { data: gameD } = await admin.from('league_games')
+    .insert({
+      league_id: league.id, home_team_id: lt.id, away_team_id: ltOpp.id,
+      start_time: new Date(Date.now() + 5 * 86400000).toISOString(), status: 'final',
+      home_score: 1, away_score: 0,
+    }).select('id').single();
+  {
+    const { data, error } = await manager.client.rpc('set_lineup', {
+      p_game_id: gameD.id, p_game_source: 'league', p_team_id: lt.id,
+      p_players: [
+        { user_id: adultPlayer.id, player_id: adultPlayer.id, jersey_number: 9, is_starter: true },
+        { user_id: subAdult.id, player_id: subAdult.id, invite_name: 'Pool Sub', jersey_number: 77, is_starter: true },
+      ],
+    });
+    check('day-of pull: ADULT pool sub saves through set_lineup', !error && data?.length === 2, error?.message || `rows=${data?.length}`);
+  }
+  {
+    // A minor anchored ONLY to the pool must not be pullable onto another
+    // team's lineup (the brief's consent non-negotiable).
+    const minorPool = await makeMinor('lrsminor-pool');
+    await admin.from('team_members').insert(
+      { team_id: skatersPool.team_id, user_id: minorPool, role: 'player', jersey_number: 8, status: 'active' });
+    const { error } = await manager.client.rpc('set_lineup', {
+      p_game_id: gameD.id, p_game_source: 'league', p_team_id: lt.id,
+      p_players: [{ user_id: minorPool, player_id: minorPool, jersey_number: 8, is_starter: true }],
+    });
+    check('day-of pull: MINOR pool sub is BLOCKED by the consent gate', isGateError(error), error?.message || 'save was allowed!');
+  }
+  {
+    await admin.from('game_goals').insert(
+      { game_id: gameD.id, team_id: lt.id, scorer_number: 77, game_source: 'league' });
+    const { data: board, error } = await manager.client.rpc('get_league_skater_stats', { p_league_id: league.id });
+    const subRow = (board || []).find(r => r.player_id === subAdult.id);
+    check('sub stats key on IDENTITY (goal attributed to the pool sub, gp=1)',
+      !error && subRow?.goals === 1 && subRow?.gp === 1 && subRow?.team_id === lt.id,
+      error?.message || JSON.stringify(subRow || {}));
+    check('sub pools never seed board rows', !(board || []).some(r => r.team_id === skatersPool.id), '');
+  }
+
   console.log(`\n${failed === 0 ? '✅ ALL PASS' : `❌ ${failed} FAILED`}`);
   process.exit(failed === 0 ? 0 : 1);
 })().catch((e) => { console.error('\n💥 harness error:', e.message); process.exit(2); });

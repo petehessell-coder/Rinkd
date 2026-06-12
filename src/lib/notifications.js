@@ -111,6 +111,7 @@ export const KIND_META = {
   team_join_denied:    { icon: '🚫', label: 'Roster request not accepted' },
   game_reminder:       { icon: '⏰', label: 'Game reminder' },
   suspension:          { icon: '🚨', label: 'Suspension filed' },
+  sub_alert:           { icon: '🏒', label: 'Sub needed' },
   team_invite:         { icon: '✉️', label: 'Team invite' },
   league_invite:       { icon: '🏆', label: 'League invite' },
   game_puck_won:       { icon: '🏒', label: 'Game Puck' },

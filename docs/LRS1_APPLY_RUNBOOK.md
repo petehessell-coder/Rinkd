@@ -28,6 +28,14 @@
    `game_suspensions` (offline filings replay through it). An old deploy
    rejects queued suspension filings as `table/operation not allowed`, which
    dead-letters them on the scorer's device.
+8. `20260615001300_lrs3_k_subs_pools.sql` (P3) — adds the pool flag +
+   commissioner-only flag guard + scheduling block, and REWRITES
+   `get_league_skater_stats` (identity-keyed attribution through per-game
+   lineups; byte-identical results for leagues with no lineups — XRHL/KOHA
+   imported rosters are pure roster-fallback. Behavior change where lineups
+   ARE used: GP becomes lineup-appearance count for those players).
+9. **Deploy `send-sub-alert`** (client-invoked, no DB trigger — any time
+   before the client build ships).
 
 ## Branch test BEFORE prod (required)
 
@@ -35,7 +43,7 @@ Supabase branching needs **Pro** — already budgeted in `SERVICES_AND_COSTS.md`
 (planned pre-pilot upgrade). Free tier blocked branch-testing at build time
 (Jun 11), so the suite below is the gate at apply time:
 
-1. Create a disposable dev branch; apply REG A–E, then H, then I, then J.
+1. Create a disposable dev branch; apply REG A–E, then H, I, J, K.
 2. ```
    SMOKE_SUPABASE_URL=https://<branch-ref>.supabase.co \
    SMOKE_ANON_KEY=<branch anon> \
@@ -49,7 +57,10 @@ Supabase branching needs **Pro** — already budgeted in `SERVICES_AND_COSTS.md`
    ignored), the `line` check constraint, `player_id` in all four stat RPCs,
    and (P2) suspension filing RLS, serve/overturn counting, CHECK invariants,
    the team-level-only flags RPC, and `verify_game_rosters` (clean vs
-   conflict vs non-staff).
+   conflict vs non-staff), and (P3) pool creation authz + idempotency, the
+   pool-flag guard (any-authed insert spoof), the scheduling block, the
+   adult-sub day-of pull vs the minor-sub consent block, and identity-keyed
+   sub stats on the league board.
 4. Delete the branch.
 
 Already verified at build time (Jun 11, no branch needed, re-runnable):

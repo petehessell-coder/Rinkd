@@ -2,6 +2,11 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { getTeamMembers } from '../lib/teams';
 import { getLineup, setLineup, resolveLineupPlayers } from '../lib/lineups';
+// LRS-1 P3 — day-of subs from the league's pools. A pulled sub is just a
+// lineup row for a user with no roster spot on this team: it saves through
+// the same set_lineup RPC, so Migration H's minor gate applies unchanged
+// (adult subs pass; a minor anchored only to the pool is blocked by design).
+import { listSubPoolsForTeam, sendSubNeededAlert } from '../lib/subPools';
 
 const B = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
@@ -44,12 +49,24 @@ export default function LineupModal({
   const [showOut, setShowOut] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // P3 subs — pulled-for-tonight players from the league's sub pools.
+  // {user_id, name, jersey (string, editable), is_goalie} per entry. Saved
+  // subs are reconstructed from lineup rows whose user is not on the roster.
+  const [subs, setSubs] = useState([]);
+  const [showSubs, setShowSubs] = useState(false);
+  const [subPools, setSubPools] = useState(null); // null = not loaded yet
+  const [subAlertMsg, setSubAlertMsg] = useState(null);
+  const [subAlertBusy, setSubAlertBusy] = useState(null); // pool.id while posting
 
   const load = useCallback(async () => {
     if (!open || !teamId || !gameId) return;
     setError(null);
     setStep('dress');
     setShowOut(false);
+    setShowSubs(false);
+    setSubPools(null);
+    setSubAlertMsg(null);
+    setSubAlertBusy(null);
     try {
       const [ms, lineup, rsvps] = await Promise.all([
         getTeamMembers(teamId),
@@ -57,6 +74,17 @@ export default function LineupModal({
         supabase.from('team_game_rsvps').select('user_id, status').eq('game_id', gameId),
       ]);
       setMembers(ms);
+      // Saved subs survive an edit: lineup rows whose user has NO roster spot
+      // here are day-of pulls — without this they'd be silently dropped on the
+      // next save (set_lineup is a full replace).
+      setSubs(lineup
+        .filter(l => l.user_id && !ms.some(m => m.user_id === l.user_id))
+        .map(l => ({
+          user_id: l.user_id,
+          name: l.invite_name || 'Sub',
+          jersey: l.jersey_number != null ? String(l.jersey_number) : '',
+          is_goalie: !!l.is_goalie,
+        })));
       const statusByUser = {};
       for (const r of (rsvps.data || [])) if (r.user_id) statusByUser[r.user_id] = r.status;
       setRsvpStatus(statusByUser);
@@ -119,6 +147,37 @@ export default function LineupModal({
     setSelected(sel);
   };
 
+  // ── P3 subs handlers ──────────────────────────────────────────────────────
+  const toggleSubsPanel = async () => {
+    setShowSubs(v => !v);
+    if (subPools === null && gameSource === 'league') {
+      try { setSubPools(await listSubPoolsForTeam(lineupTeamId || teamId)); }
+      catch { setSubPools([]); }
+    }
+  };
+  const addSub = (m, pool) => {
+    if (!m.user_id) return;
+    setSubs(s => s.some(x => x.user_id === m.user_id) ? s : [...s, {
+      user_id: m.user_id,
+      name: m.profile?.name || m.profile?.handle || 'Sub',
+      jersey: m.jersey_number != null ? String(m.jersey_number) : '',
+      is_goalie: pool.sub_pool_kind === 'goalies',
+    }]);
+  };
+  const removeSub = (userId) => setSubs(s => s.filter(x => x.user_id !== userId));
+  const setSubJersey = (userId, v) => setSubs(s => s.map(x => x.user_id === userId ? { ...x, jersey: v.replace(/[^0-9]/g, '').slice(0, 2) } : x));
+  const alertPool = async (pool) => {
+    if (subAlertBusy) return;
+    setSubAlertBusy(pool.id); setSubAlertMsg(null);
+    try {
+      const { pushed } = await sendSubNeededAlert({ pool, gameTitle });
+      setSubAlertMsg(pushed
+        ? `Posted on ${pool.team_name} and pushed to the pool.`
+        : `Posted on ${pool.team_name} — the push may be delayed.`);
+    } catch (e) { setSubAlertMsg(`Could not post the alert: ${e.message}`); }
+    finally { setSubAlertBusy(null); }
+  };
+
   const setLine = (member, n) => {
     setLines(l => {
       const c = { ...l };
@@ -137,17 +196,22 @@ export default function LineupModal({
     try {
       const dressed = members.filter(m => selected.has(m.id));
       // Duplicate jerseys can't save (DB-unique per game+team) — catch it
-      // here with a name-level message instead of a constraint error.
+      // here with a name-level message instead of a constraint error. Subs
+      // count too: a pulled sub wearing a dressed player's number is the
+      // most common collision on sub night.
       const seen = new Map();
-      for (const m of dressed) {
-        if (m.jersey_number == null) continue;
-        if (seen.has(m.jersey_number)) {
-          const a = seen.get(m.jersey_number), b = m;
-          setError(`Two dressed players share #${m.jersey_number} (${a.profile?.name || a.invite_name || '?'} and ${b.profile?.name || b.invite_name || '?'}) — fix the jersey numbers on the roster first.`);
+      const jerseyEntries = [
+        ...dressed.map(m => ({ jersey: m.jersey_number, label: m.profile?.name || m.invite_name || '?' })),
+        ...subs.map(s => ({ jersey: s.jersey === '' ? null : parseInt(s.jersey, 10), label: `${s.name} (sub)` })),
+      ];
+      for (const e of jerseyEntries) {
+        if (e.jersey == null) continue;
+        if (seen.has(e.jersey)) {
+          setError(`Two dressed players share #${e.jersey} (${seen.get(e.jersey)} and ${e.label}) — fix the jersey numbers first.`);
           setBusy(false);
           return;
         }
-        seen.set(m.jersey_number, m);
+        seen.set(e.jersey, e.label);
       }
       // Goalies: a designated STARTER flips everyone else to backup; with no
       // starter designated (even if a backup is marked) keep the legacy
@@ -169,7 +233,23 @@ export default function LineupModal({
             is_starter: goalie && starterGoalieId ? m.id === starterGoalieId : true,
           };
         });
-      await setLineup({ gameId, gameSource, teamId: lineupTeamId || teamId }, players);
+      // P3 day-of pulls: rows for users with no roster spot here. Saved
+      // through the same RPC, so Migration H's minor gate is the authority —
+      // an adult sub passes, a minor sub (pool-anchored only) is refused
+      // with the gate's own message.
+      const subPlayers = subs.map(s => ({
+        user_id: s.user_id,
+        player_id: s.user_id,
+        invite_name: s.name,
+        jersey_number: s.jersey === '' ? null : parseInt(s.jersey, 10),
+        position: null,
+        is_captain: false,
+        is_alternate: false,
+        is_goalie: s.is_goalie,
+        line: null,
+        is_starter: s.is_goalie && starterGoalieId ? false : true,
+      }));
+      await setLineup({ gameId, gameSource, teamId: lineupTeamId || teamId }, [...players, ...subPlayers]);
       // Best-effort GS-5 pass for ghost rows; never fails the save.
       await resolveLineupPlayers(gameId);
       onSaved?.();
@@ -232,6 +312,71 @@ export default function LineupModal({
             )}
 
             {members.length === 0 && <div style={{ padding: 16, color: B.steel, fontSize: 13, textAlign: 'center' }}>This team has no roster yet — add players first.</div>}
+
+            {/* P3 — day-of subs from the league's pools (league games only). */}
+            {gameSource === 'league' && (
+              <>
+                <button onClick={toggleSubsPanel}
+                  style={{ display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', padding: '10px 0 6px', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: B.blue, textTransform: 'uppercase', fontFamily: "'Barlow Condensed', sans-serif" }}>
+                  {showSubs ? '▾' : '▸'} Subs from the pool{subs.length ? ` (${subs.length} pulled)` : ''}
+                </button>
+
+                {subs.length > 0 && (
+                  <div style={{ background: B.navy, border: `1px solid ${B.border}`, borderRadius: 10, overflow: 'hidden', marginBottom: 8 }}>
+                    {subs.map(s => (
+                      <div key={s.user_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
+                        <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: 'rgba(46,91,140,0.3)', color: B.steel, flexShrink: 0 }}>SUB</span>
+                        <span style={{ fontSize: 13, color: B.ice, flex: 1 }}>{s.name}{s.is_goalie ? ' 🥅' : ''}</span>
+                        <input value={s.jersey} onChange={e => setSubJersey(s.user_id, e.target.value)} placeholder="#"
+                          inputMode="numeric"
+                          style={{ width: 44, background: '#07111F', border: `1px solid ${B.border}`, borderRadius: 6, padding: '5px 6px', color: B.ice, fontSize: 13, textAlign: 'center', fontFamily: 'inherit' }} />
+                        <button onClick={() => removeSub(s.user_id)} style={{ background: 'none', border: 'none', color: B.steel, fontSize: 15, cursor: 'pointer' }}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {showSubs && (
+                  subPools === null
+                    ? <div style={{ padding: 10, color: B.steel, fontSize: 12 }}>Loading pools…</div>
+                    : subPools.length === 0
+                      ? <div style={{ padding: 10, color: B.steel, fontSize: 12, lineHeight: 1.5 }}>No sub pools yet — a commissioner can create them from League Manage → Teams.</div>
+                      : subPools.map(pool => {
+                          const candidates = pool.members.filter(m =>
+                            m.user_id
+                            && !subs.some(x => x.user_id === m.user_id)
+                            && !members.some(x => x.user_id === m.user_id));
+                          return (
+                            <div key={pool.id} style={{ marginBottom: 8 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '6px 0' }}>
+                                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: B.steel, textTransform: 'uppercase', fontFamily: "'Barlow Condensed', sans-serif" }}>
+                                  {pool.team_name}
+                                </span>
+                                <button onClick={() => alertPool(pool)} disabled={!!subAlertBusy}
+                                  style={{ background: 'rgba(245,158,11,0.15)', border: `1px solid rgba(245,158,11,0.45)`, color: B.amber, borderRadius: 999, padding: '3px 10px', fontSize: 10.5, fontWeight: 700, cursor: subAlertBusy ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+                                  {subAlertBusy === pool.id ? 'Posting…' : '🚨 Sub needed — alert the pool'}
+                                </button>
+                              </div>
+                              <div style={{ background: B.navy, border: `1px solid ${B.border}`, borderRadius: 10, overflow: 'hidden' }}>
+                                {candidates.length === 0 && <div style={{ padding: '8px 12px', color: B.steel, fontSize: 12 }}>No available players in this pool.</div>}
+                                {candidates.map(m => (
+                                  <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
+                                    <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 14, color: 'rgba(244,247,250,0.5)', width: 24, textAlign: 'right' }}>{m.jersey_number || '—'}</span>
+                                    <span style={{ fontSize: 13, color: B.ice, flex: 1 }}>{m.profile?.name || m.profile?.handle || 'Unknown'}</span>
+                                    <button onClick={() => addSub(m, pool)}
+                                      style={{ background: 'rgba(34,197,94,0.15)', border: `1px solid rgba(34,197,94,0.4)`, color: B.green, borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                                      + Pull in
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })
+                )}
+                {subAlertMsg && <div style={{ padding: '6px 2px', color: B.amber, fontSize: 11.5 }}>{subAlertMsg}</div>}
+              </>
+            )}
           </>
         )}
 
@@ -263,7 +408,7 @@ export default function LineupModal({
             </button>
           )}
           <button onClick={handleSave} disabled={busy} style={{ flex: 2, padding: 10, borderRadius: 999, background: busy ? B.border : B.red, border: 'none', color: '#fff', fontSize: 13, fontWeight: 700, cursor: busy ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
-            {busy ? 'Saving…' : `Save lineup (${selected.size})`}
+            {busy ? 'Saving…' : `Save lineup (${selected.size + subs.length})`}
           </button>
         </div>
       </div>

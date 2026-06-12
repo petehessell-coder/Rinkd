@@ -38,6 +38,7 @@ const MIGRATIONS = [
   '20260615001000_lrs1_h_lineup_lines_player_id_minor_gate.sql',
   '20260615001100_lrs1_i_leaderboard_player_id.sql',
   '20260615001200_lrs2_j_game_suspensions.sql',
+  '20260615001300_lrs3_k_subs_pools.sql',
 ];
 
 const db = new PGlite();
@@ -120,8 +121,21 @@ create table public.game_shots (
 );
 
 create table public.teams (
-  id uuid primary key default gen_random_uuid(), name text, manager_id uuid
+  id uuid primary key default gen_random_uuid(), name text, manager_id uuid, is_public boolean
 );
+create table public.leagues (
+  id uuid primary key default gen_random_uuid(),
+  name text, commissioner_id uuid, is_activated boolean default true
+);
+create table public.league_divisions (
+  id uuid primary key default gen_random_uuid(),
+  league_id uuid, name text, sort_order integer
+);
+-- stub matching the prod helper's semantics (founder check; role rows are
+-- covered by the real definer fn on prod)
+create function public.is_league_commissioner(p_league_id uuid, p_user_id uuid)
+returns boolean language sql stable security definer as
+  $$ select exists (select 1 from public.leagues l where l.id = p_league_id and l.commissioner_id = p_user_id) $$;
 create table public.team_members (
   id uuid primary key default gen_random_uuid(),
   team_id uuid, user_id uuid, role text, jersey_number integer,
@@ -347,6 +361,93 @@ r = await q(
   `insert into public.game_suspensions (tournament_id, game_id, team_id, player_name, suspension_type, games_remaining, penalty_id)
    values ($1,$2,$3,'Dup3','suspension_3',3,$4) returning id`, [t.id, g.id, tt.id, pen.id]);
 check('re-filing after overturn is allowed (partial index)', !!r[0]?.id, JSON.stringify(r[0]));
+
+// ─── K: subs pools ───────────────────────────────────────────────────────────
+{
+  const cols = (await q(`select column_name from information_schema.columns
+    where table_schema='public' and table_name='league_teams' and column_name in ('is_sub_pool','sub_pool_kind')`)).map(r => r.column_name);
+  check('K added league_teams.is_sub_pool + sub_pool_kind', cols.length === 2, cols.join(','));
+}
+
+const [lgL] = await q(`insert into public.leagues (name, commissioner_id) values ('ESHL', $1) returning id`, [dir.id]);
+const [subX] = await q(`insert into public.profiles (name) values ('Sub X') returning id`);
+const [plY] = await q(`insert into public.profiles (name) values ('Roster Y') returning id`);
+const [teamA] = await q(`insert into public.teams (name) values ('Team A') returning id`);
+const [teamB] = await q(`insert into public.teams (name) values ('Team B') returning id`);
+const [ltA] = await q(`insert into public.league_teams (league_id, team_id, team_name) values ($1,$2,'Team A') returning id`, [lgL.id, teamA.id]);
+const [ltB] = await q(`insert into public.league_teams (league_id, team_id, team_name) values ($1,$2,'Team B') returning id`, [lgL.id, teamB.id]);
+await db.query(`insert into public.team_members (team_id, user_id, jersey_number, status, role) values ($1,$2,42,'active','player')`, [teamA.id, plY.id]);
+
+await asUser(other.id);
+await expectError('non-commissioner cannot create sub pools (42501)',
+  `select * from public.create_league_sub_pools('${lgL.id}')`, /commissioner/i);
+await asUser(dir.id);
+let pools = await q(`select * from public.create_league_sub_pools($1)`, [lgL.id]);
+check('commissioner creates BOTH pools (skaters + goalies)',
+  pools.length === 2 && new Set(pools.map(p => p.sub_pool_kind)).size === 2 && pools.every(p => p.is_sub_pool),
+  JSON.stringify(pools.map(p => p.sub_pool_kind)));
+{
+  const again = await q(`select * from public.create_league_sub_pools($1)`, [lgL.id]);
+  check('pool creation is idempotent (re-run adds none)', again.length === 0, `created ${again.length}`);
+  const [mgr] = await q(`select manager_id from public.teams t join public.league_teams lt on lt.team_id = t.id where lt.id = $1`, [pools[0].id]);
+  check('pool backing team is manager-owned by the commissioner', mgr.manager_id === dir.id, JSON.stringify(mgr));
+}
+const skatersPool = pools.find(p => p.sub_pool_kind === 'skaters');
+await expectError('K trigger: a pool cannot be scheduled (home)',
+  `insert into public.league_games (league_id, home_team_id, away_team_id, status) values ('${lgL.id}','${skatersPool.id}','${ltB.id}','scheduled')`, /cannot be scheduled/i);
+await expectError('K trigger: a pool cannot be scheduled (away)',
+  `insert into public.league_games (league_id, home_team_id, away_team_id, status) values ('${lgL.id}','${ltA.id}','${skatersPool.id}','scheduled')`, /cannot be scheduled/i);
+
+// identity-keyed sub stats: game 1 — sub X wears Y's #42 (lineup says so);
+// game 2 — no lineup, roster fallback attributes #42 to Y.
+const [lgame1] = await q(`insert into public.league_games (league_id, home_team_id, away_team_id, status) values ($1,$2,$3,'final') returning id`, [lgL.id, ltA.id, ltB.id]);
+const [lgame2] = await q(`insert into public.league_games (league_id, home_team_id, away_team_id, status) values ($1,$2,$3,'final') returning id`, [lgL.id, ltA.id, ltB.id]);
+{
+  // the day-of pull IS a set_lineup save that includes a non-rostered adult
+  const r = await q(`select * from public.set_lineup($1, 'league', $2,
+    '[{"user_id":"${subX.id}","player_id":"${subX.id}","invite_name":"Sub X","jersey_number":42,"is_starter":true}]'::jsonb)`, [lgame1.id, ltA.id]);
+  check('day-of pull: ADULT sub (no roster on playing team) saves through set_lineup', r.length === 1 && r[0].user_id === subX.id, JSON.stringify(r[0] || {}));
+}
+await db.query(`insert into public.game_goals (game_id, team_id, scorer_number, game_source) values ($1,$2,42,'league')`, [lgame1.id, ltA.id]);
+await db.query(`insert into public.game_goals (game_id, team_id, scorer_number, game_source) values ($1,$2,42,'league')`, [lgame2.id, ltA.id]);
+{
+  const board = await q(`select * from public.get_league_skater_stats($1)`, [lgL.id]);
+  const xRow = board.find(r => r.player_id === subX.id);
+  const yRow = board.find(r => r.player_id === plY.id);
+  check('sub stats key on IDENTITY: lineup game attributes #42 to Sub X (1 goal, gp from lineup apps)',
+    xRow?.goals === 1 && xRow?.gp === 1 && xRow?.player_name === 'Sub X' && xRow?.team_id === ltA.id,
+    JSON.stringify(xRow || {}));
+  check('roster fallback: non-lineup game attributes #42 to Roster Y (1 goal, team gp)',
+    yRow?.goals === 1 && yRow?.gp === 2,
+    JSON.stringify(yRow || {}));
+  check('sub pools never seed board rows', !board.some(r => r.team_id === skatersPool.id), '');
+}
+
+// the pool flag is commissioner-only (adversarial P1: the loose league_teams
+// policies would otherwise let a rival manager "pool-flag" an opponent's team
+// off the schedule).
+await asUser(other.id);
+await expectError('non-commissioner cannot FLIP a playing team into a pool (trigger)',
+  `update public.league_teams set is_sub_pool = true, sub_pool_kind = 'skaters' where id = '${ltB.id}'`, /commissioner/i);
+await expectError('non-commissioner cannot INSERT a flagged pool row (trigger)',
+  `insert into public.league_teams (league_id, team_id, team_name, is_sub_pool, sub_pool_kind)
+   values ('${lgL.id}', '${teamB.id}', 'Fake Pool', true, 'goalies')`, /commissioner/i);
+{
+  await asUser(dir.id);
+  const r = await q(`update public.league_teams set team_name = 'Team B renamed' where id = $1 returning team_name`, [ltB.id]);
+  check('non-flag league_teams updates pass the guard untouched', r[0].team_name === 'Team B renamed', JSON.stringify(r[0]));
+}
+
+// the consent path: a MINOR anchored to the POOL is still blocked from being
+// pulled onto another team's lineup (the H gate keys on the PLAYING team).
+{
+  const [minorSub] = await q(`insert into public.profiles (name, account_type) values ('Pool Kid','minor') returning id`);
+  const [poolTeam] = await q(`select team_id from public.league_teams where id = $1`, [skatersPool.id]);
+  await db.query(`insert into public.team_members (team_id, user_id, jersey_number, status, role) values ($1,$2,7,'active','player')`, [poolTeam.team_id, minorSub.id]);
+  await expectError('day-of pull: MINOR sub (anchored to the pool, not the playing team) is BLOCKED',
+    `select * from public.set_lineup('${lgame2.id}', 'league', '${ltA.id}',
+      '[{"user_id":"${minorSub.id}","player_id":"${minorSub.id}","jersey_number":7,"is_starter":true}]'::jsonb)`, /consented roster spot/i);
+}
 
 console.log(`\n${failed === 0 ? '✅ ALL PASS' : `❌ ${failed} FAILED`}`);
 process.exit(failed === 0 ? 0 : 1);
