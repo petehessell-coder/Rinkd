@@ -42,7 +42,7 @@ export async function listSubPoolsForTeam(lineupTeamId) {
 
   const { data: members } = await supabase
     .from('team_members')
-    .select('id, team_id, user_id, jersey_number, position, profile:profiles(id, name, handle)')
+    .select('id, team_id, user_id, jersey_number, position, profile:profiles!team_members_user_id_fkey(id, name, handle)')
     .in('team_id', chosen.map(p => p.team_id))
     .eq('status', 'active')
     .not('user_id', 'is', null)

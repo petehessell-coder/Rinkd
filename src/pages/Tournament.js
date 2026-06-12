@@ -5,6 +5,7 @@ import { LedR } from '../components/Logos';
 import AdSlot from '../components/AdSlot';
 import PinToNavButton from '../components/PinToNavButton';
 import { getLiveBarnUrl } from '../lib/livebarn';
+import { captureDataError } from '../lib/sentry';
 import { teamInitials } from '../lib/teamInitials';
 import { followTournament, unfollowTournament, isFollowingTournament } from '../lib/tournamentSubscriptions';
 import { subscribeToPush, isPushSubscribed } from '../lib/push';
@@ -123,7 +124,7 @@ export default function TournamentPage({ currentUser }) {
         .select('*')
         .eq('id', id)
         .single();
-      if (te) { setError(te.message); setLoading(false); return; }
+      if (te) { captureDataError(te, { where: 'Tournament.load.tournament', tournamentId: id }); setError(te.message); setLoading(false); return; }
       setTournament(t);
 
       // Load games — surface error instead of silently rendering the empty state.
@@ -132,7 +133,7 @@ export default function TournamentPage({ currentUser }) {
         .select('*, home_team:tournament_teams!home_team_id(id,team_name,pool), away_team:tournament_teams!away_team_id(id,team_name,pool), rink:rinks(id,name,sub_rink,live_barn_venue_id)')
         .eq('tournament_id', id)
         .order('start_time', { ascending: true });
-      if (ge) { setError(ge.message); setLoading(false); return; }
+      if (ge) { captureDataError(ge, { where: 'Tournament.load.games', tournamentId: id }); setError(ge.message); setLoading(false); return; }
       setGames(g || []);
 
       // Load standings — same treatment so a failed query doesn't masquerade
@@ -143,7 +144,7 @@ export default function TournamentPage({ currentUser }) {
         .eq('tournament_id', id)
         .order('pool', { ascending: true })
         .order('pool_rank', { ascending: true });
-      if (se) { setError(se.message); setLoading(false); return; }
+      if (se) { captureDataError(se, { where: 'Tournament.load.standings', tournamentId: id }); setError(se.message); setLoading(false); return; }
       const grouped = (s || []).reduce((acc, row) => {
         if (!acc[row.pool]) acc[row.pool] = [];
         acc[row.pool].push(row);
@@ -162,6 +163,7 @@ export default function TournamentPage({ currentUser }) {
       } catch { setSuspendedTeams({}); }
 
     } catch(e) {
+      captureDataError(e, { where: 'Tournament.load', tournamentId: id });
       setError(e.message);
     } finally {
       setLoading(false);

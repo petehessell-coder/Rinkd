@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * LRS-1 migration harness — applies Migrations H, I, J, K, L verbatim to a
- * REAL Postgres (PGlite/WASM) seeded with PROD-SHAPED pre-state, then runs
- * the full behavior suite (GS-2/GS-5, subs pools, lines post). No network,
- * no Supabase project needed:
+ * LRS-1 + GOALIE-1 migration harness — applies Migrations H, I, J, K, L, M
+ * verbatim to a REAL Postgres (PGlite/WASM) seeded with PROD-SHAPED
+ * pre-state, then runs the full behavior suite (GS-2/GS-5, subs pools, lines
+ * post, goalie-in-net attribution). No network, no Supabase project needed:
  *
  *   node scripts/lrs-smoke/pglite-migrations.mjs
  *
@@ -27,6 +27,9 @@
  * posts is stubbed at its live column list; lines_for_game_id /
  * posts_lines_for_game_team_unique_idx / upsert_lineup_post don't exist on
  * prod; is_team_manager is stubbed at its exact prod definition.)
+ * Migration M audited Jun 12 2026: game_goalie_changes stubbed at its prod
+ * shape; parse_game_clock / game_clock_key / goalie_in_net_timeline /
+ * goalie_game_lines and game_goals.empty_net don't exist on prod.
  *
  * What this harness CANNOT prove: RLS enforcement (PGlite runs as superuser)
  * — that's the branch run of run.js, which clones prod and therefore carries
@@ -44,6 +47,7 @@ const MIGRATIONS = [
   '20260615001200_lrs2_j_game_suspensions.sql',
   '20260615001300_lrs3_k_subs_pools.sql',
   '20260615001400_lrs4_l_lineup_post.sql',
+  '20260615001500_goalie1_m_in_net_attribution.sql',
 ];
 
 const db = new PGlite();
@@ -122,6 +126,15 @@ create table public.game_goals (
 create table public.game_shots (
   id uuid primary key default gen_random_uuid(),
   game_id uuid, team_id uuid, period integer, count integer,
+  created_at timestamptz default now(), game_source text
+);
+-- GOALIE-1 pre-state: prod shape (information_schema dump Jun 12 2026).
+-- Migration M reads it (goalie_in_net_timeline); M must NOT recreate it.
+create table public.game_goalie_changes (
+  id uuid primary key default gen_random_uuid(),
+  game_id uuid not null, team_id uuid not null,
+  goalie_out_number integer, goalie_in_number integer,
+  period integer not null, time_in_period text,
   created_at timestamptz default now(), game_source text
 );
 
@@ -555,6 +568,369 @@ await expectError('non-commissioner cannot INSERT a flagged pool row (trigger)',
   const [pB] = await q(`select * from public.upsert_lineup_post($1, 'league', $2, 'away-team lines')`, [lg3.id, ltB.id]);
   check('L: the opponent posts their OWN lines for the same game (per-team key)',
     pB?.team_id === teamB.id && pB?.id !== p1.id, JSON.stringify({ team_id: pB?.team_id }));
+}
+
+// ─── M: GOALIE-1 — goalie-in-net attribution ─────────────────────────────────
+// Conventions under test (see the migration header):
+//   * count-DOWN clock: earlier = higher time_in_period; key = period asc,
+//     clock desc; a flipped comparison mis-attributes every mid-period goal.
+//   * goal at the EXACT change instant → the OUTGOING goalie.
+//   * empty_net flag is authoritative; NULL timeline segment is the backstop.
+//   * unknown starter / unknown timeline never mis-attributes (charges no
+//     one / falls back to the team residual row).
+{
+  const cols = (await q(`select column_name, is_nullable, column_default from information_schema.columns
+    where table_schema='public' and table_name='game_goals' and column_name='empty_net'`));
+  check('M added game_goals.empty_net (not null, default false)',
+    cols.length === 1 && cols[0].is_nullable === 'NO' && /false/.test(cols[0].column_default),
+    JSON.stringify(cols[0] || {}));
+
+  // parse_game_clock + game_clock_key unit probes
+  let r = await q(`select public.parse_game_clock('8:42') a, public.parse_game_clock(' 12:30 ') b,
+    public.parse_game_clock('garbage') c, public.parse_game_clock(null) d, public.parse_game_clock('12:75') e`);
+  check('parse_game_clock: mm:ss → seconds, garbage/null/bad-seconds → null',
+    r[0].a === 522 && r[0].b === 750 && r[0].c === null && r[0].d === null && r[0].e === null, JSON.stringify(r[0]));
+  r = await q(`select public.game_clock_key(2, '12:30') later, public.game_clock_key(2, '15:00') earlier,
+    public.game_clock_key(2, null) period_start, public.game_clock_key(3, '20:00') p3`);
+  check('game_clock_key: count-DOWN ordering (15:00 of P2 keys BEFORE 12:30 of P2; null clock = period start; P3 after all of P2)',
+    Number(r[0].earlier) < Number(r[0].later) && Number(r[0].period_start) < Number(r[0].earlier)
+      && Number(r[0].p3) > Number(r[0].later),
+    JSON.stringify(r[0]));
+}
+
+// Dedicated league so earlier suites' numbers stay untouched.
+const [g1lg]  = await q(`insert into public.leagues (name, commissioner_id) values ('GOALIE-1 League', $1) returning id`, [dir.id]);
+const [teamAl] = await q(`insert into public.teams (name) values ('Team Alpha') returning id`);
+const [teamBe] = await q(`insert into public.teams (name) values ('Team Beta') returning id`);
+const [ltAl] = await q(`insert into public.league_teams (league_id, team_id, team_name) values ($1,$2,'Team Alpha') returning id`, [g1lg.id, teamAl.id]);
+const [ltBe] = await q(`insert into public.league_teams (league_id, team_id, team_name) values ($1,$2,'Team Beta') returning id`, [g1lg.id, teamBe.id]);
+const [greta] = await q(`insert into public.profiles (name) values ('Greta One') returning id`);
+const [bea]   = await q(`insert into public.profiles (name) values ('Bea Two') returning id`);
+const [wally] = await q(`insert into public.profiles (name) values ('Wally Solo') returning id`);
+const [subG]  = await q(`insert into public.profiles (name) values ('Sub Goalie') returning id`);
+// Alpha rosters TWO goalies (the ambiguous case M must resolve via lineups);
+// Beta rosters exactly ONE (the n=1 roster fallback the old fn keyed on).
+await db.query(`insert into public.team_members (team_id, user_id, jersey_number, status, position) values ($1,$2,31,'active','Goalie')`, [teamAl.id, greta.id]);
+await db.query(`insert into public.team_members (team_id, user_id, jersey_number, status, position) values ($1,$2,35,'active','Goalie')`, [teamAl.id, bea.id]);
+await db.query(`insert into public.team_members (team_id, user_id, jersey_number, status, position) values ($1,$2,1,'active','Goalie')`, [teamBe.id, wally.id]);
+
+const lgGame = async (home, away, hs, as_) => (await q(
+  `insert into public.league_games (league_id, home_team_id, away_team_id, status, home_score, away_score)
+   values ($1,$2,$3,'final',$4,$5) returning id`, [g1lg.id, home, away, hs, as_]))[0];
+const dress = (gameId, teamId, userId, jersey, opts = {}) => db.query(
+  `insert into public.game_lineups (game_id, game_source, team_id, user_id, player_id, jersey_number, is_goalie, is_starter, line)
+   values ($1,'league',$2,$3,$3,$4,true,$5,$6)`,
+  [gameId, teamId, userId, jersey, opts.is_starter !== false, opts.line ?? null]);
+const goal = (gameId, teamId, period, clock, opts = {}) => db.query(
+  `insert into public.game_goals (game_id, team_id, scorer_number, period, time_in_period, is_shootout, empty_net, game_source, created_at)
+   values ($1,$2,$3,$4,$5,false,$6,'league', now() + ($7 || ' seconds')::interval)`,
+  [gameId, teamId, opts.scorer ?? 9, period, clock, opts.empty_net === true, String(opts.seq ?? 0)]);
+const change = (gameId, teamId, out, inn, period, clock) => db.query(
+  `insert into public.game_goalie_changes (game_id, team_id, goalie_out_number, goalie_in_number, period, time_in_period, game_source)
+   values ($1,$2,$3,$4,$5,$6,'league')`, [gameId, teamId, out, inn, period, clock]);
+const shots = (gameId, teamId, period, count) => db.query(
+  `insert into public.game_shots (game_id, team_id, period, count, game_source) values ($1,$2,$3,$4,'league')`,
+  [gameId, teamId, period, count]);
+
+// ── Game 1: explicit starter + mid-period swap + exact-instant boundary ─────
+// Alpha 3-2 Beta. Alpha: #31 (line 1) starts, #35 in at P3 10:00. Beta goals
+// at P3 10:00 (the exact change instant → OUTGOING #31) and P3 4:00 (→ #35).
+// Beta has no lineup → its single roster goalie #1 eats the game.
+const lg1 = await lgGame(ltAl.id, ltBe.id, 3, 2);
+await dress(lg1.id, ltAl.id, greta.id, 31, { line: 1 });
+await dress(lg1.id, ltAl.id, bea.id, 35, { is_starter: false, line: 2 });
+await change(lg1.id, ltAl.id, 31, 35, 3, '10:00');
+await goal(lg1.id, ltBe.id, 3, '10:00', { seq: 4 });
+await goal(lg1.id, ltBe.id, 3, '4:00',  { seq: 5 });
+// Alpha's goals (vs Wally): the 3rd in clock order (P3 12:00) is the
+// game-winner — at that instant Alpha still had #31 in net (12:00 is EARLIER
+// than the 10:00 change on a count-down clock) → the W is #31's.
+await goal(lg1.id, ltAl.id, 1, '10:00', { seq: 1 });
+await goal(lg1.id, ltAl.id, 2, '8:00',  { seq: 2 });
+await goal(lg1.id, ltAl.id, 3, '12:00', { seq: 3 });
+await shots(lg1.id, ltBe.id, 1, 10); await shots(lg1.id, ltBe.id, 2, 8); await shots(lg1.id, ltBe.id, 3, 6);
+await shots(lg1.id, ltAl.id, 1, 5);  await shots(lg1.id, ltAl.id, 2, 5);  await shots(lg1.id, ltAl.id, 3, 5);
+
+{
+  let r = await q(`select segment_index, goalie_number, open_k, close_k from public.goalie_in_net_timeline($1,'league',$2) order by segment_index`, [lg1.id, ltAl.id]);
+  check('timeline: lineup starter + one change → [#31 | #35], contiguous keys',
+    r.length === 2 && r[0].goalie_number === 31 && r[1].goalie_number === 35
+      && String(r[0].close_k) === String(r[1].open_k) && r[1].close_k === null
+      && String(r[1].open_k) === String(3 * 100000 + (99999 - 600)),
+    JSON.stringify(r));
+  r = await q(`select * from public.goalie_game_lines($1,'league',$2,$3,3,2,'W',2) order by goalie_number`, [lg1.id, ltAl.id, ltBe.id]);
+  check('boundary: goal at the EXACT change instant charges the OUTGOING goalie (#31 ga 1, #35 ga 1)',
+    r.length === 2 && r[0].goalie_number === 31 && r[0].ga === 1 && r[1].goalie_number === 35 && r[1].ga === 1,
+    JSON.stringify(r));
+  check('shots: period-start rule — mid-P3 swap leaves all 24 SA on #31, 0 on #35',
+    r[0].sa === 24 && r[1].sa === 0, JSON.stringify(r.map(x => [x.goalie_number, x.sa])));
+  check('W to the goalie of record (in net for the deciding goal), not the finisher',
+    r[0].win === 1 && r[1].win === 0 && r[0].shutout === 0 && r[1].shutout === 0, JSON.stringify(r));
+  r = await q(`select * from public.goalie_game_lines($1,'league',$2,$3,2,3,'L',3)`, [lg1.id, ltBe.id, ltAl.id]);
+  check('roster n=1 fallback: Beta #1 carries the full game (ga 3, sa 15, L)',
+    r.length === 1 && r[0].goalie_number === 1 && r[0].ga === 3 && r[0].sa === 15 && r[0].loss === 1,
+    JSON.stringify(r));
+}
+
+// ── Game 2: sole dressed goalie + UNFLAGGED empty-netter (timeline backstop) ─
+// Alpha 1-0 Beta. Beta pulls #1 at P3 1:30; Alpha scores at P3 0:58 with NO
+// empty_net flag — the NULL segment must keep it off Wally (ga 1-1=0), the L
+// still lands on him (finisher), and his shutout is denied (team GA != 0).
+const lg2 = await lgGame(ltAl.id, ltBe.id, 1, 0);
+await dress(lg2.id, ltAl.id, bea.id, 35);
+await change(lg2.id, ltBe.id, 1, null, 3, '1:30');
+await goal(lg2.id, ltAl.id, 3, '0:58', { seq: 1 });
+await shots(lg2.id, ltBe.id, 3, 4);
+await shots(lg2.id, ltAl.id, 1, 7);
+{
+  let r = await q(`select * from public.goalie_game_lines($1,'league',$2,$3,0,1,'L',1)`, [lg2.id, ltBe.id, ltAl.id]);
+  check('EN backstop: unflagged goal into the pulled net charges NO ONE (Wally ga 0, still takes the L, no shutout)',
+    r.length === 1 && r[0].goalie_number === 1 && r[0].ga === 0 && r[0].loss === 1 && r[0].shutout === 0,
+    JSON.stringify(r));
+  r = await q(`select * from public.goalie_game_lines($1,'league',$2,$3,1,0,'W',0)`, [lg2.id, ltAl.id, ltBe.id]);
+  check('shutout: sole goalie + team GA 0 → W + SO to #35',
+    r.length === 1 && r[0].goalie_number === 35 && r[0].ga === 0 && r[0].win === 1 && r[0].shutout === 1,
+    JSON.stringify(r));
+}
+
+// ── Game 3: empty_net FLAG is authoritative even with a goalie in net ────────
+// 2-2 tie. Beta's second goal is flagged empty_net while #31 is (per the
+// timeline) still in net — scorekeeper input wins, #31 is not charged.
+const lg3 = await lgGame(ltAl.id, ltBe.id, 2, 2);
+await dress(lg3.id, ltAl.id, greta.id, 31);                       // is_starter true
+await dress(lg3.id, ltAl.id, bea.id, 35, { is_starter: false }); // unique flagged starter, no line set
+await goal(lg3.id, ltBe.id, 1, '5:00', { seq: 1 });
+await goal(lg3.id, ltBe.id, 2, '3:00', { seq: 2, empty_net: true });
+await goal(lg3.id, ltAl.id, 1, '2:00', { seq: 3 });
+await goal(lg3.id, ltAl.id, 2, '9:00', { seq: 4 });
+{
+  const r = await q(`select * from public.goalie_game_lines($1,'league',$2,$3,2,2,'T',2)`, [lg3.id, ltAl.id, ltBe.id]);
+  check('empty_net flag authoritative: flagged goal charges no one even mid-segment (#31 ga 1 of 2, T as finisher)',
+    r.length === 1 && r[0].goalie_number === 31 && r[0].ga === 1 && r[0].tie === 1,
+    JSON.stringify(r));
+}
+
+// ── Game 4: UNKNOWN timeline → team residual row, never a guess ──────────────
+// Alpha has two roster goalies, no lineup, no changes — nothing to key on.
+const lg4 = await lgGame(ltAl.id, ltBe.id, 1, 1);
+await goal(lg4.id, ltBe.id, 1, '6:00', { seq: 1 });
+await goal(lg4.id, ltAl.id, 2, '6:00', { seq: 2 });
+{
+  const r = await q(`select * from public.goalie_game_lines($1,'league',$2,$3,1,1,'T',1)`, [lg4.id, ltAl.id, ltBe.id]);
+  check('unknown starter (2 roster goalies, no lineup/changes): one NULL residual line, full GA, no crash',
+    r.length === 1 && r[0].goalie_number === null && r[0].ga === 1 && r[0].tie === 1,
+    JSON.stringify(r));
+}
+
+// ── Game 5: unknown starter + mid-game entry — pre-entry goals charge NO ONE ─
+// Alpha 0-2. Change at P2 10:00 brings #35 in (out unknown). The P1 goal
+// lands in the unknown segment (charges no one); the P2 4:00 goal is #35's.
+// n=1 math must still hold: ga(#35) = total 2 − 1 uncharged = 1.
+const lg5 = await lgGame(ltAl.id, ltBe.id, 0, 2);
+await change(lg5.id, ltAl.id, null, 35, 2, '10:00');
+await goal(lg5.id, ltBe.id, 1, '8:00', { seq: 1 });
+await goal(lg5.id, ltBe.id, 2, '4:00', { seq: 2 });
+{
+  const r = await q(`select * from public.goalie_game_lines($1,'league',$2,$3,0,2,'L',2)`, [lg5.id, ltAl.id, ltBe.id]);
+  check('mid-game first appearance: pre-entry goal charges no one; #35 ga 1, takes the L (finisher fallback)',
+    r.length === 1 && r[0].goalie_number === 35 && r[0].ga === 1 && r[0].loss === 1,
+    JSON.stringify(r));
+}
+
+// ── Games 6+7: SUB GOALIE across two teams + cross-team jersey collision ─────
+// Sub G tends Alpha's net wearing #1 (Wally's number on BETA — same number,
+// different team, must never cross), then Beta's net wearing #44.
+const lg6 = await lgGame(ltAl.id, ltBe.id, 2, 1);
+await dress(lg6.id, ltAl.id, subG.id, 1);
+await goal(lg6.id, ltBe.id, 2, '7:00', { seq: 1 });
+await goal(lg6.id, ltAl.id, 1, '9:00', { seq: 2 });
+await goal(lg6.id, ltAl.id, 3, '5:00', { seq: 3 });
+const lg7 = await lgGame(ltBe.id, ltAl.id, 0, 1);
+await dress(lg7.id, ltBe.id, subG.id, 44);
+await dress(lg7.id, ltAl.id, greta.id, 31, { line: 1 });
+await goal(lg7.id, ltAl.id, 2, '11:00', { seq: 1 });
+
+// ── Game 8: minor goalie — stats flow, player_id shielded for anon ───────────
+const [kid] = await q(`insert into public.profiles (name, account_type) values ('Kid Glove','minor') returning id`);
+await db.query(`insert into public.team_members (team_id, user_id, jersey_number, status, position) values ($1,$2,99,'active','Goalie')`, [teamAl.id, kid.id]);
+const lg8 = await lgGame(ltAl.id, ltBe.id, 1, 1);
+await dress(lg8.id, ltAl.id, kid.id, 99);
+await goal(lg8.id, ltBe.id, 1, '4:00', { seq: 1 });
+await goal(lg8.id, ltAl.id, 1, '3:00', { seq: 2 });
+
+// ── Game 9: goal with NO clock in a single-goalie game → still charged ───────
+const lg9 = await lgGame(ltAl.id, ltBe.id, 2, 1);
+await dress(lg9.id, ltAl.id, greta.id, 31);
+await goal(lg9.id, ltBe.id, 2, null,    { seq: 1 });
+await goal(lg9.id, ltAl.id, 1, '7:00',  { seq: 2 });
+await goal(lg9.id, ltAl.id, 3, '14:00', { seq: 3 });
+{
+  const r = await q(`select * from public.goalie_game_lines($1,'league',$2,$3,2,1,'W',1)`, [lg9.id, ltAl.id, ltBe.id]);
+  check('untimed goal, single goalie: charged (no clock needed when the period is uncontested)',
+    r.length === 1 && r[0].goalie_number === 31 && r[0].ga === 1 && r[0].win === 1,
+    JSON.stringify(r));
+}
+
+// ── Game 10: goal with NO clock in a SPLIT period → charges no one ───────────
+const lg10 = await lgGame(ltAl.id, ltBe.id, 0, 1);
+await dress(lg10.id, ltAl.id, greta.id, 31, { line: 1 });
+await dress(lg10.id, ltAl.id, bea.id, 35, { is_starter: false, line: 2 });
+await change(lg10.id, ltAl.id, 31, 35, 2, '10:00');
+await goal(lg10.id, ltBe.id, 2, null, { seq: 1 });
+{
+  const r = await q(`select * from public.goalie_game_lines($1,'league',$2,$3,0,1,'L',1) order by goalie_number`, [lg10.id, ltAl.id, ltBe.id]);
+  check('untimed goal in a split period: ambiguous → charges NO ONE (#31 ga 0, #35 ga 0, L on the finisher #35)',
+    r.length === 2 && r[0].ga === 0 && r[1].ga === 0 && r[0].win + r[0].loss + r[0].tie === 0 && r[1].loss === 1,
+    JSON.stringify(r));
+}
+
+// ── The league BOARD: aggregation, identity keys, residuals, shield ──────────
+await asUser(dir.id);
+{
+  const board = await q(`select * from public.get_league_goalie_stats($1)`, [g1lg.id]);
+  const byId = (id) => board.filter(r => r.player_id === id);
+  const gRow = byId(greta.id), bRow = byId(bea.id), wRow = byId(wally.id), kRow = byId(kid.id);
+  check('board: Greta #31 line (gp 5, ga 3, sa 24, 3W 1T 1SO)',
+    gRow.length === 1 && gRow[0].gp === 5 && gRow[0].goals_against === 3 && gRow[0].shots_against === 24
+      && gRow[0].wins === 3 && gRow[0].ties === 1 && gRow[0].losses === 0 && gRow[0].shutouts === 1
+      && gRow[0].jersey_number === 31 && gRow[0].goalie_name === 'Greta One' && gRow[0].team_id === ltAl.id,
+    JSON.stringify(gRow));
+  check('board: Bea #35 line (gp 4, ga 2, sa 4, 1W 2L 1SO)',
+    bRow.length === 1 && bRow[0].gp === 4 && bRow[0].goals_against === 2 && bRow[0].shots_against === 4
+      && bRow[0].wins === 1 && bRow[0].losses === 2 && bRow[0].shutouts === 1,
+    JSON.stringify(bRow));
+  check('board: Wally #1 keeps ONLY Beta games incl. roster-fallback ones (gp 9, ga 11, sa 22, 2W 4L 3T 2SO)',
+    wRow.length === 1 && wRow[0].team_id === ltBe.id && wRow[0].gp === 9 && wRow[0].goals_against === 11
+      && wRow[0].shots_against === 22 && wRow[0].wins === 2 && wRow[0].losses === 4 && wRow[0].ties === 3
+      && wRow[0].shutouts === 2,
+    JSON.stringify(wRow));
+  const sRows = byId(subG.id);
+  check('sub goalie: identity-keyed rows on BOTH teams (Alpha #1 W, Beta #44 L), jersey collision never crosses to Wally',
+    sRows.length === 2
+      && sRows.some(r => r.team_id === ltAl.id && r.jersey_number === 1 && r.wins === 1 && r.goals_against === 1)
+      && sRows.some(r => r.team_id === ltBe.id && r.jersey_number === 44 && r.losses === 1 && r.goals_against === 1),
+    JSON.stringify(sRows));
+  const resid = board.filter(r => r.team_id === ltAl.id && r.jersey_number === null && r.player_id === null);
+  check('residual: only the unknown-timeline game rolls to "Team Alpha (goaltending)" (gp 1, ga 1, 1T)',
+    resid.length === 1 && resid[0].goalie_name === 'Team Alpha (goaltending)' && resid[0].gp === 1
+      && resid[0].goals_against === 1 && resid[0].ties === 1,
+    JSON.stringify(resid));
+  check('minor goalie: stats flow with player_id visible to a signed-in caller',
+    kRow.length === 1 && kRow[0].gp === 1 && kRow[0].goals_against === 1 && kRow[0].ties === 1,
+    JSON.stringify(kRow));
+}
+{
+  await db.exec(`select set_config('test.uid', '', false)`);
+  const board = await q(`select * from public.get_league_goalie_stats($1)`, [g1lg.id]);
+  const kAnon = board.filter(r => r.goalie_name === 'Kid Glove');
+  const gAnon = board.filter(r => r.goalie_name === 'Greta One');
+  check('minor shield: anon caller sees the minor goalie row with player_id NULL (adults keep theirs)',
+    kAnon.length === 1 && kAnon[0].player_id === null && gAnon.length === 1 && gAnon[0].player_id === greta.id,
+    JSON.stringify({ kid: kAnon[0]?.player_id, greta: gAnon[0]?.player_id }));
+}
+
+// ── Game 11: the ScorerView starter-NUDGE row (change at P1 period start) ────
+// The nudge writes (out null, in #, period 1, time null). All timed P1 events
+// must land on the nudged starter, and P1's shots must go to the INCOMING
+// goalie (period-start lookups use the [open, close) boundary).
+const lg11 = await lgGame(ltAl.id, ltBe.id, 0, 1);
+await dress(lg11.id, ltAl.id, greta.id, 31);                      // both default
+await dress(lg11.id, ltAl.id, bea.id, 35);                        // is_starter → ambiguous
+await change(lg11.id, ltAl.id, null, 31, 1, null);                // the nudge row
+await goal(lg11.id, ltBe.id, 1, '15:00', { seq: 1 });
+await shots(lg11.id, ltBe.id, 1, 9);
+{
+  const r = await q(`select * from public.goalie_game_lines($1,'league',$2,$3,0,1,'L',1) order by goalie_number`, [lg11.id, ltAl.id, ltBe.id]);
+  check('starter nudge row: P1-start change → timed P1 goal AND P1 shots land on the nudged starter (#31), backup untouched',
+    r.length === 1 && r[0].goalie_number === 31 && r[0].ga === 1 && r[0].sa === 9 && r[0].loss === 1,
+    JSON.stringify(r));
+}
+
+// ── Game 12: two changes at the SAME instant — zero-length segment absorbs
+// nothing; a goal at that exact instant charges the FIRST outgoing goalie. ──
+const lg12 = await lgGame(ltAl.id, ltBe.id, 0, 1);
+await dress(lg12.id, ltAl.id, greta.id, 31, { line: 1 });
+await change(lg12.id, ltAl.id, 31, 35, 2, '8:00');
+await change(lg12.id, ltAl.id, 35, 31, 2, '8:00'); // double-swap, same clock
+await goal(lg12.id, ltBe.id, 2, '8:00', { seq: 1 });
+{
+  const r = await q(`select * from public.goalie_game_lines($1,'league',$2,$3,0,1,'L',1) order by goalie_number`, [lg12.id, ltAl.id, ltBe.id]);
+  const g31 = r.find(x => x.goalie_number === 31), g35 = r.find(x => x.goalie_number === 35);
+  check('same-instant double change: zero-length segment absorbs nothing; boundary goal → first outgoing (#31), #35 ga 0',
+    g31?.ga === 1 && (!g35 || g35.ga === 0),
+    JSON.stringify(r));
+}
+
+// ── Game 13: SHARED 0-GA game → shutout to NO ONE, W to exactly one ─────────
+const lg13 = await lgGame(ltAl.id, ltBe.id, 1, 0);
+await dress(lg13.id, ltAl.id, greta.id, 31, { line: 1 });
+await dress(lg13.id, ltAl.id, bea.id, 35, { is_starter: false, line: 2 });
+await change(lg13.id, ltAl.id, 31, 35, 2, '10:00');
+await goal(lg13.id, ltAl.id, 3, '5:00', { seq: 1 });
+{
+  const r = await q(`select * from public.goalie_game_lines($1,'league',$2,$3,1,0,'W',0) order by goalie_number`, [lg13.id, ltAl.id, ltBe.id]);
+  check('shared 0-GA game: no shutout for either goalie; the W goes to exactly one (goalie of record)',
+    r.length === 2 && r.every(x => x.shutout === 0) && r.reduce((s, x) => s + x.win, 0) === 1,
+    JSON.stringify(r));
+}
+
+// ─── M: tournament side — SO decision, split GA, residual fallback ───────────
+const [g1t]  = await q(`insert into public.tournaments (name, director_id) values ('GOALIE-1 Cup', $1) returning id`, [dir.id]);
+const [tta] = await q(`insert into public.tournament_teams (tournament_id, team_name) values ($1,'Avalanche') returning id`, [g1t.id]);
+const [ttb] = await q(`insert into public.tournament_teams (tournament_id, team_name) values ($1,'Blizzard') returning id`, [g1t.id]);
+const [pA] = await q(`insert into public.profiles (name) values ('Tina Net') returning id`);
+const [pB] = await q(`insert into public.profiles (name) values ('Nora Pad') returning id`);
+
+// T-Game 1: 2-2, decided by shootout (home wins). #30 (line 1) starts, #29 in
+// at P3 5:00. SO decision has no deciding goal → the W goes to the FINISHER.
+const [tg1] = await q(`insert into public.games (tournament_id, home_team_id, away_team_id, status, home_score, away_score, shootout_winner)
+  values ($1,$2,$3,'final',2,2,'home') returning id`, [g1t.id, tta.id, ttb.id]);
+const tDress = (gameId, teamId, userId, jersey, opts = {}) => db.query(
+  `insert into public.game_lineups (game_id, game_source, team_id, user_id, player_id, jersey_number, is_goalie, is_starter, line)
+   values ($1,'tournament',$2,$3,$3,$4,true,$5,$6)`,
+  [gameId, teamId, userId, jersey, opts.is_starter !== false, opts.line ?? null]);
+const tGoal = (gameId, teamId, period, clock, seq = 0, so = false) => db.query(
+  `insert into public.game_goals (game_id, team_id, scorer_number, period, time_in_period, is_shootout, game_source, created_at)
+   values ($1,$2,8,$3,$4,$5,'tournament', now() + ($6 || ' seconds')::interval)`,
+  [gameId, teamId, period, clock, so, String(seq)]);
+await tDress(tg1.id, tta.id, pA.id, 30, { line: 1 });
+await tDress(tg1.id, tta.id, pB.id, 29, { is_starter: false, line: 2 });
+await db.query(`insert into public.game_goalie_changes (game_id, team_id, goalie_out_number, goalie_in_number, period, time_in_period, game_source)
+  values ($1,$2,30,29,3,'5:00','tournament')`, [tg1.id, tta.id]);
+await tGoal(tg1.id, ttb.id, 1, '10:00', 1);
+await tGoal(tg1.id, ttb.id, 3, '2:00', 2);
+await tGoal(tg1.id, tta.id, 2, '6:00', 3);
+await tGoal(tg1.id, tta.id, 2, '1:00', 4);
+await tGoal(tg1.id, tta.id, 9, null, 5, true); // SO winner row — must stay out of GA
+
+// T-Game 2: no lineups, no changes on either side → both teams fall back to
+// residual rows (pre-M these games silently DROPPED off the tournament board).
+await q(`insert into public.games (tournament_id, home_team_id, away_team_id, status, home_score, away_score)
+  values ($1,$2,$3,'final',1,0) returning id`, [g1t.id, tta.id, ttb.id]);
+
+await asUser(dir.id);
+{
+  const board = await q(`select * from public.get_tournament_goalie_stats($1)`, [g1t.id]);
+  const a30 = board.find(r => r.player_id === pA.id);
+  const a29 = board.find(r => r.player_id === pB.id);
+  check('tournament: split GA lands per segment (#30 ga 1, #29 ga 1), SO goal row excluded',
+    a30?.goals_against === 1 && a29?.goals_against === 1 && a30?.gp === 1 && a29?.gp === 1,
+    JSON.stringify({ a30, a29 }));
+  check('tournament: SO-decided W goes to the FINISHER (#29), no shared shutout',
+    a29?.wins === 1 && a30?.wins === 0 && a30?.shutouts === 0 && a29?.shutouts === 0,
+    JSON.stringify({ w30: a30?.wins, w29: a29?.wins }));
+  const residA = board.find(r => r.team_id === tta.id && r.jersey_number === null);
+  const residB = board.filter(r => r.team_id === ttb.id && r.jersey_number === null);
+  // (T-game 2 has no goal rows — tournament GA stays row-count-based per the
+  // pre-M semantics, so the residuals carry ga 0 from it, not the score. The
+  // shutout cross-check against the official score keeps that data gap from
+  // minting an SO in a 1-0 LOSS, while the winner's true 0-GA game keeps it.)
+  check('tournament: unknown-timeline games surface as "(goaltending)" residuals instead of dropping',
+    residA?.goalie_name === 'Avalanche (goaltending)' && residA?.gp === 1 && residA?.wins === 1
+      && residA?.shutouts === 1
+      && residB.length === 1 && residB[0].gp === 2 && residB[0].losses === 2 && residB[0].goals_against === 2
+      && residB[0].shutouts === 0,
+    JSON.stringify({ residA, residB }));
 }
 
 console.log(`\n${failed === 0 ? '✅ ALL PASS' : `❌ ${failed} FAILED`}`);

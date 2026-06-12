@@ -37,7 +37,7 @@ export async function isExtraDirector(userId, tournamentId) {
 export async function listDirectors(tournamentId) {
   const { data, error } = await supabase
     .from('tournament_roles')
-    .select('id, role, user_id, created_at, profile:profiles(id, name, handle, avatar_color, avatar_initials)')
+    .select('id, role, user_id, created_at, profile:profiles!tournament_roles_user_id_fkey(id, name, handle, avatar_color, avatar_initials)')
     .eq('tournament_id', tournamentId)
     .eq('role', 'director')
     .order('created_at', { ascending: true });

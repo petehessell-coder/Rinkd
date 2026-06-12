@@ -53,7 +53,9 @@ const MAX_OPS = 200
 const RULES: Record<string, { ops: string[]; cols: string[]; needsTeam: boolean }> = {
   game_goals: {
     ops: ["insert", "delete"],
-    cols: ["id", "game_id", "team_id", "scorer_number", "assist1_number", "assist2_number", "period", "time_in_period", "is_shootout", "created_at"],
+    // empty_net (GOALIE-1): the authoritative no-goalie-charged flag — an
+    // offline-filed empty-net goal must carry it through replay.
+    cols: ["id", "game_id", "team_id", "scorer_number", "assist1_number", "assist2_number", "period", "time_in_period", "is_shootout", "empty_net", "created_at"],
     needsTeam: true,
   },
   game_penalties: {
@@ -93,6 +95,13 @@ const RULES: Record<string, { ops: string[]; cols: string[]; needsTeam: boolean 
 }
 
 const ALLOWED_STATUS = ["scheduled", "live", "final"]
+
+// Event tables carry a game_source discriminator the stat RPCs key on. It is
+// FORCED server-side from the verified (gameId, isLeague) — never trusted
+// from the body — because rows that land with game_source NULL fall out of
+// the boards' filters silently (observed on prod: the pre-GOALIE-1 queue
+// path stamped nothing).
+const SOURCE_STAMPED_TABLES = new Set(["game_goals", "game_penalties", "game_goalie_changes", "game_shots"])
 
 type Op = {
   id: string
@@ -172,6 +181,10 @@ function sanitizePayload(op: Op, rules: { cols: string[]; needsTeam: boolean }, 
     if (op.payload && Object.prototype.hasOwnProperty.call(op.payload, col)) out[col] = op.payload[col]
   }
   if ("game_id" in out || rules.cols.includes("game_id")) out.game_id = op.gameId
+  // game_source forced from the authorized op, like game_id; empty_net
+  // coerced to a strict boolean (anything but true is false).
+  if (SOURCE_STAMPED_TABLES.has(op.table)) out.game_source = op.isLeague ? "league" : "tournament"
+  if ("empty_net" in out) out.empty_net = out.empty_net === true
   if (rules.needsTeam) {
     const teamId = out.team_id
     const valid = [game?.home_team_id, game?.away_team_id].filter(Boolean)

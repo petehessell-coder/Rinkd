@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
+import { captureDataError } from '../lib/sentry';
 import { isExtraCommissioner } from '../lib/leagueCommissioners';
 import Layout from '../components/Layout';
 import RsvpBlock from '../components/RsvpBlock';
@@ -134,7 +135,7 @@ export default function GameDetail({ profile }) {
         });
         setLineupByTeam(lookup);
       }
-    } catch(e) { console.error('[GameDetail] load failed', e); }
+    } catch(e) { console.error('[GameDetail] load failed', e); captureDataError(e, { where: 'GameDetail.load', gameId }); }
     setLoading(false);
   }, [gameId, isLeague, isTeamGame]);
 
@@ -458,6 +459,7 @@ export default function GameDetail({ profile }) {
                         {g.assist1_number ? ` — assist: ${playerLabel(g.team_id, g.assist1_number)}` : ' — unassisted'}
                         {g.assist2_number ? `, ${playerLabel(g.team_id, g.assist2_number)}` : ''}
                         {g.is_shootout ? ' (SO)' : ''}
+                        {g.empty_net ? ' (EN)' : ''}
                       </div>
                       <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>
                         {teamName(g.team_id)} · {periodLabel(g.period)}{g.time_in_period ? ` · ${g.time_in_period}` : ''}

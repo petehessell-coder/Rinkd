@@ -13,7 +13,7 @@ export async function getRsvp(gameId, userId) {
 export async function getGameRsvps(gameId) {
   const { data } = await supabase
     .from('team_game_rsvps')
-    .select('*, profile:profiles(id, name, handle, avatar_color, avatar_initials)')
+    .select('*, profile:profiles!team_game_rsvps_user_id_fkey(id, name, handle, avatar_color, avatar_initials)')
     .eq('game_id', gameId)
     .order('created_at');
   return data || [];

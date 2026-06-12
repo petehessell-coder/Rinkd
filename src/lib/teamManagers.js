@@ -25,7 +25,7 @@ import { resolveProfile } from './tournamentScorers';
 export async function listTeamManagers(teamId) {
   const { data, error } = await supabase
     .from('team_members')
-    .select('id, role, user_id, joined_at, invite_name, profile:profiles(id, name, handle, avatar_color, avatar_initials)')
+    .select('id, role, user_id, joined_at, invite_name, profile:profiles!team_members_user_id_fkey(id, name, handle, avatar_color, avatar_initials)')
     .eq('team_id', teamId)
     .eq('role', 'manager')
     .order('joined_at', { ascending: true });
