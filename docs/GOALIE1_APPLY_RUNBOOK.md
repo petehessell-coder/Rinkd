@@ -52,6 +52,16 @@ whatever team they subbed for.
    goals — they'd replay as regular goals and charge a goalie).
 4. Ship the client build (ScorerView empty-net toggle + starter nudge +
    `game_source` stamping; GameDetail "(EN)" tag).
+5. `20260615001600_goalie1_n_game_source_backfill_skater_null_tolerance.sql`
+   (`feature/game-source-null-fix`, stacked on this branch) — backfills the
+   historical NULL `game_source` rows (fail-closed if any game id ever
+   appears in BOTH `games` and `league_games`; verified 0 on prod Jun 12)
+   and makes the two SKATER RPCs tolerate `game_source IS NULL` exactly like
+   M's goalie fns. **Do NOT run a manual prod UPDATE for the backfill — the
+   migration does it**, atomically with the RPC fix, and catches any null
+   rows written between now and the apply. The two `game_shots` rows whose
+   parent game was deleted (May 25) stay NULL on purpose — unreachable
+   through the parent joins, nothing to attribute them to.
 
 ## Verification already run (Jun 12)
 
@@ -80,8 +90,10 @@ whatever team they subbed for.
 - Tournament games with no goalie data now show a team-level residual row
   instead of silently dropping off the board.
 - Event reads tolerate `game_source IS NULL` (the GS-1 write path left it
-  null; the client + edge fn now stamp it again). The skater RPCs still
-  hard-filter — null-source backfill is tracked separately.
+  null; the client + edge fn now stamp it again). Migration N (step 5)
+  backfills the historical null rows and brings the skater RPCs to the same
+  tolerance — after N, a board can never silently drop an event row over a
+  missing source tag.
 
 ## What did NOT change
 

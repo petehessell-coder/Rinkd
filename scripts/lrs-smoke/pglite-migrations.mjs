@@ -30,6 +30,11 @@
  * Migration M audited Jun 12 2026: game_goalie_changes stubbed at its prod
  * shape; parse_game_clock / game_clock_key / goalie_in_net_timeline /
  * goalie_game_lines and game_goals.empty_net don't exist on prod.
+ * Migration N (game_source backfill + skater NULL tolerance): the pre-state
+ * seeds NULL-source event rows (prod has them from the GS-1-era write path)
+ * + an orphan row from a deleted game, so N's backfill is exercised against
+ * the same shape it will meet on prod (overlap guard verified 0 on prod
+ * Jun 12 2026).
  *
  * What this harness CANNOT prove: RLS enforcement (PGlite runs as superuser)
  * — that's the branch run of run.js, which clones prod and therefore carries
@@ -48,6 +53,7 @@ const MIGRATIONS = [
   '20260615001300_lrs3_k_subs_pools.sql',
   '20260615001400_lrs4_l_lineup_post.sql',
   '20260615001500_goalie1_m_in_net_attribution.sql',
+  '20260615001600_goalie1_n_game_source_backfill_skater_null_tolerance.sql',
 ];
 
 const db = new PGlite();
@@ -259,6 +265,30 @@ create policy game_suspensions_director_all on public.game_suspensions
   for all using (true);
 create policy game_suspensions_scorer_insert on public.game_suspensions
   for insert with check (auth.uid() is not null);
+
+-- Migration N backfill fixture: NULL-source event rows that exist BEFORE the
+-- chain applies (prod carries such rows from the GS-1-era write path). N must
+-- stamp the parented ones and leave the orphan (deleted parent game) NULL.
+insert into public.leagues (id, name) values ('aaaaaaaa-0000-0000-0000-000000000001', 'NullSource League');
+insert into public.teams (id, name) values
+  ('aaaaaaaa-0000-0000-0000-000000000002', 'NS Home'),
+  ('aaaaaaaa-0000-0000-0000-000000000003', 'NS Away');
+insert into public.league_teams (id, league_id, team_id, team_name) values
+  ('aaaaaaaa-0000-0000-0000-000000000004', 'aaaaaaaa-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000002', 'NS Home'),
+  ('aaaaaaaa-0000-0000-0000-000000000005', 'aaaaaaaa-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000003', 'NS Away');
+insert into public.league_games (id, league_id, home_team_id, away_team_id, status, home_score, away_score) values
+  ('aaaaaaaa-0000-0000-0000-000000000006', 'aaaaaaaa-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000004', 'aaaaaaaa-0000-0000-0000-000000000005', 'final', 1, 0);
+insert into public.game_goals (game_id, team_id, scorer_number, period) values
+  ('aaaaaaaa-0000-0000-0000-000000000006', 'aaaaaaaa-0000-0000-0000-000000000004', 77, 1);
+insert into public.tournaments (id, name) values ('aaaaaaaa-0000-0000-0000-000000000007', 'NullSource Cup');
+insert into public.tournament_teams (id, tournament_id, team_name) values
+  ('aaaaaaaa-0000-0000-0000-000000000008', 'aaaaaaaa-0000-0000-0000-000000000007', 'NS Tigers');
+insert into public.games (id, tournament_id, home_team_id, away_team_id, status, home_score, away_score) values
+  ('aaaaaaaa-0000-0000-0000-000000000009', 'aaaaaaaa-0000-0000-0000-000000000007', 'aaaaaaaa-0000-0000-0000-000000000008', 'aaaaaaaa-0000-0000-0000-000000000008', 'final', 1, 0);
+insert into public.game_goals (game_id, team_id, scorer_number, period) values
+  ('aaaaaaaa-0000-0000-0000-000000000009', 'aaaaaaaa-0000-0000-0000-000000000008', 66, 2);
+insert into public.game_shots (game_id, team_id, period, count) values
+  ('aaaaaaaa-0000-0000-0000-00000000000f', 'aaaaaaaa-0000-0000-0000-000000000004', 1, 10);
 `);
 check('prod-shaped pre-state seeded (incl. old game_suspensions stub + policies)', true);
 
@@ -931,6 +961,47 @@ await asUser(dir.id);
       && residB.length === 1 && residB[0].gp === 2 && residB[0].losses === 2 && residB[0].goals_against === 2
       && residB[0].shutouts === 0,
     JSON.stringify({ residA, residB }));
+}
+
+// ─── N: game_source backfill + skater-RPC NULL tolerance ─────────────────────
+{
+  // Backfill: pre-existing NULL-source rows stamped by parent table; the
+  // orphan (deleted parent game) deliberately left NULL.
+  let r = await q(`select game_source from public.game_goals where game_id = 'aaaaaaaa-0000-0000-0000-000000000006'`);
+  check('N backfill: NULL-source league goal stamped league',
+    r.length === 1 && r[0].game_source === 'league', JSON.stringify(r));
+  r = await q(`select game_source from public.game_goals where game_id = 'aaaaaaaa-0000-0000-0000-000000000009'`);
+  check('N backfill: NULL-source tournament goal stamped tournament',
+    r.length === 1 && r[0].game_source === 'tournament', JSON.stringify(r));
+  r = await q(`select game_source from public.game_shots where game_id = 'aaaaaaaa-0000-0000-0000-00000000000f'`);
+  check('N backfill: orphan row (deleted parent game) stays NULL',
+    r.length === 1 && r[0].game_source === null, JSON.stringify(r));
+
+  // The boards now SEE the rows (these were invisible pre-N).
+  const lb = await q(`select * from public.get_league_skater_stats('aaaaaaaa-0000-0000-0000-000000000001')`);
+  const g77 = lb.find(x => x.jersey_number === 77);
+  check('league skater board: backfilled goal visible (#77 ghost, 1 goal, team gp)',
+    g77?.goals === 1 && g77?.gp === 1 && g77?.player_name === '#77', JSON.stringify(g77 || {}));
+  const tb = await q(`select * from public.get_tournament_skater_stats('aaaaaaaa-0000-0000-0000-000000000007')`);
+  const g66 = tb.find(x => x.jersey_number === 66);
+  check('tournament skater board: backfilled goal visible (#66 ghost, 1 goal)',
+    g66?.goals === 1 && g66?.gp === 1, JSON.stringify(g66 || {}));
+
+  // TOLERANCE beyond the backfill: a NULL-source row written AFTER apply
+  // (never backfilled) must still count — this is the filter fix itself.
+  await db.query(`insert into public.game_goals (game_id, team_id, scorer_number, period)
+    values ('aaaaaaaa-0000-0000-0000-000000000006', 'aaaaaaaa-0000-0000-0000-000000000004', 77, 2)`);
+  const lb2 = await q(`select * from public.get_league_skater_stats('aaaaaaaa-0000-0000-0000-000000000001')`);
+  const g77b = lb2.find(x => x.jersey_number === 77);
+  check('skater tolerance: a NULL-source goal written post-backfill still counts (#77 → 2 goals)',
+    g77b?.goals === 2, JSON.stringify(g77b || {}));
+
+  // Signatures survived the N rewrite (deployed clients keep working).
+  for (const fn of ['get_league_skater_stats', 'get_tournament_skater_stats']) {
+    const ok = await db.query(`select player_id, is_goalie, points_per_game from public.${fn}(gen_random_uuid()) limit 0`)
+      .then(() => true).catch(() => false);
+    check(`N: ${fn} keeps its frozen signature`, ok);
+  }
 }
 
 console.log(`\n${failed === 0 ? '✅ ALL PASS' : `❌ ${failed} FAILED`}`);
