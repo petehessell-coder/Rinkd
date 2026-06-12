@@ -381,7 +381,7 @@ function RequestsTab({ navigate }) {
     if (ids.length === 0) { setRequests([]); return; }
     const { data, error: e } = await supabase
       .from('team_join_requests')
-      .select('id, team_id, user_id, created_at, status, profile:profiles(name, handle, avatar_color, avatar_initials), team:teams(id, name)')
+      .select('id, team_id, user_id, created_at, status, profile:profiles!team_join_requests_user_id_fkey(name, handle, avatar_color, avatar_initials), team:teams(id, name)')
       .in('team_id', ids)
       .eq('status', 'pending')
       .order('created_at');

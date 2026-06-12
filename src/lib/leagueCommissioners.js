@@ -40,7 +40,7 @@ export async function isExtraCommissioner(userId, leagueId) {
 export async function listCommissioners(leagueId) {
   const { data, error } = await supabase
     .from('league_roles')
-    .select('id, role, user_id, created_at, profile:profiles(id, name, handle, avatar_color, avatar_initials)')
+    .select('id, role, user_id, created_at, profile:profiles!league_roles_user_id_fkey(id, name, handle, avatar_color, avatar_initials)')
     .eq('league_id', leagueId)
     .eq('role', 'commissioner')
     .order('created_at', { ascending: true });

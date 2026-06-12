@@ -18,7 +18,7 @@ export async function listLeagues({ search = '' } = {}) {
 export async function getLeague(id) {
   const { data, error } = await supabase
     .from('leagues')
-    .select('*, commissioner:profiles(id, name, handle, avatar_color, avatar_initials)')
+    .select('*, commissioner:profiles!leagues_commissioner_id_fkey(id, name, handle, avatar_color, avatar_initials)')
     .eq('id', id).single();
   if (error) throw error;
   return data;

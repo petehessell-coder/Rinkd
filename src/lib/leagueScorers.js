@@ -100,7 +100,7 @@ export async function addScorerByInput({ leagueId, leagueName, input, invitedBy,
 export async function listScorers(leagueId) {
   const { data, error } = await supabase
     .from('league_roles')
-    .select('id, role, user_id, created_at, profile:profiles(id, name, handle, avatar_color, avatar_initials)')
+    .select('id, role, user_id, created_at, profile:profiles!league_roles_user_id_fkey(id, name, handle, avatar_color, avatar_initials)')
     .eq('league_id', leagueId)
     .eq('role', 'scorer')
     .order('created_at', { ascending: true });

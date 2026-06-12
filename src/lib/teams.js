@@ -45,7 +45,7 @@ export async function updateTeam(id, updates) {
 export async function getTeamMembers(teamId) {
   const { data, error } = await supabase
     .from('team_members')
-    .select('*, profile:profiles(id, name, handle, avatar_color, avatar_initials)')
+    .select('*, profile:profiles!team_members_user_id_fkey(id, name, handle, avatar_color, avatar_initials)')
     .eq('team_id', teamId)
     .in('status', ['active', 'pending'])
     .order('role')
@@ -184,7 +184,7 @@ export async function requestToJoin(teamId, message = '') {
 export async function getJoinRequests(teamId) {
   const { data, error } = await supabase
     .from('team_join_requests')
-    .select('*, profile:profiles(id, name, handle, avatar_color, avatar_initials)')
+    .select('*, profile:profiles!team_join_requests_user_id_fkey(id, name, handle, avatar_color, avatar_initials)')
     .eq('team_id', teamId)
     .eq('status', 'pending')
     .order('created_at');
