@@ -3,6 +3,38 @@
 **Branch:** `feature/reg-3-checkout` · **Created:** Jun 11, 2026
 **Hard rule:** sandbox only until paid-registration launch. The Stripe account is live-mode active for the merch store — `STRIPE_SECRET_KEY` must be flipped to the **sandbox** key for the registration test window (the merch store shares the secret: don't run a merch purchase during the sandbox window, or split the secrets first — see §4).
 
+## 0. Pre-apply gate (run FIRST, the morning of apply day)
+```
+node scripts/reg-smoke/pglite-migrations.mjs
+```
+Applies A→G **verbatim to a real Postgres (PGlite) seeded with prod-shaped
+pre-state** — the exact policy/constraint/function names the migrations DROP
+or REPLACE, profiles' current FK shape, and Migration D's real Henry/Pete rows
+(so D runs its REAL path, not the off-prod no-op) — then runs 27 shape +
+behavior checks (decouple, mechanical sweeps, household spine, minor gate,
+legacy mirror, fee math, refund scale). **ALL PASS required before step 1.**
+
+Why: LRS-1 Migration J was an apply-blocker because prod carried an abandoned
+same-name table that an empty-DB harness couldn't see. A–G were audited
+against live prod **Jun 12, 2026 — zero collisions** (all 14 new tables / 13
+indexes / 4 triggers / new columns are unclaimed; the 5 functions B replaces
+match prod signatures exactly; all 7 plain `DROP POLICY` and 11 plain
+`DROP CONSTRAINT` names exist verbatim; D's hardcoded rows re-verified). The
+harness seed encodes that audited state — if a hotfix renames any of those
+objects between now and apply day, this gate fails the way prod would.
+Also re-check live drift for the exact-name DROPs:
+```sql
+select conname from pg_constraint where conname in
+ ('profiles_id_fkey','league_manager_invites_invited_by_fkey','league_manager_invites_consumed_by_user_id_fkey',
+  'team_manager_invites_invited_by_fkey','team_manager_invites_consumed_by_user_id_fkey','league_roles_user_id_fkey',
+  'league_subscriptions_user_id_fkey','tournament_subscriptions_user_id_fkey','nav_pins_user_id_fkey',
+  'volunteer_slots_assigned_user_id_fkey','volunteer_slots_created_by_fkey');   -- expect 11 rows
+select policyname from pg_policies where (tablename,policyname) in
+ (('profiles','Users can insert their own profile'),('profiles','Users can update their own profile'),
+  ('team_members','team_members_insert_by_manager'),('team_members','team_members_manager_update'),
+  ('team_game_rsvps','rsvp_user_insert'),('team_game_rsvps','rsvp_user_update'),('team_game_rsvps','rsvp_user_delete'));  -- expect 7 rows
+```
+
 ## 1. Order of operations
 1. Merge PR #1 → apply migrations **A → B → C → D** (MCP `apply_migration`).
 2. Merge PR #2 → apply **E**.
