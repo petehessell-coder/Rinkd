@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
+import { captureDataError } from '../lib/sentry';
 import { isExtraCommissioner } from '../lib/leagueCommissioners';
 import Layout from '../components/Layout';
 import RsvpBlock from '../components/RsvpBlock';
@@ -134,7 +135,7 @@ export default function GameDetail({ profile }) {
         });
         setLineupByTeam(lookup);
       }
-    } catch(e) { console.error('[GameDetail] load failed', e); }
+    } catch(e) { console.error('[GameDetail] load failed', e); captureDataError(e, { where: 'GameDetail.load', gameId }); }
     setLoading(false);
   }, [gameId, isLeague, isTeamGame]);
 

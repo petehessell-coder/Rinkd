@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { getTeam, getTeamMembers, getTeamGames, getUserRoleOnTeam, isLeagueStaffOfTeam, requestToJoin } from '../lib/teams';
+import { captureDataError } from '../lib/sentry';
 import { supabase } from '../lib/supabase';
 import RsvpBlock from '../components/RsvpBlock';
 import PinToNavButton from '../components/PinToNavButton';
@@ -67,7 +68,7 @@ export default function TeamPage({ currentUser, profile }) {
           .maybeSingle();
         if (existing) setJoinRequested(true);
       }
-    } catch(e) { console.error(e); }
+    } catch(e) { console.error(e); captureDataError(e, { where: 'Team.load', teamId: id }); }
     finally { setLoading(false); }
   }, [id]);
 

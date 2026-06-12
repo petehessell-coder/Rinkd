@@ -6,6 +6,7 @@ import MapLink from '../components/MapLink';
 import PinToNavButton from '../components/PinToNavButton';
 import { getLeague, getLeagueTeams, getLeagueGames, getLeagueStandings, getUserLeagueRole } from '../lib/leagues';
 import { listLeagueDivisions, getMyDivisionInLeague } from '../lib/leagueDivisions';
+import { captureDataError } from '../lib/sentry';
 import DivisionPicker from '../components/DivisionPicker';
 import AdSlot from '../components/AdSlot';
 import { isExtraCommissioner as isExtraCommissionerLookup } from '../lib/leagueCommissioners';
@@ -202,6 +203,7 @@ export default function LeaguePage({ currentUser, profile }) {
       // user has something to retry.
       // eslint-disable-next-line no-console
       console.error('[League] load failed', e);
+      captureDataError(e, { where: 'League.load', leagueId: id });
       setError(e?.message || 'Failed to load league');
     } finally { setLoading(false); }
   }, [id, currentUser]);

@@ -94,4 +94,24 @@ export function captureMessage(msg, level) {
   try { Sentry.captureMessage(msg, level || 'info'); } catch { /* swallow */ }
 }
 
+// Report a swallowed data-fetch / query failure — the class that previously
+// went invisible: a page catches a Supabase/PostgREST error, shows a "Retry"
+// UI, and never tells us (e.g. the Jun-12 embed-ambiguity break after the REG
+// FK repoints). Skips offline/network noise so we only hear about REAL bugs
+// (broken embeds, missing columns, RPC signature mismatches — the "DB ahead of
+// frontend" class). No-ops until the DSN is set, like everything else here.
+const DATA_ERROR_NETWORKISH = /failed to fetch|networkerror|load failed|fetch failed|aborterror|timed? ?out|offline/i;
+export function captureDataError(err, context) {
+  if (!initialized) return;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  const msg = (err && (err.message || err.error_description || String(err))) || '';
+  if (DATA_ERROR_NETWORKISH.test(msg)) return;
+  try {
+    Sentry.captureException(err instanceof Error ? err : new Error(msg || 'data error'), {
+      tags: { kind: 'data_fetch' },
+      extra: { ...context, pgrst_code: err?.code, pgrst_details: err?.details, pgrst_hint: err?.hint },
+    });
+  } catch { /* swallow */ }
+}
+
 export const isSentryEnabled = () => initialized;
