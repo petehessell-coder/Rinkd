@@ -1,7 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { getTeamMembers } from '../lib/teams';
-import { getLineup, setLineup, resolveLineupPlayers } from '../lib/lineups';
+import {
+  getLineup, setLineup, resolveLineupPlayers,
+  buildLinesPostContent, upsertLineupPost, sendLineupPostPush,
+} from '../lib/lineups';
 // LRS-1 P3 — day-of subs from the league's pools. A pulled sub is just a
 // lineup row for a user with no roster spot on this team: it saves through
 // the same set_lineup RPC, so Migration H's minor gate applies unchanged
@@ -57,6 +60,13 @@ export default function LineupModal({
   const [subPools, setSubPools] = useState(null); // null = not loaded yet
   const [subAlertMsg, setSubAlertMsg] = useState(null);
   const [subAlertBusy, setSubAlertBusy] = useState(null); // pool.id while posting
+  // P4 tonight's-lines post. linesPostId = the existing post for this
+  // (game, team), so re-finalizing UPDATES it (the RPC enforces one per
+  // game+team regardless). postLines defaults ON when a post exists — a
+  // stale lines post is silently wrong data — and OFF otherwise, so the
+  // FIRST post is a deliberate act, not a save side-effect.
+  const [postLines, setPostLines] = useState(false);
+  const [linesPostId, setLinesPostId] = useState(null);
 
   const load = useCallback(async () => {
     if (!open || !teamId || !gameId) return;
@@ -68,11 +78,17 @@ export default function LineupModal({
     setSubAlertMsg(null);
     setSubAlertBusy(null);
     try {
-      const [ms, lineup, rsvps] = await Promise.all([
+      const [ms, lineup, rsvps, linesPost] = await Promise.all([
         getTeamMembers(teamId),
         getLineup(gameId, lineupTeamId || teamId),
         supabase.from('team_game_rsvps').select('user_id, status').eq('game_id', gameId),
+        // The team feed is keyed on the REAL teams.id (the teamId prop),
+        // not the lineup-scope id.
+        supabase.from('posts').select('id')
+          .eq('lines_for_game_id', gameId).eq('team_id', teamId).maybeSingle(),
       ]);
+      setLinesPostId(linesPost?.data?.id || null);
+      setPostLines(!!linesPost?.data?.id);
       setMembers(ms);
       // Saved subs survive an edit: lineup rows whose user has NO roster spot
       // here are day-of pulls — without this they'd be silently dropped on the
@@ -252,10 +268,48 @@ export default function LineupModal({
       await setLineup({ gameId, gameSource, teamId: lineupTeamId || teamId }, [...players, ...subPlayers]);
       // Best-effort GS-5 pass for ghost rows; never fails the save.
       await resolveLineupPlayers(gameId);
+      // P4 — tonight's lines on the team feed. Runs AFTER the save committed:
+      // a post failure must read as "lineup saved, post didn't", never undo
+      // or mask the save. Push fires on the FIRST post only (an update
+      // refreshes content quietly — no re-spamming the room).
+      if (postLines && gameSource !== 'tournament') {
+        const content = buildLinesPostContent(linesPostArgs());
+        if (content) {
+          try {
+            const post = await upsertLineupPost({
+              gameId, gameSource, teamId: lineupTeamId || teamId, content,
+            });
+            if (!linesPostId && post?.id) sendLineupPostPush(post.id);
+          } catch (e) {
+            setError(`Lineup saved — but posting the lines failed: ${e.message}`);
+            setBusy(false);
+            onSaved?.();
+            return; // keep the modal open; saving again retries the post
+          }
+        }
+      }
       onSaved?.();
       onClose?.();
     } catch (e) { setError(e.message); }
     finally { setBusy(false); }
+  };
+
+  // The post body, built from the SAME state the save writes — names exactly
+  // as the roster displays them, no profile ids/links (minor-shield posture).
+  const linesPostArgs = () => {
+    const toEntry = (m) => ({
+      name: m.profile?.name || m.invite_name || 'Unknown',
+      jersey: m.jersey_number,
+      line: lines[m.id] != null ? lines[m.id] : null,
+    });
+    const dressed = (list) => list.filter(m => selected.has(m.id)).map(toEntry);
+    return {
+      gameTitle,
+      goalies: dressed(goalies),
+      defense: dressed(defense),
+      forwards: dressed(forwards),
+      subs: subs.map(s => ({ name: s.name, jersey: s.jersey === '' ? null : s.jersey })),
+    };
   };
 
   if (!open) return null;
@@ -392,6 +446,37 @@ export default function LineupModal({
             <LineSection title="Forwards" list={dressedIn(forwards)} lines={lines} setLine={setLine}
               slots={[[1, 'L1'], [2, 'L2'], [3, 'L3'], [4, 'L4']]} />
             {selected.size === 0 && <div style={{ padding: 16, color: B.steel, fontSize: 13, textAlign: 'center' }}>No one's dressed yet — pick the lineup in step 1 first.</div>}
+
+            {/* P4 — the deliberate "post the lineup" action. Disabled until
+                there's a lines story to tell (a starter or any assignment). */}
+            {gameSource !== 'tournament' && (() => {
+              const postable = !!buildLinesPostContent(linesPostArgs());
+              const on = postLines && postable;
+              return (
+                <label
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, padding: '10px 12px', background: B.navy, border: `1px solid ${on ? 'rgba(34,197,94,0.4)' : B.border}`, borderRadius: 10, cursor: postable ? 'pointer' : 'not-allowed', opacity: postable ? 1 : 0.55 }}>
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    disabled={!postable}
+                    onChange={() => setPostLines(v => !v)}
+                    style={{ width: 16, height: 16, accentColor: B.green, flexShrink: 0, cursor: 'inherit' }}
+                  />
+                  <span style={{ flex: 1 }}>
+                    <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: B.ice }}>
+                      📣 {linesPostId ? 'Update the lines post on the team feed' : "Post tonight's lines to the team feed"}
+                    </span>
+                    <span style={{ display: 'block', fontSize: 11, color: B.steel, marginTop: 2, lineHeight: 1.4 }}>
+                      {!postable
+                        ? 'Assign lines or a starting goalie first.'
+                        : linesPostId
+                          ? 'Already posted — saving keeps it current. One post per game, never a duplicate.'
+                          : 'The room sees L1, the pairs, and who gets the net. Posts once; re-saving updates it.'}
+                    </span>
+                  </span>
+                </label>
+              );
+            })()}
           </>
         )}
 

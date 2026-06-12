@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
- * LRS-1 migration harness — applies Migrations H, I, J verbatim to a REAL
- * Postgres (PGlite/WASM) seeded with PROD-SHAPED pre-state, then runs the
- * full GS-2/GS-5 behavior suite. No network, no Supabase project needed:
+ * LRS-1 migration harness — applies Migrations H, I, J, K, L verbatim to a
+ * REAL Postgres (PGlite/WASM) seeded with PROD-SHAPED pre-state, then runs
+ * the full behavior suite (GS-2/GS-5, subs pools, lines post). No network,
+ * no Supabase project needed:
  *
  *   node scripts/lrs-smoke/pglite-migrations.mjs
  *
@@ -22,7 +23,10 @@
  *     recreate them)
  * Audited against prod Jun 11 2026: these are the ONLY pre-existing objects
  * the cluster's migrations touch; none of the 11 new function names, 8 new
- * index names, or new columns exist on prod.
+ * index names, or new columns exist on prod. (Migration L re-audited Jun 12:
+ * posts is stubbed at its live column list; lines_for_game_id /
+ * posts_lines_for_game_team_unique_idx / upsert_lineup_post don't exist on
+ * prod; is_team_manager is stubbed at its exact prod definition.)
  *
  * What this harness CANNOT prove: RLS enforcement (PGlite runs as superuser)
  * — that's the branch run of run.js, which clones prod and therefore carries
@@ -39,6 +43,7 @@ const MIGRATIONS = [
   '20260615001100_lrs1_i_leaderboard_player_id.sql',
   '20260615001200_lrs2_j_game_suspensions.sql',
   '20260615001300_lrs3_k_subs_pools.sql',
+  '20260615001400_lrs4_l_lineup_post.sql',
 ];
 
 const db = new PGlite();
@@ -156,6 +161,41 @@ create table public.team_games (
   id uuid primary key default gen_random_uuid(),
   team_id uuid, status text
 );
+
+-- posts: PRE-L shape (no lines_for_game_id), columns mirroring the live
+-- information_schema dump (Jun 12 2026). The teams FK is kept on purpose:
+-- if upsert_lineup_post ever writes a league_teams.id into team_id instead
+-- of the backing teams.id, the FK explodes here instead of on prod.
+create table public.posts (
+  id uuid primary key default gen_random_uuid(),
+  author_id uuid not null references public.profiles(id) on delete cascade,
+  content text not null,
+  tag text, tag_color text,
+  likes integer default 0, comment_count integer default 0, repost_count integer default 0,
+  created_at timestamptz default now(),
+  media_url text, media_type text, livebarn_venue_id text,
+  team_id uuid references public.teams(id) on delete set null,
+  is_flagged boolean not null default false,
+  is_hidden boolean not null default false,
+  flag_reason text, flagged_at timestamptz,
+  recap_for_game_id uuid,
+  tournament_id uuid, league_id uuid, tournament_team_id uuid, league_team_id uuid,
+  hidden_by uuid, hidden_at timestamptz,
+  gamepuck_reveal_game_id uuid
+);
+
+-- real prod definition (founder OR team_members manager/coach — no status filter)
+create function public.is_team_manager(p_team_id uuid, p_user_id uuid)
+returns boolean language sql stable security definer as $$
+  select exists (
+    select 1 from public.teams t
+    where t.id = p_team_id and t.manager_id = p_user_id
+  ) or exists (
+    select 1 from public.team_members tm
+    where tm.team_id = p_team_id and tm.user_id = p_user_id
+      and tm.role in ('manager', 'coach')
+  );
+$$;
 
 -- game_lineups: PRE-H shape (no player_id, no line)
 create table public.game_lineups (
@@ -447,6 +487,74 @@ await expectError('non-commissioner cannot INSERT a flagged pool row (trigger)',
   await expectError('day-of pull: MINOR sub (anchored to the pool, not the playing team) is BLOCKED',
     `select * from public.set_lineup('${lgame2.id}', 'league', '${ltA.id}',
       '[{"user_id":"${minorSub.id}","player_id":"${minorSub.id}","jersey_number":7,"is_starter":true}]'::jsonb)`, /consented roster spot/i);
+}
+
+// ─── L: tonight's-lines post (P4) ────────────────────────────────────────────
+{
+  const cols = (await q(`select column_name from information_schema.columns
+    where table_schema='public' and table_name='posts' and column_name='lines_for_game_id'`)).map(r => r.column_name);
+  check('L added posts.lines_for_game_id to the prod shape', cols.length === 1);
+  const idx = await q(`select indexname from pg_indexes where indexname='posts_lines_for_game_team_unique_idx'`);
+  check('L created the (game, team) idempotency index', idx.length === 1);
+}
+
+{
+  const [mgrP]   = await q(`insert into public.profiles (name) values ('Lines Mgr') returning id`);
+  const [coachP] = await q(`insert into public.profiles (name) values ('Lines Coach') returning id`);
+  const [randoP] = await q(`insert into public.profiles (name) values ('Lines Rando') returning id`);
+  const [teamC]  = await q(`insert into public.teams (name, manager_id) values ('Team C', $1) returning id`, [mgrP.id]);
+  const [ltC]    = await q(`insert into public.league_teams (league_id, team_id, team_name) values ($1,$2,'Team C') returning id`, [lgL.id, teamC.id]);
+  await db.query(`insert into public.team_members (team_id, user_id, role, status) values ($1,$2,'coach','active')`, [teamC.id, coachP.id]);
+  const [lg3] = await q(`insert into public.league_games (league_id, home_team_id, away_team_id, status) values ($1,$2,$3,'scheduled') returning id`, [lgL.id, ltC.id, ltB.id]);
+
+  await asUser(randoP.id);
+  await expectError('L: a non-manager cannot post lines (42501)',
+    `select * from public.upsert_lineup_post('${lg3.id}', 'league', '${ltC.id}', 'L1: x')`, /manager or coach/i);
+
+  await asUser(mgrP.id);
+  const [p1] = await q(`select * from public.upsert_lineup_post($1, 'league', $2, $3)`,
+    [lg3.id, ltC.id, "\u{1F4CB} TONIGHT'S LINES\n\u{1F945} Starting: G One (#31)\nL1: A (#9) · B (#13)"]);
+  check('L: manager creates the lines post on the TEAM feed (backing teams.id, Lineup tag, keyed to the game)',
+    p1?.team_id === teamC.id && p1?.tag === 'Lineup' && p1?.lines_for_game_id === lg3.id
+      && p1?.author_id === mgrP.id && p1?.league_id === null && p1?.tournament_id === null,
+    JSON.stringify({ team_id: p1?.team_id, tag: p1?.tag, league_id: p1?.league_id }));
+
+  // Re-finalize by a DIFFERENT staffer: the post refreshes in place — same
+  // row, original author kept (recap posture), never a second post.
+  await asUser(coachP.id);
+  const [p2] = await q(`select * from public.upsert_lineup_post($1, 'league', $2, 'refreshed lines')`, [lg3.id, ltC.id]);
+  const [cnt] = await q(`select count(*)::int as n from public.posts where lines_for_game_id = $1 and team_id = $2`, [lg3.id, teamC.id]);
+  check('L: re-finalize by the coach UPDATES the same post (idempotent, author preserved)',
+    p2?.id === p1.id && p2?.content === 'refreshed lines' && p2?.author_id === mgrP.id && cnt.n === 1,
+    JSON.stringify({ same: p2?.id === p1.id, author: p2?.author_id === mgrP.id, n: cnt.n }));
+
+  await expectError('L: cannot attach a lines post to a game the team does not play',
+    `select * from public.upsert_lineup_post('${lgame2.id}', 'league', '${ltC.id}', 'x')`, /plays in/i);
+  await expectError('L: tournament source fails closed (no team feed)',
+    `select * from public.upsert_lineup_post('${lg3.id}', 'tournament', '${ltC.id}', 'x')`, /team feed/i);
+  await expectError('L: empty content rejected',
+    `select * from public.upsert_lineup_post('${lg3.id}', 'league', '${ltC.id}', '  ')`, /content/i);
+
+  // team-source path: same feed, separate game key; participation enforced.
+  const [tg1] = await q(`insert into public.team_games (team_id, status) values ($1,'scheduled') returning id`, [teamC.id]);
+  const [p3] = await q(`select * from public.upsert_lineup_post($1, 'team', $2, 'team-game lines')`, [tg1.id, teamC.id]);
+  check('L: team-game (game_source=team) lines post lands on the same team feed',
+    p3?.team_id === teamC.id && p3?.id !== p1.id && p3?.lines_for_game_id === tg1.id, JSON.stringify({ id_differs: p3?.id !== p1.id }));
+  const [tgB] = await q(`insert into public.team_games (team_id, status) values ($1,'scheduled') returning id`, [teamB.id]);
+  await expectError('L: team-source participation enforced (another team’s game)',
+    `select * from public.upsert_lineup_post('${tgB.id}', 'team', '${teamC.id}', 'x')`, /plays in/i);
+
+  // The index is the idempotency authority even off the RPC path.
+  await expectError('L: unique index blocks a second direct insert for the same (game, team)',
+    `insert into public.posts (author_id, content, team_id, lines_for_game_id)
+     values ('${mgrP.id}', 'dup', '${teamC.id}', '${lg3.id}')`, /duplicate key|posts_lines_for_game_team_unique_idx/i);
+
+  // Per-TEAM key: the opponent posts their own lines for the same game.
+  await db.query(`update public.teams set manager_id = $1 where id = $2`, [randoP.id, teamB.id]);
+  await asUser(randoP.id);
+  const [pB] = await q(`select * from public.upsert_lineup_post($1, 'league', $2, 'away-team lines')`, [lg3.id, ltB.id]);
+  check('L: the opponent posts their OWN lines for the same game (per-team key)',
+    pB?.team_id === teamB.id && pB?.id !== p1.id, JSON.stringify({ team_id: pB?.team_id }));
 }
 
 console.log(`\n${failed === 0 ? '✅ ALL PASS' : `❌ ${failed} FAILED`}`);

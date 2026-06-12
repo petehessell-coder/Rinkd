@@ -96,3 +96,86 @@ export async function resolveLineupPlayers(gameId) {
     return 0;
   }
 }
+
+// ── P4: tonight's-lines post ────────────────────────────────────────────────
+
+/**
+ * Render the "tonight's lines" post body from the lineup the coach just
+ * saved. Pure function — testable, and the single place the post format
+ * lives.
+ *
+ * Privacy posture (audited Jun 12): names appear exactly as the roster
+ * already displays them; NO profile ids, @mentions, or links — a minor's
+ * stable id stays shielded (Migration I posture) while their name is the
+ * same consented roster exposure as team_members/game_lineups.
+ *
+ * @param {string} gameTitle — display line ("Ice Hogs vs. Polar Kings · Fri Jun 13")
+ * @param {Array} goalies/defense/forwards — dressed players: { name, jersey, line }
+ *   line semantics per group: goalies 1=starter/2=backup, defense pairs 1–3,
+ *   forwards L1–L4. NULL line = dressed, unassigned (omitted from the post).
+ * @param {Array} subs — day-of pulls: { name, jersey }
+ * @returns {string|null} — null when there's nothing line-shaped to post
+ *   (no starter, no assignments): the caller should disable/skip posting.
+ */
+export function buildLinesPostContent({ gameTitle, goalies = [], defense = [], forwards = [], subs = [] }) {
+  const tagName = (p) => p.jersey != null && p.jersey !== '' ? `${p.name} (#${p.jersey})` : p.name;
+  const group = (list, n) => list.filter(p => p.line === n).map(tagName).join(' · ');
+
+  // Starter: the designated net (line 1), else a lone dressed goalie.
+  const starter = goalies.find(g => g.line === 1) || (goalies.length === 1 ? goalies[0] : null);
+
+  const rows = [];
+  if (starter) rows.push(`🥅 Starting: ${tagName(starter)}`);
+  for (let n = 1; n <= 4; n++) {
+    const line = group(forwards, n);
+    if (line) rows.push(`L${n}: ${line}`);
+  }
+  for (let n = 1; n <= 3; n++) {
+    const pair = group(defense, n);
+    if (pair) rows.push(`D${n}: ${pair}`);
+  }
+  if (rows.length === 0) return null; // dressing-only saves have no lines story
+  if (subs.length > 0) rows.push(`Subs tonight: ${subs.map(tagName).join(' · ')}`);
+
+  return [`📋 TONIGHT'S LINES`, gameTitle || null, '', ...rows].filter(s => s !== null).join('\n');
+}
+
+/**
+ * Create-or-refresh the lines post on the team's feed. Server-side RPC owns
+ * idempotency (one post per game+team — re-finalize updates, never
+ * double-posts), authorization (manager/coach, fail-closed), and scoping
+ * (always the backing team's feed; never the global/league/tournament feed).
+ * Direct write on purpose — line-setting is the manager-at-home flow (P1
+ * decision), so this posts directly too, not through queuedWrite.
+ *
+ * @param {object} args — { gameId, gameSource ('league'|'team'), teamId
+ *   (the LINEUP-scope id: league_teams.id for league games, teams.id for
+ *   team games — same id game_lineups carries), content }
+ * @returns the posts row.
+ */
+export async function upsertLineupPost({ gameId, gameSource, teamId, content }) {
+  const { data, error } = await supabase.rpc('upsert_lineup_post', {
+    p_game_id: gameId,
+    p_game_source: gameSource,
+    p_team_id: teamId,
+    p_content: content,
+  });
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Fan the "lines are up" push out to the team's roster (send-sub-alert
+ * posture: post first, push amplifies). Best-effort — the post is the
+ * record, a push failure must never surface as a save failure.
+ */
+export async function sendLineupPostPush(postId) {
+  try {
+    const { error } = await supabase.functions.invoke('send-lines-alert', {
+      body: { post_id: postId },
+    });
+    return !error;
+  } catch {
+    return false;
+  }
+}

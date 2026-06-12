@@ -1,8 +1,9 @@
-# LRS-1 Phases 1+2 apply runbook — lines/player_id/minor gate + suspensions
+# LRS-1 Phases 1–4 apply runbook — lines/player_id/minor gate + suspensions + subs pools + lines post
 
 **Branch:** `feature/lineup-roster-subs` (stacks on `feature/gs-1-offline-mode`).
 **Apply POST-PILOT, in a no-event window.** Touches `game_lineups`
-(ScorerView-adjacent), the lineup editor, and (P2) ScorerView's penalty flow.
+(ScorerView-adjacent), the lineup editor, (P2) ScorerView's penalty flow, and
+(P4) `posts` (additive column only).
 
 ## Order (hard dependencies)
 
@@ -36,6 +37,16 @@
    ARE used: GP becomes lineup-appearance count for those players).
 9. **Deploy `send-sub-alert`** (client-invoked, no DB trigger — any time
    before the client build ships).
+10. `20260615001400_lrs4_l_lineup_post.sql` (P4) — adds
+   `posts.lines_for_game_id` (plain ALTER, fails loud on collision — audited
+   clean against prod Jun 12), the (game, team) partial unique index, and
+   `upsert_lineup_post` (SECURITY DEFINER, fenced by `is_team_manager` + a
+   participation check; justification in the migration header). Hard
+   dependency on H (`lineup_backing_team_id`) + REG E (`current_profile_id`)
+   — the DO block fails loudly if either is missing.
+11. **Deploy `send-lines-alert`** (client-invoked, no DB trigger — any time
+   before the client build ships). Payload is team-level only by design: no
+   player names on OS notification surfaces.
 
 ## Branch test BEFORE prod (required)
 
@@ -43,7 +54,7 @@ Supabase branching needs **Pro** — already budgeted in `SERVICES_AND_COSTS.md`
 (planned pre-pilot upgrade). Free tier blocked branch-testing at build time
 (Jun 11), so the suite below is the gate at apply time:
 
-1. Create a disposable dev branch; apply REG A–E, then H, I, J, K.
+1. Create a disposable dev branch; apply REG A–E, then H, I, J, K, L.
 2. ```
    SMOKE_SUPABASE_URL=https://<branch-ref>.supabase.co \
    SMOKE_ANON_KEY=<branch anon> \
@@ -60,7 +71,10 @@ Supabase branching needs **Pro** — already budgeted in `SERVICES_AND_COSTS.md`
    conflict vs non-staff), and (P3) pool creation authz + idempotency, the
    pool-flag guard (any-authed insert spoof), the scheduling block, the
    adult-sub day-of pull vs the minor-sub consent block, and identity-keyed
-   sub stats on the league board.
+   sub stats on the league board, and (P4) `upsert_lineup_post` under real
+   JWTs (anon EXECUTE revoked, rostered player fail-closed, manager create
+   lands team-scoped with no league/tournament ride-along, re-finalize
+   updates in place — one post per game+team).
 4. Delete the branch.
 
 Already verified at build time (Jun 11, no branch needed, re-runnable):
@@ -69,24 +83,29 @@ Already verified at build time (Jun 11, no branch needed, re-runnable):
 node scripts/lrs-smoke/pglite-migrations.mjs
 ```
 
-applies H → I → J **verbatim to a real Postgres (PGlite) seeded with
+applies H → I → J → K → L **verbatim to a real Postgres (PGlite) seeded with
 prod-shaped pre-state** — including prod's abandoned old `game_suspensions`
-stub + its stale policies, `game_lineups` without `player_id`/`line`, and the
-four stat RPCs at their current prod signatures — then runs the full GS-2/GS-5
-behavior suite (38 checks: shape assertions, minor gate, counting lifecycle,
-CHECKs, flags, verify authz, penalty-dedup, stamp guard). Seeding prod shape
-is the point: an earlier empty-DB version of this harness missed the
-`game_suspensions` collision entirely. The branch run (above) re-proves RLS,
-which superuser PGlite cannot, and inherently re-tests the collision since a
-branch clones prod.
+stub + its stale policies, `game_lineups` without `player_id`/`line`, `posts`
+at its live column list (no `lines_for_game_id`), and the four stat RPCs at
+their current prod signatures — then runs the full behavior suite (67 checks:
+shape assertions, minor gate, counting lifecycle, CHECKs, flags, verify
+authz, penalty-dedup, stamp guard, pool authz/scheduling/consent, lines-post
+authz/idempotency/participation). Seeding prod shape is the point: an earlier
+empty-DB version of this harness missed the `game_suspensions` collision
+entirely. The branch run (above) re-proves RLS, which superuser PGlite
+cannot, and inherently re-tests the collision since a branch clones prod.
 
 ## Prod apply
 
 1. Deploy `send-suspension-alert`; apply H, I, J (Supabase migration, not
    hand-run SQL); redeploy `sync-scorekeeper-queue`.
 2. Verify via live REST (PostgREST embed lesson): `GET /rest/v1/game_lineups?select=id,player_id,line&limit=1`,
-   one `POST /rest/v1/rpc/get_league_skater_stats`, and
-   `POST /rest/v1/rpc/get_tournament_suspension_flags` (anon key) — all must 200.
+   one `POST /rest/v1/rpc/get_league_skater_stats`,
+   `POST /rest/v1/rpc/get_tournament_suspension_flags` (anon key), and after L
+   `GET /rest/v1/posts?select=id,lines_for_game_id&limit=1` plus the feed
+   embed `GET /rest/v1/posts?select=id,profiles!posts_author_id_fkey(id)&limit=1`
+   (L adds no FK, so no new embed ambiguity — this re-proves it live) — all
+   must 200.
    Also confirm the Suspensions tab's qualified embed loads:
    `GET /rest/v1/game_suspensions?select=id,team:tournament_teams!game_suspensions_team_id_fkey(team_name)&limit=1`
    with a director JWT.
@@ -101,7 +120,16 @@ branch clones prod.
   pattern). P2 puts ONLY the suspension filing through queuedWrite +
   the sync RULES extension; line-setting and roster verification stay direct
   (verification must read live suspension state — attesting from a stale
-  cache would be a wrong answer with a green checkmark).
+  cache would be a wrong answer with a green checkmark). P4's lines post is
+  direct too (same manager-at-home flow) and runs strictly AFTER the lineup
+  save commits — a post failure reads as "lineup saved, post didn't", never
+  masks the save.
+- P4 changes NO posts RLS/policies. The post rides the existing team-feed
+  scoping (`team_id` = backing `teams.id`; `league_id`/`tournament_id` forced
+  NULL server-side), so it can never enter the global/league/tournament
+  feeds. Content is plain text — names exactly as the consented roster
+  already displays them, NO minor profile ids/mentions/links (Migration I
+  shield posture); the push is team-level only, no player names.
 - No RLS changes to existing tables; the minor gate is a trigger (fires for
   definer RPCs too). game_suspensions is a NEW table: staff-only read,
   scorer/director insert, RPC-only status transitions, team-level anon RPC.

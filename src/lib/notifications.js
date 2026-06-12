@@ -112,6 +112,7 @@ export const KIND_META = {
   game_reminder:       { icon: '⏰', label: 'Game reminder' },
   suspension:          { icon: '🚨', label: 'Suspension filed' },
   sub_alert:           { icon: '🏒', label: 'Sub needed' },
+  lineup_alert:        { icon: '📋', label: "Tonight's lines" },
   team_invite:         { icon: '✉️', label: 'Team invite' },
   league_invite:       { icon: '🏆', label: 'League invite' },
   game_puck_won:       { icon: '🏒', label: 'Game Puck' },

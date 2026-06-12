@@ -32,6 +32,11 @@
  *   role too, the team-level-only public flags RPC (anon sees counts, never
  *   rows/names), and GS-5 verify_game_rosters (clean verify by scorer,
  *   conflict requires a director, non-staff blocked).
+ *
+ * Phase 4 (Migration L — §6 P4 verification): upsert_lineup_post under real
+ *   JWTs — anon EXECUTE revoked, rostered player fail-closed, manager
+ *   create lands team-scoped (no league/tournament ride-along), re-finalize
+ *   updates in place (one post per game+team).
  */
 const { createClient } = require('@supabase/supabase-js');
 
@@ -595,6 +600,47 @@ async function makeMinor(label) {
       !error && subRow?.goals === 1 && subRow?.gp === 1 && subRow?.team_id === lt.id,
       error?.message || JSON.stringify(subRow || {}));
     check('sub pools never seed board rows', !(board || []).some(r => r.team_id === skatersPool.id), '');
+  }
+
+  // ── 12. P4 tonight's-lines post (Migration L) ──────────────────────────
+  // RLS-layer checks PGlite can't prove: the anon EXECUTE revoke and the
+  // fail-closed manager check under real JWTs.
+  {
+    const anonClient = createClient(URL, ANON, { auth: { persistSession: false } });
+    const { error } = await anonClient.rpc('upsert_lineup_post', {
+      p_game_id: game.id, p_game_source: 'league', p_team_id: lt.id, p_content: 'anon lines',
+    });
+    check('anon cannot execute upsert_lineup_post (revoked)', !!error, error?.message || 'anon call was allowed!');
+  }
+  {
+    const { error } = await adultPlayer.client.rpc('upsert_lineup_post', {
+      p_game_id: game.id, p_game_source: 'league', p_team_id: lt.id, p_content: 'player lines',
+    });
+    check('a rostered PLAYER cannot post lines (manager/coach only, 42501)',
+      !!error && /manager or coach|42501/i.test(`${error.code} ${error.message}`), error?.message || 'call was allowed!');
+  }
+  let linesPost = null;
+  {
+    const { data, error } = await manager.client.rpc('upsert_lineup_post', {
+      p_game_id: game.id, p_game_source: 'league', p_team_id: lt.id,
+      p_content: "📋 TONIGHT'S LINES\n🥅 Starting: Smoke G (#31)\nL1: A (#9) · B (#13)",
+    });
+    linesPost = data;
+    check('manager creates the lines post on the team feed (team-scoped, no league/tournament ride-along)',
+      !error && data?.team_id === team.id && data?.tag === 'Lineup'
+        && data?.lines_for_game_id === game.id && data?.league_id == null && data?.tournament_id == null,
+      error?.message || JSON.stringify({ team_id: data?.team_id, league_id: data?.league_id }));
+  }
+  {
+    const { data, error } = await manager.client.rpc('upsert_lineup_post', {
+      p_game_id: game.id, p_game_source: 'league', p_team_id: lt.id, p_content: 'refreshed lines',
+    });
+    const { count } = await admin.from('posts')
+      .select('id', { count: 'exact', head: true })
+      .eq('lines_for_game_id', game.id).eq('team_id', team.id);
+    check('re-finalize UPDATES the same post — one per (game, team), never a double-post',
+      !error && data?.id === linesPost?.id && data?.content === 'refreshed lines' && count === 1,
+      error?.message || JSON.stringify({ same: data?.id === linesPost?.id, count }));
   }
 
   console.log(`\n${failed === 0 ? '✅ ALL PASS' : `❌ ${failed} FAILED`}`);
