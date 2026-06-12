@@ -23,6 +23,15 @@
  *   COLLISION stays unresolved, inactive roster rows ignored), line check
  *   constraint, player_id in all four stat RPCs (non-vacuous: real league +
  *   tournament fixtures), and the anon minor shield.
+ *
+ * Phase 2 (Migration J — §6 P2 verification): GS-2 suspension filing RLS
+ *   (assigned scorekeeper allowed, random authed blocked, foreign team
+ *   blocked, non-pending insert blocked), serve/overturn counting (decrement
+ *   → served at exactly 0, no third serve, indefinite unserveable,
+ *   director-only, no direct UPDATE path), CHECK invariants bind service
+ *   role too, the team-level-only public flags RPC (anon sees counts, never
+ *   rows/names), and GS-5 verify_game_rosters (clean verify by scorer,
+ *   conflict requires a director, non-staff blocked).
  */
 const { createClient } = require('@supabase/supabase-js');
 
@@ -320,6 +329,189 @@ async function makeMinor(label) {
     check('authed: minor player_id passes through', !e2 && shieldedAuthed === minorAnchored, e2?.message || `got ${shieldedAuthed}`);
     const { data: adultAnon, error: e3 } = await anon.rpc('shield_minor_player_id', { p_player_id: adultPlayer.id });
     check('anon: adult player_id passes through', !e3 && adultAnon === adultPlayer.id, e3?.message || `got ${adultAnon}`);
+  }
+
+  // ── 7. GS-2 suspensions — filing RLS ───────────────────────────────────
+  // Fixtures: `manager` is the tournament director (§5); `scorer` is the
+  // assigned scorekeeper of a fresh scheduled game. adultPlayer is a plain
+  // authed user with no tournament role.
+  const scorer = await makeAuthedUser('lrsscorer');
+  const { data: tgame2 } = await admin.from('games')
+    .insert({
+      tournament_id: tourn.id, home_team_id: tt1.id, away_team_id: tt2.id,
+      start_time: new Date(Date.now() + 86400000).toISOString(), status: 'scheduled',
+      scorekeeper_id: scorer.id,
+    }).select('id').single();
+
+  const suspRow = (over) => ({
+    tournament_id: tourn.id, game_id: tgame2.id, team_id: tt1.id,
+    player_name: 'Smoke Goon', jersey_number: 4,
+    suspension_type: 'suspension_2', games_remaining: 2, ...over,
+  });
+
+  let susp2Id = null;
+  {
+    const { data, error } = await scorer.client.from('game_suspensions')
+      .insert(suspRow({})).select('id, status, games_remaining').single();
+    susp2Id = data?.id;
+    check('assigned scorekeeper CAN file a suspension', !error && data?.status === 'pending', error?.message);
+  }
+  {
+    const { error } = await adultPlayer.client.from('game_suspensions').insert(suspRow({ jersey_number: 5 }));
+    check('random authed user CANNOT file (RLS)', !!error, error?.message || 'insert was allowed!');
+  }
+  {
+    // team_id from a different tournament team not in this game
+    const { data: tt3 } = await admin.from('tournament_teams')
+      .insert({ tournament_id: tourn.id, team_name: 'LRS Smoke TT3' }).select('id').single();
+    const { error } = await scorer.client.from('game_suspensions')
+      .insert(suspRow({ team_id: tt3.id }));
+    check('filing against a team not in the game is BLOCKED', !!error, error?.message || 'insert was allowed!');
+  }
+  {
+    const { error } = await scorer.client.from('game_suspensions')
+      .insert(suspRow({ status: 'served', games_remaining: 0, resolved_at: new Date().toISOString() }));
+    check('filing a non-pending row is BLOCKED', !!error, error?.message || 'insert was allowed!');
+  }
+  {
+    // One ACTIVE filing per penalty + penalty-must-belong-to-game integrity.
+    const { data: pen } = await admin.from('game_penalties')
+      .insert({ game_id: tgame2.id, team_id: tt1.id, game_source: 'tournament', penalty_type: 'Game Misconduct', severity: 'Game Misconduct', duration_minutes: 5, period: 3 })
+      .select('id').single();
+    const { error: e1 } = await scorer.client.from('game_suspensions')
+      .insert(suspRow({ penalty_id: pen.id, jersey_number: 21, player_name: 'Dup Test' }));
+    check('filing linked to a penalty succeeds', !e1, e1?.message);
+    const { error: e2 } = await scorer.client.from('game_suspensions')
+      .insert(suspRow({ penalty_id: pen.id, jersey_number: 21, player_name: 'Dup Test 2' }));
+    check('second ACTIVE filing for the same penalty is BLOCKED (23505)', e2?.code === '23505', e2?.message || 'insert was allowed!');
+    const { data: penB } = await admin.from('game_penalties')
+      .insert({ game_id: tgame.id, team_id: tt1.id, game_source: 'tournament', penalty_type: 'Match Penalty', severity: 'Match Penalty', duration_minutes: 5, period: 3 })
+      .select('id').single();
+    const { error: e3 } = await scorer.client.from('game_suspensions')
+      .insert(suspRow({ penalty_id: penB.id, jersey_number: 22 }));
+    check('filing linked to ANOTHER game\'s penalty is BLOCKED (RLS integrity)', !!e3, e3?.message || 'insert was allowed!');
+  }
+
+  // ── 8. GS-2 counting — serve / overturn lifecycle ──────────────────────
+  {
+    const { error } = await scorer.client.rpc('serve_suspension', { p_suspension_id: susp2Id });
+    check('non-director CANNOT serve (42501)', !!error && /director|42501/i.test(`${error.code} ${error.message}`), error?.message || 'serve was allowed!');
+  }
+  {
+    const { data, error } = await manager.client.rpc('serve_suspension', { p_suspension_id: susp2Id });
+    check('serve #1: 2-game → pending with 1 left', !error && data?.status === 'pending' && data?.games_remaining === 1 && data?.resolved_at == null,
+      error?.message || JSON.stringify({ status: data?.status, left: data?.games_remaining }));
+  }
+  {
+    const { data, error } = await manager.client.rpc('serve_suspension', { p_suspension_id: susp2Id });
+    check('serve #2: hits 0 → served + resolved_at', !error && data?.status === 'served' && data?.games_remaining === 0 && data?.resolved_at != null,
+      error?.message || JSON.stringify({ status: data?.status, left: data?.games_remaining }));
+  }
+  {
+    const { error } = await manager.client.rpc('serve_suspension', { p_suspension_id: susp2Id });
+    check('serve #3 on a served row FAILS (no over-serving)', !!error, error?.message || 'serve was allowed!');
+  }
+  {
+    // Overturn from served — the mis-tap recovery path.
+    const { data, error } = await manager.client.rpc('overturn_suspension', { p_suspension_id: susp2Id, p_note: 'video review' });
+    check('overturn from served works + appends note', !error && data?.status === 'overturned' && /Overturned: video review/.test(data?.notes || ''),
+      error?.message || JSON.stringify({ status: data?.status, notes: data?.notes }));
+  }
+  {
+    const { error } = await manager.client.rpc('overturn_suspension', { p_suspension_id: susp2Id });
+    check('overturning an overturned row FAILS', !!error, error?.message || 'overturn was allowed!');
+  }
+  let suspIndefId = null;
+  {
+    const { data, error } = await scorer.client.from('game_suspensions')
+      .insert(suspRow({ suspension_type: 'indefinite', games_remaining: 0, jersey_number: 13, player_name: 'Smoke Indef' }))
+      .select('id').single();
+    suspIndefId = data?.id;
+    check('indefinite files with games_remaining=0', !error && !!data?.id, error?.message);
+  }
+  {
+    const { error } = await manager.client.rpc('serve_suspension', { p_suspension_id: suspIndefId });
+    check('indefinite CANNOT be served (overturn only)', !!error, error?.message || 'serve was allowed!');
+  }
+  {
+    // No direct UPDATE path exists — even the director must use the RPCs.
+    const { data, error } = await manager.client.from('game_suspensions')
+      .update({ games_remaining: 0, status: 'served' }).eq('id', suspIndefId).select('id');
+    check('direct UPDATE is dead (RPC-only transitions)', !error && (data || []).length === 0, error?.message || `updated ${data?.length} rows!`);
+  }
+  {
+    // CHECK constraints bind the service role too.
+    const { error } = await admin.from('game_suspensions')
+      .insert(suspRow({ suspension_type: 'indefinite', games_remaining: 2, jersey_number: 99 }));
+    check('CHECK: indefinite with games_remaining>0 rejected (service role)', !!error, error?.message || 'insert was allowed!');
+  }
+  {
+    const { error } = await admin.from('game_suspensions')
+      .update({ games_remaining: -1 }).eq('id', suspIndefId);
+    check('CHECK: negative games_remaining rejected (service role)', !!error, error?.message || 'update was allowed!');
+  }
+
+  // ── 9. team-level public surface ───────────────────────────────────────
+  {
+    const anon = createClient(URL, ANON, { auth: { persistSession: false } });
+    const { data: flags, error } = await anon.rpc('get_tournament_suspension_flags', { p_tournament_id: tourn.id });
+    const tt1Flag = (flags || []).find(f => f.team_id === tt1.id);
+    // susp2 is overturned; still pending: the indefinite (#13) + the
+    // penalty-linked filing (#21) → count 2.
+    check('anon flags RPC returns team-level pending count', !error && tt1Flag?.pending_count === 2,
+      error?.message || JSON.stringify(flags));
+    const keys = tt1Flag ? Object.keys(tt1Flag).sort() : [];
+    check('flags expose ONLY team_id + pending_count (no names/jerseys)',
+      keys.length === 2 && keys.includes('team_id') && keys.includes('pending_count'), keys.join(','));
+    const { data: rawRows } = await anon.from('game_suspensions').select('id').eq('tournament_id', tourn.id);
+    check('anon raw-table read returns nothing', (rawRows || []).length === 0, `got ${rawRows?.length} rows`);
+    const { data: playerRows } = await adultPlayer.client.from('game_suspensions').select('id').eq('tournament_id', tourn.id);
+    check('non-staff authed raw-table read returns nothing', (playerRows || []).length === 0, `got ${playerRows?.length} rows`);
+  }
+
+  // ── 10. GS-5 verify_game_rosters ───────────────────────────────────────
+  {
+    const { error } = await adultPlayer.client.rpc('verify_game_rosters', { p_game_id: tgame2.id });
+    check('non-staff CANNOT verify rosters (42501)', !!error && /staff|42501/i.test(`${error.code} ${error.message}`), error?.message || 'verify was allowed!');
+  }
+  {
+    // No lineup set yet → indefinite #13 is pending but not DRESSED → no
+    // conflict → the assigned scorekeeper may verify.
+    const { data, error } = await scorer.client.rpc('verify_game_rosters', { p_game_id: tgame2.id });
+    check('scorer verifies a clean game (no conflicts)', !error && data?.verified === true && data?.conflicts === 0,
+      error?.message || JSON.stringify(data));
+    const { data: g } = await admin.from('games').select('rosters_verified_at, rosters_verified_by').eq('id', tgame2.id).single();
+    check('rosters_verified_at/by stamped on games', !!g?.rosters_verified_at && g?.rosters_verified_by === scorer.id,
+      JSON.stringify(g));
+  }
+  {
+    // The guard trigger: staff can update games (scores) but cannot stamp the
+    // verification columns directly — verify_game_rosters is the only path.
+    const { error } = await scorer.client.from('games')
+      .update({ rosters_verified_at: new Date().toISOString() }).eq('id', tgame2.id);
+    check('direct stamp of rosters_verified_at is BLOCKED (trigger)', !!error && /verify_game_rosters|42501/i.test(`${error.code} ${error.message}`),
+      error?.message || 'update was allowed!');
+  }
+  {
+    // Dress the suspended jersey (#13, indefinite, pending) on a NEW game →
+    // conflict → scorer blocked, director acknowledges.
+    const { data: tgame3 } = await admin.from('games')
+      .insert({
+        tournament_id: tourn.id, home_team_id: tt1.id, away_team_id: tt2.id,
+        start_time: new Date(Date.now() + 2 * 86400000).toISOString(), status: 'scheduled',
+        scorekeeper_id: scorer.id,
+      }).select('id').single();
+    // Re-point the indefinite suspension's game reference is NOT needed —
+    // conflicts key on (tournament, team, jersey), not the filing game.
+    await admin.from('game_lineups').insert({
+      game_id: tgame3.id, game_source: 'tournament', team_id: tt1.id,
+      invite_name: 'Smoke Indef', jersey_number: 13, is_starter: true,
+    });
+    const { error: scorerErr } = await scorer.client.rpc('verify_game_rosters', { p_game_id: tgame3.id });
+    check('suspended jersey on lineup: scorer verify BLOCKED', !!scorerErr && /director/i.test(scorerErr.message || ''), scorerErr?.message || 'verify was allowed!');
+    const { data: dirRes, error: dirErr } = await manager.client.rpc('verify_game_rosters', { p_game_id: tgame3.id });
+    check('…and the DIRECTOR can acknowledge & verify', !dirErr && dirRes?.verified === true && dirRes?.conflicts === 1,
+      dirErr?.message || JSON.stringify(dirRes));
   }
 
   console.log(`\n${failed === 0 ? '✅ ALL PASS' : `❌ ${failed} FAILED`}`);

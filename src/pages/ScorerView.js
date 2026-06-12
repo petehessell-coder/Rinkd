@@ -20,6 +20,10 @@ import { createGameRecapPost } from '../lib/posts';
 import { resolveBracketSlotsFromSemis } from '../lib/tournamentManage';
 import { triggerTournamentRecapPush, triggerLeagueRecapPush } from '../lib/push';
 import { isExtraCommissioner } from '../lib/leagueCommissioners';
+// GS-2 — suspension filing prompt, raised after a Game Misconduct / Match
+// Penalty is logged on a tournament game. The filing write itself goes
+// through queuedWrite (rink-side, offline-safe).
+import SuspensionPrompt from '../components/SuspensionPrompt';
 
 const C = {
   dark: '#07111F', navy: '#0B1F3A', blue: '#2E5B8C',
@@ -185,6 +189,23 @@ export default function ScorerView() {
   const [penaltyForm, setPenaltyForm] = useState({ team_id: '', player_number: '', severity: 'Minor (2 min)', penalty_type: 'Hooking', period: 1, time_in_period: '' });
   const [goalieForm, setGoalieForm] = useState({ goalie_out_number: '', goalie_in_number: '', period: 1, time_in_period: '' });
 
+  // GS-2 / GS-5 (LRS-1 Phase 2, tournament games only). `lineups` was already
+  // fetched for the offline cache — it's now kept in state as the jersey
+  // cross-ref input for the pre-game eligibility check. `suspensions` holds
+  // the PENDING rows for this game's two teams (cached for offline boots so a
+  // cache-hydrated game still flags suspended jerseys).
+  const [lineups, setLineups] = useState([]);
+  const [suspensions, setSuspensions] = useState([]);
+  const [suspensionPrompt, setSuspensionPrompt] = useState(null); // { penalty } | null
+  const [suspensionBusy, setSuspensionBusy] = useState(false);
+  const suspensionBusyRef = useRef(false);
+  // Stable filing id across retries of the SAME prompt — mirrors
+  // pendingEventIdRef so a retry after an ambiguous failure dedupes
+  // server-side instead of filing twice.
+  const suspensionIdRef = useRef(null);
+  const [suspensionFiledMsg, setSuspensionFiledMsg] = useState('');
+  const [verifyBusy, setVerifyBusy] = useState(false);
+
   // GS-1 offline state. `queueState.pending` drives the "N writes pending"
   // counter and the Finalize gate; `queueState.dead` rows exhausted their
   // retries (or were rejected server-side) and need the manual Retry button.
@@ -240,6 +261,8 @@ export default function ScorerView() {
     setPenalties(ev.penalties || []);
     setShotRows(ev.shotRows || []);
     setGoalieChanges(ev.goalieChanges || []);
+    setLineups(cached.setup.lineups || []);
+    setSuspensions(cached.setup.suspensions || []);
     setFromCache(true);
     setLoading(false);
     return true;
@@ -324,14 +347,25 @@ export default function ScorerView() {
     }
     setGoalForm(prev => ({ ...prev, team_id: g.home_team?.id || '', period: g.period || 1 }));
     setPenaltyForm(prev => ({ ...prev, team_id: g.home_team?.id || '', period: g.period || 1 }));
-    const [{ data: gl }, { data: pl }, { data: sl }, { data: gc }, { data: lineups }] = await Promise.all([
+    const suspTeamIds = !isLeague && g.tournament_id
+      ? [g.home_team_id, g.away_team_id].filter(Boolean) : [];
+    const [{ data: gl }, { data: pl }, { data: sl }, { data: gc }, { data: lineups }, { data: susp }] = await Promise.all([
       supabase.from('game_goals').select('*').eq('game_id', gameId).order('created_at', { ascending: false }),
       supabase.from('game_penalties').select('*').eq('game_id', gameId).order('created_at', { ascending: false }),
       supabase.from('game_shots').select('*').eq('game_id', gameId),
       supabase.from('game_goalie_changes').select('*').eq('game_id', gameId).order('created_at', { ascending: false }),
-      // Prefetched purely for the offline cache (scoresheet rosters).
+      // Offline cache (scoresheet rosters) + the GS-5 jersey cross-ref input.
       supabase.from('game_lineups').select('*').eq('game_id', gameId),
+      // GS-5 — pending suspensions for this game's two teams (tournament games
+      // only; staff-scoped RLS, so a read failure just means no flags shown).
+      suspTeamIds.length
+        ? supabase.from('game_suspensions')
+            .select('id, team_id, player_name, jersey_number, suspension_type, games_remaining, status')
+            .eq('tournament_id', g.tournament_id).in('team_id', suspTeamIds).eq('status', 'pending')
+        : Promise.resolve({ data: [] }),
     ]);
+    setLineups(lineups || []);
+    setSuspensions(susp || []);
 
     // Merge queued-but-unsynced writes over the server lists, in replay
     // order. This covers "online but the drain didn't finish" (server
@@ -374,7 +408,7 @@ export default function ScorerView() {
     // Refresh the offline cache with everything an offline boot needs, and
     // keep the SW's drain token current. Both are fire-and-forget.
     cacheGameSetup(gameId, {
-      game: g, lineups: lineups || [], userId: user.id,
+      game: g, lineups: lineups || [], suspensions: susp || [], userId: user.id,
       authorized: true, isDirector: director, isLeague,
     }).then(() => updateCachedEvents(gameId, {
       goals: goalsList, penalties: pensList, shotRows: shotsList, goalieChanges: gcList,
@@ -429,6 +463,12 @@ export default function ScorerView() {
     const t = setTimeout(() => setJustSynced(false), 4000);
     return () => clearTimeout(t);
   }, [justSynced]);
+
+  useEffect(() => {
+    if (!suspensionFiledMsg) return undefined;
+    const t = setTimeout(() => setSuspensionFiledMsg(''), 6000);
+    return () => clearTimeout(t);
+  }, [suspensionFiledMsg]);
 
   // Mirror live event state into the offline cache after every change so an
   // offline tab reload re-opens exactly where the scorer left off (an empty
@@ -835,8 +875,94 @@ export default function ScorerView() {
       setPenalties(prev => [data, ...prev]);
       setPenaltyModal(false);
       setPenaltyForm(prev => ({ ...prev, player_number: '', time_in_period: '' }));
+      // GS-2 — a misconduct/match penalty on a TOURNAMENT game raises the
+      // suspension prompt. The penalty itself is already saved; the prompt is
+      // a separate, dismissable decision (filing creates the game_suspensions
+      // row + director alert). League suspensions are out of scope for P2.
+      if (!isLeague && (data.severity === 'Game Misconduct' || data.severity === 'Match Penalty')) {
+        suspensionIdRef.current = null;
+        setSuspensionPrompt({ penalty: data });
+      }
     } finally {
       modalBusyRef.current = false; setModalBusy(false);
+    }
+  };
+
+  // Best lineup-derived label for a jersey on one of this game's teams —
+  // SuspensionPrompt headline + the filed player_name. Falls back to the bare
+  // jersey when the lineup has no matching row (or no lineup was set).
+  const lineupNameFor = (teamId, jersey) => {
+    if (jersey == null) return null;
+    const row = lineups.find(l => l.team_id === teamId && l.jersey_number === jersey);
+    return row?.invite_name?.trim() || null;
+  };
+
+  const fileSuspension = async (suspensionType, gamesRemaining, notes) => {
+    const pen = suspensionPrompt?.penalty;
+    if (!pen) return;
+    if (suspensionBusyRef.current) return;
+    suspensionBusyRef.current = true; setSuspensionBusy(true);
+    setErrorMsg('');
+    try {
+      // Same id across retries of this prompt → the server dedupes a filing
+      // whose response was lost, instead of double-filing.
+      if (!suspensionIdRef.current) suspensionIdRef.current = uuid();
+      const { data: { user } } = await supabase.auth.getUser();
+      const name = lineupNameFor(pen.team_id, pen.player_number);
+      const { error, queued } = await queuedWrite('game_suspensions', 'insert', {
+        id: suspensionIdRef.current,
+        tournament_id: game.tournament_id,
+        game_id: gameId,
+        team_id: pen.team_id,
+        player_name: name || (pen.player_number != null ? `#${pen.player_number}` : 'Unknown player'),
+        jersey_number: pen.player_number ?? null,
+        penalty_id: pen.id,
+        suspension_type: suspensionType,
+        games_remaining: gamesRemaining,
+        notes,
+        created_by: user?.id || null,
+      }, { gameId, isLeague: false });
+      if (error) {
+        // Partial unique index on penalty_id: another device already filed
+        // for this penalty — that's a success state, not a failure.
+        if (error.code === '23505') {
+          suspensionIdRef.current = null;
+          setSuspensionPrompt(null);
+          setSuspensionFiledMsg('A suspension is already filed for this penalty.');
+          return;
+        }
+        setErrorMsg('Could not file the suspension — check your connection and try again. It was NOT filed.');
+        return;
+      }
+      suspensionIdRef.current = null;
+      setSuspensionPrompt(null);
+      setSuspensionFiledMsg(queued
+        ? 'Suspension saved on this device — it files (and alerts the director) when you reconnect.'
+        : 'Suspension filed — the tournament director has been alerted.');
+    } finally {
+      suspensionBusyRef.current = false; setSuspensionBusy(false);
+    }
+  };
+
+  // GS-5 — pre-game roster verification. Direct RPC on purpose (NOT queued):
+  // attesting eligibility against a stale offline snapshot would be a wrong
+  // answer with a green checkmark on it, so the button requires live server
+  // state. The RPC recomputes conflicts server-side and enforces
+  // director-only acknowledgment when a suspended jersey is on the lineup.
+  const verifyRosters = async () => {
+    if (verifyBusy) return;
+    if (!isOnline || fromCache) {
+      setErrorMsg('Reconnect to verify rosters — eligibility is checked against the live suspension list.');
+      return;
+    }
+    setVerifyBusy(true);
+    setErrorMsg('');
+    try {
+      const { error } = await supabase.rpc('verify_game_rosters', { p_game_id: gameId });
+      if (error) { setErrorMsg(error.message || 'Could not verify rosters.'); return; }
+      setGame(g => g ? { ...g, rosters_verified_at: new Date().toISOString() } : g);
+    } finally {
+      setVerifyBusy(false);
     }
   };
 
@@ -949,6 +1075,23 @@ export default function ScorerView() {
   const shotTotals = {};
   shotRows.forEach(s => { shotTotals[s.team_id] = (shotTotals[s.team_id] || 0) + (s.count || 0); });
 
+  // GS-5 — pre-game eligibility (tournament games only). A pending suspension
+  // whose team+jersey appears on THIS game's lineup is a CONFLICT: the
+  // scoring surface is replaced by a blocking card until a director
+  // acknowledges via verify_game_rosters (which recomputes conflicts
+  // server-side — this client list is display, not enforcement). A pending
+  // suspension with NO lineup match is the system working (the player is
+  // sitting out) and only shows as context on the verify card.
+  const pendingSuspensions = !isLeague ? suspensions : [];
+  const suspConflicts = pendingSuspensions.filter(s =>
+    lineups.some(l => l.team_id === s.team_id && l.jersey_number != null && l.jersey_number === s.jersey_number));
+  const rostersVerified = !!game.rosters_verified_at;
+  const showPreGameCheck = !isLeague && status === 'scheduled' && !isLocked;
+  const eligibilityBlocked = showPreGameCheck && !rostersVerified && suspConflicts.length > 0;
+  const suspTypeLabel = (s) => s.suspension_type === 'indefinite'
+    ? 'Indefinite'
+    : `${s.games_remaining} game${s.games_remaining === 1 ? '' : 's'} left`;
+
   // Build the period selector dynamically off the tournament's format settings
   // and the game's round. League games (no tournament) keep OT+SO on so the
   // commissioner has the full toolset by default. BLPA-style formats with
@@ -1049,6 +1192,13 @@ export default function ScorerView() {
         </div>
       )}
 
+      {suspensionFiledMsg && (
+        <div onClick={() => setSuspensionFiledMsg('')}
+          style={{ background: 'rgba(34,197,94,0.14)', borderBottom: '0.5px solid rgba(34,197,94,0.5)', color: '#F4F7FA', padding: '11px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'center' }}>
+          ✓ {suspensionFiledMsg}
+        </div>
+      )}
+
       {/* LOCKED banner — visible whenever the game is finalized. Tells the
           scorer the tool is read-only and points the director at Reopen. */}
       {isLocked && (
@@ -1068,7 +1218,81 @@ export default function ScorerView() {
         </div>
       )}
 
+      {/* GS-5 — BLOCKING pre-game eligibility card. A suspended jersey is on
+          the lineup: the entire scoring surface is withheld until a director
+          acknowledges (verify_game_rosters re-checks server-side, so this is
+          UX, not the enforcement boundary). */}
+      {eligibilityBlocked ? (
+        <div style={{ padding: 16 }}>
+          <div style={{ background: 'rgba(215,38,56,0.1)', border: '1px solid rgba(215,38,56,0.45)', borderRadius: 12, padding: 16 }}>
+            <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: '#F4F7FA', marginBottom: 8 }}>
+              ⚠️ Suspended player on the lineup
+            </div>
+            <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.7)', lineHeight: 1.55, marginBottom: 12 }}>
+              {suspConflicts.length === 1 ? 'A player with a pending suspension is' : `${suspConflicts.length} players with pending suspensions are`} dressed
+              for this game. A tournament director must acknowledge before scoring can start.
+            </div>
+            {suspConflicts.map(s => (
+              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderTop: '0.5px solid rgba(244,247,250,0.08)' }}>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: 'rgba(215,38,56,0.2)', color: C.red, whiteSpace: 'nowrap' }}>SUSPENDED</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#F4F7FA' }}>
+                    {s.jersey_number != null ? `#${s.jersey_number} ` : ''}{s.player_name}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.45)', marginTop: 2 }}>{teamName(s.team_id)} · {suspTypeLabel(s)}</div>
+                </div>
+              </div>
+            ))}
+            <div style={{ marginTop: 14 }}>
+              {isDirector ? (
+                <button onClick={verifyRosters} disabled={verifyBusy || !isOnline || fromCache}
+                  style={{ width: '100%', padding: 13, background: (verifyBusy || !isOnline || fromCache) ? C.border : C.red, border: 'none', borderRadius: 999, color: '#fff', fontSize: 14, fontWeight: 700, cursor: (verifyBusy || !isOnline || fromCache) ? 'not-allowed' : 'pointer', fontFamily: 'Barlow, sans-serif', opacity: (verifyBusy || !isOnline || fromCache) ? 0.6 : 1 }}>
+                  {verifyBusy ? '⏳ Verifying…' : (!isOnline || fromCache) ? '📡 Reconnect to verify' : '✓ Acknowledge & verify rosters'}
+                </button>
+              ) : (
+                <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.55)', lineHeight: 1.5, textAlign: 'center' }}>
+                  Ask a tournament director to open this game and acknowledge — or have the lineup
+                  updated so the suspended player isn&apos;t dressed, then reload.
+                </div>
+              )}
+              <button onClick={() => { setLoading(true); load(); }}
+                style={{ width: '100%', marginTop: 8, padding: 11, background: 'rgba(244,247,250,0.08)', border: 'none', borderRadius: 999, color: '#F4F7FA', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>
+                ↻ Re-check lineup
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
       <div style={{ padding: 16 }}>
+
+        {/* GS-5 — routine pre-game check (no conflicts): one-tap attestation
+            that powers the public "✓ Rosters verified" badge. Pending
+            suspensions with no lineup match are listed as context — that's a
+            player correctly sitting out. */}
+        {showPreGameCheck && !rostersVerified && (
+          <div style={{ background: 'rgba(46,91,140,0.12)', border: `0.5px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(244,247,250,0.5)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>Pre-game roster check</div>
+            <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.65)', lineHeight: 1.5, marginBottom: pendingSuspensions.length ? 8 : 12 }}>
+              {pendingSuspensions.length === 0
+                ? 'No pending suspensions for either team.'
+                : `${pendingSuspensions.length} pending suspension${pendingSuspensions.length === 1 ? '' : 's'} — none dressed on this lineup.`}
+            </div>
+            {pendingSuspensions.map(s => (
+              <div key={s.id} style={{ fontSize: 12, color: 'rgba(244,247,250,0.5)', padding: '3px 0' }}>
+                · {s.jersey_number != null ? `#${s.jersey_number} ` : ''}{s.player_name} ({teamName(s.team_id)}) — {suspTypeLabel(s)}, sitting out
+              </div>
+            ))}
+            <button onClick={verifyRosters} disabled={verifyBusy || !isOnline || fromCache}
+              style={{ width: '100%', marginTop: pendingSuspensions.length ? 10 : 0, padding: 11, background: (verifyBusy || !isOnline || fromCache) ? 'rgba(46,91,140,0.3)' : C.blue, border: 'none', borderRadius: 999, color: '#fff', fontSize: 13, fontWeight: 700, cursor: (verifyBusy || !isOnline || fromCache) ? 'not-allowed' : 'pointer', fontFamily: 'Barlow, sans-serif', opacity: (verifyBusy || !isOnline || fromCache) ? 0.6 : 1 }}>
+              {verifyBusy ? '⏳ Verifying…' : (!isOnline || fromCache) ? '📡 Reconnect to verify rosters' : '✓ Verify rosters'}
+            </button>
+          </div>
+        )}
+        {showPreGameCheck && rostersVerified && (
+          <div style={{ background: 'rgba(34,197,94,0.1)', border: '0.5px solid rgba(34,197,94,0.4)', borderRadius: 12, padding: '10px 14px', marginBottom: 16, fontSize: 13, fontWeight: 600, color: '#22C55E', textAlign: 'center' }}>
+            ✓ Rosters verified
+          </div>
+        )}
 
         {/* SCORE + GOAL LOG — combined card */}
         <SecLabel>Score & Goals {saving && <span style={{ color: 'rgba(244,247,250,0.3)', fontWeight: 400, textTransform: 'none', fontSize: 10 }}>saving...</span>}</SecLabel>
@@ -1294,6 +1518,7 @@ export default function ScorerView() {
           : <div style={{ textAlign: 'center', padding: 14, background: 'rgba(215,38,56,0.1)', border: '0.5px solid rgba(215,38,56,0.3)', borderRadius: 999, fontSize: 14, fontWeight: 700, color: C.red }}>✓ Game Finalized — Standings Updated</div>
         }
       </div>
+      )}
 
       {showScoresheet && (
         <Suspense fallback={<div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif' }}>Preparing scoresheet…</div>}>
@@ -1371,6 +1596,25 @@ export default function ScorerView() {
             </select>
           </MField>
         </Modal>
+      )}
+
+      {/* GS-2 — SUSPENSION PROMPT (after a misconduct/match penalty saves on a
+          tournament game). Dismiss files nothing; the penalty itself is
+          already on the scoresheet either way. */}
+      {suspensionPrompt && (
+        <SuspensionPrompt
+          penalty={suspensionPrompt.penalty}
+          playerLabel={(() => {
+            const pen = suspensionPrompt.penalty;
+            const name = lineupNameFor(pen.team_id, pen.player_number);
+            const jersey = pen.player_number != null ? `#${pen.player_number}` : '';
+            return [jersey, name].filter(Boolean).join(' ') || 'Unknown player';
+          })()}
+          teamName={teamName(suspensionPrompt.penalty.team_id)}
+          busy={suspensionBusy}
+          onFile={fileSuspension}
+          onDismiss={() => { setSuspensionPrompt(null); suspensionIdRef.current = null; }}
+        />
       )}
 
       {/* GOALIE MODAL */}

@@ -71,6 +71,15 @@ const RULES: Record<string, { ops: string[]; cols: string[]; needsTeam: boolean 
     cols: ["game_id", "team_id", "period", "count"],
     needsTeam: true,
   },
+  // LRS-1 Phase 2 (GS-2): rink-side suspension filing. Tournament games only
+  // (enforced below — the table has no league shape). tournament_id and
+  // created_by are NOT client columns: both are forced from the authorized
+  // game + verified JWT in the per-op block, like game_id.
+  game_suspensions: {
+    ops: ["insert"],
+    cols: ["id", "game_id", "team_id", "player_name", "jersey_number", "penalty_id", "suspension_type", "games_remaining", "notes", "created_at"],
+    needsTeam: true,
+  },
   games: {
     ops: ["update"],
     cols: ["home_score", "away_score", "period", "status", "shootout_winner"],
@@ -101,8 +110,10 @@ type GameAuth = {
   ok: boolean
   status?: number
   error?: string
-  game?: { home_team_id: string | null; away_team_id: string | null; status: string | null }
+  game?: { home_team_id: string | null; away_team_id: string | null; status: string | null; tournament_id?: string | null }
 }
+
+const SUSPENSION_TYPES = ["game_misconduct", "match_penalty", "suspension_1", "suspension_2", "suspension_3", "indefinite"]
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -149,7 +160,7 @@ async function authorizeGame(svc: ReturnType<typeof createClient>, gameId: strin
     ok = !!role
   }
   if (!ok) return { ok: false, status: 403, error: "forbidden" }
-  return { ok: true, game: { home_team_id: g.home_team_id, away_team_id: g.away_team_id, status: g.status } }
+  return { ok: true, game: { home_team_id: g.home_team_id, away_team_id: g.away_team_id, status: g.status, tournament_id: g.tournament_id } }
 }
 
 // Rebuild the payload from the whitelist — unknown keys are silently dropped,
@@ -236,6 +247,52 @@ serve(async (req) => {
       }
       const payload = clean.payload!
 
+      // GS-2 suspension filings get table-specific hardening: tournament-only,
+      // tournament_id + created_by forced server-side (never from the body),
+      // and the type/count pair validated to the same invariants the DB CHECKs
+      // pin — a rejection here dead-letters cleanly instead of hard-failing
+      // the batch on a constraint violation.
+      if (op.table === "game_suspensions") {
+        if (op.isLeague || !auth.game?.tournament_id) {
+          results.push({ id: op.id, status: "rejected", error: "suspensions are tournament-only" })
+          continue
+        }
+        payload.tournament_id = auth.game.tournament_id
+        payload.created_by = user.id
+        const sType = String(payload.suspension_type || "")
+        if (!SUSPENSION_TYPES.includes(sType)) {
+          results.push({ id: op.id, status: "rejected", error: "invalid suspension_type" })
+          continue
+        }
+        const gr = Number(payload.games_remaining)
+        if (!Number.isInteger(gr) || gr < 0 || gr > 99 || (sType === "indefinite" ? gr !== 0 : gr < 1)) {
+          results.push({ id: op.id, status: "rejected", error: "invalid games_remaining" })
+          continue
+        }
+        if (!payload.player_name || typeof payload.player_name !== "string") {
+          results.push({ id: op.id, status: "rejected", error: "player_name required" })
+          continue
+        }
+        if (payload.jersey_number != null && !Number.isInteger(Number(payload.jersey_number))) {
+          results.push({ id: op.id, status: "rejected", error: "invalid jersey_number" })
+          continue
+        }
+        if (payload.penalty_id != null) {
+          if (!UUID_RE.test(String(payload.penalty_id))) {
+            results.push({ id: op.id, status: "rejected", error: "invalid penalty_id" })
+            continue
+          }
+          // The linking penalty may never have made it (its insert was
+          // rejected/dead-lettered earlier in the queue, or the scorer
+          // deleted it). The suspension RECORD matters more than the link —
+          // drop the FK instead of letting the insert hard-fail and wedge
+          // the rest of the replay behind it.
+          const { data: pen } = await svc.from("game_penalties")
+            .select("id").eq("id", payload.penalty_id).eq("game_id", op.gameId).maybeSingle()
+          if (!pen) payload.penalty_id = null
+        }
+      }
+
       try {
         if (op.operation === "insert") {
           if (!payload.id) { results.push({ id: op.id, status: "rejected", error: "insert requires client id" }); continue }
@@ -293,6 +350,14 @@ serve(async (req) => {
           results.push({ id: op.id, status: "rejected", error: "unknown operation" })
         }
       } catch (err) {
+        // A duplicate ACTIVE filing for the same penalty (the partial unique
+        // index on game_suspensions.penalty_id) means another device already
+        // filed it — a clean terminal rejection, not a batch-stopping
+        // failure. Nothing later in the queue depends on a suspension row.
+        if (op.table === "game_suspensions" && (err as { code?: string })?.code === "23505") {
+          results.push({ id: op.id, status: "rejected", error: "a suspension is already filed for this penalty" })
+          continue
+        }
         // Hard DB failure — report and STOP so later ops can't leapfrog an
         // earlier one they may depend on (replay order is the contract).
         console.error("[sync-scorekeeper-queue] op failed", { op_id: op.id, table: op.table, operation: op.operation, error: err?.message })
