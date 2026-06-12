@@ -20,6 +20,7 @@ import { generateLeagueSchedule } from '../lib/leagueScheduleGenerator';
 import { uploadMedia } from '../lib/posts';
 import { classifyImage } from '../lib/imageModeration';
 import { assignTeamManagerByInput } from '../lib/leagueTeamManagers';
+import { createLeagueSubPools } from '../lib/subPools';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 const inputStyle = { width:'100%', background:'#07111F', border:`0.5px solid ${C.border}`, borderRadius:8, padding:'10px 12px', color:C.ice, fontFamily:'Barlow, sans-serif', fontSize:14, outline:'none' };
@@ -302,7 +303,14 @@ function ManageLeague({ id, navigate }) {
   const multiDivision = divisions.length > 1;
   // Teams tab list scopes to the selected division when multi (the picker also
   // targets which division new teams are added to). Single-division: all teams.
-  const scopedTeamsList = multiDivision && selectedDivisionId ? teams.filter(t => t.division_id === selectedDivisionId) : teams;
+  // P3 — sub pools are league_teams but NEVER playing teams: keep them out of
+  // every list that feeds scheduling, playoffs, and the game pickers (the DB
+  // trigger tr_block_sub_pool_scheduling is the backstop). They get their own
+  // block on the Teams tab instead.
+  const playTeams = teams.filter(t => !t.is_sub_pool);
+  const allSubPools = teams.filter(t => t.is_sub_pool);
+  const scopedTeamsList = multiDivision && selectedDivisionId ? playTeams.filter(t => t.division_id === selectedDivisionId) : playTeams;
+  const scopedSubPools = multiDivision && selectedDivisionId ? allSubPools.filter(t => t.division_id === selectedDivisionId) : allSubPools;
   const scopedGamesList = multiDivision && selectedDivisionId ? games.filter(g => g.division_id === selectedDivisionId) : games;
   const scopedStandingsList = multiDivision && selectedDivisionId ? standings.filter(r => r.division_id === selectedDivisionId) : standings;
   // Operational tabs show for managers + commissioners (RLS gates the writes).
@@ -473,6 +481,51 @@ function ManageLeague({ id, navigate }) {
             </div>
 
             {/* Link team modal */}
+            {/* P3 — SUB POOLS. A pool is a flagged league_team with a real
+                backing team page (roster via join requests, feed, stats), but
+                it can never be scheduled and never appears in standings. Two
+                per division: skaters + goalies. */}
+            <SecLabel>Sub Pools ({scopedSubPools.length})</SecLabel>
+            <Card>
+              <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.45)', marginBottom: 10, lineHeight: 1.5 }}>
+                Pools hold the league's call-up list — players join the pool team like any other team.
+                Coaches pull subs into a game night lineup from Set Lineup, and "Sub Needed" alerts push to the whole pool.
+                Pools never appear in the schedule or standings.
+              </div>
+              {scopedSubPools.length === 0 && (
+                <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.3)', padding: '4px 0 10px' }}>
+                  No sub pools yet{multiDivision && selectedDivisionId ? ' for this division' : ''}.
+                </div>
+              )}
+              {scopedSubPools.map(p => (
+                <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
+                  <span style={{ fontSize: 16 }}>{p.sub_pool_kind === 'goalies' ? '🥅' : '🏒'}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>{p.team?.name || p.team_name}</div>
+                    <div style={{ fontSize: 10, color: 'rgba(244,247,250,0.4)', marginTop: 2, textTransform: 'capitalize' }}>{p.sub_pool_kind} pool</div>
+                  </div>
+                  {p.team_id && (
+                    <button onClick={() => navigate(`/team/${p.team_id}`)}
+                      style={{ background: 'rgba(46,91,140,0.25)', border: 'none', borderRadius: 999, padding: '6px 14px', color: C.ice, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>
+                      Manage roster →
+                    </button>
+                  )}
+                </div>
+              ))}
+              {isCommissioner && scopedSubPools.length < 2 && (
+                <div style={{ marginTop: 10 }}>
+                  <Btn onClick={async () => {
+                    try {
+                      await createLeagueSubPools(id, multiDivision && selectedDivisionId ? selectedDivisionId : null);
+                      await load();
+                    } catch (e) { setError(e.message); }
+                  }}>
+                    + Create sub pools{multiDivision && selectedDivisionId ? ' for this division' : ''}
+                  </Btn>
+                </div>
+              )}
+            </Card>
+
             {linkingTeam && (
               <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
                 <div style={{ background: C.navy, borderRadius: '16px 16px 0 0', padding: 20, width: '100%', maxWidth: 480, borderTop: `0.5px solid ${C.border}` }}>

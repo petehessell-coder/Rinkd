@@ -30,7 +30,7 @@ const C = {
   green: '#22C55E', amber: '#F59E0B',
 };
 
-const TABS = ['Teams', 'Schedule', 'Bracket', 'Registrations', 'Scorers', 'Sponsors', 'Settings'];
+const TABS = ['Teams', 'Schedule', 'Bracket', 'Registrations', 'Scorers', 'Suspensions', 'Sponsors', 'Settings'];
 
 const REG_STATUS = {
   pending:    { label: 'Pending',    color: '#F59E0B', bg: 'rgba(245,158,11,0.15)' },
@@ -105,17 +105,25 @@ export default function TournamentManagePage({ currentUser, profile }) {
     tournament.director_id === currentUser.id || isExtraDirector
   );
 
+  // GS-2 — pending suspension count drives the red badge on the Suspensions
+  // tab. Refreshed by load() and by the tab itself after serve/overturn.
+  const [pendingSuspCount, setPendingSuspCount] = useState(0);
+
   const load = useCallback(async () => {
     try {
       const t = await getTournament(id);
       setTournament(t);
-      const [{ data: ts }, { data: gs }, { data: rk }, { data: st }] = await Promise.all([
+      const [{ data: ts }, { data: gs }, { data: rk }, { data: st }, { count: suspCount }] = await Promise.all([
         listTeams(id),
         listGames(id),
         listRinks().catch(() => ({ data: [] })),
         listStandingsSummary(id).catch(() => ({ data: [] })),
+        supabase.from('game_suspensions')
+          .select('id', { count: 'exact', head: true })
+          .eq('tournament_id', id).eq('status', 'pending'),
       ]);
       setTeams(ts); setGames(gs); setRinks(rk || []);
+      setPendingSuspCount(suspCount || 0);
       // Convert standings rows to a team_id → {gp,wins,losses,ties,pts} lookup
       // so renderers can look up records by id in O(1). Empty tournament =
       // empty lookup, which the renderers treat as "no record yet."
@@ -194,8 +202,13 @@ export default function TournamentManagePage({ currentUser, profile }) {
             <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${C.border}`, overflowX: 'auto', scrollbarWidth: 'none' }}>
               {TABS.map((t) => (
                 <button key={t} onClick={() => setTab(t)}
-                  style={{ background: 'transparent', color: tab === t ? C.ice : C.steel, border: 'none', padding: '10px 16px', cursor: 'pointer', fontSize: 13, fontWeight: tab === t ? 700 : 500, borderBottom: tab === t ? `3px solid ${C.red}` : '3px solid transparent', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                  style={{ background: 'transparent', color: tab === t ? C.ice : C.steel, border: 'none', padding: '10px 16px', cursor: 'pointer', fontSize: 13, fontWeight: tab === t ? 700 : 500, borderBottom: tab === t ? `3px solid ${C.red}` : '3px solid transparent', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   {t}
+                  {t === 'Suspensions' && pendingSuspCount > 0 && (
+                    <span style={{ background: C.red, color: '#fff', borderRadius: 999, fontSize: 10, fontWeight: 700, minWidth: 16, height: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px' }}>
+                      {pendingSuspCount}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
@@ -225,6 +238,7 @@ export default function TournamentManagePage({ currentUser, profile }) {
           {tab === 'Bracket' && <BracketTab tournamentId={id} tournament={tournament} teams={teams} games={games} rinks={rinks} reload={load} flash={showFlash} />}
           {tab === 'Registrations' && <RegistrationsTab tournamentId={id} tournament={tournament} reload={load} flash={showFlash} />}
           {tab === 'Scorers' && <ScorersTab tournamentId={id} tournamentName={tournament.name} originalDirectorId={tournament.director_id} profile={profile} flash={showFlash} />}
+          {tab === 'Suspensions' && <SuspensionsTab tournamentId={id} flash={showFlash} onPendingCount={setPendingSuspCount} />}
           {tab === 'Sponsors' && <SponsorsManager ownerType="tournament" ownerId={id} isYouth={tournament.settings?.feature_profile === 'youth_competitive'}
             settings={tournament.settings || {}}
             onSaveSettings={async (partial) => { await updateTournament(id, { settings: { ...(tournament.settings || {}), ...partial } }); await load(); }} />}
@@ -1560,6 +1574,182 @@ function DirectorsSection({ tournamentId, originalDirectorId, flash }) {
             );
           })}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ====================== SUSPENSIONS TAB (GS-2) ======================
+// Director lifecycle surface for suspensions filed from ScorerView. Status
+// transitions go through the fail-closed RPCs ONLY (serve_suspension /
+// overturn_suspension) — there is deliberately no direct-update path, so the
+// counting invariants live in one place. Mark Served consumes exactly one
+// game per tap and flips to 'served' at zero; Overturn voids the record from
+// pending OR served (the mis-tap recovery).
+const SUSPENSION_TYPE_LABELS = {
+  game_misconduct: 'Game misconduct',
+  match_penalty: 'Match penalty',
+  suspension_1: '1-game suspension',
+  suspension_2: '2-game suspension',
+  suspension_3: '3-game suspension',
+  indefinite: 'Indefinite',
+};
+
+function SuspensionsTab({ tournamentId, flash, onPendingCount }) {
+  const [rows, setRows] = useState(null);   // null = loading
+  const [busyId, setBusyId] = useState(null);
+  const [overturnFor, setOverturnFor] = useState(null); // suspension id with the note form open
+  const [overturnNote, setOverturnNote] = useState('');
+
+  const loadRows = useCallback(async () => {
+    // Embeds qualified by FK name (PostgREST ambiguity footgun — never bare).
+    const { data, error } = await supabase.from('game_suspensions')
+      .select('*, team:tournament_teams!game_suspensions_team_id_fkey(team_name), game:games!game_suspensions_game_id_fkey(id, start_time)')
+      .eq('tournament_id', tournamentId)
+      .order('created_at', { ascending: false });
+    if (error) {
+      flash('error', `Could not load suspensions: ${error.message}`);
+      setRows([]);
+      return;
+    }
+    setRows(data || []);
+    onPendingCount?.((data || []).filter(r => r.status === 'pending').length);
+  }, [tournamentId, flash, onPendingCount]);
+
+  useEffect(() => { loadRows(); }, [loadRows]);
+
+  const serve = async (s) => {
+    if (busyId) return;
+    setBusyId(s.id);
+    try {
+      const { data, error } = await supabase.rpc('serve_suspension', { p_suspension_id: s.id });
+      if (error) { flash('error', error.message); return; }
+      flash('success', data?.status === 'served'
+        ? `${data.player_name} has fully served the suspension.`
+        : `Game served — ${data?.games_remaining} game${data?.games_remaining === 1 ? '' : 's'} left for ${data?.player_name}.`);
+      await loadRows();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const overturn = async (s) => {
+    if (busyId) return;
+    setBusyId(s.id);
+    try {
+      const { error } = await supabase.rpc('overturn_suspension', {
+        p_suspension_id: s.id,
+        p_note: overturnNote.trim() || null,
+      });
+      if (error) { flash('error', error.message); return; }
+      flash('success', `Suspension for ${s.player_name} overturned.`);
+      setOverturnFor(null);
+      setOverturnNote('');
+      await loadRows();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  if (rows === null) return <div style={{ color: C.steel, fontSize: 13, padding: '24px 0', textAlign: 'center' }}>Loading suspensions…</div>;
+
+  const pending = rows.filter(r => r.status === 'pending');
+  const resolved = rows.filter(r => r.status !== 'pending');
+  const playerLabel = (s) => `${s.jersey_number != null ? `#${s.jersey_number} ` : ''}${s.player_name}`;
+  const remainingLabel = (s) => s.suspension_type === 'indefinite'
+    ? 'Indefinite — overturn to lift'
+    : `${s.games_remaining} game${s.games_remaining === 1 ? '' : 's'} remaining`;
+
+  const card = { background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: '14px 16px', marginBottom: 12 };
+
+  const renderRow = (s, actions) => (
+    <div key={s.id} style={card}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, whiteSpace: 'nowrap',
+              background: s.status === 'pending' ? 'rgba(215,38,56,0.18)' : s.status === 'served' ? 'rgba(34,197,94,0.15)' : 'rgba(139,163,190,0.15)',
+              color: s.status === 'pending' ? C.red : s.status === 'served' ? C.green : C.steel }}>
+              {s.status.toUpperCase()}
+            </span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: C.ice }}>{playerLabel(s)}</span>
+          </div>
+          <div style={{ fontSize: 12, color: C.steel, lineHeight: 1.6 }}>
+            {s.team?.team_name || 'Unknown team'} · {SUSPENSION_TYPE_LABELS[s.suspension_type] || s.suspension_type}
+            {s.status === 'pending' && <> · <span style={{ color: C.amber, fontWeight: 700 }}>{remainingLabel(s)}</span></>}
+            <br />
+            Filed {fmtDateTime(s.created_at)}{s.game?.start_time ? ` · game of ${fmtDateTime(s.game.start_time)}` : ''}
+            {s.resolved_at ? ` · resolved ${fmtDateTime(s.resolved_at)}` : ''}
+          </div>
+          {s.notes && (
+            <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.55)', marginTop: 6, whiteSpace: 'pre-wrap', borderLeft: `2px solid ${C.border}`, paddingLeft: 8 }}>
+              {s.notes}
+            </div>
+          )}
+        </div>
+        {actions}
+      </div>
+      {overturnFor === s.id && (
+        <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            style={{ ...inputStyle, flex: 1, minWidth: 180 }}
+            placeholder="Why is this being overturned? (optional)"
+            value={overturnNote}
+            onChange={(e) => setOverturnNote(e.target.value)}
+          />
+          <button style={btnPrimary} disabled={busyId === s.id} onClick={() => overturn(s)}>
+            {busyId === s.id ? 'Saving…' : 'Confirm overturn'}
+          </button>
+          <button style={btnGhost} onClick={() => { setOverturnFor(null); setOverturnNote(''); }}>Cancel</button>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{ fontSize: 13, color: C.steel, lineHeight: 1.6, marginBottom: 16 }}>
+        Suspensions are filed by scorekeepers when a game misconduct or match penalty is logged.
+        <b style={{ color: C.ice }}> Mark Served</b> counts one game sat out (the suspension clears at zero);
+        <b style={{ color: C.ice }}> Overturn</b> voids it. Teams with a pending suspension show a team-level
+        ⚠️ badge on the public standings — player names are never shown publicly.
+      </div>
+
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 8 }}>
+        Pending ({pending.length})
+      </div>
+      {pending.length === 0 && (
+        <div style={{ ...card, color: C.steel, fontSize: 13, textAlign: 'center' }}>No pending suspensions. 🎉</div>
+      )}
+      {pending.map(s => renderRow(s, (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {s.suspension_type !== 'indefinite' && (
+            <button style={{ ...btnPrimary, opacity: busyId === s.id ? 0.6 : 1 }} disabled={!!busyId}
+              onClick={() => serve(s)}>
+              {busyId === s.id ? 'Saving…' : 'Mark Served'}
+            </button>
+          )}
+          <button style={btnGhost} disabled={!!busyId}
+            onClick={() => { setOverturnFor(overturnFor === s.id ? null : s.id); setOverturnNote(''); }}>
+            Overturn
+          </button>
+        </div>
+      )))}
+
+      {resolved.length > 0 && (
+        <>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', margin: '18px 0 8px' }}>
+            Resolved ({resolved.length})
+          </div>
+          {/* A served row can still be overturned — the recovery path for a
+              mis-tapped Mark Served (there is deliberately no un-serve). */}
+          {resolved.map(s => renderRow(s, s.status === 'served' ? (
+            <button style={btnGhost} disabled={!!busyId}
+              onClick={() => { setOverturnFor(overturnFor === s.id ? null : s.id); setOverturnNote(''); }}>
+              Overturn
+            </button>
+          ) : null))}
+        </>
       )}
     </div>
   );

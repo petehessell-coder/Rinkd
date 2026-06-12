@@ -336,6 +336,16 @@ export default function GameDetail({ profile }) {
                 {isFinal && <span style={{ background: 'rgba(244,247,250,0.08)', color: 'rgba(244,247,250,0.4)', fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>FINAL</span>}
                 {!isLive && !isFinal && <span style={{ background: 'rgba(46,91,140,0.4)', color: C.steel, fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>SCHEDULED</span>}
               </div>
+              {/* GS-5 — pre-game roster check attestation (verify_game_rosters).
+                  Team-level signal only: it says the lineups were checked
+                  against the suspension list, never who was on it. */}
+              {isTournamentGame && game.rosters_verified_at && (
+                <div style={{ textAlign: 'center', marginTop: 6 }}>
+                  <span style={{ background: 'rgba(34,197,94,0.12)', border: '0.5px solid rgba(34,197,94,0.4)', color: '#22C55E', fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>
+                    ✓ Rosters verified
+                  </span>
+                </div>
+              )}
               {game.start_time && <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 6 }}>{new Date(game.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>}
             </div>
 

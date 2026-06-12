@@ -109,6 +109,9 @@ export default function TournamentPage({ currentUser }) {
   // so the standings/schedule landing stays fast.
   const [feedPosts, setFeedPosts] = useState(null); // null = not loaded yet
   const [feedLoading, setFeedLoading] = useState(false);
+  // GS-2 — team_id → pending-suspension count, via the team-level-only RPC
+  // (no names ever reach this page). Drives the ⚠️ badge on standings rows.
+  const [suspendedTeams, setSuspendedTeams] = useState({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -147,6 +150,16 @@ export default function TournamentPage({ currentUser }) {
         return acc;
       }, {});
       setStandings(grouped);
+
+      // GS-2 — team-level suspension flags for the standings badge.
+      // Best-effort: a failure here just means no ⚠️ shows (never block the
+      // standings on it).
+      try {
+        const { data: flags } = await supabase.rpc('get_tournament_suspension_flags', { p_tournament_id: id });
+        const flagMap = {};
+        (flags || []).forEach(f => { flagMap[f.team_id] = f.pending_count; });
+        setSuspendedTeams(flagMap);
+      } catch { setSuspendedTeams({}); }
 
     } catch(e) {
       setError(e.message);
@@ -538,6 +551,15 @@ export default function TournamentPage({ currentUser }) {
                             <div style={{display:'flex',alignItems:'center',gap:6,minWidth:0}}>
                               <span style={{width:18,height:18,borderRadius:'50%',background:row.pool_rank===1?'#D72638':row.pool_rank===2?'#2E5B8C':'rgba(244,247,250,0.1)',color:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,flexShrink:0}}>{row.pool_rank}</span>
                               <span style={{fontSize:12,fontWeight:600,color:'#F4F7FA',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{row.team_name}</span>
+                              {/* GS-2 — TEAM-LEVEL suspension flag only. Opponents
+                                  learn the lineup may differ; no player is ever
+                                  named on this public surface. */}
+                              {suspendedTeams[row.team_id] > 0 && (
+                                <span title="Suspended player(s) — lineup may differ" aria-label="Team has suspended players"
+                                  style={{fontSize:10,fontWeight:700,color:'#F59E0B',background:'rgba(245,158,11,0.14)',border:'0.5px solid rgba(245,158,11,0.45)',borderRadius:6,padding:'1px 5px',flexShrink:0,whiteSpace:'nowrap'}}>
+                                  ⚠️ Susp.
+                                </span>
+                              )}
                             </div>
                           </td>
                           {midCols.map(c => (
