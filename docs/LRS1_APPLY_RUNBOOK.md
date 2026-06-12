@@ -17,7 +17,13 @@
    AFTER INSERT trigger pg_net-POSTs to it from the very first filing; the
    trigger is exception-wrapped (a missing fn never fails the insert) but the
    alert itself would be silently lost.
-6. `20260615001200_lrs2_j_game_suspensions.sql`
+6. `20260615001200_lrs2_j_game_suspensions.sql` — **drops and recreates
+   `game_suspensions`**: prod carries an abandoned division-aware stub of the
+   same name (0 rows, 0 inbound FKs, no code references — audited Jun 11).
+   The drop is intentional; the create is deliberately NOT `if not exists` so
+   any future shape conflict fails loudly instead of skipping (the original
+   `if not exists` version was an apply-blocker: the old shape survived and
+   the index statements errored).
 7. **Redeploy `sync-scorekeeper-queue`** — the RULES whitelist gained
    `game_suspensions` (offline filings replay through it). An old deploy
    rejects queued suspension filings as `table/operation not allowed`, which
@@ -46,12 +52,22 @@ Supabase branching needs **Pro** — already budgeted in `SERVICES_AND_COSTS.md`
    conflict vs non-staff).
 4. Delete the branch.
 
-Already verified at build time (Jun 11, no branch needed): Migration J was
-applied verbatim to a real Postgres (PGlite) with stubbed dependencies — DDL +
-plpgsql bodies compile, and the full serve/overturn lifecycle, CHECK
-invariants, flags shape, and verify conflict logic pass (19/19,
-`/tmp` harness mirrored by smoke §§7–10). The branch run re-proves RLS, which
-superuser PGlite cannot.
+Already verified at build time (Jun 11, no branch needed, re-runnable):
+
+```
+node scripts/lrs-smoke/pglite-migrations.mjs
+```
+
+applies H → I → J **verbatim to a real Postgres (PGlite) seeded with
+prod-shaped pre-state** — including prod's abandoned old `game_suspensions`
+stub + its stale policies, `game_lineups` without `player_id`/`line`, and the
+four stat RPCs at their current prod signatures — then runs the full GS-2/GS-5
+behavior suite (38 checks: shape assertions, minor gate, counting lifecycle,
+CHECKs, flags, verify authz, penalty-dedup, stamp guard). Seeding prod shape
+is the point: an earlier empty-DB version of this harness missed the
+`game_suspensions` collision entirely. The branch run (above) re-proves RLS,
+which superuser PGlite cannot, and inherently re-tests the collision since a
+branch clones prod.
 
 ## Prod apply
 

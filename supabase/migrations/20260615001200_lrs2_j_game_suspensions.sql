@@ -46,7 +46,20 @@
 -- ============================================================================
 
 -- 1 ── Table ─────────────────────────────────────────────────────────────────
-create table if not exists public.game_suspensions (
+-- ⚠️  PROD COLLISION (apply-blocker found Jun 11): prod already has a
+-- game_suspensions table — an abandoned division-aware stub (division_id,
+-- player_user_id, player_jersey, reason, source_game_id, served_game_id,
+-- status default 'active') with 0 rows, 0 inbound FKs, no code references
+-- (audited Jun 11: nothing in src/ or supabase/functions/ reads or writes
+-- the old columns; the only policies on it are stale stubs). A CREATE IF NOT
+-- EXISTS would silently keep the old shape and the index/RPC statements
+-- below would fail mid-migration. Since the stub is provably orphaned, drop
+-- it outright; CASCADE clears its two stale policies. The create below is
+-- deliberately NOT "if not exists" so a future shape conflict fails LOUDLY
+-- at apply time instead of skipping.
+drop table if exists public.game_suspensions cascade;
+
+create table public.game_suspensions (
   id              uuid primary key default gen_random_uuid(),
   tournament_id   uuid not null references public.tournaments(id) on delete cascade,
   game_id         uuid not null references public.games(id) on delete cascade,
