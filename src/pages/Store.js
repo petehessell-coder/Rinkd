@@ -228,7 +228,14 @@ export default function Store({ profile }) {
   const [affiliate, setAffiliate] = useState(null);
   const [merch, setMerch] = useState(null);
   const [cart, setCart] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(CART_KEY)) || []; } catch { return []; }
+    try {
+      const saved = JSON.parse(localStorage.getItem(CART_KEY)) || [];
+      // Self-heal: coerce any missing/invalid quantity (legacy carts) to a sane 1–20.
+      return saved.map((i) => {
+        const q = Math.round(Number(i.quantity));
+        return { ...i, quantity: Number.isFinite(q) && q > 0 ? Math.min(20, q) : 1 };
+      });
+    } catch { return []; }
   });
   const [cartOpen, setCartOpen] = useState(false);
   const [params, setParams] = useSearchParams();
@@ -254,7 +261,7 @@ export default function Store({ profile }) {
     setCart((prev) => {
       const ex = prev.find((i) => i.variant_id === v.id);
       if (ex) return prev.map((i) => i.variant_id === v.id ? { ...i, quantity: Math.min(20, i.quantity + 1) } : i);
-      return [...prev, { variant_id: v.id, product_id: p.id, product_name: p.name, variant_name: v.name, image_url: v.image_url || p.image_url, price: Number(v.price), currency: v.currency }];
+      return [...prev, { variant_id: v.id, product_id: p.id, product_name: p.name, variant_name: v.name, image_url: v.image_url || p.image_url, price: Number(v.price), currency: v.currency, quantity: 1 }];
     });
     track('store_add_to_cart', { product_id: p.id, variant_id: v.id });
     setCartOpen(true);
