@@ -1620,7 +1620,16 @@ function cleanSponsorOnForm(form) {
     : null;
   settings.recap_sponsor = norm(settings.recap_sponsor);
   settings.gamepuck_sponsor = norm(settings.gamepuck_sponsor);
-  return { ...form, settings };
+  // GS-6 — usah_classification has a CHECK constraint (six levels or NULL), so
+  // the empty "Select…" option must coerce to null, never ''. Blank the other
+  // compliance text fields to null too for a clean row.
+  return {
+    ...form,
+    settings,
+    usah_classification: form.usah_classification || null,
+    usah_association_name: (form.usah_association_name || '').trim() || null,
+    division_label: (form.division_label || '').trim() || null,
+  };
 }
 
 function LeagueSettings({ league, onSave }) {
