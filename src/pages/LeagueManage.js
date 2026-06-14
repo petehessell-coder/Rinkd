@@ -14,6 +14,7 @@ import { listRinks } from '../lib/rinks';
 import { supabase } from '../lib/supabase';
 import { sendLeagueInvite } from '../lib/invites';
 import ScheduleBuilderModal from '../components/ScheduleBuilderModal';
+import LeagueImportModal from '../components/LeagueImportModal';
 import EditGameModal from '../components/EditGameModal';
 import { deleteLeagueGame, bulkInsertLeagueGames } from '../lib/scheduleBuilder';
 import { generateLeagueSchedule } from '../lib/leagueScheduleGenerator';
@@ -88,6 +89,7 @@ function ManageLeague({ id, navigate }) {
   const [newDivisionName, setNewDivisionName] = useState('');
   const [divBusy, setDivBusy] = useState(false);
   const [showScheduleBuilder, setShowScheduleBuilder] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [editGameId, setEditGameId] = useState(null);
   const [teamSearch, setTeamSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -606,6 +608,18 @@ function ManageLeague({ id, navigate }) {
                 <DivisionPicker divisions={divisions} selectedId={selectedDivisionId} onSelect={setSelectedDivisionId} accent={C.red} />
               </>
             )}
+            <SecLabel>📋 Already have a schedule? Import it</SecLabel>
+            <Card>
+              <div style={{ fontSize: 13, color: C.steel, lineHeight: 1.6, marginBottom: 12 }}>
+                Paste your teams and schedule straight from a spreadsheet (Excel / Google Sheets) and stand up the whole league in one shot — the fastest way to get a league live.
+              </div>
+              <button onClick={() => setShowImport(true)}
+                style={{ padding: '11px 18px', borderRadius: 999, background: C.blue, border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 16 }}>📋</span>
+                <span>Import from spreadsheet</span>
+              </button>
+            </Card>
+
             <SecLabel>⚡ Smart Generator — Target Games Per Team</SecLabel>
             <Card>
               <SmartScheduleGenerator
@@ -752,6 +766,18 @@ function ManageLeague({ id, navigate }) {
             rinkByTeam={rinkByTeamMap(games)}
             onClose={() => setShowScheduleBuilder(false)}
             onPublished={async () => { setShowScheduleBuilder(false); await load(); }}
+          />
+        )}
+
+        {showImport && (
+          <LeagueImportModal
+            open={showImport}
+            leagueId={id}
+            existingTeams={scopedTeamsList}
+            rinks={rinks}
+            divisionId={selectedDivisionId}
+            onImported={async () => { await load(); }}
+            onClose={() => setShowImport(false)}
           />
         )}
 
