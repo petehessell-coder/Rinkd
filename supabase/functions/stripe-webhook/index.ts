@@ -28,11 +28,13 @@ function pfHeaders(): Record<string, string> {
   return h
 }
 
-// Paid store order -> submit a confirmed fulfillment order to Printful. Returns
-// the Printful order id. Throws on failure so the caller can flag the order for
-// a manual retry (the buyer has already paid).
+// Paid store order -> create a DRAFT fulfillment order in Printful (confirm=false).
+// The order will NOT be charged or sent to production until you manually confirm
+// it in the Printful dashboard. Flip confirm back to true to re-enable
+// auto-fulfillment. Returns the Printful order id. Throws on failure so the
+// caller can flag the order for a manual retry (the buyer has already paid).
 async function submitPrintfulOrder(order: any, items: any[]): Promise<number> {
-  const res = await fetch("https://api.printful.com/orders?confirm=true", {
+  const res = await fetch("https://api.printful.com/orders?confirm=false", {
     method: "POST",
     headers: pfHeaders(),
     body: JSON.stringify({

@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Rinkd · Recap Share-Card — first-pass draft</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;0,900;1,700;1,800;1,900&family=Barlow:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #030C15; color: #F4F7FA; font-family: 'Barlow', sans-serif; padding: 28px; -webkit-font-smoothing: antialiased; }
+  h1 { font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 900; font-size: 30px; letter-spacing: -0.01em; }
+  .sub { color: #8BA3BE; font-size: 14px; margin: 6px 0 22px; max-width: 760px; line-height: 1.5; }
+  .row { display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start; }
+  .col h2 { font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-style: italic; font-size: 16px; color: #8BA3BE; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; }
+  canvas { background: #07111F; border-radius: 14px; box-shadow: 0 14px 40px rgba(0,0,0,0.55); display: block; }
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; margin: 22px 0 8px; }
+  button, select { font-family: 'Barlow', sans-serif; font-weight: 700; font-size: 14px; border-radius: 999px; padding: 9px 18px; border: 1px solid rgba(46,91,140,0.5); background: #0f2847; color: #F4F7FA; cursor: pointer; }
+  button.primary { background: #2E5B8C; border-color: #2E5B8C; }
+  .legend { max-width: 360px; font-size: 13.5px; line-height: 1.6; color: #cdd9e6; }
+  .legend h3 { font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 900; font-size: 18px; color: #F4F7FA; margin: 16px 0 8px; }
+  .legend code { background: #0f2847; padding: 1px 6px; border-radius: 5px; color: #9ec3ec; font-size: 12.5px; }
+  .legend ul { padding-left: 18px; }
+  .legend li { margin-bottom: 5px; }
+  .zone { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 7px; vertical-align: middle; }
+</style>
+</head>
+<body>
+  <h1>Rinkd — Recap Share-Card · first-pass draft</h1>
+  <div class="sub">
+    The locked dual-brand template from <b>GROWTH_SHARE_1_BUILD.md §4</b>. Sponsor top strip · payload hero · persistent Rinkd frame bottom. Mark up anything — colors, type, spacing, copy. Both export sizes render below from one shared draw routine (the basis for <code>src/lib/shareCard.js</code>). “Download PNG” exports at full resolution.
+  </div>
+
+  <div class="controls">
+    <select id="sample"></select>
+    <button id="dlPortrait" class="primary">⬇ Download portrait (1080×1350)</button>
+    <button id="dlWide" class="primary">⬇ Download wide (1200×630)</button>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <h2>Portrait · 1080×1350 (Web Share / Stories)</h2>
+      <canvas id="portrait" width="1080" height="1350" style="width:340px;height:425px;"></canvas>
+    </div>
+    <div class="col">
+      <h2>Wide · 1200×630 (OG link unfurl)</h2>
+      <canvas id="wide" width="1200" height="630" style="width:480px;height:252px;"></canvas>
+
+      <div class="legend">
+        <h3>Locked zones</h3>
+        <ul>
+          <li><span class="zone" style="background:#0a1830"></span><b>Top strip — sponsor.</b> League chip + “Recap presented by [Sponsor].” P1 = placeholder until ADS-1 sells it. Sponsor + Rinkd never share a strip.</li>
+          <li><span class="zone" style="background:#0B1F3A"></span><b>Hero — payload.</b> Both teams (initials + color), big final score, one context line (round · competition). Team-level only — <b>no player names</b> (youth guardrail).</li>
+          <li><span class="zone" style="background:#07111F"></span><b>Bottom strip — Rinkd frame.</b> Wordmark + rinkd.app + soft CTA. Persistent, identical every time.</li>
+        </ul>
+        <h3>Un-croppable mark</h3>
+        Faint repeating <code>RINKD</code> diagonal watermark across the hero + a mark beside the score — a crop can’t strip the brand.
+        <h3>Type</h3>
+        Barlow Condensed italic 900 (scores/headline) · Barlow (labels/CTA) — the app’s type system.
+      </div>
+    </div>
+  </div>
+
+<script>
+// ---- Brand tokens (lifted from the app: GameDetail.js, index.html, App.js) ----
+const C = {
+  ink:    '#030C15',  // deepest
+  dark:   '#07111F',  // bottom frame
+  navy:   '#0B1F3A',  // hero
+  navyHi: '#13335c',  // hero gradient top
+  strip:  '#0a1830',  // sponsor strip
+  blue:   '#2E5B8C',
+  red:    '#D72638',
+  ice:    '#F4F7FA',
+  steel:  '#8BA3BE',
+  line:   'rgba(46,91,140,0.45)',
+};
+
+// ---- Sample games (team-level only — mirrors buildRecapContent's data) ----
+const SAMPLES = [
+  { home:{name:'Ice Hogs',     initials:'IH', color:'#D72638', score:5,
+          scorers:[{name:'Hessell',goals:2},{name:'Jones',goals:1},{name:'Petrov',goals:1},{name:'Salazar',goals:1}]},
+    away:{name:'Mighty Ducks',  initials:'MD', color:'#2E5B8C', score:3,
+          scorers:[{name:'Conway',goals:2},{name:'Banks',goals:1}]},
+    round:'🏆 Championship', competition:'BLPA Cleveland Classic', league:'The BLPA' },
+  { home:{name:'Frozen Ropes', initials:'FR', color:'#1f9e6b', score:2,
+          scorers:[{name:'MacKinnon',goals:1},{name:'Dubé',goals:1}]},
+    away:{name:'Zamboni Crew',  initials:'ZC', color:'#e08a1e', score:2,
+          scorers:[{name:'Ovechkin',goals:2}]},
+    round:'Regular season', competition:'Kanata Oldtimers HL', league:'KOHA', tie:true },
+  { home:{name:'Toledo Sasquatches',initials:'TS', color:'#2c5f2d', score:7, logo:'/toledo.png',
+          scorers:[{name:'Bechard',goals:3},{name:'Kovic',goals:1},{name:'Lemay',goals:1},{name:'Singh',goals:1},{name:'Tran',goals:1}]},
+    away:{name:'Glass City Pain',initials:'GC', color:'#c0392b', score:4, logo:'/glasscity.png',
+          scorers:[{name:'Marsh',goals:2},{name:'Pulver',goals:1},{name:'Diaz',goals:1}]},
+    round:'Semifinal', competition:'XRHL Summer 2026', league:'XRHL' },
+  // Youth event — scorers SUPPRESSED (COPPA guardrail). Card stays team-level.
+  { home:{name:'Jr. Sharks', initials:'JS', color:'#179bd7', score:4,
+          scorers:[{name:'(minor)',goals:4}]},
+    away:{name:'Ice Wolves', initials:'IW', color:'#7d4fc0', score:1,
+          scorers:[{name:'(minor)',goals:1}]},
+    round:'10U AAA · Pool play', competition:'Little Caesars Summer Sizzle', league:'LC', youth:true },
+];
+
+// Preload any logo images referenced by samples (same-origin → canvas-safe, no taint).
+const WORDMARK_SRC = '/wordmark-tape.png'; // the "tape job" Rinkd wordmark for the bottom frame
+const LOGOS = {};
+function preloadLogos() {
+  const urls = [...new Set([WORDMARK_SRC, ...SAMPLES.flatMap(s => [s.home.logo, s.away.logo])].filter(Boolean))];
+  return Promise.all(urls.map(u => new Promise(res => {
+    const img = new Image(); img.onload = () => { LOGOS[u] = img; res(); };
+    img.onerror = () => res(); img.src = u;
+  })));
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.arcTo(x+w, y,   x+w, y+h, r);
+  ctx.arcTo(x+w, y+h, x,   y+h, r);
+  ctx.arcTo(x,   y+h, x,   y,   r);
+  ctx.arcTo(x,   y,   x+w, y,   r);
+  ctx.closePath();
+}
+
+// Diagonal repeating RINKD watermark — the un-croppable brand layer.
+function drawWatermark(ctx, W, H, size) {
+  ctx.save();
+  ctx.globalAlpha = 0.04;
+  ctx.fillStyle = C.ice;
+  ctx.font = `900 italic ${size}px 'Barlow Condensed'`;
+  ctx.textBaseline = 'middle';
+  const step = size * 2.4;
+  for (let y = -H; y < H * 2; y += step) {
+    for (let x = -W; x < W * 2; x += size * 6) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(-Math.PI / 9);
+      ctx.fillText('RINKD', 0, 0);
+      ctx.restore();
+    }
+  }
+  ctx.restore();
+}
+
+function teamChip(ctx, cx, cy, r, team) {
+  const img = team.logo && LOGOS[team.logo];
+  if (img) {
+    // real logo — white disc, circular-clipped image (cover fit), subtle ring
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
+    ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.save(); ctx.clip();
+    const pad = r*0.12, d = (r-pad)*2;
+    const s = Math.min(img.width, img.height);
+    ctx.drawImage(img, (img.width-s)/2, (img.height-s)/2, s, s, cx-(r-pad), cy-(r-pad), d, d);
+    ctx.restore();
+    ctx.lineWidth = r*0.06; ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.stroke();
+    ctx.restore();
+    return;
+  }
+  // colored disc + initials (fallback — the common case today)
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
+  ctx.fillStyle = team.color; ctx.fill();
+  ctx.lineWidth = r*0.07; ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.stroke();
+  ctx.fillStyle = '#fff';
+  ctx.font = `900 italic ${r*0.92}px 'Barlow Condensed'`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(team.initials, cx, cy + r*0.04);
+  ctx.restore();
+}
+
+// "Hessell (2)  ·  Jones  ·  Petrov" — count only shown when >1.
+function fmtScorers(scorers) {
+  return (scorers || []).map(s => s.goals > 1 ? `${s.name} (${s.goals})` : s.name);
+}
+// Greedy-wrap scorer names under a team into ≤2 centered lines; overflow → "+K".
+// Returns the number of lines drawn (so the caller can place the context line below).
+function drawScorerBlock(ctx, items, cx, topY, maxW, L) {
+  ctx.font = `600 ${L.scorerSize}px 'Barlow'`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = C.steel;
+  const sep = '   ·   ';
+  const lines = []; let cur = '';
+  for (let i = 0; i < items.length; i++) {
+    const test = cur ? cur + sep + items[i] : items[i];
+    if (ctx.measureText(test).width > maxW && cur) {
+      if (lines.length === 1) { lines.push(cur + sep + '+' + (items.length - i)); cur = ''; break; }
+      lines.push(cur); cur = items[i];
+    } else cur = test;
+  }
+  if (cur) lines.push(cur);
+  lines.slice(0, 2).forEach((ln, idx) => ctx.fillText(ln, cx, topY + idx * L.scorerSize * 1.4));
+  return Math.min(lines.length, 2);
+}
+
+// One shared routine drives both formats. layout = proportions per aspect.
+function drawCard(ctx, W, H, g, L) {
+  // --- hero background (gradient navy) ---
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, C.navyHi); grad.addColorStop(1, C.navy);
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+  drawWatermark(ctx, W, H, L.wmSize);
+
+  // ============ TOP STRIP — sponsor ============
+  ctx.fillStyle = C.strip; ctx.fillRect(0, 0, W, L.topH);
+  ctx.fillStyle = C.line; ctx.fillRect(0, L.topH-2, W, 2);
+  // league chip
+  const chipR = L.topH*0.30, chipX = L.pad + chipR, chipY = L.topH/2;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(chipX, chipY, chipR, 0, Math.PI*2);
+  ctx.fillStyle = C.blue; ctx.fill(); ctx.restore();
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = `800 italic ${chipR*0.95}px 'Barlow Condensed'`;
+  ctx.fillText((g.league||'R').slice(0,1).toUpperCase(), chipX, chipY+chipR*0.03);
+  // sponsor credit (placeholder)
+  ctx.textAlign = 'left'; ctx.fillStyle = C.steel;
+  ctx.font = `700 ${L.topH*0.20}px 'Barlow'`;
+  ctx.fillText('RECAP PRESENTED BY', chipX+chipR+L.pad*0.5, chipY - L.topH*0.13);
+  ctx.fillStyle = C.ice;
+  ctx.font = `800 italic ${L.topH*0.30}px 'Barlow Condensed'`;
+  ctx.fillText(g.sponsor || 'YOUR LEAGUE’S SPONSOR', chipX+chipR+L.pad*0.5, chipY + L.topH*0.16);
+
+  // ============ HERO — payload ============
+  // FINAL pill
+  const pillW = L.finalPillW, pillH = L.finalPillH, pillX = W/2 - pillW/2, pillY = L.topH + L.heroPadTop;
+  roundRect(ctx, pillX, pillY, pillW, pillH, pillH/2);
+  ctx.fillStyle = g.tie ? C.blue : C.red; ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = `900 italic ${pillH*0.52}px 'Barlow Condensed'`;
+  ctx.fillText(g.tie ? 'FINAL · TIE' : 'FINAL', W/2, pillY + pillH*0.55);
+
+  // teams + score row
+  const midY = pillY + pillH + L.heroGap + L.chipR;
+  const homeX = W*L.homeXr, awayX = W*L.awayXr;
+  teamChip(ctx, homeX, midY, L.chipR, g.home);
+  teamChip(ctx, awayX, midY, L.chipR, g.away);
+
+  // big score in the middle
+  ctx.fillStyle = C.ice; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = `900 italic ${L.scoreSize}px 'Barlow Condensed'`;
+  ctx.fillText(`${g.home.score}`, W*L.scoreLr, midY);
+  ctx.fillText(`${g.away.score}`, W*L.scoreRr, midY);
+  ctx.fillStyle = C.steel;
+  ctx.font = `800 ${L.scoreSize*0.5}px 'Barlow Condensed'`;
+  ctx.fillText('–', W/2, midY - L.scoreSize*0.04);
+  // un-croppable mark beside the score
+  ctx.fillStyle = 'rgba(244,247,250,0.22)';
+  ctx.font = `900 italic ${L.scoreSize*0.14}px 'Barlow Condensed'`;
+  ctx.fillText('RINKD', W/2, midY + L.scoreSize*0.42);
+
+  // team names + a per-team color accent bar (matches logo_color)
+  const nameY = midY + L.chipR + L.nameSize*1.0;
+  ctx.textAlign = 'center';
+  [[g.home, homeX], [g.away, awayX]].forEach(([t, x]) => {
+    ctx.fillStyle = C.ice;
+    ctx.font = `800 italic ${L.nameSize}px 'Barlow Condensed'`;
+    ctx.fillText(t.name.toUpperCase(), x, nameY);
+    const barW = Math.min(ctx.measureText(t.name.toUpperCase()).width, L.chipR*1.6);
+    roundRect(ctx, x - barW/2, nameY + L.nameSize*0.30, barW, L.nameSize*0.10, L.nameSize*0.05);
+    ctx.fillStyle = t.color || C.blue; ctx.fill();
+  });
+
+  // scorers under each team name — SUPPRESSED for youth events (COPPA guardrail)
+  let blockLines = 0;
+  const scorerTop = nameY + L.nameSize*0.30 + L.scorerSize*1.5;
+  if (!g.youth) {
+    const hl = drawScorerBlock(ctx, fmtScorers(g.home.scorers), homeX, scorerTop, W*0.44, L);
+    const al = drawScorerBlock(ctx, fmtScorers(g.away.scorers), awayX, scorerTop, W*0.44, L);
+    blockLines = Math.max(hl, al);
+  }
+
+  // context line (round · competition) — sits below the scorer block
+  ctx.fillStyle = C.steel; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  ctx.font = `600 ${L.ctxSize}px 'Barlow'`;
+  const ctxLine = [g.round, g.competition].filter(Boolean).join('   ·   ');
+  const ctxY = (blockLines ? scorerTop + (blockLines-1)*L.scorerSize*1.4 : nameY) + L.ctxSize*2.0;
+  ctx.fillText(ctxLine, W/2, ctxY);
+
+  // ============ BOTTOM STRIP — Rinkd frame ============
+  const bY = H - L.botH;
+  ctx.fillStyle = C.dark; ctx.fillRect(0, bY, W, L.botH);
+  ctx.fillStyle = C.line; ctx.fillRect(0, bY, W, 2);
+  // wordmark — the "tape job" PNG if loaded, else text fallback (RINKD + LED dot)
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  const wmY = bY + L.botH*0.40;
+  const wmImg = LOGOS[WORDMARK_SRC];
+  if (wmImg) {
+    const h = L.wmImgH, w = h * (wmImg.width / wmImg.height);
+    ctx.drawImage(wmImg, L.pad, wmY - h/2, w, h);
+  } else {
+    ctx.font = `900 italic ${L.wmText}px 'Barlow Condensed'`;
+    ctx.fillStyle = C.ice;
+    ctx.fillText('RINKD', L.pad, wmY);
+    const wmW = ctx.measureText('RINKD').width;
+    ctx.fillStyle = C.red;
+    ctx.beginPath(); ctx.arc(L.pad + wmW + L.wmText*0.16, wmY, L.wmText*0.10, 0, Math.PI*2); ctx.fill();
+  }
+  // rinkd.app
+  ctx.fillStyle = C.steel;
+  ctx.font = `700 ${L.wmText*0.34}px 'Barlow'`;
+  ctx.fillText('rinkd.app', L.pad, bY + L.botH*0.76);
+  // soft CTA (right-aligned)
+  ctx.textAlign = 'right'; ctx.fillStyle = C.ice;
+  ctx.font = `700 italic ${L.ctaSize}px 'Barlow Condensed'`;
+  ctx.fillText(`FOLLOW ${(g.league||'YOUR LEAGUE').toUpperCase()} LIVE →`, W - L.pad, bY + L.botH*0.42);
+  ctx.fillStyle = C.steel; ctx.font = `600 ${L.ctaSize*0.5}px 'Barlow'`;
+  ctx.textAlign = 'right';
+  ctx.fillText('Every game lives on Rinkd', W - L.pad, bY + L.botH*0.72);
+}
+
+const PORTRAIT = { pad:64, topH:150, heroPadTop:64, finalPillW:230, finalPillH:64,
+  heroGap:50, chipR:138, scoreSize:248, nameSize:56, scorerSize:33, ctxSize:34, botH:240, wmText:96, wmImgH:96, ctaSize:40, wmSize:150,
+  homeXr:0.205, awayXr:0.795, scoreLr:0.43, scoreRr:0.57 };
+const WIDE = { pad:54, topH:96, heroPadTop:26, finalPillW:150, finalPillH:42,
+  heroGap:22, chipR:74, scoreSize:140, nameSize:30, scorerSize:18, ctxSize:20, botH:120, wmText:54, wmImgH:52, ctaSize:24, wmSize:90,
+  homeXr:0.24, awayXr:0.76, scoreLr:0.42, scoreRr:0.58 };
+
+let current = 0;
+function render() {
+  const g = SAMPLES[current];
+  drawCard(document.getElementById('portrait').getContext('2d'), 1080, 1350, g, PORTRAIT);
+  drawCard(document.getElementById('wide').getContext('2d'), 1200, 630, g, WIDE);
+}
+
+function download(canvasId, name) {
+  const a = document.createElement('a');
+  a.download = name; a.href = document.getElementById(canvasId).toDataURL('image/png');
+  a.click();
+}
+
+// init
+const sel = document.getElementById('sample');
+SAMPLES.forEach((s,i)=>{ const o=document.createElement('option'); o.value=i; o.textContent=`${s.home.name} ${s.home.score}–${s.away.score} ${s.away.name}  ·  ${s.competition}`; sel.appendChild(o); });
+sel.onchange = (e)=>{ current = +e.target.value; render(); };
+document.getElementById('dlPortrait').onclick = ()=>download('portrait','rinkd-recap-1080x1350.png');
+document.getElementById('dlWide').onclick = ()=>download('wide','rinkd-recap-1200x630.png');
+
+// Wait for BOTH fonts and logo images before the first paint so nothing pops in.
+Promise.all([
+  (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve(),
+  preloadLogos(),
+]).then(render);
+setTimeout(render, 800); // safety repaint
+</script>
+</body>
+</html>

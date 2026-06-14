@@ -134,6 +134,51 @@ function Row2({ children }) {
   return <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>{children}</div>;
 }
 
+// TAP-1 — big-button picker styles. ≥44px touch targets so a volunteer taps a
+// player instead of typing a jersey number.
+const pickBtnStyle = (active) => ({
+  display: 'inline-flex', alignItems: 'center', gap: 4, minHeight: 44, padding: '8px 13px',
+  borderRadius: 10, border: `1px solid ${active ? '#22C55E' : 'rgba(46,91,140,0.5)'}`,
+  background: active ? 'rgba(34,197,94,0.18)' : 'rgba(46,91,140,0.12)', color: '#F4F7FA',
+  fontFamily: 'Barlow, sans-serif', fontSize: 14, fontWeight: 700, lineHeight: 1, WebkitTapHighlightColor: 'transparent',
+});
+const pickTagStyle = { fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: 'rgba(215,38,56,0.2)', color: '#D72638', marginLeft: 2 };
+
+// TAP-1 — tap-a-player picker. `players` = [{ jersey, name, is_captain,
+// is_alternate }]. `value` is the selected jersey (string/number) or ''. When
+// the roster is empty (no lineup set / imported ghost roster) it renders
+// `fallback` (the original number input) so scoring is never blocked.
+function PlayerPicker({ label, players, value, onPick, allowClear = false, clearLabel = 'None', disabledJerseys = [], fallback = null }) {
+  if (!players || players.length === 0) return fallback;
+  const selected = (value !== '' && value != null) ? String(value) : null;
+  const disabled = new Set((Array.isArray(disabledJerseys) ? disabledJerseys : [disabledJerseys]).filter(x => x != null).map(String));
+  return (
+    <MField label={label}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {allowClear && (
+          <button type="button" onClick={() => onPick('')} style={{ ...pickBtnStyle(selected === null), cursor: 'pointer' }}>
+            {clearLabel}
+          </button>
+        )}
+        {players.map(p => {
+          const j = String(p.jersey);
+          const isSel = selected === j;
+          const isDisabled = disabled.has(j);
+          return (
+            <button key={p.jersey} type="button" disabled={isDisabled}
+              onClick={() => onPick(isSel ? '' : p.jersey)}
+              style={{ ...pickBtnStyle(isSel), opacity: isDisabled ? 0.3 : 1, cursor: isDisabled ? 'not-allowed' : 'pointer' }}>
+              <span style={{ fontWeight: 900 }}>#{p.jersey}</span>
+              {p.name ? <span style={{ fontWeight: 600 }}>{p.name}</span> : null}
+              {p.is_captain ? <span style={pickTagStyle}>C</span> : p.is_alternate ? <span style={{ ...pickTagStyle, background: 'rgba(46,91,140,0.4)', color: '#8BA3BE' }}>A</span> : null}
+            </button>
+          );
+        })}
+      </div>
+    </MField>
+  );
+}
+
 export default function ScorerView() {
   const { gameId } = useParams();
   const navigate = useNavigate();
@@ -1006,6 +1051,13 @@ export default function ScorerView() {
   // rides the existing offline queue + sync whitelist, no new write surface.
   const dressedGoalies = (teamId) =>
     lineups.filter(l => l.team_id === teamId && l.is_goalie && l.jersey_number != null);
+  // TAP-1 — dressed roster for a team as picker entries, sorted by jersey.
+  // goaliesOnly drives the goalie-change pickers.
+  const rosterFor = (teamId, { goaliesOnly = false } = {}) =>
+    lineups
+      .filter(l => l.team_id === teamId && l.jersey_number != null && (goaliesOnly ? l.is_goalie : true))
+      .sort((a, b) => (a.jersey_number ?? 999) - (b.jersey_number ?? 999))
+      .map(l => ({ jersey: l.jersey_number, name: (l.invite_name || '').trim() || null, is_captain: l.is_captain, is_alternate: l.is_alternate }));
   const needsStarterNudge = (teamId) => {
     if (!teamId || isLocked) return false;
     if (goalieChanges.some(c => c.team_id === teamId)) return false;
@@ -1207,19 +1259,19 @@ export default function ScorerView() {
         <div style={{ background: 'rgba(245,158,11,0.14)', borderBottom: '0.5px solid rgba(245,158,11,0.5)', color: '#F4F7FA', padding: '11px 16px', fontSize: 13, fontWeight: 600, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span>📡 Running from device cache — waiting for the server.</span>
           <button onClick={() => { setLoading(true); load(); }}
-            style={{ background: C.blue, color: '#fff', border: 'none', borderRadius: 999, padding: '6px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>↻ Retry</button>
+            style={{ background: C.blue, color: '#fff', border: 'none', borderRadius: 999, padding: '10px 18px', fontSize: 14, fontWeight: 700, minHeight: 44, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>↻ Retry</button>
         </div>
       )}
       {isOnline && queueState.dead > 0 && (
         <div style={{ background: 'rgba(215,38,56,0.18)', borderBottom: '0.5px solid rgba(215,38,56,0.6)', color: '#F4F7FA', padding: '11px 16px', fontSize: 13, fontWeight: 600, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span>⚠ {queueState.dead} write{queueState.dead === 1 ? '' : 's'} failed to sync.</span>
           <button onClick={() => { setErrorMsg(''); retryDeadWrites().catch(() => {}); }}
-            style={{ background: C.red, color: '#fff', border: 'none', borderRadius: 999, padding: '6px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>↻ Retry Sync</button>
+            style={{ background: C.red, color: '#fff', border: 'none', borderRadius: 999, padding: '10px 18px', fontSize: 14, fontWeight: 700, minHeight: 44, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>↻ Retry Sync</button>
           <button onClick={() => {
             const ok = window.confirm(`Discard ${queueState.dead} failed write${queueState.dead === 1 ? '' : 's'}?\n\nThe server refused them (or retries ran out). The scoring they contain will be permanently lost on this device — check the goal log against the scoresheet afterwards.`);
             if (ok) discardDeadWrites(gameId).then(() => load()).catch(() => {});
           }}
-            style={{ background: 'rgba(244,247,250,0.12)', color: '#F4F7FA', border: 'none', borderRadius: 999, padding: '6px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>🗑 Discard</button>
+            style={{ background: 'rgba(244,247,250,0.12)', color: '#F4F7FA', border: 'none', borderRadius: 999, padding: '10px 18px', fontSize: 14, fontWeight: 700, minHeight: 44, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>🗑 Discard</button>
         </div>
       )}
       {isOnline && queueState.pending === 0 && queueState.dead === 0 && justSynced && (
@@ -1248,7 +1300,7 @@ export default function ScorerView() {
         <div style={{ background: 'rgba(46,91,140,0.18)', borderBottom: '0.5px solid rgba(46,91,140,0.6)', color: C.ice, padding: '11px 16px', fontSize: 13, lineHeight: 1.45, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
           <span>🔒 Game is finalized — scoring is locked.</span>
           {isDirector
-            ? <button onClick={reopenGame} style={{ background: C.red, color: '#fff', border: 'none', borderRadius: 999, padding: '6px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>🔓 Reopen Game</button>
+            ? <button onClick={reopenGame} style={{ background: C.red, color: '#fff', border: 'none', borderRadius: 999, padding: '10px 18px', fontSize: 14, fontWeight: 700, minHeight: 44, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>🔓 Reopen Game</button>
             : <span style={{ color: 'rgba(244,247,250,0.55)', fontSize: 12 }}>Only the {isLeague ? 'commissioner' : 'director'} can reopen.</span>}
         </div>
       )}
@@ -1380,8 +1432,8 @@ export default function ScorerView() {
                     {g.scorer_number ? `#${g.scorer_number}` : 'Unknown'}
                     {g.assist1_number ? ` — assist: #${g.assist1_number}` : ' — unassisted'}
                     {g.assist2_number ? `, #${g.assist2_number}` : ''}
-                    {g.is_shootout ? ' (SO)' : ''}
-                    {g.empty_net ? ' (EN)' : ''}
+                    {g.is_shootout ? ' (shootout)' : ''}
+                    {g.empty_net ? ' (empty net)' : ''}
                   </div>
                   <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>{teamName(g.team_id)} · {periodLabel(g.period)}{g.time_in_period ? ` · ${g.time_in_period}` : ''}</div>
                 </div>
@@ -1392,7 +1444,7 @@ export default function ScorerView() {
                 )}
               </div>
             ))}
-            {!isLocked && <AddBtn onClick={() => { setGoalForm(prev => ({ ...prev, period })); setGoalModal(true); }}>+ Log Goal</AddBtn>}
+            {!isLocked && <AddBtn onClick={() => { setGoalForm(prev => ({ ...prev, period, team_id: prev.team_id || homeTeam?.id })); setGoalModal(true); }}>+ Log Goal</AddBtn>}
           </div>
         </div>
 
@@ -1610,14 +1662,27 @@ export default function ScorerView() {
               <option value={awayTeam?.id}>{awayTeam?.team_name}</option>
             </select>
           </MField>
-          <Row2>
-            <MField label="Scorer #"><input style={inputStyle} type="number" placeholder="Jersey #" value={goalForm.scorer_number} onChange={e => setGoalForm(p => ({ ...p, scorer_number: e.target.value }))} /></MField>
-            <MField label="Assist 1 #"><input style={inputStyle} type="number" placeholder="Optional" value={goalForm.assist1_number} onChange={e => setGoalForm(p => ({ ...p, assist1_number: e.target.value }))} /></MField>
-          </Row2>
-          <Row2>
-            <MField label="Assist 2 #"><input style={inputStyle} type="number" placeholder="Optional" value={goalForm.assist2_number} onChange={e => setGoalForm(p => ({ ...p, assist2_number: e.target.value }))} /></MField>
-            <MField label="Time (mm:ss)"><input style={inputStyle} placeholder="e.g. 8:42" value={goalForm.time_in_period} onChange={e => setGoalForm(p => ({ ...p, time_in_period: e.target.value }))} /></MField>
-          </Row2>
+          {/* TAP-1 — tap the scorer/assists instead of typing jersey #s.
+              Falls back to the number input when no lineup is set. */}
+          <PlayerPicker label="Who scored?" players={rosterFor(goalForm.team_id)}
+            value={goalForm.scorer_number}
+            onPick={n => setGoalForm(p => ({ ...p, scorer_number: n }))}
+            fallback={<MField label="Scorer #"><input style={inputStyle} type="number" inputMode="numeric" placeholder="Jersey # — no lineup set" value={goalForm.scorer_number} onChange={e => setGoalForm(p => ({ ...p, scorer_number: e.target.value }))} /></MField>} />
+          <PlayerPicker label="Assist (optional)" players={rosterFor(goalForm.team_id)}
+            value={goalForm.assist1_number} allowClear clearLabel="No assist"
+            disabledJerseys={[goalForm.scorer_number]}
+            onPick={n => setGoalForm(p => ({ ...p, assist1_number: n, ...(n === '' ? { assist2_number: '' } : {}) }))}
+            fallback={<MField label="Assist 1 #"><input style={inputStyle} type="number" inputMode="numeric" placeholder="Optional" value={goalForm.assist1_number} onChange={e => setGoalForm(p => ({ ...p, assist1_number: e.target.value }))} /></MField>} />
+          {/* Second assist only appears once the first is picked — keeps the
+              common (0–1 assist) case clean. */}
+          {goalForm.assist1_number !== '' && goalForm.assist1_number != null && (
+            <PlayerPicker label="Second assist (optional)" players={rosterFor(goalForm.team_id)}
+              value={goalForm.assist2_number} allowClear clearLabel="No second assist"
+              disabledJerseys={[goalForm.scorer_number, goalForm.assist1_number]}
+              onPick={n => setGoalForm(p => ({ ...p, assist2_number: n }))}
+              fallback={<MField label="Assist 2 #"><input style={inputStyle} type="number" inputMode="numeric" placeholder="Optional" value={goalForm.assist2_number} onChange={e => setGoalForm(p => ({ ...p, assist2_number: e.target.value }))} /></MField>} />
+          )}
+          <MField label="Time (optional)"><input style={inputStyle} inputMode="numeric" placeholder="e.g. 8:42 — leave blank if unsure" value={goalForm.time_in_period} onChange={e => setGoalForm(p => ({ ...p, time_in_period: e.target.value }))} /></MField>
           <Row2>
             <MField label="Period">
               <select style={selectStyle} value={goalForm.period} onChange={e => setGoalForm(p => ({ ...p, period: parseInt(e.target.value) }))}>
@@ -1652,10 +1717,12 @@ export default function ScorerView() {
               <option value={awayTeam?.id}>{awayTeam?.team_name}</option>
             </select>
           </MField>
-          <Row2>
-            <MField label="Player #"><input style={inputStyle} type="number" placeholder="Jersey #" value={penaltyForm.player_number} onChange={e => setPenaltyForm(p => ({ ...p, player_number: e.target.value }))} /></MField>
-            <MField label="Time (mm:ss)"><input style={inputStyle} placeholder="e.g. 11:20" value={penaltyForm.time_in_period} onChange={e => setPenaltyForm(p => ({ ...p, time_in_period: e.target.value }))} /></MField>
-          </Row2>
+          {/* TAP-1 — tap the penalized player. */}
+          <PlayerPicker label="Who got the penalty?" players={rosterFor(penaltyForm.team_id)}
+            value={penaltyForm.player_number}
+            onPick={n => setPenaltyForm(p => ({ ...p, player_number: n }))}
+            fallback={<MField label="Player #"><input style={inputStyle} type="number" inputMode="numeric" placeholder="Jersey # — no lineup set" value={penaltyForm.player_number} onChange={e => setPenaltyForm(p => ({ ...p, player_number: e.target.value }))} /></MField>} />
+          <MField label="Time (optional)"><input style={inputStyle} inputMode="numeric" placeholder="e.g. 11:20 — leave blank if unsure" value={penaltyForm.time_in_period} onChange={e => setPenaltyForm(p => ({ ...p, time_in_period: e.target.value }))} /></MField>
           <MField label="Severity">
             <select style={selectStyle} value={penaltyForm.severity} onChange={e => setPenaltyForm(p => ({ ...p, severity: e.target.value, penalty_type: PENALTIES[e.target.value]?.[0] || '' }))}>
               {Object.keys(PENALTIES).map(s => <option key={s} value={s}>{s}</option>)}
@@ -1696,12 +1763,19 @@ export default function ScorerView() {
       {/* GOALIE MODAL */}
       {goalieModal && (
         <Modal title={`Goalie Change — ${teamName(goalieModal)}`} onClose={() => { setGoalieModal(null); pendingEventIdRef.current = null; }} onSave={saveGoalie} saveLabel="Save Change" busy={modalBusy}>
+          {/* TAP-1 — tap the goalie going out / coming in (goalies only).
+              "Empty net" is an explicit choice, not a blank field. */}
+          <PlayerPicker label="Goalie coming out" players={rosterFor(goalieModal, { goaliesOnly: true })}
+            value={goalieForm.goalie_out_number}
+            onPick={n => setGoalieForm(p => ({ ...p, goalie_out_number: n }))}
+            fallback={<MField label="Out #"><input style={inputStyle} type="number" inputMode="numeric" placeholder="Jersey # — no goalies in lineup" value={goalieForm.goalie_out_number} onChange={e => setGoalieForm(p => ({ ...p, goalie_out_number: e.target.value }))} /></MField>} />
+          <PlayerPicker label="Goalie going in" players={rosterFor(goalieModal, { goaliesOnly: true })}
+            value={goalieForm.goalie_in_number} allowClear clearLabel="Empty net (no goalie)"
+            disabledJerseys={[goalieForm.goalie_out_number]}
+            onPick={n => setGoalieForm(p => ({ ...p, goalie_in_number: n }))}
+            fallback={<MField label="In #"><input style={inputStyle} type="number" inputMode="numeric" placeholder="Jersey # — blank = empty net" value={goalieForm.goalie_in_number} onChange={e => setGoalieForm(p => ({ ...p, goalie_in_number: e.target.value }))} /></MField>} />
           <Row2>
-            <MField label="Out #"><input style={inputStyle} type="number" placeholder="Jersey #" value={goalieForm.goalie_out_number} onChange={e => setGoalieForm(p => ({ ...p, goalie_out_number: e.target.value }))} /></MField>
-            <MField label="In #"><input style={inputStyle} type="number" placeholder="Jersey #" value={goalieForm.goalie_in_number} onChange={e => setGoalieForm(p => ({ ...p, goalie_in_number: e.target.value }))} /></MField>
-          </Row2>
-          <Row2>
-            <MField label="Time (mm:ss)"><input style={inputStyle} placeholder="e.g. 10:00" value={goalieForm.time_in_period} onChange={e => setGoalieForm(p => ({ ...p, time_in_period: e.target.value }))} /></MField>
+            <MField label="Time (optional)"><input style={inputStyle} inputMode="numeric" placeholder="e.g. 10:00" value={goalieForm.time_in_period} onChange={e => setGoalieForm(p => ({ ...p, time_in_period: e.target.value }))} /></MField>
             <MField label="Period">
               <select style={selectStyle} value={goalieForm.period} onChange={e => setGoalieForm(p => ({ ...p, period: parseInt(e.target.value) }))}>
                 {modalPeriods.map(n => <option key={n} value={n}>{modalPeriodLabel(n)}</option>)}

@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Game Puck — preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,600;0,700;0,900;1,900&family=Barlow+Condensed:ital,wght@1,900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0B1F3A; --blue:#2E5B8C; --red:#D72638; --ice:#F4F7FA;
+    --steel:#8BA3BE; --dark:#07111F; --card:#0f2847; --border:rgba(46,91,140,0.4);
+    --dim:rgba(244,247,250,0.5); --faint:rgba(244,247,250,0.3); --line:rgba(244,247,250,0.06);
+    --chip:rgba(46,91,140,0.18); --chipBorder:rgba(46,91,140,0.5);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--dark);font-family:'Barlow',system-ui,sans-serif;color:var(--ice);
+    padding:30px 24px 50px;}
+  .wrap{display:flex;gap:34px;justify-content:center;align-items:flex-start;flex-wrap:wrap;max-width:980px;margin:0 auto;}
+  .col{width:392px;}
+  .caption{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--steel);
+    margin:0 0 10px 2px;display:flex;align-items:center;gap:8px;}
+  .caption .tag{font-size:9px;font-weight:800;padding:2px 7px;border-radius:999px;letter-spacing:.06em;}
+  .tag.live{background:rgba(34,197,94,.15);color:#4ade80;border:.5px solid rgba(34,197,94,.4);}
+  .tag.phase2{background:rgba(245,158,11,.14);color:#F59E0B;border:.5px solid rgba(245,158,11,.45);}
+  .phone{background:linear-gradient(180deg,#0B1F3A 0%,#0a1626 100%);border:1px solid var(--border);
+    border-radius:22px;padding:14px;box-shadow:0 18px 50px rgba(0,0,0,.5);}
+
+  /* ---- shared puck label ---- */
+  .seclabel{font-size:11px;font-weight:700;letter-spacing:.1em;color:rgba(244,247,250,.3);
+    text-transform:uppercase;display:flex;align-items:center;gap:6px;}
+  .puckdot{width:11px;height:11px;border-radius:50%;background:#0a0a0a;border:1px solid rgba(244,247,250,.35);display:inline-block;}
+
+  /* ---- GAME PUCK CARD (live) ---- */
+  .gp{background:var(--card);border:.5px solid var(--border);border-radius:12px;padding:12px 14px 14px;}
+  .gp .hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;}
+  .gp .votes{font-size:10px;font-weight:700;color:var(--faint);}
+  .gp .sub{font-size:11px;color:var(--dim);margin-bottom:10px;}
+  .leader{display:flex;align-items:center;gap:8px;background:rgba(46,91,140,.14);border:.5px solid var(--border);
+    border-radius:9px;padding:8px 11px;margin-bottom:12px;}
+  .leader .l1{font-size:9px;font-weight:700;letter-spacing:.1em;color:var(--faint);text-transform:uppercase;}
+  .leader .l2{font-size:13px;font-weight:700;color:var(--ice);}
+  .leader .l2 .ctx{font-weight:400;color:var(--dim);}
+  .team{margin-bottom:10px;}
+  .team .th{display:flex;align-items:center;gap:7px;margin-bottom:7px;}
+  .team .tdot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+  .team .tname{font-size:12px;font-weight:700;color:var(--ice);}
+  .chips{display:flex;flex-wrap:wrap;gap:7px;}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;
+    font-size:12px;font-weight:600;color:var(--ice);background:var(--chip);border:1px solid var(--chipBorder);}
+  .chip .nm{opacity:1;}
+  .chip .num{opacity:.7;}
+  .chip .cnt{font-size:10px;font-weight:800;line-height:1;padding:2px 6px;border-radius:999px;
+    background:rgba(244,247,250,.1);color:rgba(244,247,250,.8);}
+  .chip.sel{background:var(--red);border-color:var(--red);color:#fff;}
+  .chip.sel .num{opacity:.85;}
+  .chip.sel .cnt{background:rgba(255,255,255,.22);color:#fff;}
+  .chip.lead{border-color:rgba(244,247,250,.45);}
+  .foot{font-size:10.5px;color:var(--faint);margin-top:4px;line-height:1.5;}
+
+  /* ---- FEED AUTO-POST (Phase 2) ---- */
+  .post{background:var(--card);border:.5px solid var(--border);border-radius:14px;padding:14px 14px 10px;}
+  .post .top{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+  .avatar{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+    font-size:18px;flex-shrink:0;}
+  .who{min-width:0;flex:1;}
+  .who .n{font-size:13px;font-weight:700;color:var(--ice);display:flex;align-items:center;gap:7px;}
+  .who .auto{font-size:8.5px;font-weight:800;letter-spacing:.06em;color:#F59E0B;background:rgba(245,158,11,.14);
+    border:.5px solid rgba(245,158,11,.4);padding:1px 6px;border-radius:999px;text-transform:uppercase;}
+  .who .h{font-size:11px;color:var(--dim);}
+  .body{font-size:14px;line-height:1.5;color:var(--ice);margin:0 0 11px;}
+  .body b{font-weight:700;}
+  .resultcard{background:rgba(46,91,140,.14);border:.5px solid var(--border);border-radius:10px;
+    padding:11px 12px;margin-bottom:11px;}
+  .resultcard .rh{display:flex;align-items:center;gap:8px;margin-bottom:9px;}
+  .resultcard .rh .t{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);}
+  .bar{display:flex;align-items:center;gap:8px;margin-bottom:7px;}
+  .bar .lbl{font-size:11.5px;font-weight:600;color:var(--ice);width:118px;flex-shrink:0;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .bar .track{flex:1;height:7px;background:rgba(244,247,250,.08);border-radius:4px;overflow:hidden;}
+  .bar .fill{display:block;height:7px;border-radius:4px;}
+  .bar .pct{font-size:11px;font-weight:800;color:var(--ice);width:34px;text-align:right;}
+  .reacts{display:flex;align-items:center;gap:14px;padding-top:9px;border-top:.5px solid var(--line);}
+  .reacts .r{font-size:12.5px;color:var(--dim);display:flex;align-items:center;gap:5px;}
+  .reacts .r b{color:var(--ice);font-weight:700;}
+  .viewgame{margin-left:auto;font-size:12px;font-weight:700;color:var(--red);}
+  .note{max-width:980px;margin:26px auto 0;font-size:12px;color:var(--steel);line-height:1.6;text-align:center;}
+  .note b{color:var(--ice);}
+</style>
+</head>
+<body>
+  <div class="wrap">
+
+    <!-- ============ LIVE: GAME PAGE CARD ============ -->
+    <div class="col">
+      <div class="caption">On the game page <span class="tag live">● Live now</span></div>
+      <div class="phone">
+        <div class="gp">
+          <div class="hdr">
+            <div class="seclabel"><span class="puckdot"></span> Game Puck</div>
+            <div class="votes">12 votes</div>
+          </div>
+          <div class="sub">Fans&rsquo; Pick — who earned it?</div>
+
+          <div class="leader">
+            <span style="font-size:16px">🏒</span>
+            <div>
+              <div class="l1">Leading</div>
+              <div class="l2">Dylan Hooper · #2 <span class="ctx">· Ice Hogs</span></div>
+            </div>
+          </div>
+
+          <div class="team">
+            <div class="th"><span class="tdot" style="background:#1a4a7a"></span><span class="tname">Ice Hogs</span></div>
+            <div class="chips">
+              <span class="chip"><span class="nm">Owen Vance&nbsp;</span><span class="num">#1</span><span class="cnt">1</span></span>
+              <span class="chip sel"><span class="nm">Dylan Hooper&nbsp;</span><span class="num">#2</span><span class="cnt">7</span></span>
+              <span class="chip"><span class="nm">Sean Grant&nbsp;</span><span class="num">#3</span></span>
+              <span class="chip"><span class="nm">Marc Reilly&nbsp;</span><span class="num">#9</span><span class="cnt">1</span></span>
+            </div>
+          </div>
+
+          <div class="team">
+            <div class="th"><span class="tdot" style="background:#6b1520"></span><span class="tname">Lakeshore</span></div>
+            <div class="chips">
+              <span class="chip lead"><span class="nm">Tyler Beck&nbsp;</span><span class="num">#11</span><span class="cnt">3</span></span>
+              <span class="chip"><span class="nm">Joe Calder&nbsp;</span><span class="num">#7</span></span>
+              <span class="chip"><span class="nm">Sam Ortiz&nbsp;</span><span class="num">#19</span></span>
+            </div>
+          </div>
+
+          <div class="foot">Tap another player to change your pick. Fan vote — separate from any team or league award.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ PHASE 2: FEED AUTO-POST ============ -->
+    <div class="col">
+      <div class="caption">In the feed <span class="tag phase2">Phase 2 concept</span></div>
+      <div class="phone">
+        <div class="post">
+          <div class="top">
+            <div class="avatar" style="background:var(--red)">🏒</div>
+            <div class="who">
+              <div class="n">The BLPA <span class="auto">Auto</span></div>
+              <div class="h">@theblpa · 2h · Lakeshore Spring Shootout</div>
+            </div>
+          </div>
+
+          <p class="body">🏒 <b>Fans&rsquo; Pick is in</b> — <b>Dylan Hooper (#2)</b> earned the Game Puck for the <b>Ice Hogs</b> in their 5&ndash;3 win over Lakeshore. 12 fans voted.</p>
+
+          <div class="resultcard">
+            <div class="rh"><span class="puckdot"></span><span class="t">Game Puck · final tally</span></div>
+            <div class="bar">
+              <span class="lbl">Dylan Hooper #2</span>
+              <span class="track"><span class="fill" style="width:58%;background:var(--red)"></span></span>
+              <span class="pct">58%</span>
+            </div>
+            <div class="bar">
+              <span class="lbl">Tyler Beck #11</span>
+              <span class="track"><span class="fill" style="width:25%;background:var(--blue)"></span></span>
+              <span class="pct">25%</span>
+            </div>
+            <div class="bar">
+              <span class="lbl">Owen Vance #1</span>
+              <span class="track"><span class="fill" style="width:9%;background:var(--blue)"></span></span>
+              <span class="pct">8%</span>
+            </div>
+          </div>
+
+          <div class="reacts">
+            <span class="r">🔥 <b>3</b></span>
+            <span class="r">🚨 <b>1</b></span>
+            <span class="r">🍺 <b>2</b></span>
+            <span class="r">💬 <b>4</b></span>
+            <span class="viewgame">View game →</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="note">
+    <b>Left</b> ships today (Phase 1): vote + live tally + leader on every final league/tournament game, plus a season &ldquo;Game Pucks won&rdquo; board.&nbsp;
+    <b>Right</b> is the Phase 2 fast-follow concept: when voting settles, auto-post the winner into the scoped feed (one post/game) and notify the tagged player — re-engagement hook after the final horn. Not built yet.
+  </div>
+</body>
+</html>
