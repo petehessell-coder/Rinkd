@@ -366,6 +366,18 @@ function ManageLeague({ id, navigate }) {
                 <DivisionPicker divisions={divisions} selectedId={selectedDivisionId} onSelect={setSelectedDivisionId} accent={C.red} />
               </>
             )}
+            <SecLabel>📋 Bulk add — import from a spreadsheet</SecLabel>
+            <Card>
+              <div style={{ fontSize: 13, color: C.steel, lineHeight: 1.6, marginBottom: 12 }}>
+                Have your teams (and schedule) in Excel or Google Sheets? Paste them in and add the whole league at once — fastest way to set up.
+              </div>
+              <button onClick={() => setShowImport(true)}
+                style={{ padding: '11px 18px', borderRadius: 999, background: C.blue, border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 16 }}>📋</span>
+                <span>Import from spreadsheet</span>
+              </button>
+            </Card>
+
             <SecLabel>Add Team</SecLabel>
             <Card>
               <Field label="Team Name *">

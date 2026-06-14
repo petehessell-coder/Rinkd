@@ -39,14 +39,14 @@ function parseSchedule(text) {
     const line = raw.trim();
     if (!line) return;
     const c = cells(line);
-    // Expected: Date, Time, Home, Away   (extra columns ignored)
-    const [dateStr, timeStr, home, away] = c;
+    // Expected: Date, Time, Home, Away, [Rink]
+    const [dateStr, timeStr, home, away, rink] = c;
     const problems = [];
     if (!home || !away) problems.push('missing team');
     let iso = null;
     const dt = new Date(`${dateStr || ''} ${timeStr || ''}`.trim());
     if (isNaN(dt.getTime())) problems.push('bad date/time'); else iso = dt.toISOString();
-    out.push({ rowNum: i + 1, raw: line, dateStr, timeStr, home: (home || '').trim(), away: (away || '').trim(), iso, problems });
+    out.push({ rowNum: i + 1, raw: line, dateStr, timeStr, home: (home || '').trim(), away: (away || '').trim(), rinkName: (rink || '').trim(), iso, problems });
   });
   return out;
 }
@@ -77,15 +77,38 @@ export default function LeagueImportModal({ open, onClose, leagueId, existingTea
     return s;
   }, [existingByName, parsedTeams]);
 
+  // Match an optional per-row rink name against existing rinks (by name /
+  // sub-rink / combined). We never CREATE rinks here — add them under Rinks
+  // first; an unmatched name falls back to the default and is flagged.
+  const rinksByName = useMemo(() => {
+    const m = new Map();
+    for (const r of rinks) {
+      const label = [r.sub_rink, r.name].filter(Boolean).join(' ');
+      if (r.name) m.set(norm(r.name), r.id);
+      if (r.sub_rink) m.set(norm(r.sub_rink), r.id);
+      if (label) m.set(norm(label), r.id);
+    }
+    return m;
+  }, [rinks]);
+
   const parsedGames = useMemo(() => {
     return parseSchedule(schedText).map(g => {
       const probs = [...g.problems];
       if (g.home && !knownNames.has(norm(g.home))) probs.push(`unknown team "${g.home}"`);
       if (g.away && !knownNames.has(norm(g.away))) probs.push(`unknown team "${g.away}"`);
       if (g.home && g.away && norm(g.home) === norm(g.away)) probs.push('home = away');
-      return { ...g, problems: probs, ok: probs.length === 0 };
+      // Per-row rink (optional): matched → use it; named-but-unmatched → soft
+      // note + fall back to the default rink; blank → default rink.
+      let resolvedRinkId = rinkId || null;
+      let rinkNote = null;
+      if (g.rinkName) {
+        const m = rinksByName.get(norm(g.rinkName));
+        if (m) resolvedRinkId = m;
+        else rinkNote = `rink "${g.rinkName}" not found — using default (add it under Rinks to match)`;
+      }
+      return { ...g, resolvedRinkId, rinkNote, problems: probs, ok: probs.length === 0 };
     });
-  }, [schedText, knownNames]);
+  }, [schedText, knownNames, rinksByName, rinkId]);
 
   const goodGames = parsedGames.filter(g => g.ok);
   const badGames = parsedGames.filter(g => !g.ok);
@@ -118,7 +141,7 @@ export default function LeagueImportModal({ open, onClose, leagueId, existingTea
           home_team_id: idByName.get(norm(g.home)),
           away_team_id: idByName.get(norm(g.away)),
           start_time: g.iso,
-          rink_id: rinkId || null,
+          rink_id: g.resolvedRinkId || null,
         })).filter(r => r.home_team_id && r.away_team_id);
         if (rows.length > 0) {
           const { error: e } = await bulkInsertLeagueGames(leagueId, rows, divisionId || null);
@@ -170,12 +193,12 @@ export default function LeagueImportModal({ open, onClose, leagueId, existingTea
 
             {/* SCHEDULE */}
             <div style={{ fontSize:11, fontWeight:700, letterSpacing:'0.1em', color:C.steel, textTransform:'uppercase', marginBottom:6 }}>2 · Schedule — one game per line</div>
-            <div style={{ fontSize:12, color:C.steel, marginBottom:6 }}>Format: <b style={{ color:C.ice }}>Date, Time, Home, Away</b> &nbsp;—&nbsp; e.g. <span style={{ fontFamily:'monospace' }}>9/20/2026, 7:00 PM, Red Wings, Sharks</span></div>
+            <div style={{ fontSize:12, color:C.steel, marginBottom:6 }}>Format: <b style={{ color:C.ice }}>Date, Time, Home, Away</b><span style={{ opacity:0.75 }}>, Rink (optional — only for multi-rink leagues)</span> &nbsp;—&nbsp; e.g. <span style={{ fontFamily:'monospace' }}>9/20/2026, 7:00 PM, Red Wings, Sharks</span></div>
             <textarea value={schedText} onChange={e => setSchedText(e.target.value)} placeholder={'9/20/2026, 7:00 PM, Red Wings, Sharks\n9/20/2026, 8:15 PM, Ice Hogs, Blue Jackets\n9/27/2026, 7:00 PM, Sharks, Ice Hogs'} style={taStyle} />
 
             {rinks.length > 0 && (
               <div style={{ margin:'10px 0 4px' }}>
-                <div style={{ fontSize:12, color:C.steel, marginBottom:4 }}>Rink for all imported games (optional — one building, one pick):</div>
+                <div style={{ fontSize:12, color:C.steel, marginBottom:4 }}>Default rink — used for any game that doesn't name its own rink (perfect for a single-building house league; multi-rink leagues can add a Rink column above):</div>
                 <select value={rinkId} onChange={e => setRinkId(e.target.value)} style={inputStyle}>
                   <option value="">— No rink / set later —</option>
                   {rinks.map(r => <option key={r.id} value={r.id}>{[r.sub_rink, r.name].filter(Boolean).join(' · ')}</option>)}
@@ -195,6 +218,7 @@ export default function LeagueImportModal({ open, onClose, leagueId, existingTea
                       <span style={{ color: g.ok ? C.green : C.amber, fontWeight:700, flexShrink:0 }}>{g.ok ? '✓' : '⚠'}</span>
                       <span style={{ flex:1, color: g.ok ? C.ice : C.steel }}>
                         {g.home || '—'} vs {g.away || '—'} <span style={{ color:C.steel }}>{g.iso ? `· ${new Date(g.iso).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}` : ''}</span>
+                        {g.ok && g.rinkNote && <span style={{ display:'block', color:C.steel, fontSize:11 }}>{g.rinkNote}</span>}
                         {!g.ok && <span style={{ display:'block', color:C.amber, fontSize:11 }}>row {g.rowNum}: {g.problems.join(', ')}</span>}
                       </span>
                     </div>
