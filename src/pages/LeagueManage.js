@@ -1635,6 +1635,11 @@ function LeagueSettings({ league, onSave }) {
     logo_url: league.logo_url || '',
     status: league.status,
     settings: league.settings || {},
+    // GS-6 — USA Hockey compliance (season-setup; never asked of the game-day volunteer)
+    usah_compliant_scoresheet: !!league.usah_compliant_scoresheet,
+    usah_association_name: league.usah_association_name || '',
+    usah_classification: league.usah_classification || '',
+    division_label: league.division_label || '',
   });
   const [saving, setSaving] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -1721,6 +1726,47 @@ function LeagueSettings({ league, onSave }) {
       <div style={{ fontSize: 12, color: '#8BA3BE', margin: '4px 0 14px', lineHeight: 1.5 }}>
         Recap &amp; Game Puck sponsors moved to the <b style={{ color: '#F4F7FA' }}>Sponsors</b> tab.
       </div>
+
+      {/* GS-6 — USA Hockey compliant scoresheet (set once here; the scorer's
+          official scoresheet then prints the roster, coaches, times + enforces
+          coach/official signatures automatically). */}
+      <SecLabel>USA Hockey Compliance</SecLabel>
+      <Card>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', padding: '4px 0' }}>
+          <input type="checkbox" checked={form.usah_compliant_scoresheet}
+            onChange={e => set('usah_compliant_scoresheet', e.target.checked)}
+            style={{ width: 20, height: 20, accentColor: C.red, flexShrink: 0, cursor: 'pointer' }} />
+          <span style={{ flex: 1 }}>
+            <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: '#F4F7FA' }}>Produce a USA Hockey official scoresheet</span>
+            <span style={{ display: 'block', fontSize: 12, color: '#8BA3BE', marginTop: 2, lineHeight: 1.4 }}>
+              Turns on the printed roster, coaches block, game times, and coach + referee signatures. Leave off for non-USA-Hockey play.
+            </span>
+          </span>
+        </label>
+        {form.usah_compliant_scoresheet && (
+          <div style={{ marginTop: 14 }}>
+            <Field label="USA Hockey Registered Association">
+              <input style={inputStyle} value={form.usah_association_name} onChange={e => set('usah_association_name', e.target.value)} placeholder="e.g. Cleveland Suburban Hockey League" />
+            </Field>
+            <Row2>
+              <Field label="Level of Play">
+                <select style={inputStyle} value={form.usah_classification} onChange={e => set('usah_classification', e.target.value)}>
+                  <option value="">Select…</option>
+                  <option value="tier1">Tier I</option>
+                  <option value="tier2">Tier II</option>
+                  <option value="girls_women">Girls/Women</option>
+                  <option value="high_school">High School</option>
+                  <option value="house_rec">House/Rec</option>
+                  <option value="adult">Adult</option>
+                </select>
+              </Field>
+              <Field label="Division (e.g. 10U, 12U)">
+                <input style={inputStyle} value={form.division_label} onChange={e => set('division_label', e.target.value)} placeholder="10U" />
+              </Field>
+            </Row2>
+          </div>
+        )}
+      </Card>
       <button onClick={async () => { setSaving(true); await onSave(cleanSponsorOnForm(form)); setSaving(false); }} disabled={saving || uploadingLogo}
         style={{ width: '100%', padding: 13, background: C.red, border: 'none', borderRadius: 999, color: '#fff', fontSize: 14, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'Barlow, sans-serif', opacity: saving ? 0.7 : 1, transition: 'all 0.15s' }}
         onMouseEnter={e => { if (!saving) { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}}

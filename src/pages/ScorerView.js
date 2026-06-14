@@ -4,6 +4,8 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 // (hundreds of KB) that only a scorer exporting a PDF ever needs — keep it out
 // of the main bundle so it doesn't slow first paint for every player.
 const Scoresheet = React.lazy(() => import('../components/Scoresheet'));
+// GS-6 — pre-game coach roster sign-off (USA Hockey compliant mode only).
+const CoachSignoff = React.lazy(() => import('../components/CoachSignoff'));
 import { supabase } from '../lib/supabase';
 // GS-1 Offline Mode — every scoring write goes through queuedWrite (queue +
 // replay on connectivity loss); game setup + event state are mirrored to
@@ -230,6 +232,10 @@ export default function ScorerView() {
   const [penaltyModal, setPenaltyModal] = useState(false);
   const [goalieModal, setGoalieModal] = useState(null);
   const [showScoresheet, setShowScoresheet] = useState(false);
+  // GS-6 — coach pre-game sign-off (compliant mode): which team's coach modal
+  // is open + the loaded pre-game coach signatures.
+  const [coachModal, setCoachModal] = useState(null); // { teamId, teamName, role }
+  const [coachSignoffs, setCoachSignoffs] = useState([]);
   const [goalForm, setGoalForm] = useState({ team_id: '', scorer_number: '', assist1_number: '', assist2_number: '', period: 1, time_in_period: '', is_shootout: false, empty_net: false });
   const [penaltyForm, setPenaltyForm] = useState({ team_id: '', player_number: '', severity: 'Minor (2 min)', penalty_type: 'Hooking', period: 1, time_in_period: '' });
   const [goalieForm, setGoalieForm] = useState({ goalie_out_number: '', goalie_in_number: '', period: 1, time_in_period: '' });
@@ -324,14 +330,14 @@ export default function ScorerView() {
     }
     const { data: g, error: gErr } = isLeague
       ? await supabase.from('league_games')
-          .select('*, home_team:league_teams!home_team_id(id, team_name, team:teams(id,name)), away_team:league_teams!away_team_id(id, team_name, team:teams(id,name)), rink:rinks(name,sub_rink), league:leagues(name,commissioner_id,is_activated)')
+          .select('*, home_team:league_teams!home_team_id(id, team_name, team:teams(id,name)), away_team:league_teams!away_team_id(id, team_name, team:teams(id,name)), rink:rinks(name,sub_rink), league:leagues(name,commissioner_id,is_activated,usah_compliant_scoresheet,usah_association_name,usah_classification,division_label)')
           .eq('id', gameId).single()
       : await supabase.from('games')
           // Pull tournament settings so the period selector can hide OT/SO
           // when the format says they're not allowed (e.g., BLPA Bash is
           // regulation → shootout, no OT). is_activated drives the monetization
           // gate — show the activation-pending wall instead of the scorer UI.
-          .select('*, home_team:tournament_teams!home_team_id(id,team_name), away_team:tournament_teams!away_team_id(id,team_name), rink:rinks(name,sub_rink), tournament:tournaments(name,director_id,settings,is_activated)')
+          .select('*, home_team:tournament_teams!home_team_id(id,team_name), away_team:tournament_teams!away_team_id(id,team_name), rink:rinks(name,sub_rink), tournament:tournaments(name,director_id,settings,is_activated,usah_compliant_scoresheet,usah_association_name,usah_classification,division_label)')
           .eq('id', gameId).single();
     // A transient fetch failure (flaky rink wifi) must NOT eject the scorer
     // mid-game. Serve the cached setup in queue-only mode if we have one;
@@ -468,6 +474,25 @@ export default function ScorerView() {
   }, [gameId, navigate, isLeague, hydrateFromCache]);
 
   useEffect(() => { load(); }, [load]);
+
+  // GS-6 — load the pre-game coach signatures for compliant games (so the card
+  // shows ✓ once a coach has signed). Cheap; only runs in compliant mode.
+  const loadCoachSignoffs = useCallback(async () => {
+    if (!gameId) return;
+    const { data } = await supabase.from('game_signoffs').select('*')
+      .eq('game_id', gameId).eq('game_source', isLeague ? 'league' : 'tournament')
+      .eq('phase', 'pre_game');
+    setCoachSignoffs(data || []);
+  }, [gameId, isLeague]);
+  useEffect(() => { loadCoachSignoffs(); }, [loadCoachSignoffs]);
+
+  // GS-6 — re-fetch lineups after a coach scratches a player on the sign-off
+  // screen, so the scoresheet + goalie-in-net logic see the change immediately.
+  const reloadLineups = useCallback(async () => {
+    if (!gameId) return;
+    const { data } = await supabase.from('game_lineups').select('*').eq('game_id', gameId);
+    if (data) setLineups(data);
+  }, [gameId]);
 
   // GS-1 — connectivity + queue wiring. The 'online' handler drains; the
   // queue subscription drives the banner counter, and the pending→0 edge
@@ -1050,14 +1075,16 @@ export default function ScorerView() {
   // change at the top of P1 (out=null, in=#, no clock = period start) — it
   // rides the existing offline queue + sync whitelist, no new write surface.
   const dressedGoalies = (teamId) =>
-    lineups.filter(l => l.team_id === teamId && l.is_goalie && l.jersey_number != null);
+    lineups.filter(l => l.team_id === teamId && l.is_goalie && l.jersey_number != null && l.roster_status !== 'scratched');
   // TAP-1 — dressed roster for a team as picker entries, sorted by jersey.
-  // goaliesOnly drives the goalie-change pickers.
-  const rosterFor = (teamId, { goaliesOnly = false } = {}) =>
+  // goaliesOnly drives the goalie-change pickers. Scratched players are hidden
+  // from scoring surfaces by default; CoachSignoff passes includeScratched so a
+  // scratch can be undone.
+  const rosterFor = (teamId, { goaliesOnly = false, includeScratched = false } = {}) =>
     lineups
-      .filter(l => l.team_id === teamId && l.jersey_number != null && (goaliesOnly ? l.is_goalie : true))
+      .filter(l => l.team_id === teamId && l.jersey_number != null && (goaliesOnly ? l.is_goalie : true) && (includeScratched || l.roster_status !== 'scratched'))
       .sort((a, b) => (a.jersey_number ?? 999) - (b.jersey_number ?? 999))
-      .map(l => ({ jersey: l.jersey_number, name: (l.invite_name || '').trim() || null, is_captain: l.is_captain, is_alternate: l.is_alternate }));
+      .map(l => ({ id: l.id, jersey: l.jersey_number, name: (l.invite_name || '').trim() || null, is_captain: l.is_captain, is_alternate: l.is_alternate, is_goalie: l.is_goalie, roster_status: l.roster_status || 'dressed' }));
   const needsStarterNudge = (teamId) => {
     if (!teamId || isLocked) return false;
     if (goalieChanges.some(c => c.team_id === teamId)) return false;
@@ -1181,6 +1208,10 @@ export default function ScorerView() {
   const suspConflicts = pendingSuspensions.filter(s =>
     lineups.some(l => l.team_id === s.team_id && l.jersey_number != null && l.jersey_number === s.jersey_number));
   const rostersVerified = !!game.rosters_verified_at;
+  // GS-6 — USA Hockey compliant mode for this game's context.
+  const compliant = isLeague ? !!game.league?.usah_compliant_scoresheet : !!game.tournament?.usah_compliant_scoresheet;
+  const showCoachSignoff = compliant && status === 'scheduled' && !isLocked;
+  const coachSigned = (teamId, role) => coachSignoffs.find(s => s.team_id === teamId && s.role === role);
   const showPreGameCheck = !isLeague && status === 'scheduled' && !isLocked;
   const eligibilityBlocked = showPreGameCheck && !rostersVerified && suspConflicts.length > 0;
   const suspTypeLabel = (s) => s.suspension_type === 'indefinite'
@@ -1386,6 +1417,30 @@ export default function ScorerView() {
         {showPreGameCheck && rostersVerified && (
           <div style={{ background: 'rgba(34,197,94,0.1)', border: '0.5px solid rgba(34,197,94,0.4)', borderRadius: 12, padding: '10px 14px', marginBottom: 16, fontSize: 13, fontWeight: 600, color: '#22C55E', textAlign: 'center' }}>
             ✓ Rosters verified
+          </div>
+        )}
+
+        {/* GS-6 — pre-game COACH sign-off (USA Hockey compliant mode). Each
+            head coach reviews their roster and signs before the game. Big
+            buttons, one tap to open; ✓ once signed. */}
+        {showCoachSignoff && (
+          <div style={{ background: 'rgba(46,91,140,0.12)', border: `0.5px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(244,247,250,0.5)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>🇺🇸 Coach roster sign-off</div>
+            <div style={{ fontSize: 12.5, color: 'rgba(244,247,250,0.6)', lineHeight: 1.45, marginBottom: 12 }}>USA Hockey: each head coach signs their roster before the game.</div>
+            {[['home', homeTeam, 'home_coach'], ['away', awayTeam, 'visiting_coach']].map(([side, team, role]) => {
+              const signed = coachSigned(team?.id, role);
+              return signed ? (
+                <div key={side} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 12px', marginBottom: 8, background: 'rgba(34,197,94,0.1)', border: '0.5px solid rgba(34,197,94,0.4)', borderRadius: 10 }}>
+                  <span style={{ color: '#22C55E', fontWeight: 700, fontSize: 14 }}>✓</span>
+                  <span style={{ fontSize: 13, color: '#F4F7FA', flex: 1 }}>{team?.team_name} — signed by {signed.printed_name}</span>
+                </div>
+              ) : (
+                <button key={side} onClick={() => setCoachModal({ teamId: team?.id, teamName: team?.team_name, role })}
+                  style={{ display: 'block', width: '100%', textAlign: 'left', padding: '13px 14px', marginBottom: 8, minHeight: 48, background: C.blue, border: 'none', borderRadius: 10, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>
+                  ✍️ {team?.team_name} — coach: review &amp; sign
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -1647,8 +1702,27 @@ export default function ScorerView() {
             penalties={penalties}
             shots={shotTotals}
             goalieChanges={goalieChanges}
+            lineups={lineups}
+            suspensions={suspensions}
             isLeague={isLeague}
             onClose={() => setShowScoresheet(false)}
+          />
+        </Suspense>
+      )}
+
+      {/* GS-6 — coach pre-game sign-off modal (compliant mode). */}
+      {coachModal && (
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif' }}>Loading…</div>}>
+          <CoachSignoff
+            game={game}
+            isLeague={isLeague}
+            teamId={coachModal.teamId}
+            teamName={coachModal.teamName}
+            role={coachModal.role}
+            roster={rosterFor(coachModal.teamId, { includeScratched: true })}
+            onSigned={loadCoachSignoffs}
+            onRosterChanged={reloadLineups}
+            onClose={() => setCoachModal(null)}
           />
         </Suspense>
       )}

@@ -444,6 +444,12 @@ export async function updateTournament(tournamentId, fields) {
   if (fields.registrationFeeCents !== undefined) payload.registration_fee_cents = fields.registrationFeeCents;
   if (fields.registrationDeadline !== undefined) payload.registration_deadline = fields.registrationDeadline || null;
   if (fields.maxTeams !== undefined) payload.max_teams = fields.maxTeams;
+  // GS-6 — USA Hockey compliance (season-setup). usah_classification has a CHECK
+  // constraint, so '' must coerce to null.
+  if (fields.usahCompliantScoresheet !== undefined) payload.usah_compliant_scoresheet = !!fields.usahCompliantScoresheet;
+  if (fields.usahAssociationName !== undefined) payload.usah_association_name = fields.usahAssociationName?.trim() || null;
+  if (fields.usahClassification !== undefined) payload.usah_classification = fields.usahClassification || null;
+  if (fields.divisionLabel !== undefined) payload.division_label = fields.divisionLabel?.trim() || null;
   const { data, error } = await supabase
     .from('tournaments')
     .update(payload)

@@ -1037,6 +1037,11 @@ function SettingsTab({ tournament, currentUser, reload, flash }) {
   const [status, setStatus] = useState(tournament.status || 'draft');
   const [logoUrl, setLogoUrl] = useState(tournament.logo_url || '');
   const [accentColor, setAccentColor] = useState(tournament.accent_color || '');
+  // GS-6 — USA Hockey compliance (season-setup; never asked of the game-day volunteer)
+  const [usahCompliant, setUsahCompliant] = useState(!!tournament.usah_compliant_scoresheet);
+  const [usahAssoc, setUsahAssoc] = useState(tournament.usah_association_name || '');
+  const [usahClass, setUsahClass] = useState(tournament.usah_classification || '');
+  const [usahDivision, setUsahDivision] = useState(tournament.division_label || '');
   // Format & rules live in the settings JSONB. Seed from what's stored, falling
   // back to sensible defaults for any key an older tournament is missing.
   const s0 = tournament.settings || {};
@@ -1128,6 +1133,8 @@ function SettingsTab({ tournament, currentUser, reload, flash }) {
     const { error } = await updateTournament(tournament.id, {
       name, division, startDate, endDate, status, settings: mergedSettings,
       logoUrl: (logoUrl || '').trim(), accentColor: cleanAccent,
+      usahCompliantScoresheet: usahCompliant, usahAssociationName: usahAssoc,
+      usahClassification: usahClass, divisionLabel: usahDivision,
     });
     setBusy(false);
     if (error) { flash?.('error', `Save failed: ${error.message}`); return; }
@@ -1305,6 +1312,48 @@ function SettingsTab({ tournament, currentUser, reload, flash }) {
       {/* Recap + Game Puck sponsors moved to the Sponsors tab. */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 16px', marginBottom: 14, fontSize: 12, color: C.steel, lineHeight: 1.5 }}>
         Recap &amp; Game Puck sponsors moved to the <b style={{ color: '#F4F7FA' }}>Sponsors</b> tab.
+      </div>
+
+      {/* GS-6 — USA Hockey compliant scoresheet (set once here; the scorer's
+          official scoresheet then prints roster, coaches, times + enforces
+          coach/official signatures automatically). */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 16px', marginBottom: 14 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
+          <input type="checkbox" checked={usahCompliant} onChange={(e) => setUsahCompliant(e.target.checked)}
+            style={{ width: 20, height: 20, accentColor: C.red, flexShrink: 0, cursor: 'pointer' }} />
+          <span style={{ flex: 1 }}>
+            <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: '#F4F7FA' }}>Produce a USA Hockey official scoresheet</span>
+            <span style={{ display: 'block', fontSize: 12, color: C.steel, marginTop: 2, lineHeight: 1.4 }}>
+              Turns on the printed roster, coaches block, game times, and coach + referee signatures. Leave off for non-USA-Hockey play.
+            </span>
+          </span>
+        </label>
+        {usahCompliant && (
+          <div style={{ marginTop: 14 }}>
+            <div style={{ marginBottom: 10 }}>
+              <label style={labelStyle}>USA Hockey Registered Association</label>
+              <input value={usahAssoc} onChange={(e) => setUsahAssoc(e.target.value)} placeholder="e.g. Greater New York Amateur Hockey Assn." style={inputStyle} />
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ flex: 2 }}>
+                <label style={labelStyle}>Level of Play</label>
+                <select value={usahClass} onChange={(e) => setUsahClass(e.target.value)} style={inputStyle}>
+                  <option value="">Select…</option>
+                  <option value="tier1">Tier I</option>
+                  <option value="tier2">Tier II</option>
+                  <option value="girls_women">Girls/Women</option>
+                  <option value="high_school">High School</option>
+                  <option value="house_rec">House/Rec</option>
+                  <option value="adult">Adult</option>
+                </select>
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>Division</label>
+                <input value={usahDivision} onChange={(e) => setUsahDivision(e.target.value)} placeholder="10U" style={inputStyle} />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
