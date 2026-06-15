@@ -8,7 +8,7 @@ import RsvpBlock from '../components/RsvpBlock';
 import PinToNavButton from '../components/PinToNavButton';
 import MapLink from '../components/MapLink';
 import CalendarButton from '../components/CalendarButton';
-import LineupModal from '../components/LineupModal';
+import LineupCTA from '../components/LineupCTA';
 import TeamFeed from '../components/TeamFeed';
 import TeamVolunteer from '../components/TeamVolunteer';
 import SEO from '../components/SEO';
@@ -44,7 +44,6 @@ export default function TeamPage({ currentUser, profile }) {
   // expands to every game past + future. Persists per-team via state, resets
   // on page change. Keeps the team page light by default but never hides data.
   const [showAllGames, setShowAllGames] = useState(false);
-  const [lineupGame, setLineupGame] = useState(null); // game object whose lineup modal is open
 
   const load = useCallback(async () => {
     try {
@@ -226,26 +225,14 @@ export default function TeamPage({ currentUser, profile }) {
               {g.status === 'scheduled' && (
                 <CalendarButton game={g} teamLabel={`${team.name} ${g.is_home ? 'vs.' : '@'} ${g.opponent || ''}`.trim()} />
               )}
-              {isManager && g.status === 'scheduled' && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); setLineupGame(g); }}
-                  style={{
-                    fontSize: 10, fontWeight: 700, letterSpacing: '0.04em',
-                    padding: '3px 9px', borderRadius: 999,
-                    background: 'rgba(46,91,140,0.25)',
-                    border: '0.5px solid rgba(46,91,140,0.6)',
-                    color: C.ice, cursor: 'pointer',
-                    display: 'inline-flex', alignItems: 'center', gap: 4,
-                    fontFamily: "'Barlow', sans-serif", whiteSpace: 'nowrap',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(46,91,140,0.25)'; e.currentTarget.style.color = C.ice; }}>
-                  📋 Lineup
-                </button>
-              )}
             </div>
           )}
           {g.status === 'scheduled' && <RsvpBlock gameId={g.id} compact={false} />}
+          {g.status === 'scheduled' && isManager && (
+            <div onClick={e => e.stopPropagation()}>
+              <LineupCTA game={g} teamId={id} teamName={team.name} canManage={isManager} onSaved={load} />
+            </div>
+          )}
         </div>
         {g.status === 'final'
           ? <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 14, color: isWin ? '#22C55E' : isLoss ? C.red : C.ice }}>
@@ -533,22 +520,6 @@ export default function TeamPage({ currentUser, profile }) {
         </div>
       </div>
 
-      {lineupGame && (
-        <LineupModal
-          open={true}
-          onClose={() => setLineupGame(null)}
-          onSaved={load}
-          gameId={lineupGame.id}
-          gameSource={lineupGame._source === 'league' ? 'league' : 'team'}
-          teamId={id}
-          /* For league games, game_goals.team_id is the league_team.id, not the real team.id.
-             Pick the league_team id matching whichever side we're playing on this game. */
-          lineupTeamId={lineupGame._source === 'league'
-            ? (lineupGame.is_home ? lineupGame.home_team_id : lineupGame.away_team_id)
-            : id}
-          gameTitle={`${team.name} ${lineupGame.is_home ? 'vs.' : '@'} ${lineupGame.opponent || ''} · ${new Date(lineupGame.start_time).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`}
-        />
-      )}
 
       <SubscribeCalendarSheet
         open={subscribeOpen}
