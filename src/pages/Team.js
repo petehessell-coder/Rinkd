@@ -325,6 +325,28 @@ export default function TeamPage({ currentUser, profile }) {
 
         <div style={{ padding: 16 }}>
 
+          {/* COACH: next-game lines prompt — first thing a manager sees, every tab */}
+          {isManager && (() => {
+            const now = Date.now();
+            const next = games
+              .filter(g => g.status === 'scheduled' && g.start_time && new Date(g.start_time).getTime() >= now - 2 * 3.6e6)
+              .sort((a, b) => new Date(a.start_time) - new Date(b.start_time))[0];
+            if (!next) return null;
+            const d = new Date(next.start_time);
+            return (
+              <div style={{ marginBottom: 14, padding: 14, borderRadius: 12, background: 'rgba(46,91,140,0.12)', border: '1px solid rgba(46,91,140,0.5)' }}>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#8BA3BE', marginBottom: 4 }}>Your next game</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: C.ice }}>
+                  {next.is_home ? 'vs.' : '@'} {next.opponent || 'TBD'}
+                </div>
+                <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.6)', marginTop: 2 }}>
+                  {d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} · {d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                </div>
+                <LineupCTA game={next} teamId={id} teamName={team.name} canManage={isManager} onSaved={load} />
+              </div>
+            );
+          })()}
+
           {/* ROSTER TAB */}
           {activeTab === 'Roster' && (
             <>
