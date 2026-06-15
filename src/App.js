@@ -12,7 +12,7 @@ import Leagues from './pages/Leagues';
 import Tournament from './pages/Tournament';
 import Tournaments from './pages/Tournaments';
 import Landing from './pages/Landing';
-import { setSentryUser } from './lib/sentry';
+import { setSentryUser, captureException } from './lib/sentry';
 import { track } from './lib/analytics';
 import OnboardingModal from './components/OnboardingModal';
 import RouteAnalytics from './components/RouteAnalytics';
@@ -291,7 +291,21 @@ export default function App() {
       // for users who already have one (the function early-returns).
       if (!ensureAttempted) {
         ensureAttempted = true;
-        try { await ensureProfileForUser(user); } catch (_) { /* swallow */ }
+        // ensureProfileForUser RETURNS { error } on an RLS/constraint reject
+        // (it doesn't throw), so a bare try/catch silently dropped the real
+        // failure — which is exactly how a profile-less signup went invisible.
+        // Report both the returned error and any throw so the next one pages us.
+        try {
+          const res = await ensureProfileForUser(user);
+          if (res?.error) {
+            captureException(
+              new Error(`ensureProfileForUser failed: ${res.error.message || res.error.code || 'unknown'}`),
+              { where: 'fetchProfileWithRetry', userId: user.id, code: res.error.code }
+            );
+          }
+        } catch (e) {
+          captureException(e, { where: 'fetchProfileWithRetry/ensureProfileForUser', userId: user.id });
+        }
       }
       // Exponential-ish backoff: 200, 400, 800, 1200, 1800, 2500 ms (~7s total)
       await new Promise((r) => setTimeout(r, 200 + attempt * 400));

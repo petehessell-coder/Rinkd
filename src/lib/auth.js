@@ -104,6 +104,10 @@ export async function ensureProfileForUser(user) {
 
   const { error: profileError } = await supabase.from('profiles').upsert({
     id: user.id,
+    // REG INSERT policy ("Users can insert their own profile") checks
+    // auth.uid() = auth_user_id. Without this line the new row fails RLS and
+    // the signup boots profile-less (App.js swallows the error). MUST be set.
+    auth_user_id: user.id,
     email: (user.email || '').toLowerCase(),
     name,
     handle,
