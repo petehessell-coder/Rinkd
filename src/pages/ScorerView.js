@@ -843,7 +843,7 @@ export default function ScorerView() {
       // finalize itself.
       if (game.round === 'semifinal' && game.pool) {
         try {
-          const { error: resolveErr } = await resolveBracketSlotsFromSemis(game.tournament_id, game.pool);
+          const { error: resolveErr } = await resolveBracketSlotsFromSemis(game.tournament_id, game.pool, game.division_id);
           if (resolveErr) console.warn('[scorer] bracket auto-fill failed:', resolveErr.message);
         } catch (e) {
           // eslint-disable-next-line no-console
@@ -1407,6 +1407,16 @@ export default function ScorerView() {
         </div>
       ) : (
       <div style={{ padding: 16 }}>
+
+        {/* MULTIDIV-1 Phase 4 — advisory mercy / running-time banner. Display only
+            (no app clock — the arena clock is the truth). Fires at goal differential
+            >= the format's max in the 3rd period. */}
+        {!isLeague && !isLocked && Number(settings.max_goal_differential) > 0 && period === 3
+          && Math.abs(homeScore - awayScore) >= Number(settings.max_goal_differential) && (
+          <div style={{ background: 'rgba(245,158,11,0.14)', border: '0.5px solid rgba(245,158,11,0.45)', borderRadius: 10, color: '#F4F7FA', padding: '10px 14px', fontSize: 13, lineHeight: 1.45, textAlign: 'center', fontWeight: 600, marginBottom: 12 }}>
+            🕐 Running time in effect — {settings.max_goal_differential}-goal differential reached. (Advisory; follow the arena clock.)
+          </div>
+        )}
 
         {/* GS-5 — routine pre-game check (no conflicts): one-tap attestation
             that powers the public "✓ Rosters verified" badge. Pending

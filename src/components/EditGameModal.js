@@ -17,6 +17,10 @@ import React, { useState } from 'react';
 //   onClose  - () => void
 //   onSave   - async (values) => void   (throw to surface an inline error)
 //   onDelete - optional async () => void (renders a Delete button when present)
+//   onForfeit- optional async (winner: 'home' | 'away') => void. When passed and
+//              the game isn't final + both teams are set, renders forfeit
+//              buttons (MULTIDIV-1 Phase 4). Tournament-only; the league side
+//              omits it. (throw to surface an inline error)
 
 const C = {
   ink: '#07111F',
@@ -64,7 +68,7 @@ function Field({ label, children }) {
   );
 }
 
-export default function EditGameModal({ game, rinks = [], teams = null, title = 'Edit game', onClose, onSave, onDelete }) {
+export default function EditGameModal({ game, rinks = [], teams = null, title = 'Edit game', onClose, onSave, onDelete, onForfeit = null }) {
   const [startTime, setStartTime] = useState(isoToLocal(game?.start_time));
   const [rinkId, setRinkId] = useState(game?.rink_id || '');
   const [location, setLocation] = useState(game?.location || '');
@@ -110,6 +114,24 @@ export default function EditGameModal({ game, rinks = [], teams = null, title = 
       onClose?.();
     } catch (e) {
       setErr(e?.message || 'Could not delete the game.');
+      setBusy(false);
+    }
+  };
+
+  // MULTIDIV-1 Phase 4 — record a forfeit (3-0 to the side that showed up).
+  // Uses the home/away currently selected in the modal so a mis-seeded game can
+  // be fixed and forfeited in one pass.
+  const handleForfeit = async (winner) => {
+    if (!onForfeit) return;
+    const winName = (teams || []).find((t) => t.id === (winner === 'home' ? homeId : awayId))?.name || (winner === 'home' ? 'Home' : 'Away');
+    if (!window.confirm(`Record a forfeit win for ${winName} (3–0)? This finalizes the game with no goal log.`)) return;
+    setErr(null);
+    setBusy(true);
+    try {
+      await onForfeit(winner);
+      onClose?.();
+    } catch (e) {
+      setErr(e?.message || 'Could not record the forfeit.');
       setBusy(false);
     }
   };
@@ -167,6 +189,19 @@ export default function EditGameModal({ game, rinks = [], teams = null, title = 
                 {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </Field>
+          </div>
+        )}
+
+        {/* MULTIDIV-1 Phase 4 — forfeit (tournament-only; only before final + both teams set) */}
+        {onForfeit && game?.status !== 'final' && homeId && awayId && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', margin: '4px 0 14px', paddingTop: 12, borderTop: `0.5px solid ${C.border}` }}>
+            <span style={{ fontSize: 11, color: C.steel, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Forfeit:</span>
+            <button onClick={() => handleForfeit('home')} disabled={busy} style={{ background: 'none', border: `0.5px solid ${C.border}`, color: C.ice, borderRadius: 999, padding: '7px 12px', fontSize: 11, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif' }}>
+              {(teams || []).find((t) => t.id === homeId)?.name || 'Home'} wins 3–0
+            </button>
+            <button onClick={() => handleForfeit('away')} disabled={busy} style={{ background: 'none', border: `0.5px solid ${C.border}`, color: C.ice, borderRadius: 999, padding: '7px 12px', fontSize: 11, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif' }}>
+              {(teams || []).find((t) => t.id === awayId)?.name || 'Away'} wins 3–0
+            </button>
           </div>
         )}
 

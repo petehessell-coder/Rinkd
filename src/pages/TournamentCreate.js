@@ -647,21 +647,35 @@ export default function TournamentCreate({ profile }) {
         } catch (_) { /* non-fatal */ }
       }
 
-      // 4. Create teams
+      // 3c. Default division (MULTIDIV-1 M5). Every event now gets at least one
+      // division row so the Divisions tab + division-scoped manage panels work
+      // on new events the same as on the M1-backfilled ones. Single-division
+      // events (the common case) never see this — it's named from the existing
+      // "Division" field if set (e.g. "12U AAA"), else "Main", mirroring the
+      // M1 backfill convention. Directors add more divisions post-publish via
+      // the Manage → Divisions tab. CASCADE-cleaned with the tournament on failure.
+      const { data: div, error: de } = await supabase.from('tournament_divisions')
+        .insert({ tournament_id: t.id, name: (data.division || '').trim() || 'Main', sort_order: 0, settings: {} })
+        .select().single();
+      if (de) throw new Error(`Couldn't create the default division: ${de.message}`);
+      const defaultDivisionId = div.id;
+
+      // 4. Create teams (tagged to the default division)
       const teamMap = {};
       for (const team of data.teams) {
         const { data: teamRow, error: tme } = await supabase.from('tournament_teams')
-          .insert({ tournament_id: t.id, team_name: team.name, pool: team.pool })
+          .insert({ tournament_id: t.id, division_id: defaultDivisionId, team_name: team.name, pool: team.pool })
           .select().single();
         if (tme) throw tme;
         teamMap[team.name] = teamRow.id;
       }
 
-      // 5. Create games
+      // 5. Create games (tagged to the default division)
       for (const g of data.games) {
         if (!teamMap[g.home] || !teamMap[g.away]) continue;
         const { error: ge } = await supabase.from('games').insert({
           tournament_id: t.id,
+          division_id: defaultDivisionId,
           home_team_id: teamMap[g.home],
           away_team_id: teamMap[g.away],
           rink_id: rinkMap[g.rink] || null,

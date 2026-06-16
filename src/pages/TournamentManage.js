@@ -10,7 +10,11 @@ import {
   updateTournament,
   listStandingsSummary,
   generateChampionshipBracket,
+  recordForfeit,
 } from '../lib/tournamentManage';
+import {
+  listDivisions, createDivision, updateDivision, deleteDivision, reorderDivisions,
+} from '../lib/tournamentDivisions';
 import { listRinks } from '../lib/rinks';
 import { listScorers, addScorerByInput, removeScorer } from '../lib/tournamentScorers';
 import { listDirectors, addDirectorByInput, removeDirector, isExtraDirector as isDirectorRole } from '../lib/tournamentDirectors';
@@ -31,7 +35,29 @@ const C = {
   green: '#22C55E', amber: '#F59E0B',
 };
 
-const TABS = ['Teams', 'Schedule', 'Bracket', 'Registrations', 'Scorers', 'Suspensions', 'Sponsors', 'GameSheet', 'Settings'];
+const TABS = ['Divisions', 'Teams', 'Schedule', 'Bracket', 'Registrations', 'Scorers', 'Suspensions', 'Sponsors', 'GameSheet', 'Settings'];
+
+// Tabs whose panels operate on a single selected division. The scope selector
+// (chips) renders above these tabs when the event has >1 division.
+const DIVISION_SCOPED_TABS = new Set(['Teams', 'Schedule', 'Bracket']);
+
+// Per-division format presets for the Divisions tab. "Inherit" = empty settings
+// so the division falls back to the tournament's settings (the M3/public-page
+// merge). Mirrors TournamentCreate's FORMAT_PRESETS; kept minimal here since a
+// division only needs to override the format, not re-enter every field.
+const DIVISION_FORMAT_PRESETS = {
+  '': { label: 'Inherit from tournament', settings: null },
+  blpa_bash: {
+    label: 'BLPA Bash (3×12 · 6-goal mercy · 1 advances)',
+    settings: {
+      period_length_minutes: 12, period_type: 'stop', num_periods: 3,
+      points_win: 2, points_tie: 1, points_loss: 0, shootout_win_points: 2,
+      max_goal_differential: 6, allow_ties: true, shootout_pool: false,
+      shootout_bracket: true, advancement_per_pool: 1,
+      tiebreakers: ['goal_quotient', 'period_points', 'head_to_head', 'goal_diff', 'goals_for', 'goals_against', 'penalty_minutes', 'coin_toss'],
+    },
+  },
+};
 
 const REG_STATUS = {
   pending:    { label: 'Pending',    color: '#F59E0B', bg: 'rgba(245,158,11,0.15)' },
@@ -65,6 +91,10 @@ export default function TournamentManagePage({ currentUser, profile }) {
   const [games, setGames] = useState([]);
   const [rinks, setRinks] = useState([]);
   const [standingsByTeam, setStandingsByTeam] = useState({});
+  // MULTIDIV-1 (M4): divisions drive the scope selector. Single-division events
+  // (incl. BLPA's backfilled "Main") have exactly one; the chips stay hidden.
+  const [divisions, setDivisions] = useState([]);
+  const [selectedDivisionId, setSelectedDivisionId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('Teams');
   const [error, setError] = useState(null);
@@ -114,7 +144,7 @@ export default function TournamentManagePage({ currentUser, profile }) {
     try {
       const t = await getTournament(id);
       setTournament(t);
-      const [{ data: ts }, { data: gs }, { data: rk }, { data: st }, { count: suspCount }] = await Promise.all([
+      const [{ data: ts }, { data: gs }, { data: rk }, { data: st }, { count: suspCount }, { data: divs }] = await Promise.all([
         listTeams(id),
         listGames(id),
         listRinks().catch(() => ({ data: [] })),
@@ -122,9 +152,17 @@ export default function TournamentManagePage({ currentUser, profile }) {
         supabase.from('game_suspensions')
           .select('id', { count: 'exact', head: true })
           .eq('tournament_id', id).eq('status', 'pending'),
+        listDivisions(id).catch(() => ({ data: [] })),
       ]);
       setTeams(ts); setGames(gs); setRinks(rk || []);
       setPendingSuspCount(suspCount || 0);
+      const divList = divs || [];
+      setDivisions(divList);
+      // Default to the first division; preserve the director's pick across
+      // reloads (mirror Tournament.js M3) so adding a team doesn't snap the
+      // scope back to division 1.
+      setSelectedDivisionId((cur) =>
+        cur && divList.some((d) => d.id === cur) ? cur : (divList[0]?.id ?? null));
       // Convert standings rows to a team_id → {gp,wins,losses,ties,pts} lookup
       // so renderers can look up records by id in O(1). Empty tournament =
       // empty lookup, which the renderers treat as "no record yet."
@@ -172,6 +210,18 @@ export default function TournamentManagePage({ currentUser, profile }) {
       </div>
     </Layout>
   );
+
+  // MULTIDIV-1: scope teams/games/settings to the selected division so the
+  // Teams/Schedule/Bracket panels only show + write that division's data.
+  // Single-division events have selectedDivisionId = the backfilled "Main"
+  // division (every row already points at it) → identical to pre-multidiv.
+  // Events with no division yet (e.g. created before M5's create-step lands)
+  // have selectedDivisionId = null → no filtering, today's behavior.
+  const selectedDivision = divisions.find((d) => d.id === selectedDivisionId) || null;
+  const divSettings = { ...(tournament.settings || {}), ...(selectedDivision?.settings || {}) };
+  const divisionTeams = selectedDivisionId ? teams.filter((t) => t.division_id === selectedDivisionId) : teams;
+  const divisionGames = selectedDivisionId ? games.filter((g) => g.division_id === selectedDivisionId) : games;
+  const showScopeChips = divisions.length > 1 && DIVISION_SCOPED_TABS.has(tab);
 
   return (
     <Layout profile={profile}>
@@ -235,9 +285,33 @@ export default function TournamentManagePage({ currentUser, profile }) {
             </div>
           )}
 
-          {tab === 'Teams' && <TeamsTab tournamentId={id} teams={teams} standingsByTeam={standingsByTeam} reload={load} flash={showFlash} />}
-          {tab === 'Schedule' && <ScheduleTab tournamentId={id} tournament={tournament} teams={teams} games={games} rinks={rinks} reload={load} flash={showFlash} />}
-          {tab === 'Bracket' && <BracketTab tournamentId={id} tournament={tournament} teams={teams} games={games} rinks={rinks} reload={load} flash={showFlash} />}
+          {/* MULTIDIV-1 division scope selector — only when >1 division and the
+              active tab operates on one division. Hidden for single-division
+              events (BLPA unchanged). */}
+          {showScopeChips && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 10, color: C.steel, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 6 }}>Editing division</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {divisions.map((d) => (
+                  <button key={d.id} onClick={() => setSelectedDivisionId(d.id)}
+                    style={{
+                      padding: '6px 12px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                      fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap',
+                      border: selectedDivisionId === d.id ? 'none' : `1px solid ${C.border}`,
+                      background: selectedDivisionId === d.id ? C.red : 'transparent',
+                      color: selectedDivisionId === d.id ? '#fff' : C.steel,
+                    }}>
+                    {d.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {tab === 'Divisions' && <DivisionsTab tournamentId={id} divisions={divisions} teams={teams} games={games} selectedDivisionId={selectedDivisionId} onSelect={setSelectedDivisionId} reload={load} flash={showFlash} />}
+          {tab === 'Teams' && <TeamsTab tournamentId={id} teams={divisionTeams} divisionId={selectedDivisionId} standingsByTeam={standingsByTeam} reload={load} flash={showFlash} />}
+          {tab === 'Schedule' && <ScheduleTab tournamentId={id} tournament={tournament} teams={divisionTeams} games={divisionGames} divisionId={selectedDivisionId} rinks={rinks} reload={load} flash={showFlash} />}
+          {tab === 'Bracket' && <BracketTab tournamentId={id} tournament={tournament} divSettings={divSettings} teams={divisionTeams} games={divisionGames} divisionId={selectedDivisionId} rinks={rinks} reload={load} flash={showFlash} />}
           {tab === 'Registrations' && <RegistrationsTab tournamentId={id} tournament={tournament} reload={load} flash={showFlash} />}
           {tab === 'Scorers' && <ScorersTab tournamentId={id} tournamentName={tournament.name} originalDirectorId={tournament.director_id} profile={profile} flash={showFlash} />}
           {tab === 'Suspensions' && <SuspensionsTab tournamentId={id} flash={showFlash} onPendingCount={setPendingSuspCount} />}
@@ -252,8 +326,188 @@ export default function TournamentManagePage({ currentUser, profile }) {
   );
 }
 
+// ====================== DIVISIONS TAB ======================
+// MULTIDIV-1 (M4): in-app division CRUD + reorder. Before this, divisions only
+// existed via SQL. Each division is the unit of competition (its own teams,
+// schedule, bracket, format); the tournament is the event wrapper.
+function DivisionsTab({ tournamentId, divisions, teams, games, selectedDivisionId, onSelect, reload, flash }) {
+  const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+
+  // Per-division team + game counts so the director sees what a delete will
+  // take with it (teams CASCADE; games' division_id is SET NULL).
+  const counts = useMemo(() => {
+    const m = {};
+    for (const t of teams) { const k = t.division_id; if (!k) continue; m[k] = m[k] || { teams: 0, games: 0 }; m[k].teams++; }
+    for (const g of games) { const k = g.division_id; if (!k) continue; m[k] = m[k] || { teams: 0, games: 0 }; m[k].games++; }
+    return m;
+  }, [teams, games]);
+
+  const move = async (idx, dir) => {
+    const next = idx + dir;
+    if (next < 0 || next >= divisions.length) return;
+    const ids = divisions.map((d) => d.id);
+    [ids[idx], ids[next]] = [ids[next], ids[idx]];
+    setBusyId(divisions[idx].id);
+    const { error } = await reorderDivisions(ids);
+    setBusyId(null);
+    if (error) { flash?.('error', `Reorder failed: ${error.message}`); return; }
+    reload();
+  };
+
+  const remove = async (d) => {
+    const c = counts[d.id] || { teams: 0, games: 0 };
+    const warn = c.teams > 0 || c.games > 0
+      ? `Delete "${d.name}"? This permanently removes its ${c.teams} team${c.teams === 1 ? '' : 's'}${c.games ? ` and unassigns ${c.games} game${c.games === 1 ? '' : 's'}` : ''}. This cannot be undone.`
+      : `Delete "${d.name}"? This cannot be undone.`;
+    if (!window.confirm(warn)) return;
+    setBusyId(d.id);
+    const { error } = await deleteDivision(d.id);
+    setBusyId(null);
+    if (error) { flash?.('error', `Delete failed: ${error.message}`); return; }
+    flash?.('success', `Deleted ${d.name}.`);
+    // If we just deleted the selected division, drop the selection so the page
+    // re-defaults to the first remaining one on reload.
+    if (selectedDivisionId === d.id) onSelect?.(null);
+    reload();
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ fontSize: 13, color: C.steel }}>
+          {divisions.length} division{divisions.length === 1 ? '' : 's'}
+        </div>
+        <button onClick={() => { setAdding(true); setEditingId(null); }} style={btnPrimary}>+ Add Division</button>
+      </div>
+
+      <div style={{ fontSize: 12, color: C.steel, marginBottom: 14, lineHeight: 1.5 }}>
+        Each division has its own teams, schedule, bracket, and format. Pick a division in the scope selector above the Teams / Schedule / Bracket tabs to manage it. A division's format overrides the tournament's; leave it on “Inherit” to use the tournament settings.
+      </div>
+
+      {adding && (
+        <DivisionForm tournamentId={tournamentId} nextSortOrder={divisions.length}
+          flash={flash} onDone={() => { setAdding(false); reload(); }} onCancel={() => setAdding(false)} />
+      )}
+
+      {divisions.length === 0 && !adding && (
+        <div style={{ textAlign: 'center', color: C.steel, padding: '40px 0' }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>🗂️</div>
+          No divisions yet. Add one to start scoping teams and games.
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {divisions.map((d, i) => editingId === d.id ? (
+          <DivisionForm key={d.id} tournamentId={tournamentId} division={d} nextSortOrder={d.sort_order}
+            flash={flash} onDone={() => { setEditingId(null); reload(); }} onCancel={() => setEditingId(null)} />
+        ) : (
+          <div key={d.id} style={{ background: C.card, border: `1px solid ${selectedDivisionId === d.id ? C.red : C.border}`, borderRadius: 12, padding: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <button onClick={() => move(i, -1)} disabled={i === 0 || busyId} title="Move up"
+                style={{ ...btnGhost, padding: '2px 8px', opacity: i === 0 ? 0.3 : 1, cursor: i === 0 ? 'default' : 'pointer' }}>▲</button>
+              <button onClick={() => move(i, 1)} disabled={i === divisions.length - 1 || busyId} title="Move down"
+                style={{ ...btnGhost, padding: '2px 8px', opacity: i === divisions.length - 1 ? 0.3 : 1, cursor: i === divisions.length - 1 ? 'default' : 'pointer' }}>▼</button>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: C.ice, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                {d.name}
+                {d.age_group && <span style={{ fontSize: 10, fontWeight: 700, color: C.steel, background: C.navy, borderRadius: 6, padding: '2px 6px', letterSpacing: '0.05em' }}>{d.age_group}</span>}
+                {d.tier && <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: C.blue, borderRadius: 6, padding: '2px 6px', letterSpacing: '0.05em' }}>{d.tier}</span>}
+              </div>
+              <div style={{ fontSize: 12, color: C.steel, marginTop: 4 }}>
+                {(counts[d.id]?.teams || 0)} team{(counts[d.id]?.teams || 0) === 1 ? '' : 's'} · {(counts[d.id]?.games || 0)} game{(counts[d.id]?.games || 0) === 1 ? '' : 's'} · {d.settings && Object.keys(d.settings).length > 0 ? 'custom format' : 'inherits format'}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => { setEditingId(d.id); setAdding(false); }} style={btnGhost}>Edit</button>
+              <button onClick={() => remove(d)} disabled={busyId === d.id} style={{ ...btnGhost, color: C.red, borderColor: C.red }}>Delete</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DivisionForm({ tournamentId, division, nextSortOrder = 0, flash, onDone, onCancel }) {
+  const [name, setName] = useState(division?.name || '');
+  const [ageGroup, setAgeGroup] = useState(division?.age_group || '');
+  const [tier, setTier] = useState(division?.tier || '');
+  // Detect the current preset: empty settings → inherit; matches a known
+  // preset key → that preset; anything else → "custom" (keep, don't clobber).
+  const initialPreset = useMemo(() => {
+    const s = division?.settings || {};
+    if (!s || Object.keys(s).length === 0) return '';
+    const match = Object.entries(DIVISION_FORMAT_PRESETS).find(
+      ([, p]) => p.settings && JSON.stringify(p.settings) === JSON.stringify(s)
+    );
+    return match ? match[0] : 'custom';
+  }, [division]);
+  const [preset, setPreset] = useState(initialPreset);
+  const [busy, setBusy] = useState(false);
+  const [localError, setLocalError] = useState('');
+
+  const save = async () => {
+    if (!name.trim()) { setLocalError('Division name is required'); return; }
+    setLocalError('');
+    setBusy(true);
+    // 'custom' = keep the division's existing settings untouched; '' = inherit
+    // (empty); a known preset = drop in that preset's settings object.
+    let settings;
+    if (preset === 'custom') settings = division?.settings || {};
+    else settings = DIVISION_FORMAT_PRESETS[preset]?.settings || {};
+    const fields = { name, ageGroup, tier, settings };
+    const res = division
+      ? await updateDivision(division.id, fields)
+      : await createDivision(tournamentId, { ...fields, sortOrder: nextSortOrder });
+    setBusy(false);
+    if (res.error) { flash?.('error', `Save failed: ${res.error.message}`); return; }
+    flash?.('success', division ? 'Division saved.' : `Added ${name}.`);
+    onDone();
+  };
+
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 4 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 12 }}>
+        <div style={{ gridColumn: '1 / -1' }}>
+          <label style={labelStyle}>Division Name</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. 12U AA" style={inputStyle} />
+        </div>
+        <div>
+          <label style={labelStyle}>Age Group</label>
+          <input value={ageGroup} onChange={(e) => setAgeGroup(e.target.value)} placeholder="12U" style={inputStyle} />
+        </div>
+        <div>
+          <label style={labelStyle}>Tier</label>
+          <input value={tier} onChange={(e) => setTier(e.target.value)} placeholder="AA / AAA / A" style={inputStyle} />
+        </div>
+        <div>
+          <label style={labelStyle}>Format</label>
+          <select value={preset} onChange={(e) => setPreset(e.target.value)} style={inputStyle}>
+            {Object.entries(DIVISION_FORMAT_PRESETS).map(([k, p]) => (
+              <option key={k} value={k}>{p.label}</option>
+            ))}
+            {initialPreset === 'custom' && <option value="custom">Custom (keep current)</option>}
+          </select>
+        </div>
+      </div>
+      {localError && (
+        <div style={{ background: 'rgba(215,38,56,0.12)', border: '1px solid rgba(215,38,56,0.4)', color: C.ice, padding: '8px 12px', borderRadius: 8, fontSize: 13, marginBottom: 10 }}>
+          {localError}
+        </div>
+      )}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+        <button onClick={onCancel} style={btnGhost}>Cancel</button>
+        <button onClick={save} disabled={busy} style={btnPrimary}>{busy ? 'Saving…' : division ? 'Save' : 'Add Division'}</button>
+      </div>
+    </div>
+  );
+}
+
 // ====================== TEAMS TAB ======================
-function TeamsTab({ tournamentId, teams, standingsByTeam = {}, reload, flash }) {
+function TeamsTab({ tournamentId, teams, divisionId = null, standingsByTeam = {}, reload, flash }) {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
 
@@ -281,7 +535,7 @@ function TeamsTab({ tournamentId, teams, standingsByTeam = {}, reload, flash }) 
         <button onClick={() => setAdding(true)} style={btnPrimary}>+ Add Team</button>
       </div>
 
-      {adding && <TeamForm tournamentId={tournamentId} pools={pools} flash={flash} onDone={() => { setAdding(false); reload(); }} onCancel={() => setAdding(false)} />}
+      {adding && <TeamForm tournamentId={tournamentId} divisionId={divisionId} pools={pools} flash={flash} onDone={() => { setAdding(false); reload(); }} onCancel={() => setAdding(false)} />}
 
       {teams.length === 0 && !adding && (
         <div style={{ textAlign: 'center', color: C.steel, padding: '40px 0' }}>
@@ -296,7 +550,7 @@ function TeamsTab({ tournamentId, teams, standingsByTeam = {}, reload, flash }) 
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
             {list.map((t, i) => editingId === t.id ? (
               <div key={t.id} style={{ padding: 12, borderTop: i ? `1px solid rgba(46,91,140,0.25)` : 'none' }}>
-                <TeamForm tournamentId={tournamentId} pools={pools} team={t} flash={flash} onDone={() => { setEditingId(null); reload(); }} onCancel={() => setEditingId(null)} />
+                <TeamForm tournamentId={tournamentId} divisionId={divisionId} pools={pools} team={t} flash={flash} onDone={() => { setEditingId(null); reload(); }} onCancel={() => setEditingId(null)} />
               </div>
             ) : (
               <div key={t.id} style={{ display: 'flex', alignItems: 'center', padding: 12, borderTop: i ? `1px solid rgba(46,91,140,0.25)` : 'none', gap: 12 }}>
@@ -321,7 +575,7 @@ function TeamsTab({ tournamentId, teams, standingsByTeam = {}, reload, flash }) 
   );
 }
 
-function TeamForm({ tournamentId, team, pools, flash, onDone, onCancel }) {
+function TeamForm({ tournamentId, divisionId = null, team, pools, flash, onDone, onCancel }) {
   const [teamName, setTeamName] = useState(team?.team_name || '');
   const [pool, setPool] = useState(team?.pool || (pools[0] || ''));
   const [seed, setSeed] = useState(team?.seed || '');
@@ -335,7 +589,7 @@ function TeamForm({ tournamentId, team, pools, flash, onDone, onCancel }) {
     setLocalError('');
     setBusy(true);
     const fields = { teamName, pool, seed, contactEmail, logoUrl };
-    const res = team ? await updateTeam(team.id, fields) : await createTeam(tournamentId, fields);
+    const res = team ? await updateTeam(team.id, fields) : await createTeam(tournamentId, { ...fields, divisionId });
     setBusy(false);
     if (res.error) { flash?.('error', `Save failed: ${res.error.message}`); return; }
     flash?.('success', team ? 'Team saved.' : `Added ${teamName}.`);
@@ -392,7 +646,7 @@ function TeamForm({ tournamentId, team, pools, flash, onDone, onCancel }) {
 }
 
 // ====================== SCHEDULE TAB ======================
-function ScheduleTab({ tournamentId, tournament, teams, games, rinks, reload, flash }) {
+function ScheduleTab({ tournamentId, tournament, teams, games, divisionId = null, rinks, reload, flash }) {
   const [showGen, setShowGen] = useState(false);
   const [genStart, setGenStart] = useState('');
   const [genMinutes, setGenMinutes] = useState(60);
@@ -411,6 +665,7 @@ function ScheduleTab({ tournamentId, tournament, teams, games, rinks, reload, fl
       gameMinutes: parseInt(genMinutes, 10) || 60,
       rinkId: genRinkId || null,
       replaceExisting: replace,
+      divisionId,
     });
     setBusy(false);
     if (error) { flash?.('error', `Generate failed: ${error.message}`); return; }
@@ -526,6 +781,13 @@ function ScheduleTab({ tournamentId, tournament, teams, games, rinks, reload, fl
               flash?.('success', 'Game deleted.');
               reload();
             }}
+            onForfeit={async (winner) => {
+              const { error } = await recordForfeit(g.id, winner);
+              if (error) throw new Error(error.message);
+              const winName = teams.find((t) => t.id === (winner === 'home' ? g.home_team_id : g.away_team_id))?.team_name || 'Winner';
+              flash?.('success', `Recorded forfeit — ${winName} wins 3–0.`);
+              reload();
+            }}
           />
         );
       })()}
@@ -534,8 +796,10 @@ function ScheduleTab({ tournamentId, tournament, teams, games, rinks, reload, fl
 }
 
 // ====================== BRACKET TAB ======================
-function BracketTab({ tournamentId, tournament, teams, games, rinks, reload, flash }) {
-  const advPerPool = tournament?.settings?.advancement_per_pool ?? 2;
+function BracketTab({ tournamentId, tournament, divSettings, teams, games, divisionId = null, rinks, reload, flash }) {
+  // MULTIDIV-1: read the selected division's settings (falls back to the
+  // tournament's via the merge done on the page).
+  const advPerPool = divSettings?.advancement_per_pool ?? tournament?.settings?.advancement_per_pool ?? 2;
   const bracketGames = games.filter((g) => (g.round || 'pool') !== 'pool');
   // Count distinct pools so the "Add Bracket Game" default round can be
   // derived from how many teams will advance. 2 advancers → Final, 4 → Semi,
@@ -576,11 +840,11 @@ function BracketTab({ tournamentId, tournament, teams, games, rinks, reload, fla
 
   useEffect(() => {
     (async () => {
-      const q = await loadPoolQualifiers(tournamentId, advPerPool);
+      const q = await loadPoolQualifiers(tournamentId, advPerPool, divisionId);
       setQualifiers(q);
       setLoaded(true);
     })();
-  }, [tournamentId, advPerPool, finalPoolCount]);
+  }, [tournamentId, advPerPool, finalPoolCount, divisionId]);
 
   const addBracketGame = async () => {
     if (!homeId || !awayId || homeId === awayId) { flash?.('error', 'Pick two different teams.'); return; }
@@ -590,6 +854,7 @@ function BracketTab({ tournamentId, tournament, teams, games, rinks, reload, fla
       homeTeamId: homeId, awayTeamId: awayId, round,
       startTime: new Date(startTime).toISOString(),
       rinkId: rinkId || null,
+      divisionId,
     });
     setBusy(false);
     if (error) { flash?.('error', `Failed to add bracket game: ${error.message}`); return; }
@@ -626,7 +891,7 @@ function BracketTab({ tournamentId, tournament, teams, games, rinks, reload, fla
           pattern. Each pool with 4 teams gets 4 games: 2 semis (2v3, 1v4),
           a gold game (semi winners), and a bronze game (semi losers).
           Gold/bronze start with TBD teams and fill in when semis finalize. */}
-      <ChampionshipBracketGenerator tournamentId={tournamentId} teams={teams} bracketGames={bracketGames} reload={reload} flash={flash} rinks={rinks} />
+      <ChampionshipBracketGenerator tournamentId={tournamentId} divisionId={divisionId} teams={teams} bracketGames={bracketGames} reload={reload} flash={flash} rinks={rinks} />
 
       {/* Add bracket game */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 18 }}>
@@ -724,7 +989,7 @@ function BracketTab({ tournamentId, tournament, teams, games, rinks, reload, fla
 // pool-play status and either offers a "Generate Championship Bracket"
 // button (when all pool games are final + no bracket games yet) or shows
 // a status hint ("Waiting on N pool games" / "Bracket already generated").
-function ChampionshipBracketGenerator({ tournamentId, teams, bracketGames, reload, flash, rinks }) {
+function ChampionshipBracketGenerator({ tournamentId, divisionId = null, teams, bracketGames, reload, flash, rinks }) {
   const [open, setOpen] = useState(false);
   const [start, setStart] = useState('');
   const [rinkId, setRinkId] = useState('');
@@ -760,6 +1025,7 @@ function ChampionshipBracketGenerator({ tournamentId, teams, bracketGames, reloa
       startTime: new Date(start).toISOString(),
       rinkId: rinkId || null,
       gameMinutes: parseInt(gameMinutes, 10) || 60,
+      divisionId,
     });
     setBusy(false);
     if (error) { flash?.('error', `Bracket generation failed: ${error.message}`); return; }
