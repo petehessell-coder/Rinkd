@@ -24,7 +24,7 @@ import { MentionInput, MentionText } from '../components/Mentions';
 import { savePostMentions, mentionMapFromRows } from '../lib/mentions';
 import ShareButton from '../components/ShareButton';
 import RecapCard from '../components/RecapCard';
-import { recapSourceFromPost, getRecapCard } from '../lib/recapCard';
+import { recapSourceFromPost, getRecapCardWithSponsor } from '../lib/recapCard';
 import { loadGameCardData } from '../lib/gameCardData';
 
 
@@ -948,7 +948,7 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
                       View game →
                     </button>
                     <ShareButton gameId={p.recap_for_game_id} isLeague={false} variant="ghost" cardType="recapv2"
-                      getCard={async () => (await getRecapCard(p.recap_for_game_id, recapSourceFromPost(p))).data} />
+                      getCard={async () => (await getRecapCardWithSponsor(p.recap_for_game_id, recapSourceFromPost(p))).data} />
                   </div>
                 )}
                 {p.gamepuck_reveal_game_id && (

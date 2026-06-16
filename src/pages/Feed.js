@@ -18,7 +18,7 @@ import { useAuth } from '../lib/authContext';
 import ShareButton from '../components/ShareButton';
 import { loadGameCardData } from '../lib/gameCardData';
 import RecapCard from '../components/RecapCard';
-import { recapSourceFromPost, getRecapCard } from '../lib/recapCard';
+import { recapSourceFromPost, getRecapCardWithSponsor } from '../lib/recapCard';
 
 // Feed page size — keyset pagination pulls this many chirps per request.
 const PAGE_SIZE = 20;
@@ -228,7 +228,7 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
               <span style={{ fontSize: 16 }}>🏒</span> View game →
             </button>
             <ShareButton gameId={post.recap_for_game_id} isLeague={!!post.league_id} variant="ghost" cardType="recapv2"
-              getCard={async () => (await getRecapCard(post.recap_for_game_id, recapSourceFromPost(post))).data} />
+              getCard={async () => (await getRecapCardWithSponsor(post.recap_for_game_id, recapSourceFromPost(post))).data} />
           </div>
         )}
         {/* Sealed Game Puck teaser — no winner named; tap through to the game

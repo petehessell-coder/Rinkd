@@ -10,7 +10,7 @@
 // share size. team-source games render score-only (no goals/stats captured).
 
 import { useEffect, useState } from 'react';
-import { getRecapCard } from '../lib/recapCard';
+import { getRecapCardWithSponsor } from '../lib/recapCard';
 
 const PLATE = '/recap-card-bg2.png';
 const WORDMARK = '/rinkd-wordmark-tape.png';
@@ -81,20 +81,21 @@ const CSS = `
 .rcap .spon{display:flex;align-items:center;justify-content:center;gap:2cqw;background:rgba(10,24,48,.7);border-top:1px solid rgba(46,91,140,.4);border-bottom:1px solid rgba(46,91,140,.4);padding:1.8cqw;margin-top:1cqw}
 .rcap .spon .lbl{color:#8BA3BE;font-size:2.1cqw;font-weight:700;letter-spacing:.16em}
 .rcap .spon .nm{font-family:'Barlow Condensed',sans-serif;font-style:italic;font-weight:900;font-size:3.6cqw;color:#F4F7FA}
+.rcap .spon .sponimg{height:5.5cqw;width:auto;max-width:42cqw;object-fit:contain;display:block}
 .rcap .foot{display:flex;align-items:center;justify-content:space-between;gap:3cqw;padding:2.5cqw 0 0}
 .rcap .foot .rkimg{height:7cqw;width:auto;display:block}
 .rcap .foot .url{color:#8BA3BE;font-weight:700;font-size:2.8cqw;margin-top:.8cqw}
 .rcap .foot .mid{flex:1;text-align:center;color:#8BA3BE;font-weight:700;font-size:2.1cqw;letter-spacing:.12em;line-height:1.5}
 `;
 
-export default function RecapCard({ gameId, source, sponsorName = null }) {
+export default function RecapCard({ gameId, source }) {
   const [card, setCard] = useState(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let alive = true;
     if (!gameId || !source) return undefined;
-    getRecapCard(gameId, source).then(({ data, error }) => {
+    getRecapCardWithSponsor(gameId, source).then(({ data, error }) => {
       if (!alive) return;
       if (error || !data) { setFailed(true); return; }
       setCard(data);
@@ -164,7 +165,9 @@ export default function RecapCard({ gameId, source, sponsorName = null }) {
 
         <div className="spon">
           <span className="lbl">RECAP PRESENTED BY</span>
-          <span className="nm">{(sponsorName || 'RINKD').toUpperCase()}</span>
+          {card.sponsorImageUrl
+            ? <img className="sponimg" src={card.sponsorImageUrl} alt={card.sponsorName || 'Sponsor'} />
+            : <span className="nm">{(card.sponsorName || 'RINKD').toUpperCase()}</span>}
         </div>
 
         <div className="foot">
