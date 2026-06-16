@@ -35,7 +35,7 @@ const C = {
   green: '#22C55E', amber: '#F59E0B',
 };
 
-const TABS = ['Divisions', 'Teams', 'Schedule', 'Bracket', 'Registrations', 'Scorers', 'Suspensions', 'Sponsors', 'GameSheet', 'Settings'];
+const TABS = ['Divisions', 'Teams', 'Schedule', 'Bracket', 'Registrations', 'Scorers', 'Suspensions', 'Sponsors', 'Integrations', 'Settings'];
 
 // Tabs whose panels operate on a single selected division. The scope selector
 // (chips) renders above these tabs when the event has >1 division.
@@ -318,7 +318,7 @@ export default function TournamentManagePage({ currentUser, profile }) {
           {tab === 'Sponsors' && <SponsorsManager ownerType="tournament" ownerId={id} isYouth={tournament.settings?.feature_profile === 'youth_competitive'}
             settings={tournament.settings || {}}
             onSaveSettings={async (partial) => { await updateTournament(id, { settings: { ...(tournament.settings || {}), ...partial } }); await load(); }} />}
-          {tab === 'GameSheet' && <GameSheetTab tournamentId={id} tournament={tournament} games={games} reload={load} flash={showFlash} />}
+          {tab === 'Integrations' && <IntegrationsTab tournamentId={id} tournament={tournament} games={games} reload={load} flash={showFlash} />}
           {tab === 'Settings' && <SettingsTab tournament={tournament} currentUser={currentUser} reload={load} flash={showFlash} />}
         </div>
       </div>
@@ -2082,6 +2082,22 @@ const GS_MAP_STATUS = {
   confirmed: { label: 'Synced',       color: '#22C55E', bg: 'rgba(34,197,94,0.15)' },
   ignored:   { label: 'Ignored',      color: '#8BA3BE', bg: 'rgba(139,163,190,0.15)' },
 };
+
+// ====================== INTEGRATIONS TAB ======================
+// INTEGRATIONS-1 — houses external-source connections. Tournaments connect via
+// GameSheet (live). HockeyShift is league-scoped (its sync targets leagues), so
+// it isn't offered here. Keeps the tab provider-sectioned for future additions.
+function IntegrationsTab({ tournamentId, tournament, games = [], reload, flash }) {
+  return (
+    <div>
+      <div style={{ fontSize: 13, color: C.steel, marginBottom: 16, lineHeight: 1.5 }}>
+        Connect Rinkd to your external scoring/stats provider. Scores, standings, stats, and the feed + recap pushes all flow off the synced results — no double-entry.
+      </div>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', color: C.ice, textTransform: 'uppercase', marginBottom: 10, paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}>GameSheet</div>
+      <GameSheetTab tournamentId={tournamentId} tournament={tournament} games={games} reload={reload} flash={flash} />
+    </div>
+  );
+}
 
 function GameSheetTab({ tournamentId, tournament, games = [], reload, flash }) {
   const [links, setLinks] = useState([]);

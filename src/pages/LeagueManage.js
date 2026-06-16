@@ -7,6 +7,7 @@ import { listLeagueDivisions, createLeagueDivision, updateLeagueDivision, delete
 import LeagueStaffManager from '../components/LeagueStaffManager';
 import DivisionPicker from '../components/DivisionPicker';
 import SponsorsManager from '../components/SponsorsManager';
+import DataSyncAuthorization from '../components/DataSyncAuthorization';
 import { getLeagueRegistrations, updateRegistrationStatus, approveRegistration } from '../lib/registrations';
 import { leaguePayoutsReady, startConnectOnboarding } from '../lib/stripeConnect';
 import { generatePlayoffRoundOne, generatePlayoffNextRound, SUPPORTED_BRACKET_SIZES } from '../lib/leaguePlayoffGenerator';
@@ -318,7 +319,7 @@ function ManageLeague({ id, navigate }) {
   // Operational tabs show for managers + commissioners (RLS gates the writes).
   // Registrations / Sponsors / Staff / Settings are commissioner-only
   // (billing, sponsor inventory, staff, delete).
-  const MANAGE_TABS = ['Teams', 'Divisions', 'Schedule', 'Playoffs', ...(isCommissioner ? ['Registrations', 'Sponsors', 'Staff', 'Settings'] : [])];
+  const MANAGE_TABS = ['Teams', 'Divisions', 'Schedule', 'Playoffs', ...(isCommissioner ? ['Registrations', 'Sponsors', 'Integrations', 'Staff', 'Settings'] : [])];
 
   if (loading) return <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Loading...</div>;
 
@@ -808,9 +809,123 @@ function ManageLeague({ id, navigate }) {
           <LeagueStaffManager leagueId={id} leagueName={league.name} invitedBy={league.commissioner?.name || null} />
         )}
 
+        {activeTab === 'Integrations' && league && isCommissioner && (
+          <LeagueIntegrationsTab league={league} onSave={async (updates) => { await updateLeague(id, updates); await load(); }} />
+        )}
+
         {activeTab === 'Settings' && league && isCommissioner && (
           <LeagueSettings league={league} onSave={async (updates) => { await updateLeague(id, updates); await load(); }} />
         )}
+      </div>
+    </div>
+  );
+}
+
+// ── INTEGRATIONS TAB ───────────────────────────────────────────
+// INTEGRATIONS-1 — external-source connections for a league. HockeyShift is
+// live (its sync reads leagues.settings.hockeyshift.division_id); GameSheet for
+// leagues is coming. The HockeyShift connect form is gated behind the reusable
+// data-sync authorization clickwrap (DataSyncAuthorization).
+function LeagueIntegrationsTab({ league, onSave }) {
+  // division_id may be stored as a number (legacy) or string — coerce for the input.
+  const rawWired = league?.settings?.hockeyshift?.division_id;
+  const wired = (rawWired === null || rawWired === undefined || rawWired === '') ? '' : String(rawWired);
+  const [divId, setDivId] = useState(wired);
+  const [authorized, setAuthorized] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [ok, setOk] = useState('');
+
+  const saveHockeyshift = async () => {
+    setErr(''); setOk('');
+    if (!authorized) { setErr('Authorize the data sync above before connecting.'); return; }
+    if (!divId.trim()) { setErr('Enter your HockeyShift division id first.'); return; }
+    setBusy(true);
+    try {
+      const settings = {
+        ...(league.settings || {}),
+        hockeyshift: { ...(league.settings?.hockeyshift || {}), division_id: divId.trim() },
+      };
+      await onSave({ settings });
+      setOk('Connected — HockeyShift data syncs on the next scheduled run.');
+    } catch (e) { setErr(e?.message || 'Save failed.'); }
+    setBusy(false);
+  };
+
+  const disconnect = async () => {
+    // eslint-disable-next-line no-alert
+    if (!window.confirm('Disconnect HockeyShift? Future syncs stop; already-imported teams/games stay.')) return;
+    setErr(''); setOk(''); setBusy(true);
+    try {
+      const hs = { ...(league.settings?.hockeyshift || {}) };
+      delete hs.division_id;
+      await onSave({ settings: { ...(league.settings || {}), hockeyshift: hs } });
+      setDivId('');
+      setOk('Disconnected.');
+    } catch (e) { setErr(e?.message || 'Disconnect failed.'); }
+    setBusy(false);
+  };
+
+  return (
+    <div>
+      <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.65)', marginBottom: 18, lineHeight: 1.5 }}>
+        Connect Rinkd to your external scoring/stats provider. Teams, schedule, scores, standings, and recap pushes flow off the synced results — no double-entry.
+      </div>
+
+      {/* HockeyShift */}
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', color: C.ice, textTransform: 'uppercase', marginBottom: 4, paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}>HockeyShift / ShiftStats</div>
+      <div style={{ fontSize: 12.5, color: 'rgba(244,247,250,0.6)', margin: '12px 0', lineHeight: 1.5 }}>
+        Runs your league on HockeyShift (DigitalShift / ShiftStats)? Authorize the sync and paste your division id — Rinkd imports teams, games, and scores automatically.
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <DataSyncAuthorization
+          ownerType="league"
+          ownerId={league.id}
+          integration="hockeyshift"
+          label="HockeyShift"
+          accent={C.red}
+          onAuthorizedChange={setAuthorized}
+        />
+      </div>
+
+      {wired ? (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: 14 }}>
+          <div style={{ fontSize: 13, color: C.ice, fontWeight: 600 }}>
+            Connected · division <code style={{ color: C.ice }}>{wired}</code>
+          </div>
+          <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.5)', marginTop: 4, lineHeight: 1.5 }}>
+            Live data syncs on Rinkd's schedule. Change the id below to re-point, or disconnect to stop syncing.
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <input value={divId} onChange={(e) => setDivId(e.target.value)} placeholder="HockeyShift division id (e.g. 48313)" style={{ ...inputStyle, flex: 1 }} />
+            <Btn onClick={saveHockeyshift} disabled={busy || !authorized}>{busy ? 'Saving…' : 'Update'}</Btn>
+          </div>
+          <button onClick={disconnect} disabled={busy} style={{ background: 'none', border: `1px solid ${C.red}`, color: C.red, borderRadius: 999, padding: '6px 14px', fontSize: 12, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif', marginTop: 10 }}>Disconnect</button>
+        </div>
+      ) : (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: 14, opacity: authorized ? 1 : 0.55 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.4)', textTransform: 'uppercase', marginBottom: 8 }}>HockeyShift division id</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input value={divId} onChange={(e) => setDivId(e.target.value)} placeholder="e.g. 48313" disabled={!authorized} style={{ ...inputStyle, flex: 1 }} />
+            <Btn onClick={saveHockeyshift} disabled={busy || !authorized || !divId.trim()}>{busy ? 'Connecting…' : 'Connect'}</Btn>
+          </div>
+          <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.45)', marginTop: 8, lineHeight: 1.5 }}>
+            Find it in your ShiftStats URL: <code style={{ color: C.ice }}>shiftstats.com/divisions/<b>48313</b></code>. {!authorized && 'Authorize the data sync above to enable.'}
+          </div>
+        </div>
+      )}
+
+      {err && <div style={{ color: C.red, fontSize: 12.5, marginTop: 10 }}>{err}</div>}
+      {ok && <div style={{ color: '#22C55E', fontSize: 12.5, marginTop: 10 }}>{ok}</div>}
+
+      {/* GameSheet — coming soon for leagues */}
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', color: C.ice, textTransform: 'uppercase', margin: '26px 0 4px', paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}>GameSheet</div>
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: 14, marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 18 }}>🗓️</span>
+        <div style={{ fontSize: 12.5, color: 'rgba(244,247,250,0.6)', lineHeight: 1.5 }}>
+          GameSheet sync for leagues is coming soon. It's live for tournaments today — reach out at <a href="mailto:hello@rinkd.app?subject=GameSheet for leagues" style={{ color: C.ice }}>hello@rinkd.app</a> if you run your league on GameSheet.
+        </div>
       </div>
     </div>
   );
