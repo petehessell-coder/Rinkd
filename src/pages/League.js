@@ -971,6 +971,11 @@ function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, league
                     : <img src={p.media_url} alt="" style={{ width: '100%', display: 'block' }} />}
                 </div>
               )}
+              {p.recap_for_game_id && (
+                <div style={{ margin: '8px 0' }}>
+                  <RecapCard gameId={p.recap_for_game_id} source={recapSourceFromPost(p)} />
+                </div>
+              )}
               <div style={{ marginTop: 8 }}>
                 <PostReactions postId={p.id} currentUserId={currentUser?.id} initial={reactionMap[p.id]} />
               </div>
@@ -986,11 +991,6 @@ function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, league
                   </button>
                   <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{author ? `${author} · ` : ''}{timeAgo(p.created_at)} ago</span>
                 </div>
-                {p.recap_for_game_id && (
-                  <div style={{ margin: '4px 0 10px' }}>
-                    <RecapCard gameId={p.recap_for_game_id} source={recapSourceFromPost(p)} />
-                  </div>
-                )}
                 {p.recap_for_game_id && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                     <button onClick={() => navigate(`/game/${p.recap_for_game_id}?type=league`)}
