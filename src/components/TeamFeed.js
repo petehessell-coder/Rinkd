@@ -12,7 +12,8 @@ import PostActionMenu from './PostActionMenu';
 import PostReactions from './PostReactions';
 import { getReactions } from '../lib/reactions';
 import RecapCard from './RecapCard';
-import { recapSourceFromPost } from '../lib/recapCard';
+import ShareButton from './ShareButton';
+import { recapSourceFromPost, getRecapCardWithSponsor } from '../lib/recapCard';
 import { MentionInput, MentionText } from './Mentions';
 import { savePostMentions, saveCommentMentions, mentionMapFromRows } from '../lib/mentions';
 
@@ -138,6 +139,10 @@ function PostCard({ post, currentUser, isLiked, reactions, onLike, onCommentChan
         {post.recap_for_game_id && (
           <div style={{ margin: '4px 0 10px' }}>
             <RecapCard gameId={post.recap_for_game_id} source={recapSourceFromPost(post)} />
+            <div style={{ marginTop: 8 }}>
+              <ShareButton gameId={post.recap_for_game_id} isLeague={!!post.league_id} variant="ghost" cardType="recapv2"
+                getCard={async () => (await getRecapCardWithSponsor(post.recap_for_game_id, recapSourceFromPost(post))).data} />
+            </div>
           </div>
         )}
         <div style={{ display: 'flex', gap: 16, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
