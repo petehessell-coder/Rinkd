@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { composeRecapCard, composeGamePuckCard, composeWatermarkedPhoto } from '../lib/shareCard';
+import { composeRecapCardV2 } from '../lib/recapShareV2';
 import { prefersNativeShare, downloadBlob, copyText, absoluteShareUrl } from '../lib/share';
 import { gameShareUrl } from '../lib/publicShare';
 import { uploadShareCard } from '../lib/ogCard';
@@ -30,6 +31,7 @@ export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghos
   const kind = isLeague ? 'league' : 'tournament';
   const isPuck = cardType === 'gamepuck';
   const isPhoto = cardType === 'photo';
+  const isRecapV2 = cardType === 'recapv2';
   const fileName = isPhoto ? 'rinkd-photo.jpg' : isPuck ? 'rinkd-gamepuck.png' : 'rinkd-recap.png';
   const mime = isPhoto ? 'image/jpeg' : 'image/png';
 
@@ -42,7 +44,8 @@ export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghos
       card = await getCard();
       blob = isPhoto ? await composeWatermarkedPhoto(card.imageUrl, { tag: card.tag })
         : isPuck ? await composeGamePuckCard(card)
-          : await composeRecapCard(card, { format: 'portrait' });
+          : isRecapV2 ? await composeRecapCardV2(card, { shareUrl: gameDeepLink, sponsorName: card.sponsorName })
+            : await composeRecapCard(card, { format: 'portrait' });
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('[ShareButton] compose failed', e);
@@ -57,7 +60,9 @@ export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghos
       ? `📸 ${card.tag ? card.tag + ' · ' : ''}on Rinkd`
       : isPuck
         ? `🏒 Game Puck: ${card.player.name || '#' + card.player.jersey} — ${card.player.teamName} · on Rinkd`
-        : `${card.home.name} ${card.homeScore ?? 0}, ${card.away.name} ${card.awayScore ?? 0} — on Rinkd`;
+        : isRecapV2
+          ? `${card.away?.name || 'Away'} ${card.away_score ?? 0}, ${card.home?.name || 'Home'} ${card.home_score ?? 0} — on Rinkd`
+          : `${card.home.name} ${card.homeScore ?? 0}, ${card.away.name} ${card.awayScore ?? 0} — on Rinkd`;
     // 2) Touch device with file-share → one-tap native sheet. Any failure (incl.
     //    lost user-activation after the async compose) drops to the modal.
     if (prefersNativeShare()) {

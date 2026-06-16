@@ -29,7 +29,7 @@ import { MentionInput, MentionText } from '../components/Mentions';
 import { savePostMentions, mentionMapFromRows } from '../lib/mentions';
 import ShareButton from '../components/ShareButton';
 import RecapCard from '../components/RecapCard';
-import { recapSourceFromPost } from '../lib/recapCard';
+import { recapSourceFromPost, getRecapCard } from '../lib/recapCard';
 import { loadGameCardData } from '../lib/gameCardData';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
@@ -997,8 +997,8 @@ function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, league
                       style={{ background: 'transparent', border: 'none', color: '#5B9FE2', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}>
                       View game →
                     </button>
-                    <ShareButton gameId={p.recap_for_game_id} isLeague variant="ghost"
-                      getCard={() => loadGameCardData(p.recap_for_game_id, true)} />
+                    <ShareButton gameId={p.recap_for_game_id} isLeague variant="ghost" cardType="recapv2"
+                      getCard={async () => (await getRecapCard(p.recap_for_game_id, recapSourceFromPost(p))).data} />
                   </div>
                 )}
                 {p.gamepuck_reveal_game_id && (
