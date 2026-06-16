@@ -28,6 +28,8 @@ import SeasonGamePucks from '../components/SeasonGamePucks';
 import { MentionInput, MentionText } from '../components/Mentions';
 import { savePostMentions, mentionMapFromRows } from '../lib/mentions';
 import ShareButton from '../components/ShareButton';
+import RecapCard from '../components/RecapCard';
+import { recapSourceFromPost } from '../lib/recapCard';
 import { loadGameCardData } from '../lib/gameCardData';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
@@ -984,6 +986,11 @@ function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, league
                   </button>
                   <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{author ? `${author} · ` : ''}{timeAgo(p.created_at)} ago</span>
                 </div>
+                {p.recap_for_game_id && (
+                  <div style={{ margin: '4px 0 10px' }}>
+                    <RecapCard gameId={p.recap_for_game_id} source={recapSourceFromPost(p)} />
+                  </div>
+                )}
                 {p.recap_for_game_id && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                     <button onClick={() => navigate(`/game/${p.recap_for_game_id}?type=league`)}

@@ -17,6 +17,8 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/authContext';
 import ShareButton from '../components/ShareButton';
 import { loadGameCardData } from '../lib/gameCardData';
+import RecapCard from '../components/RecapCard';
+import { recapSourceFromPost } from '../lib/recapCard';
 
 // Feed page size — keyset pagination pulls this many chirps per request.
 const PAGE_SIZE = 20;
@@ -214,6 +216,11 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
         <MediaDisplay url={post.media_url} type={post.media_type} />
         {/* Auto-recap posts link straight to the game page — saves the
             spectator from copy/pasting the URL out of the content body. */}
+        {post.recap_for_game_id && (
+          <div style={{ marginBottom: 10 }}>
+            <RecapCard gameId={post.recap_for_game_id} source={recapSourceFromPost(post)} />
+          </div>
+        )}
         {post.recap_for_game_id && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
             <button type="button" onClick={() => navigate(`/game/${post.recap_for_game_id}`)}

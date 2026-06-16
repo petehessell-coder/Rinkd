@@ -11,6 +11,8 @@ import { classifyImage } from '../lib/imageModeration';
 import PostActionMenu from './PostActionMenu';
 import PostReactions from './PostReactions';
 import { getReactions } from '../lib/reactions';
+import RecapCard from './RecapCard';
+import { recapSourceFromPost } from '../lib/recapCard';
 import { MentionInput, MentionText } from './Mentions';
 import { savePostMentions, saveCommentMentions, mentionMapFromRows } from '../lib/mentions';
 
@@ -133,6 +135,11 @@ function PostCard({ post, currentUser, isLiked, reactions, onLike, onCommentChan
         </div>
         {post.content && <p style={{ fontSize: 15, color: C.ice, lineHeight: 1.55, marginBottom: 10, wordBreak: 'break-word' }}><MentionText text={post.content} mentions={postMentionMap} /></p>}
         <MediaDisplay url={post.media_url} type={post.media_type} />
+        {post.recap_for_game_id && (
+          <div style={{ margin: '4px 0 10px' }}>
+            <RecapCard gameId={post.recap_for_game_id} source={recapSourceFromPost(post)} />
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 16, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
           <button onClick={() => onLike(post.id)} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: isLiked ? C.red : C.steel, fontSize: 13, fontFamily: "'Barlow', sans-serif", padding: 0 }}>
             <span style={{ fontSize: 16 }}>{isLiked ? '❤️' : '🤍'}</span>

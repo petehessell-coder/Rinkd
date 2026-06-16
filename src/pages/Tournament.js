@@ -23,6 +23,8 @@ import SeasonGamePucks from '../components/SeasonGamePucks';
 import { MentionInput, MentionText } from '../components/Mentions';
 import { savePostMentions, mentionMapFromRows } from '../lib/mentions';
 import ShareButton from '../components/ShareButton';
+import RecapCard from '../components/RecapCard';
+import { recapSourceFromPost } from '../lib/recapCard';
 import { loadGameCardData } from '../lib/gameCardData';
 
 
@@ -932,6 +934,11 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
                   </button>
                   <span style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{author ? `${author} · ` : ''}{timeAgo(p.created_at)} ago</span>
                 </div>
+                {p.recap_for_game_id && (
+                  <div style={{margin:'4px 0 10px'}}>
+                    <RecapCard gameId={p.recap_for_game_id} source={recapSourceFromPost(p)} />
+                  </div>
+                )}
                 {p.recap_for_game_id && (
                   <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
                     <button
