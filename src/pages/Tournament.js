@@ -613,7 +613,8 @@ export default function TournamentPage({ currentUser }) {
           <>
             <AdSlot slot="stats_presented" targetType="tournament" targetId={tournament.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
             <SeasonGamePucks scope="tournament" id={id} accent={accent} />
-            <StatLeaderboards source="tournament" id={id} accent={accent} />
+            <StatLeaderboards source="tournament" id={id} accent={accent}
+              gamesheetSeasonId={tournament?.scoring_source === 'external' ? (tournament?.settings?.gamesheet_season_id || null) : null} />
           </>
         )}
 

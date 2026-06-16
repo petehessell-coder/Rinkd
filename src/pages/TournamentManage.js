@@ -23,6 +23,7 @@ import SponsorsManager from '../components/SponsorsManager';
 import { supabase } from '../lib/supabase';
 import { getTournamentRegistrations, updateTournamentRegistrationStatus, approveTournamentRegistration } from '../lib/registrations';
 import { tournamentPayoutsReady, startConnectOnboarding } from '../lib/stripeConnect';
+import { listLinks, createLink, setLinkStatus, removeLink, listGameMaps, confirmMatch, ignoreMatch } from '../lib/gamesheet';
 
 const C = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
@@ -30,7 +31,7 @@ const C = {
   green: '#22C55E', amber: '#F59E0B',
 };
 
-const TABS = ['Teams', 'Schedule', 'Bracket', 'Registrations', 'Scorers', 'Suspensions', 'Sponsors', 'Settings'];
+const TABS = ['Teams', 'Schedule', 'Bracket', 'Registrations', 'Scorers', 'Suspensions', 'Sponsors', 'GameSheet', 'Settings'];
 
 const REG_STATUS = {
   pending:    { label: 'Pending',    color: '#F59E0B', bg: 'rgba(245,158,11,0.15)' },
@@ -200,7 +201,8 @@ export default function TournamentManagePage({ currentUser, profile }) {
               clips off-screen. Without the mask, mobile users miss the last tab. */}
           <div style={{ position: 'relative', marginBottom: 18 }}>
             <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${C.border}`, overflowX: 'auto', scrollbarWidth: 'none' }}>
-              {TABS.map((t) => (
+              {/* GameSheet-synced events hide Registrations (poller feeds scores; GameSheet tab manages the link). */}
+              {(tournament?.scoring_source === 'external' ? TABS.filter((t) => t !== 'Registrations') : TABS).map((t) => (
                 <button key={t} onClick={() => setTab(t)}
                   style={{ background: 'transparent', color: tab === t ? C.ice : C.steel, border: 'none', padding: '10px 16px', cursor: 'pointer', fontSize: 13, fontWeight: tab === t ? 700 : 500, borderBottom: tab === t ? `3px solid ${C.red}` : '3px solid transparent', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   {t}
@@ -242,6 +244,7 @@ export default function TournamentManagePage({ currentUser, profile }) {
           {tab === 'Sponsors' && <SponsorsManager ownerType="tournament" ownerId={id} isYouth={tournament.settings?.feature_profile === 'youth_competitive'}
             settings={tournament.settings || {}}
             onSaveSettings={async (partial) => { await updateTournament(id, { settings: { ...(tournament.settings || {}), ...partial } }); await load(); }} />}
+          {tab === 'GameSheet' && <GameSheetTab tournamentId={id} tournament={tournament} games={games} reload={load} flash={showFlash} />}
           {tab === 'Settings' && <SettingsTab tournament={tournament} currentUser={currentUser} reload={load} flash={showFlash} />}
         </div>
       </div>
@@ -1803,3 +1806,196 @@ function SuspensionsTab({ tournamentId, flash, onPendingCount }) {
     </div>
   );
 }
+
+// ====================== GAMESHEET TAB (SOCIAL-2 S3) ======================
+// Director links the Rinkd event to a GameSheet season; the sync-gamesheet cron
+// then mirrors scores in. This tab manages the link + lets the director confirm
+// or ignore the matches the poller queues. (Polling/score-writing is server-side.)
+const GS_MAP_STATUS = {
+  pending:   { label: 'Needs review', color: '#F59E0B', bg: 'rgba(245,158,11,0.15)' },
+  confirmed: { label: 'Synced',       color: '#22C55E', bg: 'rgba(34,197,94,0.15)' },
+  ignored:   { label: 'Ignored',      color: '#8BA3BE', bg: 'rgba(139,163,190,0.15)' },
+};
+
+function GameSheetTab({ tournamentId, tournament, games = [], reload, flash }) {
+  const [links, setLinks] = useState([]);
+  const [maps, setMaps] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [seasonId, setSeasonId] = useState('');
+  const [autoImport, setAutoImport] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [busyMapId, setBusyMapId] = useState(null);
+  // Per-unmatched-row manual game pick (mapId → rinkd_game_id).
+  const [pick, setPick] = useState({});
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [{ data: lk }, { data: mp }] = await Promise.all([
+      listLinks(tournamentId),
+      listGameMaps(tournamentId),
+    ]);
+    setLinks(lk || []); setMaps(mp || []); setLoading(false);
+  }, [tournamentId]);
+  useEffect(() => { load(); }, [load]);
+
+  // Rinkd games by id → "Home vs. Away" for resolving matched/manual rows.
+  const gameLabel = useMemo(() => {
+    const m = {};
+    for (const g of games) m[g.id] = `${g.home_team?.team_name || 'TBD'} vs. ${g.away_team?.team_name || 'TBD'}`;
+    return m;
+  }, [games]);
+  // Games not already mapped — candidates for resolving an unmatched row.
+  const unmappedGames = useMemo(() => {
+    const taken = new Set(maps.filter(m => m.rinkd_game_id && m.status !== 'ignored').map(m => m.rinkd_game_id));
+    return games.filter(g => !taken.has(g.id));
+  }, [games, maps]);
+
+  const addLink = async () => {
+    if (!seasonId.trim()) { flash?.('error', 'Paste the GameSheet season id first.'); return; }
+    setBusy(true);
+    const { error } = await createLink(tournamentId, { seasonId, autoImport });
+    setBusy(false);
+    if (error) { flash?.('error', `Couldn't link: ${error.message}`); return; }
+    flash?.('success', autoImport ? 'Linked — teams, games + scores will sync in automatically.' : 'Linked — scores sync onto your existing schedule (you confirm matches).');
+    setSeasonId(''); reload?.(); load();
+  };
+  const toggleLink = async (lk) => {
+    const { error } = await setLinkStatus(lk.id, lk.status === 'active' ? 'paused' : 'active');
+    if (error) { flash?.('error', error.message); return; }
+    load();
+  };
+  const dropLink = async (lk) => {
+    if (!window.confirm(`Unlink GameSheet season ${lk.gamesheet_season_id}? Scores already synced stay; future syncs stop. If this is the last link, the event returns to manual scoring.`)) return;
+    const { error } = await removeLink(lk.id, tournamentId);
+    if (error) { flash?.('error', error.message); return; }
+    flash?.('success', 'Unlinked.'); reload?.(); load();
+  };
+  const doConfirm = async (m) => {
+    const rid = m.rinkd_game_id || pick[m.id];
+    if (!rid) { flash?.('error', 'Pick the Rinkd game this matches first.'); return; }
+    setBusyMapId(m.id);
+    const { error } = await confirmMatch(m.id, m.rinkd_game_id ? undefined : rid);
+    setBusyMapId(null);
+    if (error) { flash?.('error', error.message); return; }
+    flash?.('success', 'Confirmed — the next sync writes the score.');
+    load();
+  };
+  const doIgnore = async (m) => {
+    setBusyMapId(m.id);
+    const { error } = await ignoreMatch(m.id);
+    setBusyMapId(null);
+    if (error) { flash?.('error', error.message); return; }
+    load();
+  };
+
+  const pending = maps.filter(m => m.status === 'pending');
+  const confirmed = maps.filter(m => m.status === 'confirmed');
+  const hasLink = links.length > 0;
+
+  return (
+    <div>
+      <div style={{ fontSize: 13, color: C.steel, marginBottom: 14, lineHeight: 1.5 }}>
+        Run your event on GameSheet? Link the season and Rinkd mirrors the scores in automatically — standings, stats, the feed + recap pushes all flow off the imported results. No double-entry. {hasLink && tournament?.scoring_source === 'external' && <span style={{ color: C.green }}>This event is in GameSheet-synced mode (manual scoring is off).</span>}
+      </div>
+
+      {/* Link form / current links */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 10 }}>Linked GameSheet seasons</div>
+        {links.map((lk) => (
+          <div key={lk.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid rgba(46,91,140,0.2)' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>
+                Season {lk.gamesheet_season_id}
+                <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 6, color: lk.status === 'active' ? C.green : C.steel, background: lk.status === 'active' ? 'rgba(34,197,94,0.15)' : 'rgba(139,163,190,0.15)' }}>{lk.status === 'active' ? 'ACTIVE' : 'PAUSED'}</span>
+                <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 6, color: C.steel, background: 'rgba(139,163,190,0.12)' }}>{lk.auto_import ? 'AUTO-IMPORT' : 'MATCH-ONLY'}</span>
+              </div>
+              <div style={{ fontSize: 11, color: C.steel, marginTop: 3 }}>
+                {lk.last_synced_at ? `Last sync ${fmtDateTime(lk.last_synced_at)}${lk.last_sync_note ? ` · ${lk.last_sync_note}` : ''}` : 'Waiting for first sync…'}
+              </div>
+            </div>
+            <button onClick={() => toggleLink(lk)} style={btnGhost}>{lk.status === 'active' ? 'Pause' : 'Resume'}</button>
+            <button onClick={() => dropLink(lk)} style={{ ...btnGhost, color: C.red, borderColor: C.red }}>Unlink</button>
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: 8, marginTop: links.length ? 12 : 0 }}>
+          <input value={seasonId} onChange={(e) => setSeasonId(e.target.value)} placeholder="GameSheet season id (e.g. 6416)" style={{ ...inputStyle, flex: 1 }} />
+          <button onClick={addLink} disabled={busy} style={btnPrimary}>{busy ? 'Linking…' : '+ Link season'}</button>
+        </div>
+        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 10, fontSize: 12, color: C.ice, cursor: 'pointer' }}>
+          <input type="checkbox" checked={autoImport} onChange={(e) => setAutoImport(e.target.checked)} style={{ marginTop: 2 }} />
+          <span><b>Auto-create teams &amp; games from GameSheet</b> <span style={{ color: C.steel }}>— recommended. Leave on if you haven&rsquo;t built your schedule in Rinkd; the poller creates the teams + games (with scores) for you. Turn off to match incoming results onto a schedule you&rsquo;ve already set up.</span></span>
+        </label>
+        <div style={{ fontSize: 11, color: C.steel, marginTop: 8, lineHeight: 1.5 }}>
+          Find the id in your GameSheet stats URL: <code style={{ color: C.ice }}>gamesheetstats.com/seasons/<b>6416</b>/scores</code>.
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: 'center', color: C.steel, padding: '24px 0', fontSize: 13 }}>Loading…</div>
+      ) : !hasLink ? null : (
+        <>
+          {/* Pending matches — director confirms before any score is written */}
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 8 }}>
+            Needs review ({pending.length})
+          </div>
+          {pending.length === 0 ? (
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 16, color: C.steel, fontSize: 13 }}>
+              Nothing to review. New GameSheet results show up here for a quick confirm before they post.
+            </div>
+          ) : (
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 16 }}>
+              {pending.map((m, i) => (
+                <div key={m.id} style={{ padding: 12, borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>
+                    {m.gs_home_name} {m.gs_home_goals}–{m.gs_visitor_goals} {m.gs_visitor_name}
+                  </div>
+                  <div style={{ fontSize: 11, color: C.steel, marginTop: 2 }}>
+                    GameSheet · {[m.gs_date, m.gs_time, m.gs_division].filter(Boolean).join(' · ')}
+                  </div>
+                  {m.rinkd_game_id ? (
+                    <div style={{ fontSize: 12, color: C.ice, marginTop: 8 }}>
+                      → matches <b>{gameLabel[m.rinkd_game_id] || 'a Rinkd game'}</b>
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ fontSize: 11, color: C.amber, marginBottom: 4 }}>No automatic match — pick the Rinkd game:</div>
+                      <select value={pick[m.id] || ''} onChange={(e) => setPick(p => ({ ...p, [m.id]: e.target.value }))} style={inputStyle}>
+                        <option value="">— Select game —</option>
+                        {unmappedGames.map(g => <option key={g.id} value={g.id}>{gameLabel[g.id]}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10, justifyContent: 'flex-end' }}>
+                    <button onClick={() => doIgnore(m)} disabled={busyMapId === m.id} style={btnGhost}>Ignore</button>
+                    <button onClick={() => doConfirm(m)} disabled={busyMapId === m.id} style={btnPrimary}>{busyMapId === m.id ? '…' : 'Confirm'}</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Confirmed / synced */}
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 8 }}>
+            Synced ({confirmed.length})
+          </div>
+          {confirmed.length === 0 ? (
+            <div style={{ color: C.steel, fontSize: 13, padding: '4px 0 16px' }}>No games synced yet.</div>
+          ) : (
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+              {confirmed.map((m, i) => (
+                <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>{m.gs_home_name} {m.gs_home_goals}–{m.gs_visitor_goals} {m.gs_visitor_name}</div>
+                    <div style={{ fontSize: 11, color: C.steel, marginTop: 2 }}>{m.rinkd_game_id ? gameLabel[m.rinkd_game_id] : '—'}</div>
+                  </div>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 6, color: GS_MAP_STATUS.confirmed.color, background: GS_MAP_STATUS.confirmed.bg }}>SYNCED</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+

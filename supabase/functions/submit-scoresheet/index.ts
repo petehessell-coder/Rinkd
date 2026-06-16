@@ -62,8 +62,11 @@ async function authorizeAndResolveRecipients(svc, isLeague: boolean, gameId: str
   }
 
   const { data: g } = await svc.from("games")
-    .select("tournament_id, scorekeeper_id, home_team_id, away_team_id").eq("id", gameId).single()
+    .select("tournament_id, scorekeeper_id, home_team_id, away_team_id, tournament:tournaments(scoring_source)").eq("id", gameId).single()
   if (!g) return { status: 404 }
+  // SOCIAL-2: GameSheet-synced events take scores from the poller — block the
+  // manual scoresheet path server-side (defense-in-depth; the UI is also gated).
+  if ((g as any).tournament?.scoring_source === "external") return { status: 409, reason: "external_scoring" }
   let ok = g.scorekeeper_id === userId
   if (!ok) {
     const { data: isDir } = await svc.rpc("is_tournament_director", { p_tournament_id: g.tournament_id, p_user_id: userId })
@@ -108,6 +111,7 @@ serve(async (req) => {
     // manager_emails in the body).
     const authz = await authorizeAndResolveRecipients(svc, !!is_league, game_id, user.id)
     if (authz.status === 404) return json({ error: "game not found" }, 404)
+    if (authz.status === 409) return json({ error: "This event is synced from GameSheet — manual scoresheets are disabled." }, 409)
     if (authz.status === 403) return json({ error: "forbidden" }, 403)
     const recipientEmails: string[] = authz.emails || []
 

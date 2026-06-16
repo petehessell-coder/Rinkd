@@ -165,7 +165,44 @@ function ArchivedStats({ archived, accent }) {
   );
 }
 
-export default function StatLeaderboards({ source = 'tournament', id, accent = '#D72638', archived = null }) {
+// SOCIAL-2: GameSheet-synced tournaments don't have native goal/lineup rows, so
+// the jersey-keyed RPC boards would be empty. Instead we embed GameSheet's own
+// player/goalie stats widget, recolored + branding-stripped — accurate, zero
+// ingestion. Fails soft to an external link if the frame doesn't load.
+function GameSheetStatsEmbed({ seasonId, accent = '#D72638' }) {
+  const [view, setView] = useState('players');
+  const hex = String(accent || '#D72638').replace('#', '');
+  const base = `https://gamesheetstats.com/seasons/${encodeURIComponent(seasonId)}/${view}`;
+  const src = `${base}?configuration[logo]=false&configuration[navigation]=false&configuration[primary-colour]=${hex}`;
+  const Tab = ({ tid, label }) => (
+    <button onClick={() => setView(tid)} style={{
+      flex: 1, padding: '8px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+      fontFamily: 'Barlow, sans-serif', borderRadius: 9, border: 'none',
+      background: view === tid ? accent : 'rgba(46,91,140,0.18)',
+      color: view === tid ? '#fff' : 'rgba(244,247,250,0.6)',
+    }}>{label}</button>
+  );
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <Tab tid="players" label="Skaters" />
+        <Tab tid="goalies" label="Goalies" />
+      </div>
+      <iframe
+        key={view}
+        title="GameSheet stats"
+        src={src}
+        style={{ width: '100%', height: 640, border: '0.5px solid rgba(46,91,140,0.4)', borderRadius: 12, background: '#fff' }}
+      />
+      <div style={{ fontSize: 11, color: C.faint, marginTop: 8, display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        <span>Stats synced live from GameSheet.</span>
+        <a href={base} target="_blank" rel="noreferrer" style={{ color: accent, fontWeight: 700 }}>Open on GameSheet ↗</a>
+      </div>
+    </div>
+  );
+}
+
+export default function StatLeaderboards({ source = 'tournament', id, accent = '#D72638', archived = null, gamesheetSeasonId = null }) {
   const cfg = RPC[source] || RPC.tournament;
   const [view, setView] = useState('skaters');
   const [season, setSeason] = useState('current'); // 'current' | 'archive'
@@ -217,6 +254,12 @@ export default function StatLeaderboards({ source = 'tournament', id, accent = '
     if (!hasLive) setSeason('archive');
     setSeasonPicked(true);
   }, [loading, seasonPicked, hasArchive, hasLive]);
+
+  // SOCIAL-2: external (GameSheet-synced) events embed GameSheet's widget instead
+  // of the native boards (after all hooks, to respect rules-of-hooks).
+  if (gamesheetSeasonId) {
+    return <GameSheetStatsEmbed seasonId={gamesheetSeasonId} accent={accent} />;
+  }
 
   if (loading) {
     return <div style={{ textAlign: 'center', color: C.faint, fontSize: 13, paddingTop: 40 }}>Loading stats…</div>;
