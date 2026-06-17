@@ -101,11 +101,18 @@ export async function getLeaguePosts(leagueId, limit = 50) {
 }
 
 // Auto-recap post on game finalize. Idempotent: re-finalize after a Reopen
-// updates the existing recap row (kept unique by posts_recap_for_game_id_unique_idx)
-// rather than spamming the global feed with a second recap. Tournament games
-// only for the pilot; league + team game variants can plug in later by
-// extending the caller's content builder. Always tagged "Game Recap" so it
-// renders with the blue tag stripe in Feed and TeamFeed.
+// updates the existing recap row (kept unique by the matching partial unique
+// index) rather than spamming the feed with a second recap. Always tagged
+// "Game Recap" so it renders with the blue tag stripe in Feed and TeamFeed.
+//
+// Two game id-spaces: tournament `games` (keyed on recap_for_game_id) and
+// `league_games` (keyed on recap_for_league_game_id). The caller signals which
+// by passing tournamentId vs leagueId — a league recap MUST NOT write the
+// league_games id into recap_for_game_id, whose FK points at games(id) and
+// would reject it (this is why league recaps were silently failing before
+// recap_for_league_game_id existed). The poller's postLeagueRecapAndPush
+// targets the same recap_for_league_game_id column, so both paths stay
+// idempotent against one recap per league game.
 const GAME_RECAP_TAG = 'Game Recap';
 const GAME_RECAP_TAG_COLOR = '#2E5B8C';
 
@@ -113,13 +120,16 @@ export async function createGameRecapPost({ scorerId, gameId, content, tournamen
   if (!scorerId || !gameId || !content) {
     return { data: null, error: new Error('createGameRecapPost requires scorerId, gameId, and content') };
   }
+  // Pick the recap key column by id-space: league games → recap_for_league_game_id,
+  // tournament/global games → recap_for_game_id.
+  const recapCol = leagueId ? 'recap_for_league_game_id' : 'recap_for_game_id';
   // Look for an existing recap. Single round-trip is fine — the partial unique
   // index makes this an indexed lookup, and the volume is tiny (one row per
   // finalized game).
   const { data: existing, error: lookupErr } = await supabase
     .from('posts')
     .select('id, author_id')
-    .eq('recap_for_game_id', gameId)
+    .eq(recapCol, gameId)
     .maybeSingle();
   if (lookupErr) return { data: null, error: lookupErr };
 
@@ -146,7 +156,7 @@ export async function createGameRecapPost({ scorerId, gameId, content, tournamen
       content,
       tag: GAME_RECAP_TAG,
       tag_color: GAME_RECAP_TAG_COLOR,
-      recap_for_game_id: gameId,
+      [recapCol]: gameId,
       tournament_id: tournamentId,
       league_id: leagueId,
       likes: 0,
