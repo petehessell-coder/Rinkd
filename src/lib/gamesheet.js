@@ -93,3 +93,78 @@ export async function ignoreMatch(mapId) {
     .eq('id', mapId);
   return { error };
 }
+
+/**
+ * GAMESHEET-LEAGUES-1 — league variants of the link/map helpers. Deliberately
+ * parallel to the tournament ones above (gamesheet_links is owner-polymorphic:
+ * tournament_id XOR league_id). Reads/writes here are gated by the commissioner
+ * RLS (gamesheet_links_commish_all / gamesheet_game_map_commish_all). The actual
+ * polling/score-writing is done server-side by `sync-gamesheet`'s league pass.
+ * setLinkStatus / confirmMatch / ignoreMatch are owner-agnostic (id-based) and
+ * are reused as-is — no league-specific copies needed.
+ *
+ * Leagues have no `scoring_source='external'` gate (unlike tournaments), so a
+ * league link doesn't flip a manual-scoring switch — the commissioner can still
+ * enter scores by hand; the poller just keeps the synced games in sync.
+ */
+export async function listLeagueLinks(leagueId) {
+  const { data, error } = await supabase
+    .from('gamesheet_links')
+    .select('id, league_id, league_division_id, gamesheet_season_id, status, auto_import, last_synced_at, last_sync_note, created_at')
+    .eq('league_id', leagueId)
+    .order('created_at', { ascending: true });
+  return { data: data || [], error };
+}
+
+// Create a league link. autoImport (default true): the poller creates league
+// teams + games (with scores) from GameSheet for anything it can't match to an
+// existing league game — so the commissioner doesn't have to rebuild their
+// schedule first. divisionId (optional) scopes the link to one league division.
+export async function createLeagueLink(leagueId, { seasonId, divisionId = null, autoImport = true }) {
+  const sid = String(seasonId || '').trim();
+  if (!sid) return { data: null, error: new Error('A GameSheet season id is required') };
+  const { data, error } = await supabase
+    .from('gamesheet_links')
+    .insert({ league_id: leagueId, league_division_id: divisionId || null, gamesheet_season_id: sid, status: 'active', auto_import: !!autoImport })
+    .select()
+    .single();
+  if (error) return { data: null, error };
+  // Stash the season id in the league's public settings JSONB (mirror of the
+  // tournament create) so a public embed can read it without touching the
+  // commissioner-only gamesheet_links table.
+  const { data: lRow } = await supabase.from('leagues').select('settings').eq('id', leagueId).single();
+  const mergedSettings = { ...(lRow?.settings || {}), gamesheet_season_id: sid };
+  await supabase.from('leagues').update({ settings: mergedSettings }).eq('id', leagueId);
+  return { data, error: null };
+}
+
+// Remove a league link. If it was the last link on the league, clear the stashed
+// season id from settings.
+export async function removeLeagueLink(linkId, leagueId) {
+  const { error } = await supabase.from('gamesheet_links').delete().eq('id', linkId);
+  if (error) return { error };
+  const { data: remaining } = await supabase
+    .from('gamesheet_links').select('id').eq('league_id', leagueId).limit(1);
+  if (!remaining || remaining.length === 0) {
+    const { data: lRow } = await supabase.from('leagues').select('settings').eq('id', leagueId).single();
+    const s = { ...(lRow?.settings || {}) };
+    delete s.gamesheet_season_id;
+    await supabase.from('leagues').update({ settings: s }).eq('id', leagueId);
+  }
+  return { error: null };
+}
+
+// All map rows for a league's links, newest first (mirror of listGameMaps).
+export async function listLeagueGameMaps(leagueId) {
+  const { data: links } = await supabase
+    .from('gamesheet_links').select('id').eq('league_id', leagueId);
+  const ids = (links || []).map(l => l.id);
+  if (ids.length === 0) return { data: [], error: null };
+  const { data, error } = await supabase
+    .from('gamesheet_game_map')
+    .select('id, link_id, rinkd_game_id, gamesheet_game_id, status, gs_home_name, gs_visitor_name, gs_division, gs_date, gs_time, gs_home_goals, gs_visitor_goals, updated_at')
+    .in('link_id', ids)
+    .order('status', { ascending: true })
+    .order('updated_at', { ascending: false });
+  return { data: data || [], error };
+}
