@@ -150,12 +150,29 @@ function mapGsRound(g: any): string | null {
   return 'pool';
 }
 
-// After a semifinal is written final from ANY source, advance the bracket:
-// resolve_tournament_bracket fills the final + consolation slots from the two
-// semis (idempotent, shootout-aware). On the turn it actually resolves, post a
-// "Final set" recap so followers get the matchup. No-op for non-semis / no pool.
+// After a bracket game is written final from ANY source, advance the bracket
+// and (on the turn the final matchup locks) post a "Final set" recap.
+// Two bracket models coexist:
+//   - General single-elim (BRACKET-GEN-2): the game carries bracket_round, so
+//     advance_tournament_bracket propagates winners up the (round,slot) tree +
+//     fills the 3rd-place game. Fires after ANY bracket game finalizes.
+//   - Legacy 4-team-per-pool: bracket_round is null; resolve_tournament_bracket
+//     pairs the two semis by pool. Unchanged so live/old brackets keep working.
 async function maybeAdvanceBracket(supabase: Sb, link: any,
-  g: { round: string | null; pool: string | null; division_id: string | null }): Promise<number> {
+  g: { round: string | null; pool: string | null; division_id: string | null; bracket_round: number | null }): Promise<number> {
+  if (g.bracket_round != null) {
+    const { data, error } = await supabase.rpc('advance_tournament_bracket', {
+      p_tournament_id: link.tournament_id, p_division_id: g.division_id ?? null,
+    });
+    if (error) { console.error('[gamesheet] bracket advance v2 fail', error); return 0; }
+    const fm = (data as any)?.final_matchup;
+    if (!fm?.game_id) return 0;
+    await postRecapAndPush(supabase, {
+      rinkdGameId: fm.game_id, tournamentId: link.tournament_id, directorId: link.director_id,
+      content: `🏒 FINAL SET · ${fm.home} vs ${fm.away}\nThe championship matchup is locked.`,
+    });
+    return 1;
+  }
   if (g.round !== 'semifinal' || !g.pool) return 0;
   const { data, error } = await supabase.rpc('resolve_tournament_bracket', {
     p_tournament_id: link.tournament_id, p_pool: g.pool, p_division_id: g.division_id ?? null,
@@ -173,12 +190,12 @@ type RinkdGame = {
   id: string; division_id: string | null; status: string;
   home_score: number | null; away_score: number | null; start_time: string | null;
   home_name: string; away_name: string;
-  round: string | null; pool: string | null;
+  round: string | null; pool: string | null; bracket_round: number | null;
 };
 
 async function loadRinkdGames(supabase: Sb, tournamentId: string, divisionId: string | null): Promise<RinkdGame[]> {
   let q = supabase.from('games')
-    .select('id, division_id, status, home_score, away_score, start_time, round, pool, home_team:tournament_teams!home_team_id(team_name), away_team:tournament_teams!away_team_id(team_name)')
+    .select('id, division_id, status, home_score, away_score, start_time, round, pool, bracket_round, home_team:tournament_teams!home_team_id(team_name), away_team:tournament_teams!away_team_id(team_name)')
     .eq('tournament_id', tournamentId);
   if (divisionId) q = q.eq('division_id', divisionId);
   const { data, error } = await q;
@@ -187,7 +204,7 @@ async function loadRinkdGames(supabase: Sb, tournamentId: string, divisionId: st
     id: g.id, division_id: g.division_id, status: g.status,
     home_score: g.home_score, away_score: g.away_score, start_time: g.start_time,
     home_name: g.home_team?.team_name ?? '', away_name: g.away_team?.team_name ?? '',
-    round: g.round ?? null, pool: g.pool ?? null,
+    round: g.round ?? null, pool: g.pool ?? null, bracket_round: g.bracket_round ?? null,
   }));
 }
 
@@ -195,6 +212,11 @@ async function syncLink(supabase: Sb, link: any): Promise<Record<string, number>
   const stats = { scored: 0, updated: 0, recaps: 0, pending: 0, unmatched: 0, imported: 0, skipped: 0 };
   const gsGames = await fetchSeasonScores(String(link.gamesheet_season_id));
   const rinkdGames = await loadRinkdGames(supabase, link.tournament_id, link.division_id);
+  // Once a bracket exists, pool play is over — never auto-import a stray "pool"
+  // game from an incoming playoff result. It either matches an existing bracket
+  // slot (by team names, once advancement fills them) or queues pending for the
+  // director. Pre-bracket pool play is unaffected (hasBracket is false then).
+  const hasBracket = rinkdGames.some(r => r.bracket_round != null);
 
   const { data: maps } = await supabase
     .from('gamesheet_game_map').select('*').eq('link_id', link.id);
@@ -257,11 +279,11 @@ async function syncLink(supabase: Sb, link: any): Promise<Record<string, number>
           });
           stats.recaps++;
         }
-        // Bracket advance: if this matched game is a semifinal now final, fill
-        // the final + consolation slots (director pre-built the bracket). Works
-        // even though ScorerView's client-side resolver never runs in external mode.
+        // Bracket advance: if this matched game belongs to a bracket, advance it
+        // (general single-elim tree, or legacy 4-team pool). Works even though
+        // ScorerView's client-side resolver never runs in external mode.
         stats.recaps += await maybeAdvanceBracket(supabase, link,
-          { round: rg.round, pool: rg.pool, division_id: rg.division_id });
+          { round: rg.round, pool: rg.pool, division_id: rg.division_id, bracket_round: rg.bracket_round });
       }
       await supabase.from('gamesheet_game_map')
         .update({ gs_home_goals: gHomeGoals, gs_visitor_goals: gAwayGoals, updated_at: new Date().toISOString() })
@@ -287,8 +309,8 @@ async function syncLink(supabase: Sb, link: any): Promise<Record<string, number>
     // mapGsRound returns null for an ambiguous playoff (quarterfinal / generic) —
     // don't fabricate a round (would violate games_round_check); fall through to a
     // pending row so the director can place it against a pre-built bracket.
-    const importRound = (!matched && link.auto_import) ? mapGsRound(g) : null;
-    if (!matched && link.auto_import && importRound !== null) {
+    const importRound = (!matched && link.auto_import && !hasBracket) ? mapGsRound(g) : null;
+    if (!matched && link.auto_import && !hasBracket && importRound !== null) {
       const homeId = await findOrCreateTeam(gHome);
       const awayId = await findOrCreateTeam(gAway);
       if (homeId && awayId) {

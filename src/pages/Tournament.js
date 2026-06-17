@@ -414,7 +414,15 @@ export default function TournamentPage({ currentUser }) {
   const liveGames = games.filter(g => g.status === 'live'); // header badge stays event-wide
   const finalGames = divisionGames.filter(g => g.status === 'final');
   const scheduledGames = divisionGames.filter(g => g.status === 'scheduled');
-  const bracketGames = divisionGames.filter(g => g.round && g.round !== 'pool');
+  // Bracket games ordered by tree position (round_of_16 → QF → SF → Final →
+  // 3rd place). New brackets carry bracket_round/slot; legacy ones fall back to
+  // their natural (start_time) order since bracket_round is null.
+  const bracketGames = divisionGames
+    .filter(g => g.round && g.round !== 'pool')
+    .slice()
+    .sort((a, b) =>
+      ((a.bracket_round ?? 999) - (b.bracket_round ?? 999)) ||
+      ((a.bracket_slot ?? 0) - (b.bracket_slot ?? 0)));
   const adv = divSettings?.advancement_per_pool ?? 2;
   // Tiebreaker config drives which standings columns to show. Default to
   // BLPA Bash order so older tournaments without an explicit list render
@@ -686,7 +694,24 @@ export default function TournamentPage({ currentUser }) {
                     {tournament?.name && <div style={{fontSize:11,color:'rgba(244,247,250,0.5)',marginTop:6}}>{tournament.name}</div>}
                   </div>
                 )}
-                {bracketGames.map(g => <GameCard key={g.id} game={g} navigate={navigate} canScore={canScore} />)}
+                {(() => {
+                  // Group the (already round-ordered) bracket games under round
+                  // headers so the list reads like a bracket.
+                  const PRETTY = { round_of_16: 'Round of 16', quarterfinal: 'Quarterfinals', semifinal: 'Semifinals', final: 'Final', championship: 'Final', consolation: '3rd place' };
+                  const groups = [];
+                  for (const g of bracketGames) {
+                    const label = PRETTY[g.round] || g.round;
+                    let grp = groups[groups.length - 1];
+                    if (!grp || grp.label !== label) { grp = { label, games: [] }; groups.push(grp); }
+                    grp.games.push(g);
+                  }
+                  return groups.map(grp => (
+                    <div key={grp.label}>
+                      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', color: 'rgba(244,247,250,0.45)', textTransform: 'uppercase', margin: '14px 0 6px' }}>{grp.label}</div>
+                      {grp.games.map(g => <GameCard key={g.id} game={g} navigate={navigate} canScore={canScore} />)}
+                    </div>
+                  ));
+                })()}
               </>
         )}
 

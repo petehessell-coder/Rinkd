@@ -836,12 +836,22 @@ export default function ScorerView() {
         console.warn('[scorer] recap post failed; game still finalized:', e?.message || e);
       }
 
-      // If this was a semifinal, try to advance the bracket — fill the
-      // gold game (winners) and bronze game (losers) with the resolved
-      // teams. Idempotent and pool-scoped so it only touches the bracket
-      // that includes this semi. Failure logs but never blocks the
-      // finalize itself.
-      if (game.round === 'semifinal' && game.pool) {
+      // Advance the bracket after a bracket game finalizes (same as the synced
+      // path). New general single-elim brackets carry bracket_round, so
+      // advance_tournament_bracket propagates winners up the whole tree and
+      // fills the 3rd-place game. Legacy 4-team-per-pool brackets use the
+      // pool-scoped resolver. Idempotent; failure logs but never blocks finalize.
+      if (game.bracket_round != null) {
+        try {
+          const { error: advErr } = await supabase.rpc('advance_tournament_bracket', {
+            p_tournament_id: game.tournament_id, p_division_id: game.division_id ?? null,
+          });
+          if (advErr) console.warn('[scorer] bracket advance failed:', advErr.message);
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.warn('[scorer] bracket advance threw:', e?.message || e);
+        }
+      } else if (game.round === 'semifinal' && game.pool) {
         try {
           const { error: resolveErr } = await resolveBracketSlotsFromSemis(game.tournament_id, game.pool, game.division_id);
           if (resolveErr) console.warn('[scorer] bracket auto-fill failed:', resolveErr.message);

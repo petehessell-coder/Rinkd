@@ -475,6 +475,170 @@ export async function resolveBracketSlotsFromSemis(tournamentId, pool, divisionI
   return { updated: updates.length, error: null };
 }
 
+// ============================================================================
+// GENERAL SINGLE-ELIMINATION BRACKET (BRACKET-GEN-2) — any size 4/8/16.
+//
+// Why this exists alongside generateChampionshipBracket: the legacy generator
+// only does the 4-team-per-pool pattern (semi/semi → final + bronze) and the
+// advancement is paired by start_time. This one builds a real single-elim TREE
+// of arbitrary size, encoding topology explicitly on each game so advancement
+// is structural and name-agnostic:
+//   - bracket_round: 1 = first round PLAYED (largest), counting up to the final
+//   - bracket_slot:  0-indexed position within that round
+//   - bracket_size:  N (number of seeds), stored on every bracket game
+//   Winner of (round r, slot s) advances to (round r+1, slot floor(s/2)),
+//   HOME if s is even, AWAY if s is odd. The lone game in the top round is the
+//   final; the 3rd-place game (round='consolation') is fed by the two
+//   semifinal losers. The DB twin advance_tournament_bracket() does the
+//   propagation; these pure helpers only lay out the skeleton.
+//
+// External sources (GameSheet/HockeyShift) expose NO bracket topology, so the
+// structure is always native: seeded from the standings we compute off synced
+// games, confirmed once by the director, then auto-filled as scores sync.
+// ============================================================================
+
+export const BRACKET_SIZES = [4, 8, 16]; // powers of two supported in v1 (no byes yet)
+
+// Standard single-elimination seeding order for a power-of-two field. Returns
+// the seed NUMBERS (1-indexed) in bracket order; consecutive pairs are the
+// round-1 matchups. Built so the top two seeds can only meet in the final.
+//   4  -> [1,4,2,3]                  (1v4, 2v3)
+//   8  -> [1,8,4,5,2,7,3,6]          (1v8, 4v5, 2v7, 3v6)
+//   16 -> [1,16,8,9,4,13,5,12,2,15,7,10,3,14,6,11]
+export function seedOrder(n) {
+  let seeds = [1, 2];
+  while (seeds.length < n) {
+    const sum = seeds.length * 2 + 1; // each round pairs seed s with (sum - s)
+    const next = [];
+    for (const s of seeds) { next.push(s); next.push(sum - s); }
+    seeds = next;
+  }
+  return seeds;
+}
+
+// Display/label for a bracket round given its number and the bracket's total
+// rounds (T = log2(size)). distance-from-final 0=final, 1=semi, 2=quarter, 3=R16.
+export function roundLabelFor(bracketRound, totalRounds) {
+  const d = totalRounds - bracketRound;
+  if (d === 0) return 'final';
+  if (d === 1) return 'semifinal';
+  if (d === 2) return 'quarterfinal';
+  if (d === 3) return 'round_of_16';
+  return 'round_of_16'; // v1 caps at 16; deeper rounds would extend here
+}
+
+// Human-readable round label for the UI (maps the stored token).
+export const PRETTY_ROUND = {
+  pool: 'Pool play', round_of_16: 'Round of 16', quarterfinal: 'Quarterfinal',
+  semifinal: 'Semifinal', final: 'Final', consolation: '3rd place',
+};
+
+// Propose a seed order from the standings view rows: overall (cross-pool) rank
+// by points, then goal differential, then goals for. Director can reorder
+// before confirming — this is only the default proposal. Returns team rows
+// (whatever columns the caller selected) sorted best-first.
+export function proposeSeeds(standingsRows) {
+  return [...(standingsRows || [])].sort((a, b) =>
+    (Number(b.pts || 0) - Number(a.pts || 0)) ||
+    (Number(b.goal_diff || 0) - Number(a.goal_diff || 0)) ||
+    (Number(b.gf || 0) - Number(a.gf || 0)) ||
+    String(a.team_name || '').localeCompare(String(b.team_name || '')));
+}
+
+// Pure: lay out every game row of a single-elim bracket of size N from an
+// ordered list of seed team ids (seedTeamIds[0] = the #1 seed). Round-1 games
+// carry real teams; later rounds start as TBD (NULL/NULL) and fill via
+// advancement. Includes a 3rd-place game unless thirdPlace=false. Caller inserts
+// the returned rows into `games`.
+export function buildBracketRows(tournamentId, divisionId, seedTeamIds, opts = {}) {
+  const N = seedTeamIds.length;
+  if (!BRACKET_SIZES.includes(N)) {
+    throw new Error(`Bracket size must be one of ${BRACKET_SIZES.join('/')} (got ${N}).`);
+  }
+  const { startTime = null, rinkId = null, gameMinutes = 60, thirdPlace = true } = opts;
+  const totalRounds = Math.log2(N);
+  const order = seedOrder(N);               // seed numbers in bracket order
+  const team = (seedNum) => seedTeamIds[seedNum - 1] ?? null;
+  // games.start_time is NOT NULL — always emit a real timestamp. Default to now
+  // when the director didn't pick one (they can edit times per game afterward).
+  const baseStart = startTime ? new Date(startTime) : new Date();
+  const slotMin = parseInt(gameMinutes, 10) || 60;
+  const rows = [];
+  let seq = 0;
+  const startFor = () => new Date(baseStart.getTime() + (seq++) * slotMin * 60_000).toISOString();
+
+  // Round 1: real matchups, ordered so #1 and #2 are on opposite halves.
+  for (let slot = 0; slot < N / 2; slot++) {
+    rows.push({
+      tournament_id: tournamentId, division_id: divisionId,
+      round: roundLabelFor(1, totalRounds), bracket_round: 1, bracket_slot: slot, bracket_size: N,
+      home_team_id: team(order[slot * 2]), away_team_id: team(order[slot * 2 + 1]),
+      status: 'scheduled', start_time: startFor(), rink_id: rinkId, pool: null,
+    });
+  }
+  // Rounds 2..T: TBD games that fill by advancement.
+  for (let r = 2; r <= totalRounds; r++) {
+    const gamesInRound = N / Math.pow(2, r);
+    for (let slot = 0; slot < gamesInRound; slot++) {
+      rows.push({
+        tournament_id: tournamentId, division_id: divisionId,
+        round: roundLabelFor(r, totalRounds), bracket_round: r, bracket_slot: slot, bracket_size: N,
+        home_team_id: null, away_team_id: null,
+        status: 'scheduled', start_time: startFor(), rink_id: rinkId, pool: null,
+      });
+    }
+  }
+  // 3rd-place game: fed by the two semifinal losers. Lives in the top round
+  // (slot 1, beside the final) so it renders last and never reads as the final.
+  if (thirdPlace && totalRounds >= 2) {
+    rows.push({
+      tournament_id: tournamentId, division_id: divisionId,
+      round: 'consolation', bracket_round: totalRounds, bracket_slot: 1, bracket_size: N,
+      home_team_id: null, away_team_id: null,
+      status: 'scheduled', start_time: startFor(), rink_id: rinkId, pool: null,
+    });
+  }
+  return rows;
+}
+
+// Seed candidates for the general bracket: every team in the division's
+// standings, ordered best-first (overall, cross-pool) by proposeSeeds. The UI
+// proposes the top N as seeds and lets the director reorder before confirming.
+export async function loadBracketSeedCandidates(tournamentId, divisionId = null) {
+  let q = supabase
+    .from(STANDINGS_VIEW)
+    .select('team_id, team_name, pool, pts, goal_diff, gf, wins, losses, ties')
+    .eq('tournament_id', tournamentId);
+  if (divisionId) q = q.eq('division_id', divisionId);
+  const { data } = await q;
+  return proposeSeeds(data || []);
+}
+
+// Generate + insert a general single-elim bracket. seedTeamIds is the
+// director-confirmed seed order (top N teams, best first). Refuses to run if a
+// bracket already exists for the division (delete first to regenerate).
+export async function generateBracketV2(tournamentId, { divisionId = null, seedTeamIds, startTime = null, rinkId = null, gameMinutes = 60, thirdPlace = true }) {
+  if (!Array.isArray(seedTeamIds) || !BRACKET_SIZES.includes(seedTeamIds.length)) {
+    return { inserted: 0, error: new Error(`Pick ${BRACKET_SIZES.join(', ')} teams to seed the bracket.`) };
+  }
+  if (seedTeamIds.some((id) => !id)) {
+    return { inserted: 0, error: new Error('Every seed needs a team — fill all slots before generating.') };
+  }
+  // Guard against double-generation (scope to division for multi-division events).
+  let existingQ = supabase.from('games').select('id').eq('tournament_id', tournamentId).neq('round', 'pool');
+  if (divisionId) existingQ = existingQ.eq('division_id', divisionId);
+  const { data: existing } = await existingQ;
+  if (existing && existing.length > 0) {
+    return { inserted: 0, error: new Error(`A bracket already exists (${existing.length} game${existing.length === 1 ? '' : 's'}). Delete it before regenerating.`) };
+  }
+  let rows;
+  try { rows = buildBracketRows(tournamentId, divisionId, seedTeamIds, { startTime, rinkId, gameMinutes, thirdPlace }); }
+  catch (e) { return { inserted: 0, error: e }; }
+  const { data, error } = await supabase.from('games').insert(rows).select('id');
+  if (error) return { inserted: 0, error };
+  return { inserted: data?.length || 0, error: null };
+}
+
 // ------------------------------ Misc ------------------------------
 
 export async function updateTournament(tournamentId, fields) {

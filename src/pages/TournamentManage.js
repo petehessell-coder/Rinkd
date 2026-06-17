@@ -9,7 +9,7 @@ import {
   loadPoolQualifiers, createBracketGame,
   updateTournament,
   listStandingsSummary,
-  generateChampionshipBracket,
+  generateBracketV2, loadBracketSeedCandidates, BRACKET_SIZES,
   recordForfeit,
 } from '../lib/tournamentManage';
 import {
@@ -887,11 +887,11 @@ function BracketTab({ tournamentId, tournament, divSettings, teams, games, divis
         </div>
       </div>
 
-      {/* Auto-generate championship bracket — the BLPA "4-team-per-pool"
-          pattern. Each pool with 4 teams gets 4 games: 2 semis (2v3, 1v4),
-          a gold game (semi winners), and a bronze game (semi losers).
-          Gold/bronze start with TBD teams and fill in when semis finalize. */}
-      <ChampionshipBracketGenerator tournamentId={tournamentId} divisionId={divisionId} teams={teams} bracketGames={bracketGames} reload={reload} flash={flash} rinks={rinks} />
+      {/* Auto-build the playoff bracket (BRACKET-GEN-2): general single-elim of
+          size 4/8/16, seeded from the standings we compute off synced games.
+          Director confirms seeds + size once; the poller then fills scores and
+          advances winners up the tree automatically. */}
+      <PlayoffBracketBuilder tournamentId={tournamentId} divisionId={divisionId} games={games} bracketGames={bracketGames} reload={reload} flash={flash} rinks={rinks} />
 
       {/* Add bracket game */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 18 }}>
@@ -902,11 +902,11 @@ function BracketTab({ tournamentId, tournament, divSettings, teams, games, divis
           <div>
             <label style={labelStyle}>Round</label>
             <select value={round} onChange={(e) => setRound(e.target.value)} style={inputStyle}>
+              <option value="round_of_16">Round of 16</option>
               <option value="quarterfinal">Quarterfinal</option>
               <option value="semifinal">Semifinal</option>
               <option value="final">Final</option>
-              <option value="consolation">Consolation</option>
-              <option value="bronze">Bronze Medal</option>
+              <option value="consolation">3rd place</option>
             </select>
           </div>
           <div>
@@ -984,102 +984,151 @@ function BracketTab({ tournamentId, tournament, divSettings, teams, games, divis
   );
 }
 
-// ====================== CHAMPIONSHIP BRACKET GENERATOR ======================
-// Self-contained sub-component for the Bracket tab. Reads the current
-// pool-play status and either offers a "Generate Championship Bracket"
-// button (when all pool games are final + no bracket games yet) or shows
-// a status hint ("Waiting on N pool games" / "Bracket already generated").
-function ChampionshipBracketGenerator({ tournamentId, divisionId = null, teams, bracketGames, reload, flash, rinks }) {
+// ====================== PLAYOFF BRACKET BUILDER (BRACKET-GEN-2) ======================
+// General single-elimination bracket of size 4/8/16. Surfaces once pool play is
+// done (or anytime, with a warning), proposes seeds from the division's
+// standings (overall: pts → goal-diff → goals-for), lets the director reorder
+// and pick the size, then generates the full skeleton via generateBracketV2.
+// External sources expose no bracket topology, so structure is always native;
+// the sync-gamesheet poller fills scores and advances winners automatically.
+function PlayoffBracketBuilder({ tournamentId, divisionId = null, games, bracketGames, reload, flash, rinks }) {
   const [open, setOpen] = useState(false);
+  const [order, setOrder] = useState([]);   // working seed order (reorderable team rows)
+  const [size, setSize] = useState(null);
   const [start, setStart] = useState('');
   const [rinkId, setRinkId] = useState('');
   const [gameMinutes, setGameMinutes] = useState(60);
+  const [thirdPlace, setThirdPlace] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  // Count pools that have exactly 4 teams. The 4-team pattern is what this
-  // generator supports; other shapes fall back to manual entry below.
-  const poolSummary = useMemo(() => {
-    const byPool = teams.reduce((acc, t) => {
-      if (!t.pool) return acc;
-      acc[t.pool] = (acc[t.pool] || 0) + 1;
-      return acc;
-    }, {});
-    const fourTeamPools = Object.entries(byPool).filter(([, n]) => n === 4).map(([p]) => p);
-    const otherPools    = Object.entries(byPool).filter(([, n]) => n !== 4);
-    return { fourTeamPools, otherPools, totalPools: Object.keys(byPool).length };
-  }, [teams]);
-
   const alreadyGenerated = bracketGames.length > 0;
-  const eligible = poolSummary.fourTeamPools.length > 0;
 
-  if (!eligible && !alreadyGenerated) {
-    // Nothing to surface — Tournaments with non-4-team pools use the manual
-    // "Add Bracket Game" form below.
-    return null;
-  }
+  // Pool-play readiness: at least one pool game and all pool games final.
+  const poolGames = useMemo(() => games.filter((g) => (g.round || 'pool') === 'pool'), [games]);
+  const finalPool = useMemo(() => poolGames.filter((g) => g.status === 'final').length, [poolGames]);
+  const poolComplete = poolGames.length > 0 && finalPool === poolGames.length;
+
+  // Propose seeds when the builder is relevant (pool play progresses).
+  useEffect(() => {
+    if (alreadyGenerated) return;
+    (async () => {
+      const rows = await loadBracketSeedCandidates(tournamentId, divisionId);
+      setOrder(rows);
+      const fits = BRACKET_SIZES.filter((n) => n <= rows.length);
+      setSize(fits.length ? fits[fits.length - 1] : null);
+    })();
+  }, [tournamentId, divisionId, finalPool, alreadyGenerated]);
+
+  const move = (i, dir) => setOrder((prev) => {
+    const j = i + dir;
+    if (j < 0 || j >= prev.length) return prev;
+    const next = [...prev];
+    [next[i], next[j]] = [next[j], next[i]];
+    return next;
+  });
 
   const handleGenerate = async () => {
-    if (!start) { flash?.('error', 'Pick a start time for the first semifinal.'); return; }
+    if (!size) { flash?.('error', 'Need at least 4 teams in the standings to seed a bracket.'); return; }
+    const seedTeamIds = order.slice(0, size).map((t) => t.team_id);
     setBusy(true);
-    const { inserted, error, poolsCovered } = await generateChampionshipBracket(tournamentId, {
-      startTime: new Date(start).toISOString(),
+    const { inserted, error } = await generateBracketV2(tournamentId, {
+      divisionId, seedTeamIds,
+      startTime: start ? new Date(start).toISOString() : null,
       rinkId: rinkId || null,
       gameMinutes: parseInt(gameMinutes, 10) || 60,
-      divisionId,
+      thirdPlace,
     });
     setBusy(false);
     if (error) { flash?.('error', `Bracket generation failed: ${error.message}`); return; }
-    flash?.('success', `Generated ${inserted} bracket games across ${poolsCovered.length} pool${poolsCovered.length === 1 ? '' : 's'}.`);
+    flash?.('success', `Built a ${size}-team bracket (${inserted} games). Scores + advancement fill in automatically.`);
     setOpen(false);
     reload();
   };
+
+  if (alreadyGenerated) {
+    return (
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 14 }}>
+        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 16, textTransform: 'uppercase' }}>Playoff bracket</div>
+        <div style={{ fontSize: 12, color: C.steel, marginTop: 4, lineHeight: 1.5 }}>
+          Bracket is live — {bracketGames.length} game{bracketGames.length === 1 ? '' : 's'}. Scores and advancement fill in automatically as results sync. Delete the bracket games below to rebuild.
+        </div>
+      </div>
+    );
+  }
+
+  const canFit = BRACKET_SIZES.filter((n) => n <= order.length);
 
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 220 }}>
-          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 16, textTransform: 'uppercase' }}>
-            Championship bracket
-          </div>
+          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 16, textTransform: 'uppercase' }}>Build playoff bracket</div>
           <div style={{ fontSize: 12, color: C.steel, marginTop: 4, lineHeight: 1.5 }}>
-            {alreadyGenerated
-              ? `${bracketGames.length} bracket game${bracketGames.length === 1 ? '' : 's'} already created. Delete them below to regenerate.`
-              : `Auto-create 4 games per 4-team pool: 2 semis (seed 2 v 3, seed 1 v 4), final (winners), bronze (losers). Pools matched: ${poolSummary.fourTeamPools.join(' · ') || 'none'}.${poolSummary.otherPools.length ? ` Pools skipped (not 4 teams): ${poolSummary.otherPools.map(([p, n]) => `${p} (${n})`).join(', ')}.` : ''}`}
+            {poolComplete
+              ? 'Pool play is complete — seed the bracket and Rinkd fills scores + advances winners automatically as results sync.'
+              : `Pool play in progress (${finalPool}/${poolGames.length} games final). Seed now from current standings, or wait until pool play wraps.`}
           </div>
         </div>
-        {!alreadyGenerated && (
-          <button onClick={() => setOpen((v) => !v)} style={btnPrimary}>
-            🏆 Generate Bracket
-          </button>
-        )}
+        <button onClick={() => setOpen((v) => !v)} style={btnPrimary}>🏆 Build Bracket</button>
       </div>
 
-      {open && !alreadyGenerated && (
+      {open && (
         <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
-          <div style={{ fontSize: 12, color: C.steel, marginBottom: 12, lineHeight: 1.5 }}>
-            Seeds resolve from current standings. Run this once pool play is complete (or use placeholder seeds and edit each game after). Bronze + final games start with TBD teams and fill in automatically when each semi finalizes.
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 12 }}>
-            <div>
-              <label style={labelStyle}>First semi start</label>
-              <input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} style={inputStyle}/>
-            </div>
-            <div>
-              <label style={labelStyle}>Per-game minutes</label>
-              <input type="number" value={gameMinutes} onChange={(e) => setGameMinutes(e.target.value)} style={inputStyle}/>
-            </div>
-            <div>
-              <label style={labelStyle}>Default rink</label>
-              <select value={rinkId} onChange={(e) => setRinkId(e.target.value)} style={inputStyle}>
-                <option value="">— None —</option>
-                {rinks.map((r) => <option key={r.id} value={r.id}>{[r.sub_rink, r.name].filter(Boolean).join(' · ')}</option>)}
-              </select>
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button onClick={() => setOpen(false)} style={btnGhost}>Cancel</button>
-            <button onClick={handleGenerate} disabled={busy} style={btnPrimary}>{busy ? 'Generating…' : 'Generate'}</button>
-          </div>
+          {canFit.length === 0 ? (
+            <div style={{ fontSize: 13, color: C.amber }}>Need at least 4 teams in the standings to build a bracket — finish more pool games first.</div>
+          ) : (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 12 }}>
+                <div>
+                  <label style={labelStyle}>Bracket size</label>
+                  <select value={size || ''} onChange={(e) => setSize(parseInt(e.target.value, 10))} style={inputStyle}>
+                    {canFit.map((n) => <option key={n} value={n}>{n} teams</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>First game start</label>
+                  <input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} style={inputStyle}/>
+                </div>
+                <div>
+                  <label style={labelStyle}>Per-game minutes</label>
+                  <input type="number" value={gameMinutes} onChange={(e) => setGameMinutes(e.target.value)} style={inputStyle}/>
+                </div>
+                <div>
+                  <label style={labelStyle}>Default rink</label>
+                  <select value={rinkId} onChange={(e) => setRinkId(e.target.value)} style={inputStyle}>
+                    <option value="">— None —</option>
+                    {rinks.map((r) => <option key={r.id} value={r.id}>{[r.sub_rink, r.name].filter(Boolean).join(' · ')}</option>)}
+                  </select>
+                </div>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: C.ice, marginBottom: 12, cursor: 'pointer' }}>
+                <input type="checkbox" checked={thirdPlace} onChange={(e) => setThirdPlace(e.target.checked)} /> Include a 3rd-place game
+              </label>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 6 }}>
+                Seeds — top {size} advance · reorder if needed
+              </div>
+              <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}>
+                {order.map((t, i) => {
+                  const seeded = i < size;
+                  return (
+                    <div key={t.team_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderTop: i ? '1px solid rgba(46,91,140,0.2)' : 'none', opacity: seeded ? 1 : 0.4, background: i === size ? 'rgba(215,38,56,0.06)' : 'transparent' }}>
+                      <span style={{ width: 22, height: 22, borderRadius: '50%', background: seeded ? C.red : 'rgba(139,163,190,0.25)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{seeded ? i + 1 : '–'}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>{t.team_name}</div>
+                        <div style={{ fontSize: 11, color: C.steel }}>{[t.pool, `${t.wins}-${t.losses}-${t.ties}`, `${t.pts} pts`, `${Number(t.goal_diff) >= 0 ? '+' : ''}${t.goal_diff} GD`].filter(Boolean).join(' · ')}</div>
+                      </div>
+                      <button onClick={() => move(i, -1)} disabled={i === 0} style={{ ...btnGhost, padding: '4px 9px', opacity: i === 0 ? 0.3 : 1 }}>↑</button>
+                      <button onClick={() => move(i, 1)} disabled={i === order.length - 1} style={{ ...btnGhost, padding: '4px 9px', opacity: i === order.length - 1 ? 0.3 : 1 }}>↓</button>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button onClick={() => setOpen(false)} style={btnGhost}>Cancel</button>
+                <button onClick={handleGenerate} disabled={busy} style={btnPrimary}>{busy ? 'Building…' : `Build ${size}-team bracket`}</button>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
