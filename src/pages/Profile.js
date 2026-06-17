@@ -5,7 +5,7 @@ import { Avatar, TierBadge } from '../components/Logos';
 import { updateProfile } from '../lib/auth';
 import { getTier, getTierProgress, getNextTier, TIERS } from '../lib/tiers';
 import { supabase } from '../lib/supabase';
-import { getPlayerLeagueStats } from '../lib/stats';
+import { getPlayerLeagueStats, getPlayerTournamentStats } from '../lib/stats';
 import { getUserGamePuckCount } from '../lib/gamePucks';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getOrCreateDm } from '../lib/messages';
@@ -18,6 +18,34 @@ import { classifyImage } from '../lib/imageModeration';
 
 const POSITIONS = ['Forward', 'Defense', 'Goalie', 'Coach', 'Parent', 'Official', 'Fan'];
 const LEVELS = ['Youth (Mite-Bantam)', 'Youth (Midget)', 'High School', 'Junior (Tier I)', 'Junior (Tier II/III)', 'College', 'Minor Pro', 'Beer League', 'Adult Rec', 'Fan'];
+
+// STATS-3: one stat-line card (team header + GP/G/A/PTS/PIM grid). Shared by the
+// Leagues and Tournaments sections so both read identically; the two are never
+// blended. Logo color/initials fall back gracefully (tournament teams don't
+// carry a logo color, so the caller passes a neutral one + derived initials).
+function StatLine({ logoColor, initials, title, subtitle, gp, goals, assists, points, pim }) {
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px', marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+        <div style={{ width: 36, height: 36, borderRadius: 8, background: logoColor || '#2E5B8C', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 14, color: '#fff', flexShrink: 0 }}>
+          {initials}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.ice }}>{title}</div>
+          <div style={{ fontSize: 11, color: C.steel, marginTop: 2 }}>{subtitle}</div>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
+        {[['GP', gp], ['G', goals], ['A', assists], ['PTS', points], ['PIM', pim]].map(([label, val]) => (
+          <div key={label} style={{ background: '#07111F', borderRadius: 8, padding: '10px 0', textAlign: 'center' }}>
+            <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: label === 'PTS' ? 22 : 18, color: label === 'PTS' ? '#D72638' : C.ice, lineHeight: 1 }}>{val}</div>
+            <div style={{ fontSize: 9, fontWeight: 700, color: C.steel, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 3 }}>{label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function Profile({ currentUser, profile: myProfile, onProfileUpdate }) {
   const { userId: urlUserId } = useParams();
@@ -35,6 +63,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
   const [blockLoading, setBlockLoading] = useState(false);
   const [dmLoading, setDmLoading] = useState(false);
   const [leagueStats, setLeagueStats] = useState([]);
+  const [tournamentStats, setTournamentStats] = useState([]);
   const [puckCount, setPuckCount] = useState(0);
 
   const [editName, setEditName] = useState('');
@@ -85,9 +114,10 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
       // Posts are capped at 50; the activity strip only uses the latest 20 and
       // the grid stays useful without pulling a power-user's entire history.
       const wantsRel = !isOwnProfile && currentUser;
-      const [postsRes, stats, counts, commentsRes, f, b, pucks] = await Promise.all([
+      const [postsRes, stats, tournStats, counts, commentsRes, f, b, pucks] = await Promise.all([
         supabase.from('posts').select('*').eq('author_id', profileId).order('created_at', { ascending: false }).limit(50),
         getPlayerLeagueStats(profileId),
+        getPlayerTournamentStats(profileId),
         getFollowCounts(profileId),
         supabase
           .from('comments')
@@ -102,6 +132,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
       const data = postsRes.data;
       const comments = commentsRes.data;
       setLeagueStats(stats);
+      setTournamentStats(tournStats);
       setPuckCount(pucks || 0);
       setPosts(data || []);
       setFollowCounts(counts);
@@ -478,7 +509,9 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
           </div>
         </div>
 
-        {/* Season totals — quick view across all leagues */}
+        {/* League season totals — quick view across all leagues. League-only by
+            design: tournament stats live in their own section and are NEVER
+            blended into this number (the two aren't comparable). */}
         {leagueStats.length > 0 && (() => {
           const tot = leagueStats.reduce((acc, s) => ({
             gp: acc.gp + (s.gp || 0), goals: acc.goals + (s.goals || 0),
@@ -487,7 +520,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
           }), { gp: 0, goals: 0, assists: 0, points: 0, pim: 0 });
           return (
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14, marginBottom: 16 }}>
-              <div style={{ fontSize: 10, color: C.steel, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 8 }}>Season Totals · across {leagueStats.length} league{leagueStats.length === 1 ? '' : 's'}</div>
+              <div style={{ fontSize: 10, color: C.steel, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 8 }}>League Season Totals · across {leagueStats.length} league{leagueStats.length === 1 ? '' : 's'}</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
                 {[['GP', tot.gp], ['G', tot.goals], ['A', tot.assists], ['PTS', tot.points], ['PIM', tot.pim]].map(([label, val]) => (
                   <div key={label} style={{ background: '#07111F', borderRadius: 8, padding: '10px 0', textAlign: 'center' }}>
@@ -559,34 +592,44 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
 
         {activeTab === 'stats' && (
           <div>
-            {leagueStats.length === 0 ? (
+            {leagueStats.length === 0 && tournamentStats.length === 0 ? (
               <div style={{ textAlign: 'center', color: C.steel, padding: '40px', fontSize: 14 }}>
                 <div style={{ fontSize: 32, marginBottom: 10 }}>🏒</div>
-                No league stats yet. Play in a league to see your stats here.
+                No stats yet. Play in a league or tournament to see your stats here.
               </div>
-            ) : leagueStats.map((s, i) => (
-              <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px', marginBottom: 12 }}>
-                {/* League + team header */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 8, background: s.team_logo_color || '#2E5B8C', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 14, color: '#fff', flexShrink: 0 }}>
-                    {s.team_logo_initials || s.team_name?.slice(0,2).toUpperCase()}
+            ) : (
+              <>
+                {/* Leagues — kept separate from Tournaments; never a blended total. */}
+                {leagueStats.length > 0 && (
+                  <div style={{ marginBottom: tournamentStats.length > 0 ? 22 : 0 }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.12em', color: C.steel, textTransform: 'uppercase', marginBottom: 10 }}>Leagues</div>
+                    {leagueStats.map((s, i) => (
+                      <StatLine key={`lg-${i}`}
+                        logoColor={s.team_logo_color}
+                        initials={s.team_logo_initials || s.team_name?.slice(0, 2).toUpperCase()}
+                        title={`${s.team_name} · #${s.jersey_number}`}
+                        subtitle={`${s.league_name}${s.season ? ` · ${s.season}` : ''}${s.division ? ` · ${s.division}` : ''}`}
+                        gp={s.gp} goals={s.goals} assists={s.assists} points={s.points} pim={s.pim} />
+                    ))}
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: C.ice }}>{s.team_name} · #{s.jersey_number}</div>
-                    <div style={{ fontSize: 11, color: C.steel, marginTop: 2 }}>{s.league_name}{s.season ? ` · ${s.season}` : ''}{s.division ? ` · ${s.division}` : ''}</div>
+                )}
+                {/* Tournaments — own section beside Leagues. Empty for unlinked
+                    players until a tournament lineup carries their user_id. */}
+                {tournamentStats.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.12em', color: C.steel, textTransform: 'uppercase', marginBottom: 10 }}>Tournaments</div>
+                    {tournamentStats.map((s, i) => (
+                      <StatLine key={`tn-${i}`}
+                        logoColor="#2E5B8C"
+                        initials={s.team_name?.slice(0, 2).toUpperCase()}
+                        title={`${s.team_name} · #${s.jersey_number}`}
+                        subtitle={`${s.tournament_name}${s.division ? ` · ${s.division}` : ''}`}
+                        gp={s.gp} goals={s.goals} assists={s.assists} points={s.points} pim={s.pim} />
+                    ))}
                   </div>
-                </div>
-                {/* Stat grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
-                  {[['GP', s.gp], ['G', s.goals], ['A', s.assists], ['PTS', s.points], ['PIM', s.pim]].map(([label, val]) => (
-                    <div key={label} style={{ background: '#07111F', borderRadius: 8, padding: '10px 0', textAlign: 'center' }}>
-                      <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: label === 'PTS' ? 22 : 18, color: label === 'PTS' ? '#D72638' : C.ice, lineHeight: 1 }}>{val}</div>
-                      <div style={{ fontSize: 9, fontWeight: 700, color: C.steel, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 3 }}>{label}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+                )}
+              </>
+            )}
           </div>
         )}
         {activeTab === 'activity' && (

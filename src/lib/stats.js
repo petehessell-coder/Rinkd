@@ -12,3 +12,17 @@ export async function getPlayerLeagueStats(userId) {
   }
   return (data || []).sort((a, b) => b.points - a.points);
 }
+
+export async function getPlayerTournamentStats(userId) {
+  // STATS-3: tournament half of the player profile. Mirrors getPlayerLeagueStats
+  // but reads get_player_tournament_stats, which anchors on game_lineups.user_id
+  // (tournaments have no team_members link). Kept SEPARATE from league stats —
+  // the two are never blended. Empty until a tournament lineup carries a user_id
+  // (adult links via link_tournament_player; minors stay consent-gated).
+  const { data, error } = await supabase.rpc('get_player_tournament_stats', { p_user_id: userId });
+  if (error) {
+    console.warn('[stats] getPlayerTournamentStats failed:', error.message);
+    return [];
+  }
+  return (data || []).sort((a, b) => b.points - a.points);
+}

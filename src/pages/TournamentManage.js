@@ -28,6 +28,7 @@ import { supabase } from '../lib/supabase';
 import { getTournamentRegistrations, updateTournamentRegistrationStatus, approveTournamentRegistration } from '../lib/registrations';
 import { tournamentPayoutsReady, startConnectOnboarding } from '../lib/stripeConnect';
 import { listLinks, createLink, setLinkStatus, removeLink, listGameMaps, confirmMatch, ignoreMatch } from '../lib/gamesheet';
+import { listTournamentTeamJerseys, getTournamentTeamLinks, searchLinkableProfiles, linkTournamentPlayer, unlinkTournamentPlayer } from '../lib/tournamentRoster';
 
 const C = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
@@ -510,6 +511,7 @@ function DivisionForm({ tournamentId, division, nextSortOrder = 0, flash, onDone
 function TeamsTab({ tournamentId, teams, divisionId = null, standingsByTeam = {}, reload, flash }) {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [linkingId, setLinkingId] = useState(null);
 
   const pools = useMemo(() => {
     const set = new Set(teams.map((t) => t.pool).filter(Boolean));
@@ -553,24 +555,164 @@ function TeamsTab({ tournamentId, teams, divisionId = null, standingsByTeam = {}
                 <TeamForm tournamentId={tournamentId} divisionId={divisionId} pools={pools} team={t} flash={flash} onDone={() => { setEditingId(null); reload(); }} onCancel={() => setEditingId(null)} />
               </div>
             ) : (
-              <div key={t.id} style={{ display: 'flex', alignItems: 'center', padding: 12, borderTop: i ? `1px solid rgba(46,91,140,0.25)` : 'none', gap: 12 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 8, background: t.logo_url ? `url(${t.logo_url}) center/cover` : C.navy, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 13, color: '#fff' }}>
-                  {!t.logo_url && teamInitials(t.team_name, 2)}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{t.team_name}{t.seed ? ` · #${t.seed}` : ''}</div>
-                  <div style={{ fontSize: 12, color: C.steel }}>
-                    {standingsByTeam[t.id]?.gp > 0
-                      ? <span><b style={{ color: C.ice }}>{standingsByTeam[t.id].wins}-{standingsByTeam[t.id].losses}-{standingsByTeam[t.id].ties}</b> · {standingsByTeam[t.id].pts} pts · {t.contact_email || 'no contact'}</span>
-                      : (t.contact_email || '—')}
+              <div key={t.id} style={{ borderTop: i ? `1px solid rgba(46,91,140,0.25)` : 'none' }}>
+                <div style={{ display: 'flex', alignItems: 'center', padding: 12, gap: 12 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 8, background: t.logo_url ? `url(${t.logo_url}) center/cover` : C.navy, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 13, color: '#fff' }}>
+                    {!t.logo_url && teamInitials(t.team_name, 2)}
                   </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{t.team_name}{t.seed ? ` · #${t.seed}` : ''}</div>
+                    <div style={{ fontSize: 12, color: C.steel }}>
+                      {standingsByTeam[t.id]?.gp > 0
+                        ? <span><b style={{ color: C.ice }}>{standingsByTeam[t.id].wins}-{standingsByTeam[t.id].losses}-{standingsByTeam[t.id].ties}</b> · {standingsByTeam[t.id].pts} pts · {t.contact_email || 'no contact'}</span>
+                        : (t.contact_email || '—')}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setLinkingId(linkingId === t.id ? null : t.id)}
+                    style={{ ...btnGhost, ...(linkingId === t.id ? { borderColor: C.red, color: C.red } : {}) }}
+                    title="Link Rinkd players to jerseys so their stats show on their profile">🔗 Players</button>
+                  <button onClick={() => setEditingId(t.id)} style={btnGhost}>Edit</button>
                 </div>
-                <button onClick={() => setEditingId(t.id)} style={btnGhost}>Edit</button>
+                {linkingId === t.id && <TeamPlayerLinks tournamentId={tournamentId} team={t} flash={flash} />}
               </div>
             ))}
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// STATS-3 Step 4c — director-side jersey<->profile linking. A tournament team's
+// "roster" is derived from its game_lineups (no stored roster table), so the
+// jerseys shown are exactly the ones a link can actually attribute stats to.
+// Adults only — the RPC is the gate; the minor hint here is just courtesy.
+function TeamPlayerLinks({ tournamentId, team, flash }) {
+  const [jerseys, setJerseys] = useState(null); // null = loading
+  const [links, setLinks] = useState({});       // { [jersey_number]: {user_id,name,handle} }
+  const [openJersey, setOpenJersey] = useState(null);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    const [js, lk] = await Promise.all([
+      listTournamentTeamJerseys(tournamentId, team.id),
+      getTournamentTeamLinks(team.id),
+    ]);
+    setJerseys(js);
+    setLinks(lk);
+  }, [tournamentId, team.id]);
+  useEffect(() => { load(); }, [load]);
+
+  // Debounced profile search while a jersey's search box is open.
+  useEffect(() => {
+    if (openJersey == null) return undefined;
+    const q = query.trim();
+    if (q.length < 2) { setResults([]); setSearching(false); return undefined; }
+    let cancelled = false;
+    setSearching(true);
+    const handle = setTimeout(async () => {
+      const r = await searchLinkableProfiles(q);
+      if (!cancelled) { setResults(r); setSearching(false); }
+    }, 250);
+    return () => { cancelled = true; clearTimeout(handle); };
+  }, [query, openJersey]);
+
+  const startLink = (jersey) => { setOpenJersey(jersey); setQuery(''); setResults([]); };
+  const cancelLink = () => { setOpenJersey(null); setQuery(''); setResults([]); };
+
+  const doLink = async (jersey, profile) => {
+    if (busy) return;
+    if (profile.account_type === 'minor') {
+      flash?.('error', 'Minor players can’t be linked yet (needs guardian consent).');
+      return;
+    }
+    setBusy(true);
+    const { stamped, error } = await linkTournamentPlayer(team.id, jersey, profile.id);
+    setBusy(false);
+    if (error) {
+      flash?.('error', /guardian consent/i.test(error.message || '')
+        ? 'Minor players can’t be linked yet (needs guardian consent).'
+        : (error.message || 'Could not link player.'));
+      return;
+    }
+    flash?.('success', `Linked ${profile.name} to #${jersey}${stamped ? ` · ${stamped} game${stamped === 1 ? '' : 's'}` : ''}.`);
+    cancelLink();
+    load();
+  };
+
+  const doUnlink = async (jersey) => {
+    if (busy) return;
+    setBusy(true);
+    const { error } = await unlinkTournamentPlayer(team.id, jersey);
+    setBusy(false);
+    if (error) { flash?.('error', error.message || 'Could not unlink.'); return; }
+    flash?.('success', `Unlinked #${jersey}.`);
+    load();
+  };
+
+  return (
+    <div style={{ padding: '0 12px 14px 12px', background: 'rgba(7,17,31,0.35)' }}>
+      <div style={{ fontSize: 12, color: C.steel, lineHeight: 1.5, padding: '10px 0' }}>
+        Link a Rinkd profile to a jersey so this event’s stats show on their profile.
+        <b style={{ color: C.ice }}> Adults only</b> — minors stay behind the guardian-consent path.
+        New games for a linked jersey attach automatically.
+      </div>
+      {jerseys === null ? (
+        <div style={{ fontSize: 12, color: C.steel, padding: '8px 0' }}>Loading roster…</div>
+      ) : jerseys.length === 0 ? (
+        <div style={{ fontSize: 12, color: C.steel, padding: '8px 0' }}>
+          No jerseys yet — players appear here once this team has game lineups to attribute.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {jerseys.map((j) => {
+            const link = links[j.jersey_number];
+            return (
+              <div key={j.jersey_number} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 16, color: C.ice, minWidth: 34 }}>#{j.jersey_number}</span>
+                  <span style={{ fontSize: 13, color: C.steel, flex: 1, minWidth: 80 }}>{j.invite_name || '—'}</span>
+                  {link ? (
+                    <>
+                      <span style={{ fontSize: 12, color: C.green, fontWeight: 700 }}>✓ {link.name}{link.handle ? ` · @${link.handle}` : ''}</span>
+                      <button onClick={() => doUnlink(j.jersey_number)} disabled={busy} style={btnGhost}>Unlink</button>
+                    </>
+                  ) : openJersey === j.jersey_number ? (
+                    <button onClick={cancelLink} style={btnGhost}>Cancel</button>
+                  ) : (
+                    <button onClick={() => startLink(j.jersey_number)} style={btnGhost}>Link Rinkd player</button>
+                  )}
+                </div>
+                {openJersey === j.jersey_number && !link && (
+                  <div style={{ marginTop: 8 }}>
+                    <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name or @handle…" style={inputStyle} />
+                    {searching && <div style={{ fontSize: 11, color: C.steel, marginTop: 6 }}>Searching…</div>}
+                    {!searching && query.trim().length >= 2 && results.length === 0 && (
+                      <div style={{ fontSize: 11, color: C.steel, marginTop: 6 }}>No matches.</div>
+                    )}
+                    {results.length > 0 && (
+                      <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {results.map((p) => (
+                          <button key={p.id} onClick={() => doLink(j.jersey_number, p)} disabled={busy}
+                            style={{ textAlign: 'left', background: C.navy, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px', cursor: 'pointer', color: C.ice, display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 13, fontWeight: 600 }}>{p.name}</span>
+                            {p.handle && <span style={{ fontSize: 12, color: C.steel }}>@{p.handle}</span>}
+                            {p.account_type === 'minor' && <span style={{ fontSize: 10, color: C.amber, marginLeft: 'auto' }}>minor — consent needed</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
