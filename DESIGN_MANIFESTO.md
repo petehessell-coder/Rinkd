@@ -423,6 +423,49 @@ Rules:
 
 ---
 
+## Bulletproof Layout Resilience — The Stress Test
+
+AI-generated mockups look great until real data hits them. Rinkd has real hockey names ("Przybyszewski"), real scores (0–12), real descriptions that run three paragraphs. Every component must survive all of it without breaking.
+
+**Defensive CSS rules — non-negotiable:**
+- Long text wraps gracefully or truncates with `text-overflow: ellipsis` + `overflow: hidden` + `white-space: nowrap`
+- Image containers use `object-fit: cover` or `object-fit: contain` — never unconstrained
+- Grid and flex containers have explicit `min-width: 0` on children so they can actually shrink
+- No layout shift when content loads in — reserve space with aspect ratios or skeleton dimensions
+- Aspect ratios on all media containers — never let an image dictate layout
+
+**Stress test before shipping any component:**
+1. Paste a 60-character player name. Does it clip through the container?
+2. Make the description 5 sentences. Does the grid shatter?
+3. Set the score to 0–0. Does the empty state look intentional?
+4. Set the score to 14–0. Does the number fit?
+5. Remove the avatar/image. Does the fallback look designed, not broken?
+
+If any of these break the layout, it ships after the fix — not before.
+
+---
+
+## Built for Scale — Saturday Night at 10,000 Concurrent Users
+
+Rinkd's ceiling is not a single rink. Black Bear Sports Group alone is 50 rinks, 1,000+ teams. Add two more operators that size and a Saturday night game window means tens of thousands of families hitting the app simultaneously. Every architectural and UI decision must reflect this.
+
+**Performance non-negotiables:**
+
+- **No blocking renders.** Data fetches never block the UI. Show skeleton, load data, hydrate in place.
+- **Optimistic updates everywhere.** Likes, chirps, reactions update instantly on the client — reconcile with server after. Never make a user wait for a network round-trip to see their own action.
+- **Real-time via Supabase Realtime — not polling.** Polling at scale is a DDoS on your own backend. Subscribe to channels, unsubscribe on unmount.
+- **Lazy load everything below the fold.** Images, secondary stats, comment threads — none of it loads until the user needs it.
+- **Paginate feeds, not full loads.** Never fetch all games, all chirps, all stats. Cursor-based pagination on every list.
+- **Edge functions for hot paths.** Score updates, live game state — these run at the edge, not cold-start serverless.
+- **Image optimization mandatory.** All uploaded photos compressed and served at appropriate resolution. Raw uploads never hit the feed directly.
+
+**The Saturday Night Test:**
+> Would this feature still feel snappy if 10,000 people were using it at the same moment?
+
+If the answer requires a server call that isn't already cached or optimized — fix the architecture before writing the UI.
+
+---
+
 ## The Benchmark Question
 
 Before shipping any screen, ask:

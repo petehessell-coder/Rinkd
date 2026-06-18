@@ -101,7 +101,11 @@ export default function PublicGame({ league }) {
     const bump = () => { if (t) clearTimeout(t); t = setTimeout(load, 400); };
     let channel = null;
     try {
-      channel = supabase.channel(`publicgame:${gameId}:${Math.random().toString(36).slice(2, 8)}`)
+      // All spectators for a given game share one named channel so Supabase
+      // Realtime only opens a single WebSocket subscription per game, not one
+      // per viewer. At scale (hundreds of fans sharing a link to the same game)
+      // this keeps connection count O(games) instead of O(viewers).
+      channel = supabase.channel(`publicgame:${gameId}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: rowTable, filter: `id=eq.${gameId}` }, bump)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'game_goals', filter: `game_id=eq.${gameId}` }, bump)
         .subscribe();
