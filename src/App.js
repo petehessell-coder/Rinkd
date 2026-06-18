@@ -4,14 +4,15 @@ import { AuthContext, useAuth } from './lib/authContext';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import { getProfile, ensureProfileForUser, touchLastSeen } from './lib/auth';
-// Eager — first-paint-critical + the public pilot path (no chunk-load flash).
+// Eager — genuinely first-paint-critical (auth gate + authenticated home).
+// Everything else is lazy so the main bundle stays lean.
 import Auth from './pages/Auth';
 import Feed from './pages/Feed';
-import Profile from './pages/Profile';
-import Leagues from './pages/Leagues';
-import Tournament from './pages/Tournament';
-import Tournaments from './pages/Tournaments';
 import Landing from './pages/Landing';
+const Profile = lazyWithRetry(() => import('./pages/Profile'));
+const Leagues = lazyWithRetry(() => import('./pages/Leagues'));
+const Tournament = lazyWithRetry(() => import('./pages/Tournament'));
+const Tournaments = lazyWithRetry(() => import('./pages/Tournaments'));
 import { setSentryUser, captureException } from './lib/sentry';
 import { track } from './lib/analytics';
 import OnboardingModal from './components/OnboardingModal';
@@ -91,12 +92,29 @@ function LoginRedirect() {
 
 function ProtectedRoute({ children }) {
   const { user, loading, profileError } = useAuth();
+  // Show a "tap to reload" hint after 4s so a slow cold-start doesn't feel
+  // like a crash. The hint disappears the moment loading resolves.
+  const [loadingSlow, setLoadingSlow] = React.useState(false);
+  React.useEffect(() => {
+    if (!loading) { setLoadingSlow(false); return; }
+    const t = setTimeout(() => setLoadingSlow(true), 4000);
+    return () => clearTimeout(t);
+  }, [loading]);
   if (loading) return (
     <div style={{ minHeight: '100vh', background: '#07111F', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow', sans-serif", color: '#8BA3BE', fontSize: 15 }}>
       <div style={{ textAlign: 'center' }}>
         <img src={LOADING_MARK.src} alt={LOADING_MARK.alt} width={LOADING_MARK.size} height={LOADING_MARK.size}
           style={{ display: 'block', margin: '0 auto 16px', borderRadius: LOADING_MARK.borderRadius, animation: 'rinkd-pulse 1.6s ease-in-out infinite' }} />
         <div>Loading Rinkd...</div>
+        {loadingSlow && (
+          <div style={{ marginTop: 18 }}>
+            <div style={{ fontSize: 12, color: 'rgba(139,163,190,0.6)', marginBottom: 10 }}>Taking longer than usual…</div>
+            <button onClick={() => window.location.reload()}
+              style={{ background: 'rgba(46,91,140,0.3)', border: '1px solid rgba(46,91,140,0.5)', borderRadius: 999, color: '#F4F7FA', padding: '8px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: "'Barlow', sans-serif" }}>
+              Tap to reload
+            </button>
+          </div>
+        )}
         <style>{`@keyframes rinkd-pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.65; transform: scale(0.96); } }`}</style>
       </div>
     </div>
@@ -284,7 +302,12 @@ export default function App() {
   // (since signUp couldn't create it without a session).
   const fetchProfileWithRetry = async (user) => {
     let ensureAttempted = false;
-    for (let attempt = 0; attempt < 6; attempt++) {
+    // 3 attempts max (was 6). For returning users, the profile always exists on
+    // the first try. The retries exist for the new-signup race where profile insert
+    // hasn't committed yet — 3x150ms (~450ms total) covers that window without
+    // blocking PWA cold-start for several seconds. If all 3 miss, profileError
+    // shows the reload screen (much faster than the old ~7s wait).
+    for (let attempt = 0; attempt < 3; attempt++) {
       const { data } = await getProfile(user.id);
       if (data) return data;
       // First miss: try to build the profile from user_metadata. Idempotent
@@ -307,8 +330,9 @@ export default function App() {
           captureException(e, { where: 'fetchProfileWithRetry/ensureProfileForUser', userId: user.id });
         }
       }
-      // Exponential-ish backoff: 200, 400, 800, 1200, 1800, 2500 ms (~7s total)
-      await new Promise((r) => setTimeout(r, 200 + attempt * 400));
+      // Flat 150ms between attempts. Covers the signup-race window without
+      // adding seconds of perceived lag on slow connections.
+      await new Promise((r) => setTimeout(r, 150));
     }
     return null;
   };
@@ -320,19 +344,19 @@ export default function App() {
     let currentUserId = null;
     let mounted = true;
 
-    // Safety net: if supabase.auth.getSession() hangs >10s (e.g. a network
+    // Safety net: if supabase.auth.getSession() hangs >5s (e.g. a network
     // failure mid token-refresh on rink wifi), give up and let the user land
     // on Landing/Auth instead of staring at "Loading Rinkd…" forever. Reading
-    // from localStorage is normally <100ms, so 10s is well past the worst
-    // real-world cold-start case. If the session call eventually resolves
-    // later, the listener below will pick it up and update state correctly.
+    // from localStorage is normally <100ms; token refresh adds ~1-2s on a slow
+    // connection. 5s is well past any real cold-start worst case while being
+    // tight enough to not leave a PWA user staring at the spinner forever.
     const sessionTimeout = setTimeout(() => {
       if (mounted && currentUserId === null) {
         // eslint-disable-next-line no-console
-        console.warn('[auth] getSession() did not resolve within 10s — dropping to logged-out state. The user can retry from Landing.');
+        console.warn('[auth] getSession() did not resolve within 5s — dropping to logged-out state. The user can retry from Landing.');
         setLoading(false);
       }
-    }, 10000);
+    }, 5000);
 
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!mounted) return;
