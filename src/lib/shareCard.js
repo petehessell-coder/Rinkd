@@ -24,6 +24,7 @@ const WORDMARK_SRC = '/rinkd-wordmark-tape.png'; // same-origin asset in public/
 const PUCK_SRC = '/gamepuck/puck.png';           // RINKD Game Puck mark — PNG so the
                                                  // canvas decodes it on every browser
                                                  // (webp isn't universally decodable)
+const PUCK_BG_SRC = '/recap-card-bg3.jpg';      // Arena rafters/lights — Game Puck card background
 
 const PORTRAIT = {
   W: 1080, H: 1350, pad: 64, topH: 150, heroPadTop: 64, finalPillW: 230, finalPillH: 64,
@@ -375,9 +376,23 @@ function fitFont(ctx, text, weight, maxW, base, floor) {
 
 function drawGamePuck(ctx, L, card, assets) {
   const { W, H } = L;
-  const grad = ctx.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, C.navyHi); grad.addColorStop(1, C.navy);
-  ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+  // Background — arena rafters/lights photo, cover-fit, with dark overlay for legibility
+  if (assets.bg) {
+    const iw = assets.bg.width || 1, ih = assets.bg.height || 1;
+    const scale = Math.max(W / iw, H / ih);
+    const dw = iw * scale, dh = ih * scale;
+    ctx.drawImage(assets.bg, (W - dw) / 2, (H - dh) / 2, dw, dh);
+    // Dark overlay so text stays readable over the photo
+    const overlay = ctx.createLinearGradient(0, 0, 0, H);
+    overlay.addColorStop(0, 'rgba(7,17,31,0.72)');
+    overlay.addColorStop(1, 'rgba(11,31,58,0.82)');
+    ctx.fillStyle = overlay; ctx.fillRect(0, 0, W, H);
+  } else {
+    // Fallback to gradient if image failed to load
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, C.navyHi); grad.addColorStop(1, C.navy);
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+  }
   drawWatermark(ctx, W, H, L.wmSize);
 
   // TOP STRIP — GAME PUCK + sponsor
@@ -479,11 +494,15 @@ function drawGamePuck(ctx, L, card, assets) {
 export async function composeGamePuckCard(card) {
   const L = PUCK;
   await ensureFonts();
-  const [wordmark, puck] = await Promise.all([loadImage(WORDMARK_SRC), loadImage(PUCK_SRC)]);
+  const [wordmark, puck, bg] = await Promise.all([
+    loadImage(WORDMARK_SRC),
+    loadImage(PUCK_SRC),
+    loadImage(PUCK_BG_SRC),
+  ]);
   const canvas = document.createElement('canvas');
   canvas.width = L.W; canvas.height = L.H;
   const ctx = canvas.getContext('2d');
-  drawGamePuck(ctx, L, card, { wordmark, puck });
+  drawGamePuck(ctx, L, card, { wordmark, puck, bg });
   return new Promise((resolve, reject) => {
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob returned null'))), 'image/png');
   });
