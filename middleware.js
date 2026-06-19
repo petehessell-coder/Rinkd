@@ -80,13 +80,24 @@ async function gameMeta(isLeague, gameId, origin) {
   const title = `${homeName || 'Home'} ${g.home_score ?? 0}, ${awayName || 'Away'} ${g.away_score ?? 0}`;
   const desc = [statusLabel, roundLabel, competition, sponsorName ? `Presented by ${sponsorName}` : null].filter(Boolean).join(' · ');
 
-  // og:image: the stored client-composed card if it exists, else the fallback.
+  // og:image priority:
+  //   1. the client-composed card stored on a share (richest — real logos +
+  //      scorers),
+  //   2. else a per-game SERVER-RENDERED card from /api/og, so a game nobody
+  //      has shared yet still unfurls a real broadcast card (not the generic
+  //      site fallback). /api/og itself falls back to /og-fallback-rinkd.png.
   const cardUrl = `${SUPABASE_URL}/storage/v1/object/public/share-cards/${isLeague ? 'lg' : 'g'}/${gameId}.png`;
-  let image = `${origin}/og-fallback-rinkd.png`;
+  const og = new URLSearchParams({ type: isLeague ? 'lg' : 'g', id: gameId, home: homeName || 'Home', away: awayName || 'Away', sub: competition });
+  if (g.status === 'final' || g.status === 'live') {
+    og.set('hs', String(g.home_score ?? 0)); og.set('as', String(g.away_score ?? 0)); og.set('status', statusLabel || '');
+  } else {
+    og.set('title', `${awayName || 'Away'} vs ${homeName || 'Home'}`);
+  }
+  let image = `${origin}/api/og?${og.toString()}`;
   try {
     const head = await fetch(cardUrl, { method: 'HEAD' });
     if (head.ok) image = cardUrl;
-  } catch { /* keep fallback */ }
+  } catch { /* keep the rendered card */ }
 
   return { title, desc, image };
 }

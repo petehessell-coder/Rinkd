@@ -5,10 +5,6 @@
   "buildCommand": "CI=false GENERATE_SOURCEMAP=false npm run build",
   "outputDirectory": "build",
   "rewrites": [
-    { "source": "/g/:gameId", "has": [{ "type": "header", "key": "user-agent", "value": "(?i).*(facebookexternalhit|Facebot|Twitterbot|Slackbot|Slack-ImgProxy|WhatsApp|Discordbot|LinkedInBot|TelegramBot|Pinterest|redditbot|Googlebot|bingbot|Applebot|Embedly|iframely|SkypeUriPreview|Mastodon|Bluesky|vkShare|nuzzel|Google-InspectionTool).*" }], "destination": "/api/unfurl?type=g&id=:gameId" },
-    { "source": "/lg/:gameId", "has": [{ "type": "header", "key": "user-agent", "value": "(?i).*(facebookexternalhit|Facebot|Twitterbot|Slackbot|Slack-ImgProxy|WhatsApp|Discordbot|LinkedInBot|TelegramBot|Pinterest|redditbot|Googlebot|bingbot|Applebot|Embedly|iframely|SkypeUriPreview|Mastodon|Bluesky|vkShare|nuzzel|Google-InspectionTool).*" }], "destination": "/api/unfurl?type=lg&id=:gameId" },
-    { "source": "/league/:id", "has": [{ "type": "header", "key": "user-agent", "value": "(?i).*(facebookexternalhit|Facebot|Twitterbot|Slackbot|Slack-ImgProxy|WhatsApp|Discordbot|LinkedInBot|TelegramBot|Pinterest|redditbot|Googlebot|bingbot|Applebot|Embedly|iframely|SkypeUriPreview|Mastodon|Bluesky|vkShare|nuzzel|Google-InspectionTool).*" }], "destination": "/api/unfurl?type=league&id=:id" },
-    { "source": "/tournament/:id", "has": [{ "type": "header", "key": "user-agent", "value": "(?i).*(facebookexternalhit|Facebot|Twitterbot|Slackbot|Slack-ImgProxy|WhatsApp|Discordbot|LinkedInBot|TelegramBot|Pinterest|redditbot|Googlebot|bingbot|Applebot|Embedly|iframely|SkypeUriPreview|Mastodon|Bluesky|vkShare|nuzzel|Google-InspectionTool).*" }], "destination": "/api/unfurl?type=tournament&id=:id" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
