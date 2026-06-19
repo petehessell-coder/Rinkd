@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import Auth from './Auth';
 import InAppBrowserNudge from '../components/InAppBrowserNudge';
 import SEO from '../components/SEO';
-import { Wordmark, RinkdLogo } from '../components/Logos';
+import { RinkdLogo } from '../components/Logos';
+import TapeText from '../components/TapeText';
 import { track } from '../lib/analytics';
 
 const C = {
@@ -140,7 +141,7 @@ export default function LandingPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: `radial-gradient(ellipse at 20% 30%, ${C.blue}33 0%, transparent 60%), radial-gradient(ellipse at 80% 70%, ${C.red}22 0%, transparent 55%), ${C.dark}`,
+      background: '#0A1E38',
       color: C.ice, fontFamily: "'Barlow', sans-serif",
       padding: '24px 18px 60px',
       display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -150,59 +151,43 @@ export default function LandingPage() {
         description="Rinkd is the mobile-first social platform built exclusively for the hockey community. Teams, leagues, scores, and stories — all in one place."
       />
 
-      {/* Big brand mark */}
+      {/* Big brand mark — logo + the hand-taped "tape job" wordmark */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 18, marginBottom: 26 }}>
         <RinkdLogo size={84} />
         <div style={{ marginTop: 14 }}>
-          <Wordmark height={56} />
+          <TapeText height={56}>RINKD</TapeText>
         </div>
       </div>
 
       {/* In-app-browser nudge — IG/FB clicks land here and can't complete signup */}
       <div style={{ width: '100%', maxWidth: 420 }}><InAppBrowserNudge /></div>
 
-      {/* Headline */}
+      {/* Hero headline — big, cold, competitive. Says what Rinkd is in one line. */}
       <div style={{
         fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic',
-        fontSize: 38, lineHeight: 0.96, letterSpacing: '-0.01em', textTransform: 'uppercase',
-        textAlign: 'center', marginBottom: 10,
+        fontSize: 64, lineHeight: 0.9, letterSpacing: '-0.01em', textTransform: 'uppercase',
+        color: C.ice, textAlign: 'center', marginBottom: 14,
       }}>
         Where Hockey<br />Lives Online
       </div>
-      <div style={{ fontSize: 15, color: C.steel, lineHeight: 1.5, textAlign: 'center', maxWidth: 360, marginBottom: 22 }}>
-        Teams, leagues, schedules, lineups, live scores, calendars — the off-ice infrastructure the sport has never had.
+      <div style={{ fontSize: 15, color: C.steel, lineHeight: 1.5, textAlign: 'center', maxWidth: 360, marginBottom: 24 }}>
+        Teams, leagues, schedules, live scores — the off-ice home the sport has never had.
       </div>
 
-      {/* Social proof strip */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 28, flexWrap: 'wrap', justifyContent: 'center' }}>
-        {[
-          { n: '1.18M+', l: 'NA Players' },
-          { n: '23M+', l: 'NHL Tickets' },
-          { n: '+30%', l: 'Women & Girls' },
-        ].map(({ n, l }) => (
-          <div key={l} style={{
-            background: 'rgba(46,91,140,0.18)', border: `1px solid ${C.border}`,
-            borderRadius: 10, padding: '8px 12px', textAlign: 'center', minWidth: 88,
-          }}>
-            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, lineHeight: 1, color: C.ice }}>{n}</div>
-            <div style={{ fontSize: 9, color: C.steel, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 3 }}>{l}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* PRIMARY CTA */}
+      {/* PRIMARY CTA — single red pill, the one action. */}
       <button onClick={handleInstall} style={{
         width: '100%', maxWidth: 360,
         background: C.red, color: '#fff', border: 'none',
-        padding: '15px 22px', borderRadius: 999, cursor: 'pointer',
+        padding: '16px 22px', borderRadius: 999, cursor: 'pointer',
         fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic',
-        fontSize: 17, letterSpacing: '0.05em', textTransform: 'uppercase',
+        fontSize: 18, letterSpacing: '0.05em', textTransform: 'uppercase',
         boxShadow: '0 10px 30px rgba(215,38,56,0.4)',
         marginBottom: 12,
       }}>
         📲 Install Rinkd
       </button>
 
+      {/* Secondary — visually subordinate text link, never a competing button. */}
       <button onClick={handleContinue} style={{
         background: 'transparent', color: C.steel, border: 'none',
         padding: '8px 16px', cursor: 'pointer',
@@ -213,23 +198,35 @@ export default function LandingPage() {
         Continue in browser →
       </button>
 
-      {/* Three-up brand row */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', maxWidth: 380, marginBottom: 22 }}>
+      {/* Stat bar — hockey is big. Jersey-size numbers (Barlow Condensed 900). */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 32, flexWrap: 'wrap', justifyContent: 'center' }}>
         {[
-          { logo: '/rinkd-wordmark-tape.png', tag: 'THE PLATFORM', body: 'Teams · Leagues · Schedules · Scoring · Stats' },
-          { logo: '/rinkside-logo.png', tag: 'THE CONTENT', body: 'Daily reporting, features, and community storytelling' },
-          { logo: '/crease-logo.png', tag: 'THE PREMIUM', body: 'Original long-form shows · launching soon' },
-        ].map(({ logo, tag, body }) => (
-          <div key={tag} style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            background: 'rgba(15,40,71,0.6)', border: `1px solid ${C.border}`,
-            borderRadius: 12, padding: 12,
+          { n: '1.18M+', l: 'NA Players' },
+          { n: '23M+', l: 'NHL Tickets' },
+          { n: '+30%', l: 'Women & Girls' },
+        ].map(({ n, l }) => (
+          <div key={l} style={{
+            background: 'rgba(46,91,140,0.12)', border: `1px solid ${C.border}`,
+            borderRadius: 10, padding: '10px 14px', textAlign: 'center', minWidth: 96,
           }}>
-            <img src={logo} alt="" style={{ height: 44, width: 'auto', maxWidth: 90, objectFit: 'contain', flexShrink: 0 }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: C.red, letterSpacing: '0.12em', marginBottom: 3 }}>{tag}</div>
-              <div style={{ fontSize: 12, color: C.steel, lineHeight: 1.45 }}>{body}</div>
+            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 30, lineHeight: 1, color: C.ice }}>{n}</div>
+            <div style={{ fontSize: 9, color: C.steel, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 4 }}>{l}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* What Rinkd is — broadcast lower-third headers, not feature cards. */}
+      <div style={{ width: '100%', maxWidth: 380, marginBottom: 24 }}>
+        {[
+          { tag: 'The Platform', body: 'Teams, leagues, schedules, scoring, and stats — one app.' },
+          { tag: 'The Content', body: 'Daily reporting, features, and community storytelling.' },
+          { tag: 'The Premium', body: 'Original long-form shows — launching soon.' },
+        ].map(({ tag, body }) => (
+          <div key={tag} style={{ marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', background: '#0f2847', borderLeft: `4px solid ${C.red}`, borderTopRightRadius: 4, borderBottomRightRadius: 4, padding: '7px 14px', marginBottom: 6 }}>
+              <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 16, letterSpacing: '0.05em', textTransform: 'uppercase', color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tag}</span>
             </div>
+            <div style={{ fontSize: 13, color: C.steel, lineHeight: 1.45, paddingLeft: 14 }}>{body}</div>
           </div>
         ))}
       </div>
@@ -282,7 +279,7 @@ function InstallInstructionsModal({ onClose }) {
               { n: 3, body: <>Tap <strong style={{ color: C.ice }}>Add</strong> in the top right.</> },
             ].map(({ n, body }) => (
               <div key={n} style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-                <div style={{ width: 28, height: 28, borderRadius: '50%', background: C.red, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>{n}</div>
+                <div style={{ width: 28, height: 28, borderRadius: '50%', background: C.red, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 16, flexShrink: 0 }}>{n}</div>
                 <div style={{ fontSize: 14, color: C.ice, lineHeight: 1.55, flex: 1 }}>{body}</div>
               </div>
             ))}
@@ -300,7 +297,7 @@ function InstallInstructionsModal({ onClose }) {
               { n: 2, body: <>Choose <strong style={{ color: C.ice }}>"Install app"</strong> or <strong style={{ color: C.ice }}>"Add to Home screen"</strong>.</> },
             ].map(({ n, body }) => (
               <div key={n} style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-                <div style={{ width: 28, height: 28, borderRadius: '50%', background: C.red, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>{n}</div>
+                <div style={{ width: 28, height: 28, borderRadius: '50%', background: C.red, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 16, flexShrink: 0 }}>{n}</div>
                 <div style={{ fontSize: 14, color: C.ice, lineHeight: 1.55, flex: 1 }}>{body}</div>
               </div>
             ))}
