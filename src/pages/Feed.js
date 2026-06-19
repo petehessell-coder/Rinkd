@@ -24,6 +24,8 @@ import ShareButton from '../components/ShareButton';
 import { loadGameCardData } from '../lib/gameCardData';
 import RecapCard from '../components/RecapCard';
 import { recapSourceFromPost, getRecapCardWithSponsor } from '../lib/recapCard';
+import { haptics } from '../lib/haptics';
+import PullToRefresh from '../components/PullToRefresh';
 
 // Feed page size — keyset pagination pulls this many chirps per request.
 const PAGE_SIZE = 20;
@@ -702,6 +704,7 @@ export default function Feed({ currentUser, profile }) {
       nextLiked = !prev.includes(postId);
       return nextLiked ? [...prev, postId] : prev.filter(id => id !== postId);
     });
+    if (nextLiked) haptics.like();   // a soft tap — only when adding a like, not removing
     setPosts(prev => prev.map(p => p.id === postId
       ? { ...p, likes: nextLiked ? (p.likes || 0) + 1 : Math.max(0, (p.likes || 0) - 1) }
       : p
@@ -750,6 +753,7 @@ export default function Feed({ currentUser, profile }) {
   return (
     <Layout profile={profile}>
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '24px 16px' }}>
+      <PullToRefresh onRefresh={load}>
         <h1 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 32, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.02em', marginBottom: 20 }}><TapeText height={32}>Chirps</TapeText></h1>
 
         {/* ONBOARD-1 progressive-disclosure nudge — only renders for users who
@@ -882,6 +886,7 @@ export default function Feed({ currentUser, profile }) {
             )}
           </>
         )}
+      </PullToRefresh>
       </div>
     </Layout>
   );

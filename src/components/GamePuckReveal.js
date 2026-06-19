@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ShareButton from './ShareButton';
 import PuckMark from './PuckMark';
 import { loadGamePuckCardData } from '../lib/gameCardData';
+import { prefersReducedMotion } from '../lib/motion';
+import { haptics } from '../lib/haptics';
 
 // GAMEPUCK-2 — the "peel the tape" reveal. A settled Game Puck winner sits UNDER
 // a strip of worn hockey tape; you grab the loose end and drag across to peel it
@@ -37,11 +39,55 @@ const C = {
 const RIP_AT = 0.7;            // fraction peeled before it auto-finishes
 const HAPTIC_STEPS = 8;        // "ticks per wrap" as the tape lifts
 
-const prefersReducedMotion = () => {
-  try { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
-  catch { return false; }
-};
-const buzz = (pattern) => { try { navigator.vibrate && navigator.vibrate(pattern); } catch { /* no-op */ } };
+// ── The 3D roll ─────────────────────────────────────────────────────────────
+// As the tape peels, its loose end lifts off the surface and curls back into a
+// roll. We model that roll as a lit cylinder pinned to the lift line:
+//   · its width (radius) GROWS with the peel — more tape rolled up = heavier,
+//   · a horizontal gradient gives it cylinder shading (under-curl shadow → tan →
+//     specular crown → front-face falloff → a rim catch-light at the lift edge),
+//   · a fixed jagged RIGHT edge reads as an irregular, torn peel front,
+//   · a soft cast shadow on the revealed ice grows + slides as it lifts,
+//   · on the auto-rip it flings off-screen with weight (perspective + rotate).
+// All of it is suppressed under reduced motion (the "Reveal" button path).
+
+// Worn-tape cylinder shading, light from the upper-right. Stops chosen so the
+// crown reads bright and the under-curl edge reads as deep shadow.
+const CYL =
+  'linear-gradient(90deg,' +
+  'rgba(34,32,26,0.62) 0%,' +  // under-curl, tucked in shadow
+  '#a8a08b 12%,' +             // rising tan off the shadow
+  '#e9e2d0 34%,' +
+  '#fffefa 49%,' +             // specular crown
+  '#efe8d6 58%,' +
+  '#c7bea6 78%,' +             // front-face falloff
+  '#9a927c 93%,' +             // crease before the lift line
+  '#e8e1cd 100%)';             // rim catch-light at the lift edge
+
+// A fixed torn profile for the roll's right (lift) edge — % inset per node down
+// the height. Deterministic so the tear looks consistent, not random per render.
+const TEAR = [0.2, 1.5, 0.5, 2.1, 0.9, 1.7, 0.3, 2.0, 0.7, 1.3, 0.4, 1.6, 0.6];
+function rollClip() {
+  const n = TEAR.length;
+  const pts = ['0% 0%', '0% 100%'];
+  for (let i = n - 1; i >= 0; i--) {
+    const y = (i / (n - 1)) * 100;
+    pts.push(`${(100 - TEAR[i]).toFixed(1)}% ${y.toFixed(1)}%`);
+  }
+  return `polygon(${pts.join(',')})`;
+}
+
+// Inject the rip-fling keyframe once (reduced-motion safe — the fling never
+// runs under reduced motion because the roll isn't rendered there).
+const PEEL_KEYFRAMES_ID = 'gp-peel-keyframes';
+function ensurePeelKeyframes() {
+  if (typeof document === 'undefined' || document.getElementById(PEEL_KEYFRAMES_ID)) return;
+  const el = document.createElement('style');
+  el.id = PEEL_KEYFRAMES_ID;
+  el.textContent =
+    '@keyframes gpPeelFling{0%{transform:translateX(-100%) rotate(0deg) scale(1);opacity:1}' +
+    '100%{transform:translateX(-260%) rotate(-26deg) scale(0.82);opacity:0}}';
+  document.head.appendChild(el);
+}
 
 const revealKey = (kind, gameId) => `gp_revealed_${kind === 'league' ? 'league' : 'tournament'}_${gameId}`;
 export function hasRevealed(kind, gameId) {
@@ -110,11 +156,16 @@ export default function GamePuckReveal({
   const draggingRef = useRef(false);
   const lastTickRef = useRef(0);
   const finishedRef = useRef(false);
+  const ripTimerRef = useRef(null);
   const reduced = useMemo(prefersReducedMotion, []);
   const [peel, setPeel] = useState(0);          // 0 = fully taped, 1 = revealed
   const [done, setDone] = useState(false);       // reveal latched
+  const [ripping, setRipping] = useState(false); // the tape is springing off + flinging
   const [confettiOn, setConfettiOn] = useState(false);
   const [tapeImgFailed, setTapeImgFailed] = useState(false); // real tape couldn't load → CSS fallback
+
+  useEffect(() => { if (!reduced) ensurePeelKeyframes(); }, [reduced]);
+  useEffect(() => () => clearTimeout(ripTimerRef.current), []);
 
   const name = result?.winner_name || null;
   const jersey = result?.jersey;
@@ -125,9 +176,19 @@ export default function GamePuckReveal({
     if (finishedRef.current) return;
     finishedRef.current = true;
     draggingRef.current = false;
-    setPeel(1);
+    if (!reduced) {
+      // Weight + spring into the rip: the clip springs from wherever it was to
+      // fully gone while the roll flings off (animation on the assembly).
+      setRipping(true);
+      setPeel(1);
+      haptics.rip();                 // rrrip
+      setConfettiOn(true);
+      ripTimerRef.current = setTimeout(() => setRipping(false), 520);
+    } else {
+      // Reduced motion: no animation, no confetti — instant reveal.
+      setPeel(1);
+    }
     setDone(true);
-    if (!reduced) { buzz([0, 28, 18, 42]); setConfettiOn(true); }   // rrrip
     markRevealed(kind, gameId);
     onRevealed && onRevealed();
   }, [reduced, kind, gameId, onRevealed]);
@@ -140,7 +201,7 @@ export default function GamePuckReveal({
     setPeel(frac);
     // Haptic tick each time we cross a "wrap" boundary while lifting.
     const step = Math.floor(frac * HAPTIC_STEPS);
-    if (step !== lastTickRef.current) { lastTickRef.current = step; if (!reduced) buzz(6); }
+    if (step !== lastTickRef.current) { lastTickRef.current = step; haptics.tick(); }
     if (frac >= RIP_AT) finish();
   }, [reduced, finish]);
 
@@ -174,6 +235,20 @@ export default function GamePuckReveal({
 
   const peelPct = Math.round(peel * 100);
   const tapeGone = peel >= 0.999;
+
+  // ── Peel geometry (recomputed per render from `peel`) ──
+  const lift = peel;                                  // 0 (flat) → 1 (off)
+  const rollW = Math.round(22 + lift * 36);           // the roll fattens as it gathers tape (weight)
+  const rollLeftPct = ripping ? Math.round(RIP_AT * 100) : peelPct; // freeze the roll at the rip point while it flings
+  const showTape = !tapeGone || ripping;              // keep the flat tape mounted through the rip spring
+  const showRoll = !reduced && (ripping || (!tapeGone && peel > 0.012));
+  // Spring (overshoot) into the rip; smooth otherwise; nothing while the finger drives it.
+  const tapeClipTransition = draggingRef.current ? 'none'
+    : ripping ? 'clip-path 0.5s cubic-bezier(.5,.16,.3,1.25), -webkit-clip-path 0.5s cubic-bezier(.5,.16,.3,1.25)'
+      : 'clip-path 0.45s cubic-bezier(.5,0,.2,1), -webkit-clip-path 0.45s cubic-bezier(.5,0,.2,1)';
+  // Cast shadow on the revealed ice — grows + softens as the roll lifts higher.
+  const shadeBlur = (2 + lift * 6).toFixed(1);
+  const shadeOpacity = (0.16 + lift * 0.26).toFixed(2);
 
   return (
     <div
@@ -242,15 +317,15 @@ export default function GamePuckReveal({
 
           {confettiOn && <Confetti seed={peelPct} />}
 
-          {/* ── Tape layer (cover) — clipped away from the left as you peel right.
-               Real frayed-tape photo (Pete) over the CSS gradient, which stays as
-               the fallback if the image fails to load. ── */}
-          {!tapeGone && (
+          {/* ── Flat tape still stuck to the surface (right of the lift line).
+               Clipped away from the left as the peel advances; the real frayed
+               photo rides over the CSS gradient fallback. ── */}
+          {showTape && (
             <div aria-hidden style={{
               position: 'absolute', inset: 0, zIndex: 4,
               clipPath: `inset(0 0 0 ${peelPct}%)`,
               WebkitClipPath: `inset(0 0 0 ${peelPct}%)`,
-              transition: draggingRef.current ? 'none' : 'clip-path 0.45s cubic-bezier(.5,0,.2,1), -webkit-clip-path 0.45s cubic-bezier(.5,0,.2,1)',
+              transition: `${tapeClipTransition}`,
               // Behind the frayed/transparent parts of the real tape we want the
               // SAME navy as the card so the patch sits seamlessly (no rectangular
               // border). The CSS gradient is painted ONLY if the image fails.
@@ -261,9 +336,6 @@ export default function GamePuckReveal({
                   'linear-gradient(180deg,#f3f4f6,#dfe3e8 55%,#cfd5dc)'
                 : 'none',
             }}>
-              {/* the real frayed tape — its transparent fray shows the navy behind.
-                  webp + PNG fallback (some phones don't decode webp); both fail →
-                  tapeImgFailed → the CSS gradient. */}
               {!tapeImgFailed && (
                 <picture>
                   <source srcSet="/gamepuck/tape.webp" type="image/webp" />
@@ -288,23 +360,43 @@ export default function GamePuckReveal({
             </div>
           )}
 
-          {/* ── Curl lip — the lifting edge that tracks the peel boundary ── */}
-          {!tapeGone && peel > 0.012 && (
+          {/* ── Cast shadow — the lifted roll throws a soft shadow onto the
+               revealed ice, growing + sliding as it climbs. ── */}
+          {showRoll && (
             <div aria-hidden style={{
-              position: 'absolute', top: 0, bottom: 0, left: `${peelPct}%`, width: 22, zIndex: 6,
-              transform: 'translateX(-100%)',
+              position: 'absolute', top: '4%', bottom: '4%', left: `${rollLeftPct}%`, width: rollW * 1.5, zIndex: 5,
+              transform: `translateX(calc(-100% - ${Math.round(rollW * 0.35)}px))`,
               transition: draggingRef.current ? 'none' : 'left 0.45s cubic-bezier(.5,0,.2,1)',
+              background: `linear-gradient(90deg, rgba(0,0,0,0) 0%, rgba(0,0,0,${shadeOpacity * 0.4}) 55%, rgba(0,0,0,${shadeOpacity}) 100%)`,
+              filter: `blur(${shadeBlur}px)`, borderRadius: rollW,
+              opacity: ripping ? 0 : 1,
+            }} />
+          )}
+
+          {/* ── The 3D roll — the loose end lifted off the surface and curled
+               back into a lit cylinder, pinned to the lift line. Flings off on
+               the rip. ── */}
+          {showRoll && (
+            <div aria-hidden style={{
+              position: 'absolute', top: 0, bottom: 0, left: `calc(${rollLeftPct}% + 2px)`, width: rollW, zIndex: 6,
+              perspective: 800,
+              transform: ripping ? undefined : 'translateX(-100%)',
+              transition: draggingRef.current || ripping ? 'none' : 'left 0.45s cubic-bezier(.5,0,.2,1)',
+              animation: ripping ? 'gpPeelFling 0.5s cubic-bezier(.4,.05,.6,1) forwards' : 'none',
             }}>
-              {/* shadow the lifted tape casts onto the revealed side */}
-              <div style={{ position: 'absolute', top: 0, bottom: 0, left: -14, width: 16, background: 'linear-gradient(90deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.28) 100%)', filter: 'blur(1px)' }} />
-              {/* the curled tape edge */}
               <div style={{
-                position: 'absolute', top: -2, bottom: -2, right: 0, width: 22,
-                borderRadius: '3px 9px 9px 3px',
-                background: 'linear-gradient(90deg,#c7bfa8 0%,#e6dfcd 42%,#f5efe1 72%,#d6cdb8 100%)',
-                boxShadow: '0 0 6px rgba(0,0,0,0.4), inset -2px 0 2px rgba(255,255,255,0.7)',
-                transform: 'skewY(-1.5deg)',
-              }} />
+                position: 'absolute', inset: '-3px 0', clipPath: rollClip(), WebkitClipPath: rollClip(),
+                background: CYL, borderRadius: 2,
+                transform: 'rotateY(-15deg)', transformOrigin: 'right center',
+                boxShadow: 'inset 0 9px 13px rgba(255,255,255,0.22), inset 0 -11px 15px rgba(0,0,0,0.32)',
+              }}>
+                {/* top-down light + bottom shade across the cylinder length */}
+                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(255,255,255,0.24) 0%, rgba(255,255,255,0) 24%, rgba(0,0,0,0) 68%, rgba(0,0,0,0.2) 100%)' }} />
+                {/* the specular band running down the crown of the roll */}
+                <div style={{ position: 'absolute', top: 0, bottom: 0, left: '44%', width: 3, background: 'rgba(255,255,255,0.9)', filter: 'blur(2px)' }} />
+                {/* the crease where the tape leaves the surface (the lift line) */}
+                <div style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: 2, background: 'rgba(0,0,0,0.3)' }} />
+              </div>
             </div>
           )}
         </div>

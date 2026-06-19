@@ -12,6 +12,7 @@ import { classifyImage } from '../lib/imageModeration';
 import PostActionMenu from './PostActionMenu';
 import PostReactions from './PostReactions';
 import { getReactions } from '../lib/reactions';
+import { haptics } from '../lib/haptics';
 import RecapCard from './RecapCard';
 import ShareButton from './ShareButton';
 import { recapSourceFromPost, getRecapCardWithSponsor } from '../lib/recapCard';
@@ -304,6 +305,7 @@ export default function TeamFeed({ teamId, currentUser, isMember }) {
       nextLiked = !prev.includes(postId);
       return nextLiked ? [...prev, postId] : prev.filter(id => id !== postId);
     });
+    if (nextLiked) haptics.like();
     setPosts(prev => prev.map(p => p.id === postId
       ? { ...p, likes: nextLiked ? (p.likes || 0) + 1 : Math.max(0, (p.likes || 0) - 1) }
       : p

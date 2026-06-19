@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { REACTION_EMOJIS, toggleReaction } from '../lib/reactions';
+import { haptics } from '../lib/haptics';
 
 const C = { ice: '#F4F7FA', steel: '#8BA3BE', blue: '#5B9FE2', border: 'rgba(46,91,140,0.5)' };
 
@@ -70,6 +71,7 @@ export default function PostReactions({ postId, currentUserId, initial }) {
     const willReactOn = !(reactions[emoji]?.mine);
     setReactions((prev) => applyToggle(prev, emoji));
     if (willReactOn) {
+      haptics.tick();
       const key = ++popSeq.current;
       setPop({ emoji, key });
       clearTimeout(popTimer.current);

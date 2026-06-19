@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { composeRecapCard, composeGamePuckCard, composeWatermarkedPhoto } from '../lib/shareCard';
+import { composeRecapCard, composeGamePuckCard, composeWatermarkedPhoto, composeStatCard } from '../lib/shareCard';
 import { composeRecapCardV2 } from '../lib/recapShareV2';
 import { prefersNativeShare, downloadBlob, copyText, absoluteShareUrl } from '../lib/share';
 import { gameShareUrl } from '../lib/publicShare';
@@ -21,18 +21,19 @@ import { track } from '../lib/analytics';
 
 const C = { blue: '#2E5B8C', ice: '#F4F7FA', steel: '#8BA3BE', card: '#0f2847', border: 'rgba(46,91,140,0.4)', dark: '#07111F' };
 
-export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghost', label = 'Share', cardType = 'recap' }) {
+export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghost', label = 'Share', cardType = 'recap', compact = false, shareUrl = null }) {
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState(null); // { imgUrl, blob, deepLink }
   const [copied, setCopied] = useState(false);
   const [err, setErr] = useState(false);
 
-  const gameDeepLink = absoluteShareUrl(gameShareUrl(!!isLeague, gameId));
+  const gameDeepLink = gameId ? absoluteShareUrl(gameShareUrl(!!isLeague, gameId)) : (shareUrl || absoluteShareUrl('/'));
   const kind = isLeague ? 'league' : 'tournament';
   const isPuck = cardType === 'gamepuck';
   const isPhoto = cardType === 'photo';
   const isRecapV2 = cardType === 'recapv2';
-  const fileName = isPhoto ? 'rinkd-photo.jpg' : isPuck ? 'rinkd-gamepuck.png' : 'rinkd-recap.png';
+  const isStat = cardType === 'stat';
+  const fileName = isPhoto ? 'rinkd-photo.jpg' : isPuck ? 'rinkd-gamepuck.png' : isStat ? 'rinkd-stat.png' : 'rinkd-recap.png';
   const mime = isPhoto ? 'image/jpeg' : 'image/png';
 
   const onShare = async () => {
@@ -44,25 +45,28 @@ export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghos
       card = await getCard();
       blob = isPhoto ? await composeWatermarkedPhoto(card.imageUrl, { tag: card.tag })
         : isPuck ? await composeGamePuckCard(card)
-          : isRecapV2 ? await composeRecapCardV2(card, { shareUrl: gameDeepLink, sponsorName: card.sponsorName })
-            : await composeRecapCard(card, { format: 'portrait' });
+          : isStat ? await composeStatCard(card)
+            : isRecapV2 ? await composeRecapCardV2(card, { shareUrl: shareUrl || gameDeepLink, sponsorName: card.sponsorName })
+              : await composeRecapCard(card, { format: 'portrait' });
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('[ShareButton] compose failed', e);
       setErr(true); setBusy(false);
       return;
     }
-    // Photos deep-link to the event page (no per-photo public page); games to /g|/lg.
-    const link = isPhoto ? (card.deepLink || gameDeepLink) : gameDeepLink;
+    // Photos + stat cards deep-link to the event page; games to /g|/lg.
+    const link = (isPhoto && card.deepLink) ? card.deepLink : (shareUrl || gameDeepLink);
     // Fire-and-forget OG upload — recap only (the game's OG image is the recap card).
     if (cardType === 'recap') uploadShareCard(gameId, isLeague, card);
     const text = isPhoto
       ? `📸 ${card.tag ? card.tag + ' · ' : ''}on Rinkd`
       : isPuck
         ? `🏒 Game Puck: ${card.player.name || '#' + card.player.jersey} — ${card.player.teamName} · on Rinkd`
-        : isRecapV2
-          ? `${card.away?.name || 'Away'} ${card.away_score ?? 0}, ${card.home?.name || 'Home'} ${card.home_score ?? 0} — on Rinkd`
-          : `${card.home.name} ${card.homeScore ?? 0}, ${card.away.name} ${card.awayScore ?? 0} — on Rinkd`;
+        : isStat
+          ? `🏒 ${card.player.name || '#' + card.player.jersey}${card.headline ? ` — ${card.headline.value} ${card.headline.label}` : ''} · on Rinkd`
+          : isRecapV2
+            ? `${card.away?.name || 'Away'} ${card.away_score ?? 0}, ${card.home?.name || 'Home'} ${card.home_score ?? 0} — on Rinkd`
+            : `${card.home.name} ${card.homeScore ?? 0}, ${card.away.name} ${card.awayScore ?? 0} — on Rinkd`;
     // 2) Touch device with file-share → one-tap native sheet. Any failure (incl.
     //    lost user-activation after the async compose) drops to the modal.
     if (prefersNativeShare()) {
@@ -92,6 +96,39 @@ export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghos
     ? { background: C.blue, color: '#fff', border: 'none' }
     : { background: 'transparent', color: C.ice, border: `1px solid ${C.border}` };
 
+  const noun = isPhoto ? 'photo' : isPuck ? 'Game Puck' : isStat ? 'card' : 'recap';
+  const renderModal = () => (
+    <div onClick={closeModal} style={{ position: 'fixed', inset: 0, background: 'rgba(3,9,18,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 16, padding: 18, maxWidth: 360, width: '100%' }}>
+        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice, marginBottom: 12 }}>Share this {noun}</div>
+        <img src={modal.imgUrl} alt={`Rinkd ${noun}`} style={{ width: '100%', borderRadius: 10, display: 'block', marginBottom: 14, border: `1px solid ${C.border}` }} />
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={() => downloadBlob(modal.blob, fileName)} style={{ flex: 1, background: C.blue, color: '#fff', border: 'none', borderRadius: 999, padding: '11px 0', fontFamily: "'Barlow', sans-serif", fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>⬇ Download</button>
+          <button onClick={async () => { const ok = await copyText(modal.deepLink); setCopied(ok); }} style={{ flex: 1, background: 'transparent', color: C.ice, border: `1px solid ${C.border}`, borderRadius: 999, padding: '11px 0', fontFamily: "'Barlow', sans-serif", fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>{copied ? '✓ Link copied' : '🔗 Copy link'}</button>
+        </div>
+        <button onClick={closeModal} style={{ width: '100%', marginTop: 10, background: 'transparent', color: C.steel, border: 'none', padding: 8, fontSize: 13, cursor: 'pointer' }}>Close</button>
+      </div>
+    </div>
+  );
+
+  if (compact) {
+    return (
+      <>
+        <button onClick={(e) => { e.stopPropagation(); onShare(); }} disabled={busy}
+          aria-label={err ? 'Could not build the card — tap to try again' : 'Share card'}
+          title={err ? 'Could not build the card — tap to try again' : 'Share card'}
+          style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40,
+            borderRadius: 999, background: 'transparent', border: 'none', cursor: busy ? 'default' : 'pointer',
+            color: err ? '#E26B6B' : busy ? '#8BA3BE' : '#9ec3ec', opacity: busy ? 0.7 : 1, padding: 0,
+          }}>
+          <ShareIcon />
+        </button>
+        {modal && renderModal()}
+      </>
+    );
+  }
+
   return (
     <>
       <button onClick={onShare} disabled={busy} title={err ? 'Could not build the card — tap to try again' : 'Share'} style={{
@@ -102,19 +139,7 @@ export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghos
         <ShareIcon /> {busy ? 'Preparing…' : err ? 'Try again' : label}
       </button>
 
-      {modal && (
-        <div onClick={closeModal} style={{ position: 'fixed', inset: 0, background: 'rgba(3,9,18,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 16, padding: 18, maxWidth: 360, width: '100%' }}>
-            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice, marginBottom: 12 }}>{isPhoto ? 'Share this photo' : isPuck ? 'Share this Game Puck' : 'Share this recap'}</div>
-            <img src={modal.imgUrl} alt={isPhoto ? 'Photo' : isPuck ? 'Game Puck card' : 'Recap card'} style={{ width: '100%', borderRadius: 10, display: 'block', marginBottom: 14, border: `1px solid ${C.border}` }} />
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => downloadBlob(modal.blob, fileName)} style={{ flex: 1, background: C.blue, color: '#fff', border: 'none', borderRadius: 999, padding: '11px 0', fontFamily: "'Barlow', sans-serif", fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>⬇ Download</button>
-              <button onClick={async () => { const ok = await copyText(modal.deepLink); setCopied(ok); }} style={{ flex: 1, background: 'transparent', color: C.ice, border: `1px solid ${C.border}`, borderRadius: 999, padding: '11px 0', fontFamily: "'Barlow', sans-serif", fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>{copied ? '✓ Link copied' : '🔗 Copy link'}</button>
-            </div>
-            <button onClick={closeModal} style={{ width: '100%', marginTop: 10, background: 'transparent', color: C.steel, border: 'none', padding: 8, fontSize: 13, cursor: 'pointer' }}>Close</button>
-          </div>
-        </div>
-      )}
+      {modal && renderModal()}
     </>
   );
 }

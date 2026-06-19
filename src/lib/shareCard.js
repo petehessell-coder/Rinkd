@@ -60,6 +60,53 @@ function drawImageContain(ctx, img, cx, cy, boxW, boxH) {
   ctx.drawImage(img, cx - w / 2, cy - h / 2, w, h);
 }
 
+// ── Broadcast finish ─────────────────────────────────────────────────────────
+// The polish layer that lifts these from "made by a script" to "ran on the
+// jumbotron": an overhead arena light bloom, an edge vignette for depth, and a
+// hairline safe-area frame. Applied over the background (bloom) and over the
+// finished card (vignette + frame) on every composer.
+
+// Overhead rink-light bloom — a soft pool of light from above center.
+function drawArenaLighting(ctx, W, H) {
+  const bloom = ctx.createRadialGradient(W / 2, -H * 0.12, W * 0.06, W / 2, H * 0.16, W * 0.95);
+  bloom.addColorStop(0, 'rgba(255,255,255,0.11)');
+  bloom.addColorStop(0.45, 'rgba(214,228,245,0.04)');
+  bloom.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.save(); ctx.globalCompositeOperation = 'screen';
+  ctx.fillStyle = bloom; ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
+// Edge vignette — darkens the corners so the eye lands center-ice. Kept gentle
+// so it adds depth without muddying the approved layout.
+function drawVignette(ctx, W, H) {
+  const v = ctx.createRadialGradient(W / 2, H * 0.46, Math.min(W, H) * 0.30, W / 2, H * 0.5, Math.max(W, H) * 0.78);
+  v.addColorStop(0, 'rgba(0,0,0,0)');
+  v.addColorStop(0.75, 'rgba(0,0,0,0.04)');
+  v.addColorStop(1, 'rgba(0,0,0,0.22)');
+  ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+}
+
+// Hairline broadcast safe-area frame — a thin inset rule, like a TV graphic.
+function drawInnerFrame(ctx, W, H, pad) {
+  const inset = Math.max(20, pad * 0.5);
+  ctx.save();
+  ctx.strokeStyle = 'rgba(244,247,250,0.10)';
+  ctx.lineWidth = 2;
+  roundRect(ctx, inset, inset, W - inset * 2, H - inset * 2, 20);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Wrap a text draw in a soft drop shadow — the "score bug" lift that makes big
+// numbers read as a broadcast overlay, not flat type. Caller draws inside fn().
+function withTextShadow(ctx, { blur = 18, oy = 6, color = 'rgba(0,0,0,0.45)' }, fn) {
+  ctx.save();
+  ctx.shadowColor = color; ctx.shadowBlur = blur; ctx.shadowOffsetY = oy;
+  fn();
+  ctx.restore();
+}
+
 // Load an image for canvas compositing — taint-proof. We fetch the bytes and
 // createImageBitmap() them: a bitmap built from a blob is ALWAYS canvas-clean,
 // which sidesteps the service-worker/CORS replay traps that can taint a plain
@@ -191,6 +238,7 @@ function drawCard(ctx, L, card, assets) {
   const grad = ctx.createLinearGradient(0, 0, 0, H);
   grad.addColorStop(0, C.navyHi); grad.addColorStop(1, C.navy);
   ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+  drawArenaLighting(ctx, W, H);
   drawWatermark(ctx, W, H, L.wmSize);
 
   // TOP STRIP — sponsor
@@ -226,8 +274,10 @@ function drawCard(ctx, L, card, assets) {
 
   ctx.fillStyle = C.ice; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = `900 italic ${L.scoreSize}px 'Barlow Condensed'`;
-  ctx.fillText(`${g.homeScore ?? 0}`, W * L.scoreLr, midY);
-  ctx.fillText(`${g.awayScore ?? 0}`, W * L.scoreRr, midY);
+  withTextShadow(ctx, { blur: L.scoreSize * 0.10, oy: L.scoreSize * 0.03 }, () => {
+    ctx.fillText(`${g.homeScore ?? 0}`, W * L.scoreLr, midY);
+    ctx.fillText(`${g.awayScore ?? 0}`, W * L.scoreRr, midY);
+  });
   ctx.fillStyle = C.steel;
   ctx.font = `800 ${L.scoreSize * 0.5}px 'Barlow Condensed'`;
   ctx.fillText('–', W / 2, midY - L.scoreSize * 0.04);
@@ -341,6 +391,8 @@ export async function composeRecapCard(card, { format = 'portrait' } = {}) {
   canvas.width = L.W; canvas.height = L.H;
   const ctx = canvas.getContext('2d');
   drawCard(ctx, L, card, { homeLogo, awayLogo, wordmark });
+  drawVignette(ctx, L.W, L.H);
+  drawInnerFrame(ctx, L.W, L.H, L.pad);
   return new Promise((resolve, reject) => {
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob returned null'))), 'image/png');
   });
@@ -393,6 +445,7 @@ function drawGamePuck(ctx, L, card, assets) {
     grad.addColorStop(0, C.navyHi); grad.addColorStop(1, C.navy);
     ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
   }
+  drawArenaLighting(ctx, W, H);
   drawWatermark(ctx, W, H, L.wmSize);
 
   // TOP STRIP — GAME PUCK + sponsor
@@ -421,6 +474,12 @@ function drawGamePuck(ctx, L, card, assets) {
   // the player name + # sits directly below). Falls back to the drawn black
   // puck + number if the image didn't load.
   const cx = W / 2, cy = L.puckCy;
+  // Spotlight halo behind the medallion — the trophy pop.
+  const halo = ctx.createRadialGradient(cx, cy, L.puckR * 0.2, cx, cy, L.puckR * 1.95);
+  halo.addColorStop(0, 'rgba(215,38,56,0.30)');
+  halo.addColorStop(0.5, 'rgba(215,38,56,0.10)');
+  halo.addColorStop(1, 'rgba(215,38,56,0)');
+  ctx.save(); ctx.globalCompositeOperation = 'screen'; ctx.fillStyle = halo; ctx.fillRect(0, 0, W, H); ctx.restore();
   if (assets.puck) {
     drawImageContain(ctx, assets.puck, cx, cy, L.puckR * 2.3, L.puckR * 2.3);
   } else {
@@ -503,6 +562,202 @@ export async function composeGamePuckCard(card) {
   canvas.width = L.W; canvas.height = L.H;
   const ctx = canvas.getContext('2d');
   drawGamePuck(ctx, L, card, { wordmark, puck, bg });
+  drawVignette(ctx, L.W, L.H);
+  drawInnerFrame(ctx, L.W, L.H, L.pad);
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob returned null'))), 'image/png');
+  });
+}
+
+// ---- Player stat card (broadcast) -------------------------------------------
+// The "screenshot it to the family group chat" card. Player-centric, vertical
+// (Stories), mirroring the Game Puck frame so the set feels like one broadcast
+// package. Driven by a headline stat (huge "score bug") + up to four supporting
+// blocks, an optional gold rank ribbon, and a subtitle (season / event).
+//
+//   buildStatCardData({ player:{ name|null, jersey, teamName, teamColor, position },
+//                       league, sponsor, headline:{ label, value }, stats:[{label,value}],
+//                       rankLabel, subtitle }) -> card
+//   composeStatCard(card) -> Promise<Blob>
+//
+// player.name === null → youth-suppressed (the card shows "#jersey").
+
+const GOLD = '#C9A84C';
+const STAT = {
+  W: 1080, H: 1350, pad: 64, topH: 150, botH: 230, wmText: 96, wmImgH: 96, wmSize: 150,
+  ghost: 560, nameSize: 104, eyebrow: 33, teamSize: 44, pillSize: 34,
+  headlineNum: 212, headlineLbl: 40, blockNum: 74, blockLbl: 25,
+};
+
+export function buildStatCardData({ player, league, sponsor, headline, stats, rankLabel, subtitle } = {}) {
+  return {
+    player: {
+      name: player?.name || null,
+      jersey: player?.jersey ?? null,
+      teamName: player?.teamName || '',
+      teamColor: player?.teamColor || C.blue,
+      position: player?.position || null,
+    },
+    league: league || 'Rinkd',
+    sponsor: sponsor || null,
+    headline: headline || { label: 'PTS', value: 0 },
+    stats: (stats || []).filter(Boolean).slice(0, 4),
+    rankLabel: rankLabel || null,
+    subtitle: subtitle || null,
+  };
+}
+
+function drawStatCard(ctx, L, card, assets) {
+  const { W, H } = L;
+
+  // Background + arena finish.
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, C.navyHi); grad.addColorStop(1, C.navy);
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+  drawArenaLighting(ctx, W, H);
+  drawWatermark(ctx, W, H, L.wmSize);
+
+  // Ghost jersey number — a huge, faint mark behind the hero (the jersey on the
+  // wall). Skipped when there's no number.
+  if (card.player.jersey != null && card.player.jersey !== '') {
+    ctx.save();
+    ctx.globalAlpha = 0.05; ctx.fillStyle = C.ice;
+    ctx.font = `900 italic ${L.ghost}px 'Barlow Condensed'`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(`${card.player.jersey}`, W / 2, L.topH + 360);
+    ctx.restore();
+  }
+
+  // TOP STRIP — PLAYER CARD + sponsor (mirrors the recap / Game Puck lockup).
+  ctx.fillStyle = C.strip; ctx.fillRect(0, 0, W, L.topH);
+  ctx.fillStyle = C.line; ctx.fillRect(0, L.topH - 2, W, 2);
+  const chipR = L.topH * 0.30, chipX = L.pad + chipR, chipY = L.topH / 2;
+  if (assets.puck) {
+    drawImageContain(ctx, assets.puck, chipX, chipY, chipR * 2.2, chipR * 2.2);
+  } else {
+    ctx.save(); ctx.beginPath(); ctx.arc(chipX, chipY, chipR, 0, Math.PI * 2);
+    ctx.fillStyle = '#0a0a0a'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(244,247,250,0.4)'; ctx.stroke(); ctx.restore();
+  }
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = C.steel; ctx.font = `700 ${L.topH * 0.19}px 'Barlow'`;
+  ctx.fillText('PLAYER CARD · PRESENTED BY', chipX + chipR + L.pad * 0.5, chipY - L.topH * 0.13);
+  ctx.fillStyle = C.ice; ctx.font = `800 italic ${L.topH * 0.30}px 'Barlow Condensed'`;
+  ctx.fillText((card.sponsor || 'RINKD').toUpperCase(), chipX + chipR + L.pad * 0.5, chipY + L.topH * 0.16);
+
+  // Eyebrow — position · league.
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = C.red; ctx.font = `900 italic ${L.eyebrow}px 'Barlow Condensed'`;
+  const eyebrow = [card.player.position, card.league].filter(Boolean).join('  ·  ').toUpperCase() || 'RINKD';
+  ctx.fillText(eyebrow, W / 2, L.topH + 86);
+
+  // Player name (or #jersey for youth).
+  const hero = (card.player.name ? card.player.name : `#${card.player.jersey ?? '?'}`).toUpperCase();
+  ctx.fillStyle = C.ice;
+  const ns = fitFont(ctx, hero, '900 italic', W - L.pad * 2, L.nameSize, 48);
+  let y = L.topH + 86 + ns * 0.95;
+  withTextShadow(ctx, { blur: 22, oy: 6 }, () => ctx.fillText(hero, W / 2, y));
+
+  // Team accent bar + team name.
+  const team = (card.player.teamName || '').toUpperCase();
+  ctx.font = `800 italic ${L.teamSize}px 'Barlow Condensed'`;
+  const ty = y + L.teamSize * 1.35;
+  const barW = Math.min(ctx.measureText(team).width, 420);
+  if (team) {
+    roundRect(ctx, W / 2 - barW / 2, ty - L.teamSize * 1.15, barW, 9, 4);
+    ctx.fillStyle = card.player.teamColor || C.blue; ctx.fill();
+    ctx.fillStyle = C.steel; ctx.fillText(team, W / 2, ty);
+  }
+
+  // Gold rank ribbon (optional) — the only gold on the card, by design.
+  let cursor = ty + (team ? L.teamSize * 0.9 : 0);
+  if (card.rankLabel) {
+    cursor += 70;
+    ctx.font = `800 italic ${L.pillSize}px 'Barlow Condensed'`;
+    const txt = card.rankLabel.toUpperCase();
+    const pw = ctx.measureText(txt).width + 64, ph = 56;
+    roundRect(ctx, W / 2 - pw / 2, cursor - ph + 12, pw, ph, ph / 2);
+    ctx.fillStyle = GOLD; ctx.fill();
+    ctx.fillStyle = '#1a160a'; ctx.textBaseline = 'middle';
+    ctx.fillText(txt, W / 2, cursor - ph / 2 + 12);
+    ctx.textBaseline = 'alphabetic';
+    cursor += 24;
+  }
+
+  // Headline stat — the score bug. Big number, small label.
+  const headY = Math.max(cursor + L.headlineNum * 0.62, L.topH + 560);
+  ctx.fillStyle = C.ice; ctx.textBaseline = 'middle';
+  ctx.font = `900 italic ${L.headlineNum}px 'Barlow Condensed'`;
+  withTextShadow(ctx, { blur: 26, oy: 8 }, () => ctx.fillText(String(card.headline.value ?? 0), W / 2, headY));
+  ctx.fillStyle = C.steel; ctx.textBaseline = 'alphabetic';
+  ctx.font = `800 ${L.headlineLbl}px 'Barlow Condensed'`;
+  ctx.fillText(String(card.headline.label || '').toUpperCase(), W / 2, headY + L.headlineNum * 0.46);
+
+  // Supporting blocks — evenly spaced row of number+label cells.
+  const blocks = card.stats;
+  if (blocks.length) {
+    const rowY = Math.min(headY + L.headlineNum * 0.78, H - L.botH - 150);
+    const span = W - L.pad * 2;
+    const cw = span / blocks.length;
+    blocks.forEach((b, i) => {
+      const cx = L.pad + cw * (i + 0.5);
+      ctx.fillStyle = C.ice; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `900 italic ${L.blockNum}px 'Barlow Condensed'`;
+      ctx.fillText(String(b.value ?? 0), cx, rowY);
+      ctx.fillStyle = C.steel; ctx.textBaseline = 'alphabetic';
+      ctx.font = `700 ${L.blockLbl}px 'Barlow'`;
+      ctx.fillText(String(b.label || '').toUpperCase(), cx, rowY + L.blockNum * 0.52);
+      if (i > 0) { // thin divider between cells
+        ctx.strokeStyle = 'rgba(46,91,140,0.4)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(L.pad + cw * i, rowY - L.blockNum * 0.5); ctx.lineTo(L.pad + cw * i, rowY + L.blockNum * 0.4); ctx.stroke();
+      }
+    });
+  }
+
+  // Subtitle (season / event), just above the frame.
+  if (card.subtitle) {
+    ctx.fillStyle = C.steel; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.font = `600 ${L.blockLbl + 4}px 'Barlow'`;
+    ctx.fillText(card.subtitle, W / 2, H - L.botH - 40);
+  }
+
+  // BOTTOM STRIP — Rinkd frame (identical to recap / Game Puck).
+  const bY = H - L.botH;
+  ctx.fillStyle = C.dark; ctx.fillRect(0, bY, W, L.botH);
+  ctx.fillStyle = C.line; ctx.fillRect(0, bY, W, 2);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  const wmY = bY + L.botH * 0.40;
+  let wmRight;
+  if (assets.wordmark) {
+    const h = L.wmImgH, w = h * (assets.wordmark.width / assets.wordmark.height);
+    ctx.drawImage(assets.wordmark, L.pad, wmY - h / 2, w, h); wmRight = L.pad + w;
+  } else {
+    ctx.font = `900 italic ${L.wmText}px 'Barlow Condensed'`; ctx.fillStyle = C.ice; ctx.fillText('RINKD', L.pad, wmY);
+    wmRight = L.pad + ctx.measureText('RINKD').width + L.wmText * 0.26;
+  }
+  ctx.fillStyle = C.steel; ctx.font = `700 ${L.wmText * 0.34}px 'Barlow'`; ctx.fillText('rinkd.app', L.pad, bY + L.botH * 0.76);
+  const ctaMaxW = W - L.pad - wmRight - L.pad * 0.6;
+  let ctaSize = L.wmText * 0.42;
+  ctx.fillStyle = C.ice; ctx.textAlign = 'right'; ctx.font = `700 italic ${ctaSize}px 'Barlow Condensed'`;
+  let ctaText = `FOLLOW ${(card.league || 'YOUR LEAGUE').toUpperCase()} LIVE →`;
+  if (ctx.measureText(ctaText).width > ctaMaxW) {
+    ctaText = 'FOLLOW LIVE ON RINKD →';
+    while (ctaSize > L.wmText * 0.26 && (ctx.font = `700 italic ${ctaSize}px 'Barlow Condensed'`, ctx.measureText(ctaText).width > ctaMaxW)) ctaSize -= 2;
+  }
+  ctx.fillText(ctaText, W - L.pad, bY + L.botH * 0.42);
+  ctx.fillStyle = C.steel; ctx.font = `600 ${L.wmText * 0.21}px 'Barlow'`; ctx.textAlign = 'right';
+  ctx.fillText('Every shift lives on Rinkd', W - L.pad, bY + L.botH * 0.72);
+}
+
+export async function composeStatCard(card) {
+  const L = STAT;
+  await ensureFonts();
+  const [wordmark, puck] = await Promise.all([loadImage(WORDMARK_SRC), loadImage(PUCK_SRC)]);
+  const canvas = document.createElement('canvas');
+  canvas.width = L.W; canvas.height = L.H;
+  const ctx = canvas.getContext('2d');
+  drawStatCard(ctx, L, card, { wordmark, puck });
+  drawVignette(ctx, L.W, L.H);
+  drawInnerFrame(ctx, L.W, L.H, L.pad);
   return new Promise((resolve, reject) => {
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob returned null'))), 'image/png');
   });

@@ -17,8 +17,10 @@ import { track } from '../lib/analytics';
 import PostActionMenu from '../components/PostActionMenu';
 import PostReactions from '../components/PostReactions';
 import { getReactions } from '../lib/reactions';
+import { haptics } from '../lib/haptics';
 import Gallery from '../components/Gallery';
 import StatLeaderboards from '../components/StatLeaderboards';
+import { getRecapSponsor, isPublicSharingEnabled, areScorersHidden } from '../lib/publicShare';
 import SeasonGamePucks from '../components/SeasonGamePucks';
 import { MentionInput, MentionText } from '../components/Mentions';
 import { savePostMentions, mentionMapFromRows } from '../lib/mentions';
@@ -761,7 +763,15 @@ export default function TournamentPage({ currentUser }) {
             <AdSlot slot="stats_presented" targetType="tournament" targetId={tournament.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
             <SeasonGamePucks scope="tournament" id={id} accent={accent} />
             <StatLeaderboards source="tournament" id={id} divisionId={selectedDivisionId} accent={accent}
-              gamesheetSeasonId={tournament?.scoring_source === 'external' ? (tournament?.settings?.gamesheet_season_id || null) : null} />
+              gamesheetSeasonId={tournament?.scoring_source === 'external' ? (tournament?.settings?.gamesheet_season_id || null) : null}
+              shareMeta={{
+                leagueName: tournament?.name,
+                sponsor: getRecapSponsor(tournament?.settings)?.name || null,
+                youth: areScorersHidden(tournament?.settings),
+                canShare: isPublicSharingEnabled(tournament?.settings),
+                subtitle: selectedDivision?.name || null,
+                shareUrl: typeof window !== 'undefined' ? `${window.location.origin}/tournament/${id}` : null,
+              }} />
           </>
         )}
 
@@ -906,6 +916,7 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
   const onLike = (postId) => {
     if (!currentUser?.id) return;
     const willLike = !likedPosts.includes(postId);
+    if (willLike) haptics.like();
     setLikedPosts((prev) => willLike
       ? (prev.includes(postId) ? prev : [...prev, postId])
       : prev.filter((id) => id !== postId));

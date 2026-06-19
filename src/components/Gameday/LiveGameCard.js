@@ -1,6 +1,8 @@
 import React from 'react';
 import { C, colors, radii, shadows, type, font } from '../../lib/tokens';
 import { Icon, BounceNumber, useExpand } from '../ui';
+import { useGoalMoment, GoalSweep } from '../../lib/goalMoment';
+import SoundToggle from '../SoundToggle';
 
 // =============================================================================
 // LiveGameCard — the live float. A live game pinned to the top of the feed
@@ -49,20 +51,27 @@ function TeamRow({ team, score, lead }) {
 export default function LiveGameCard({ game, navigate }) {
   const expand = useExpand();
   const hs = game.homeScore ?? 0, as = game.awayScore ?? 0;
+  // SHARE-GOAL-1 — the synchronized goal moment. Fires the haptic thump + opt-in
+  // horn and lights the card up the instant a score really ticks up; the score
+  // numbers bounce on their own via <BounceNumber/>.
+  const goal = useGoalMoment(hs, as);
 
   return (
     <div
       onClick={(e) => expand(e, () => navigate(game.gameUrl), { bg: colors.surfaceElevated })}
-      className="rinkd-pressable"
+      className={`rinkd-pressable${goal ? ' rinkd-goal-glow' : ''}`}
       style={{
+        position: 'relative',
         background: colors.surfaceElevated,
         border: '1px solid rgba(215,38,56,0.6)', boxShadow: shadows.live,
         borderRadius: radii.card, padding: 16, marginBottom: 12, cursor: 'pointer', overflow: 'hidden',
       }}
     >
+      {goal && <GoalSweep key={goal.key} side={goal.side} />}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
         <LivePill />
-        <span style={{ ...type.meta, color: C.steel, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{game.eventName}</span>
+        <span style={{ ...type.meta, color: C.steel, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{game.eventName}</span>
+        <SoundToggle />
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

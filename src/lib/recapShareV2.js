@@ -102,7 +102,10 @@ export async function composeRecapCardV2(payload, { shareUrl, sponsorName = null
   y += 210;
 
   ctx.fillStyle = C.ice; ctx.font = "900 italic 200px 'Barlow Condensed'"; ctx.textBaseline = 'middle';
+  // Broadcast "score bug" lift — a soft drop shadow under the big numbers.
+  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 24; ctx.shadowOffsetY = 8;
   ctx.fillText(`${payload.away_score ?? 0}`, W * 0.30, y + 70); ctx.fillText(`${payload.home_score ?? 0}`, W * 0.70, y + 70);
+  ctx.restore();
   ctx.fillStyle = C.steel; ctx.font = "800 100px 'Barlow Condensed'"; ctx.fillText('–', W / 2, y + 60);
   y += 160;
 
@@ -154,6 +157,10 @@ export async function composeRecapCardV2(payload, { shareUrl, sponsorName = null
   ctx.fillStyle = C.steel; ctx.font = "700 22px 'Barlow'"; ctx.textAlign = 'center';
   ctx.fillText('EVERY SHIFT.', W / 2, y + 50); ctx.fillText('EVERY GAME.', W / 2, y + 80); ctx.fillText('EVERY PLAYER.', W / 2, y + 110);
   if (qr) { ctx.fillStyle = '#fff'; roundRect(W - PAD - 126, y + 30, 126, 126, 14); ctx.fill(); ctx.drawImage(qr, W - PAD - 114, y + 42, 102, 102); }
+
+  // Hairline broadcast safe-area frame.
+  ctx.save(); ctx.strokeStyle = 'rgba(244,247,250,0.10)'; ctx.lineWidth = 2;
+  roundRect(28, 28, W - 56, H - 56, 22); ctx.stroke(); ctx.restore();
 
   return new Promise((resolve, reject) => {
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob null'))), 'image/png');

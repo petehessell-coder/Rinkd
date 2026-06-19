@@ -5,6 +5,8 @@ import { track } from '../lib/analytics';
 import { teamInitials } from '../lib/teamInitials';
 import SEO from '../components/SEO';
 import ShareButton from '../components/ShareButton';
+import SoundToggle from '../components/SoundToggle';
+import { useGoalMoment, GoalSweep } from '../lib/goalMoment';
 import { loadGameCardData } from '../lib/gameCardData';
 import {
   isPublicSharingEnabled, areScorersHidden, isParentPublic, gameAppUrl, getRecapSponsor,
@@ -142,6 +144,14 @@ export default function PublicGame({ league }) {
 
   const { loading, game, parent, blocked } = state;
 
+  // SHARE-GOAL-1 — the goal moment for spectators who opened a shared live link.
+  // `ready` gates out the loading→hydrate jump; `enabled` keeps a final game from
+  // celebrating on a re-render. Hook sits above the early returns (rules of hooks).
+  const goal = useGoalMoment(game?.home_score, game?.away_score, {
+    ready: !loading && !!game && !blocked,
+    enabled: game?.status === 'live',
+  });
+
   if (loading) return (
     <Shell>
       <Center>
@@ -258,16 +268,18 @@ export default function PublicGame({ league }) {
         </div>
 
         {/* scoreboard */}
-        <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 16, padding: '22px 18px', marginBottom: 16, overflow: 'hidden' }}>
+        <div className={goal ? 'rinkd-goal-glow' : undefined} style={{ position: 'relative', background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 16, padding: '22px 18px', marginBottom: 16, overflow: 'hidden' }}>
+          {goal && <GoalSweep key={goal.key} side={goal.side} />}
           {isLive ? (
             /* Live broadcast lower-third: red-accent slab bleeding to the card
                edges, pulsing ring, "2ND PERIOD - LIVE". You feel it before you
-               read it. */
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '-22px -18px 18px', padding: '11px 18px', background: C.navy, borderLeft: `4px solid ${C.red}` }}>
+               read it. The opt-in goal horn lives here — the live surface. */
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '-22px -18px 18px', padding: '7px 8px 7px 18px', background: C.navy, borderLeft: `4px solid ${C.red}` }}>
               <span className="pg-live-ring" style={{ width: 10, height: 10, borderRadius: 999, background: C.red, flex: '0 0 auto' }} />
               <span style={{ flex: 1, minWidth: 0, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', textTransform: 'uppercase', letterSpacing: '0.05em', color: C.ice, fontSize: 17, lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {periodDisplay(game.period)} - Live
               </span>
+              <SoundToggle />
             </div>
           ) : (
             <div style={{ textAlign: 'center', marginBottom: 16 }}>

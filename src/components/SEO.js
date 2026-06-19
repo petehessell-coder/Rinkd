@@ -15,7 +15,7 @@ import { useEffect } from 'react';
 const DEFAULTS = {
   title: 'Rinkd · Where Hockey Lives Online',
   description: 'The mobile-first social platform built for the hockey community. Teams, leagues, scores, and stories — all in one place.',
-  image: 'https://rinkd.app/rinkd-wordmark-large.png',
+  image: 'https://rinkd.app/og-fallback-rinkd.png',
   siteName: 'Rinkd',
   type: 'website',
   twitterCard: 'summary_large_image',

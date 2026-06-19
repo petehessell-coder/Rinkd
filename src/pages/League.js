@@ -16,6 +16,7 @@ import { getLeaguePosts, createPost, uploadMedia, timeAgo, toggleLike, getLikedP
 import PostActionMenu from '../components/PostActionMenu';
 import PostReactions from '../components/PostReactions';
 import { getReactions } from '../lib/reactions';
+import { haptics } from '../lib/haptics';
 import Gallery from '../components/Gallery';
 import { LedR } from '../components/Logos';
 import { getLiveBarnUrl } from '../lib/livebarn';
@@ -24,6 +25,7 @@ import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
 import SubscribeCalendarSheet from '../components/SubscribeCalendarSheet';
 import StatLeaderboards from '../components/StatLeaderboards';
+import { getRecapSponsor, isPublicSharingEnabled, areScorersHidden } from '../lib/publicShare';
 import SeasonGamePucks from '../components/SeasonGamePucks';
 import { MentionInput, MentionText } from '../components/Mentions';
 import { savePostMentions, mentionMapFromRows } from '../lib/mentions';
@@ -702,7 +704,15 @@ export default function LeaguePage({ currentUser, profile }) {
             <>
               <AdSlot slot="stats_presented" targetType="league" targetId={league.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
               <SeasonGamePucks scope="league" id={id} accent={league.accent_color || C.red} />
-              <StatLeaderboards source="league" id={id} accent={league.accent_color || C.red} archived={league.settings?.archived_stats || null} />
+              <StatLeaderboards source="league" id={id} accent={league.accent_color || C.red} archived={league.settings?.archived_stats || null}
+                shareMeta={{
+                  leagueName: league?.name,
+                  sponsor: getRecapSponsor(league?.settings)?.name || null,
+                  youth: areScorersHidden(league?.settings),
+                  canShare: isPublicSharingEnabled(league?.settings),
+                  subtitle: league?.season || null,
+                  shareUrl: typeof window !== 'undefined' ? `${window.location.origin}/league/${id}` : null,
+                }} />
             </>
           )}
 
@@ -861,6 +871,7 @@ function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, league
   const onLike = (postId) => {
     if (!currentUser?.id) return;
     const willLike = !likedPosts.includes(postId);
+    if (willLike) haptics.like();
     setLikedPosts((prev) => willLike
       ? (prev.includes(postId) ? prev : [...prev, postId])
       : prev.filter((id) => id !== postId));

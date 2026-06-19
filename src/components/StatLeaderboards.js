@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
+import ShareButton from './ShareButton';
+import { buildStatCardData } from '../lib/shareCard';
 
 // Phase-1 review-only stat leaderboards (skaters + goalies), jersey-keyed.
 // Shared by the Tournament and League pages via the `source` prop:
@@ -41,15 +43,16 @@ function fmtNum(v, dp) {
   return Number(v).toFixed(dp);
 }
 
-function StatTable({ rows, accent, idLabel, renderId, cols, rowKey, showRank = true }) {
+function StatTable({ rows, accent, idLabel, renderId, cols, rowKey, showRank = true, action = null }) {
   const midCellW = 40;
+  const idMin = action ? 178 : 150, idMax = action ? 224 : 190;
   return (
     <div style={{ background: C.card, border: '0.5px solid rgba(46,91,140,0.4)', borderRadius: 12, overflow: 'hidden' }}>
       <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 'max-content', tableLayout: 'auto' }}>
           <thead>
             <tr style={{ background: 'rgba(46,91,140,0.2)', fontSize: 10, fontWeight: 700, color: 'rgba(244,247,250,0.35)', textTransform: 'uppercase' }}>
-              <th style={{ position: 'sticky', left: 0, zIndex: 2, background: C.cardHdr, boxShadow: '4px 0 6px -4px rgba(0,0,0,0.4)', textAlign: 'left', padding: '8px 10px', minWidth: 150, maxWidth: 190 }}>{idLabel}</th>
+              <th style={{ position: 'sticky', left: 0, zIndex: 2, background: C.cardHdr, boxShadow: '4px 0 6px -4px rgba(0,0,0,0.4)', textAlign: 'left', padding: '8px 10px', minWidth: idMin, maxWidth: idMax }}>{idLabel}</th>
               {cols.map(c => (
                 <th key={c.key} style={{ textAlign: 'center', padding: '8px 4px', width: midCellW, minWidth: midCellW }}>{c.label}</th>
               ))}
@@ -58,10 +61,11 @@ function StatTable({ rows, accent, idLabel, renderId, cols, rowKey, showRank = t
           <tbody>
             {rows.map((row, i) => (
               <tr key={rowKey ? rowKey(row, i) : (row.team_id + ':' + row.jersey_number)} style={{ borderTop: '0.5px solid ' + C.line }}>
-                <td style={{ position: 'sticky', left: 0, zIndex: 1, background: C.card, boxShadow: '4px 0 6px -4px rgba(0,0,0,0.4)', padding: '9px 10px', minWidth: 150, maxWidth: 190 }}>
+                <td style={{ position: 'sticky', left: 0, zIndex: 1, background: C.card, boxShadow: '4px 0 6px -4px rgba(0,0,0,0.4)', padding: '9px 10px', minWidth: idMin, maxWidth: idMax }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
                     {showRank && <span style={{ width: 18, height: 18, borderRadius: '50%', background: i === 0 ? accent : 'rgba(244,247,250,0.1)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>}
                     <div style={{ minWidth: 0 }}>{renderId(row)}</div>
+                    {action && <div style={{ marginLeft: 'auto', flexShrink: 0 }}>{action(row, i)}</div>}
                   </div>
                 </td>
                 {cols.map(c => (
@@ -202,7 +206,7 @@ function GameSheetStatsEmbed({ seasonId, accent = '#D72638' }) {
   );
 }
 
-export default function StatLeaderboards({ source = 'tournament', id, divisionId = null, accent = '#D72638', archived = null, gamesheetSeasonId = null }) {
+export default function StatLeaderboards({ source = 'tournament', id, divisionId = null, accent = '#D72638', archived = null, gamesheetSeasonId = null, shareMeta = null }) {
   const cfg = RPC[source] || RPC.tournament;
   const [view, setView] = useState('skaters');
   const [season, setSeason] = useState('current'); // 'current' | 'archive'
@@ -341,6 +345,40 @@ export default function StatLeaderboards({ source = 'tournament', id, divisionId
     ? 'League games don’t record which goalie was in net, so this is team goaltending — attributed to the roster goalie when a team has exactly one. SV% needs logged shots; GAA is per game played.'
     : 'SV% & GAA are computed from logged shots and goals. GAA is shown per game played. When goalies split a game, shots-against is attributed to the starter — exact for single-goalie games.';
 
+  // SHARE-GOAL-1 — a broadcast stat card per row. Only when the parent opts in
+  // (adult, publicly shareable); youth names are suppressed to a jersey number.
+  const canShare = !!shareMeta?.canShare;
+  const skaterShare = canShare ? (row, i) => (
+    <ShareButton compact cardType="stat" shareUrl={shareMeta.shareUrl} label=""
+      getCard={() => buildStatCardData({
+        player: { name: shareMeta.youth ? null : row.player_name, jersey: row.jersey_number, teamName: row.team_name, teamColor: accent },
+        league: shareMeta.leagueName, sponsor: shareMeta.sponsor, subtitle: shareMeta.subtitle,
+        headline: { label: 'PTS', value: row.points },
+        stats: [
+          { label: 'G', value: row.goals },
+          { label: 'A', value: row.assists },
+          { label: 'GP', value: row.gp },
+          { label: 'PIM', value: row.pim },
+        ],
+        rankLabel: i === 0 ? '#1 · Points' : null,
+      })} />
+  ) : null;
+  const goalieShare = canShare ? (row, i) => (
+    <ShareButton compact cardType="stat" shareUrl={shareMeta.shareUrl} label=""
+      getCard={() => buildStatCardData({
+        player: { name: shareMeta.youth ? null : (row.goalie_name || row.player_name), jersey: row.jersey_number, teamName: row.team_name, teamColor: accent, position: 'Goalie' },
+        league: shareMeta.leagueName, sponsor: shareMeta.sponsor, subtitle: shareMeta.subtitle,
+        headline: { label: 'SV%', value: fmtPct(row.save_pct) },
+        stats: [
+          { label: 'GAA', value: fmtNum(row.gaa, 2) },
+          { label: 'GP', value: row.gp },
+          { label: 'W-L-T', value: `${row.wins}-${row.losses}-${row.ties}` },
+          { label: 'SO', value: row.shutouts },
+        ],
+        rankLabel: i === 0 ? '#1 · SV%' : null,
+      })} />
+  ) : null;
+
   return (
     <div>
       {SeasonBar}
@@ -351,14 +389,14 @@ export default function StatLeaderboards({ source = 'tournament', id, divisionId
 
       {view === 'skaters' && (
         hasSkaters
-          ? <StatTable rows={skaters} accent={accent} idLabel="Player" renderId={renderRowId} cols={skaterCols} />
+          ? <StatTable rows={skaters} accent={accent} idLabel="Player" renderId={renderRowId} cols={skaterCols} action={skaterShare} />
           : <div style={{ textAlign: 'center', color: C.faint, fontSize: 13, paddingTop: 30 }}>No skater scoring logged yet.</div>
       )}
 
       {view === 'goalies' && (
         hasGoalies
           ? <>
-              <StatTable rows={goalies} accent={accent} idLabel="Goalie" renderId={renderRowId} cols={goalieCols} />
+              <StatTable rows={goalies} accent={accent} idLabel="Goalie" renderId={renderRowId} cols={goalieCols} action={goalieShare} />
               <div style={{ fontSize: 10.5, color: C.faint, marginTop: 10, lineHeight: 1.5 }}>{goalieFootnote}</div>
             </>
           : <div style={{ textAlign: 'center', color: C.faint, fontSize: 13, paddingTop: 30 }}>No goalie stats yet — needs a finalized game with a goalie on the roster.</div>
