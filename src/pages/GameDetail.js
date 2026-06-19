@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
 import { captureDataError } from '../lib/sentry';
 import { isExtraCommissioner } from '../lib/leagueCommissioners';
-import { Icon } from '../components/ui';
+import { Icon, BounceNumber } from '../components/ui';
 import Layout from '../components/Layout';
 import RsvpBlock from '../components/RsvpBlock';
 import MapLink from '../components/MapLink';
@@ -329,9 +329,9 @@ export default function GameDetail({ profile }) {
             {/* Score */}
             <div style={{ textAlign: 'center', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 56, color: C.ice, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{game.home_score ?? 0}</span>
+                <BounceNumber value={game.home_score ?? 0} style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 56, color: C.ice, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }} />
                 <span style={{ fontSize: 24, color: 'rgba(244,247,250,0.3)', fontWeight: 300 }}>–</span>
-                <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 56, color: C.ice, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{game.away_score ?? 0}</span>
+                <BounceNumber value={game.away_score ?? 0} style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 56, color: C.ice, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }} />
               </div>
               <div style={{ textAlign: 'center', marginTop: 6 }}>
                 {isLive && <span style={{ background: C.red, color: '#fff', fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20, letterSpacing: '0.06em' }}>● LIVE · {periodLabel(game.period)}</span>}

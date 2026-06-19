@@ -18,6 +18,7 @@ const Tournaments = lazyWithRetry(() => import('./pages/Tournaments'));
 import { setSentryUser, captureException } from './lib/sentry';
 import { track } from './lib/analytics';
 import OnboardingModal from './components/OnboardingModal';
+import { MotionProvider, RouteTransition } from './components/ui';
 import RouteAnalytics from './components/RouteAnalytics';
 import ErrorBoundary from './components/ErrorBoundary';
 import { DuesTrackerPage } from './pages/ComingSoon';
@@ -184,7 +185,7 @@ function AppRoutes() {
     (!!profile && profile.welcome_seen === false) || pendingFromSession
   );
   return (
-    <>
+    <MotionProvider>
     {/* Fires a page_view on every route change → per-session navigation paths. */}
     <RouteAnalytics />
     {showOnboarding && (
@@ -208,6 +209,7 @@ function AppRoutes() {
         triggerIceReveal — either path alone disables the animation. */}
     <style>{`@keyframes rinkdIceRise{from{opacity:0;transform:translateY(48px)}to{opacity:1;transform:translateY(0)}}.rinkd-ice-rise{animation:rinkdIceRise ${motion.duration.reveal}ms ${motion.easing.out} both}@media (prefers-reduced-motion: reduce){.rinkd-ice-rise{animation:none}}`}</style>
     <div className={iceRise ? 'rinkd-ice-rise' : undefined}>
+    <RouteTransition>
     <Suspense fallback={<RouteFallback />}>
     <Routes>
       {/* Root: Landing handles the "first time mobile visitor" install pitch
@@ -305,8 +307,9 @@ function AppRoutes() {
       <Route path="*" element={<NotFound />} />
     </Routes>
     </Suspense>
+    </RouteTransition>
     </div>
-    </>
+    </MotionProvider>
   );
 }
 

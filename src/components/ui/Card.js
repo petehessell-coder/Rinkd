@@ -39,10 +39,14 @@ export default function Card({
   as: Tag = 'div',
   padding = 16,
   onClick,
+  className,
   style,
   children,
   ...rest
 }) {
+  // Tappable cards get the global press state (scale dip on :active, reduced-
+  // motion-guarded in index.css) via the .rinkd-pressable hook class.
+  const classes = [onClick ? 'rinkd-pressable' : '', className].filter(Boolean).join(' ') || undefined;
   const v = VARIANTS[variant] || VARIANTS.standard;
   // Live games override the hero shadow with the red-ring treatment — manifesto
   // "Live game cards: 0 0 0 1px rgba(215,38,56,0.6), 0 8px 32px ...".
@@ -53,6 +57,7 @@ export default function Card({
   return (
     <Tag
       onClick={onClick}
+      className={classes}
       style={{
         position: 'relative',
         borderRadius: radii.card,

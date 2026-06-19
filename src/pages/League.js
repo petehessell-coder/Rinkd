@@ -32,7 +32,8 @@ import RecapCard from '../components/RecapCard';
 import { recapSourceFromPost, getRecapCardWithSponsor } from '../lib/recapCard';
 import { loadGameCardData } from '../lib/gameCardData';
 import { C } from '../lib/tokens';
-import { Icon } from '../components/ui';
+import { Icon, BounceNumber, useExpand } from '../components/ui';
+import { staggerStyle } from '../lib/motion';
 const TABS = ['Schedule', 'Standings', 'Stats', 'Teams', 'Feed', 'Gallery', 'Info'];
 
 // Broadcast lower-third section header — white Barlow Condensed 700 italic caps
@@ -68,6 +69,7 @@ function TeamLogo({ team, size = 32 }) {
 }
 
 function GameRow({ game, isCommissioner, navigate }) {
+  const expand = useExpand();
   const home = game.home_lt?.team || { name: game.home_lt?.team_name, logo_color: game.home_lt?.logo_color, logo_initials: game.home_lt?.logo_initials, logo_url: game.home_lt?.logo_url };
   const away = game.away_lt?.team || { name: game.away_lt?.team_name, logo_color: game.away_lt?.logo_color, logo_initials: game.away_lt?.logo_initials, logo_url: game.away_lt?.logo_url };
   const isLive = game.status === 'live';
@@ -84,7 +86,7 @@ function GameRow({ game, isCommissioner, navigate }) {
   const streamPlatform = streamUrl ? detectStreamPlatform(streamUrl) : null;
 
   return (
-    <div onClick={() => navigate('/league-game/' + game.id + '?type=league')} style={{ padding: '12px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)', cursor: 'pointer' }} onMouseEnter={e=>e.currentTarget.style.background='rgba(46,91,140,0.08)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+    <div onClick={(e) => expand(e, () => navigate('/league-game/' + game.id + '?type=league'), { bg: C.card, radius: 0 })} style={{ padding: '12px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)', cursor: 'pointer' }} onMouseEnter={e=>e.currentTarget.style.background='rgba(46,91,140,0.08)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {/* Date */}
         <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(244,247,250,0.4)', width: 44, flexShrink: 0, lineHeight: 1.5 }}>
@@ -113,11 +115,11 @@ function GameRow({ game, isCommissioner, navigate }) {
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           {isLive && <>
             <span style={{ background: C.red, color: '#fff', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, display: 'block', marginBottom: 4 }}>● LIVE</span>
-            <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice, fontVariantNumeric: 'tabular-nums' }}>{game.home_score} – {game.away_score}</span>
+            <BounceNumber value={`${game.home_score} – ${game.away_score}`} style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice, fontVariantNumeric: 'tabular-nums' }} />
           </>}
           {isFinal && <>
             <span style={{ background: 'rgba(244,247,250,0.08)', color: 'rgba(244,247,250,0.4)', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, display: 'block', marginBottom: 4 }}>FINAL</span>
-            <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice, fontVariantNumeric: 'tabular-nums' }}>{game.home_score} – {game.away_score}</span>
+            <BounceNumber value={`${game.home_score} – ${game.away_score}`} style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice, fontVariantNumeric: 'tabular-nums' }} />
           </>}
           {!isLive && !isFinal && (
             <span style={{ background: 'rgba(46,91,140,0.4)', color: C.steel, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>
@@ -671,7 +673,7 @@ export default function LeaguePage({ currentUser, profile }) {
                     // Number first, no cell borders. PTS gold on the 1st-place row only.
                     const stat = { fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 16, textAlign: 'center', fontVariantNumeric: 'tabular-nums', color: 'rgba(244,247,250,0.75)' };
                     return (
-                    <div key={row.lt_id} style={{ display: 'grid', gridTemplateColumns: standingsCols, padding: '9px 12px', alignItems: 'center' }}>
+                    <div key={row.lt_id} style={{ display: 'grid', gridTemplateColumns: standingsCols, padding: '9px 12px', alignItems: 'center', ...staggerStyle(i) }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
                         {/* Rank as a large muted number (gold for 1st), not a column. */}
                         <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, lineHeight: 1, minWidth: 16, textAlign: 'center', fontVariantNumeric: 'tabular-nums', color: rank === 1 ? '#C9A84C' : 'rgba(244,247,250,0.35)', flexShrink: 0 }}>{rank}</span>

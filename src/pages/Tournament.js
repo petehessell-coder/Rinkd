@@ -27,7 +27,8 @@ import RecapCard from '../components/RecapCard';
 import { recapSourceFromPost, getRecapCardWithSponsor } from '../lib/recapCard';
 import { loadGameCardData } from '../lib/gameCardData';
 import { C } from '../lib/tokens';
-import { Icon } from '../components/ui';
+import { Icon, BounceNumber, useExpand } from '../components/ui';
+import { staggerStyle } from '../lib/motion';
 
 
 const TABS = ['Standings','Schedule','Bracket','Stats','Feed','Gallery','Info'];
@@ -677,7 +678,7 @@ export default function TournamentPage({ currentUser }) {
                             </td>
                           </tr>
                         )}
-                        <tr>
+                        <tr style={staggerStyle(i)}>
                           <td style={{...stickyLeft,padding:'10px',minWidth:130,maxWidth:160}}>
                             <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
                               {/* Rank as a large muted number (gold for 1st), not a column or a badge. */}
@@ -1259,6 +1260,7 @@ function ScheduleByDay({ games, navigate, canScore }) {
 }
 
 function GameCard({ game, navigate, canScore }) {
+  const expand = useExpand();
   const isLive = game.status === 'live';
   const isFinal = game.status === 'final';
   const url = getLiveBarnUrl(game.rink?.live_barn_venue_id);
@@ -1283,7 +1285,7 @@ function GameCard({ game, navigate, canScore }) {
   const awayWon = isFinal && ((game.away_score ?? 0) > (game.home_score ?? 0) || game.shootout_winner === 'away');
 
   return (
-    <div onClick={() => navigate('/game/' + game.id)} style={{background:cardBackground,border:cardBorder,boxShadow:cardShadow,borderRadius:12,padding:'14px 16px',marginBottom:10,cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.border=cardHoverBorder} onMouseLeave={e=>e.currentTarget.style.border=cardBorder}>
+    <div onClick={(e) => expand(e, () => navigate('/game/' + game.id), { bg: cardBackground })} style={{background:cardBackground,border:cardBorder,boxShadow:cardShadow,borderRadius:12,padding:'14px 16px',marginBottom:10,cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.border=cardHoverBorder} onMouseLeave={e=>e.currentTarget.style.border=cardBorder}>
       {/* Status row + round badge + start time. Date/time is now shown for
           every game state — not just scheduled — so spectators can find when
           a finalized game happened without opening the detail page. */}
@@ -1309,14 +1311,14 @@ function GameCard({ game, navigate, canScore }) {
           <div style={{width:32,height:32,borderRadius:'50%',background:'#1a4a7a',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:11,color:'#fff',flexShrink:0}}>{teamInitials(game.home_team?.team_name)}</div>
           <span style={{fontSize:14,fontWeight:homeWon?800:600,color:C.ice,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{game.home_team?.team_name}</span>
         </div>
-        {(isLive||isFinal) && <span style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:26,color:C.ice,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{game.home_score}</span>}
+        {(isLive||isFinal) && <BounceNumber value={game.home_score} style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:26,color:C.ice,flexShrink:0,fontVariantNumeric:'tabular-nums'}} />}
       </div>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:10,opacity:isFinal && !awayWon ? 0.65 : 1}}>
         <div style={{display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0}}>
           <div style={{width:32,height:32,borderRadius:'50%',background:'#6b1520',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:11,color:'#fff',flexShrink:0}}>{teamInitials(game.away_team?.team_name)}</div>
           <span style={{fontSize:14,fontWeight:awayWon?800:600,color:C.ice,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{game.away_team?.team_name}</span>
         </div>
-        {(isLive||isFinal) ? <span style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:26,color:C.ice,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{game.away_score}</span> : <span style={{fontSize:11,fontWeight:600,color:'rgba(244,247,250,0.3)',flexShrink:0}}>VS</span>}
+        {(isLive||isFinal) ? <BounceNumber value={game.away_score} style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:26,color:C.ice,flexShrink:0,fontVariantNumeric:'tabular-nums'}} /> : <span style={{fontSize:11,fontWeight:600,color:'rgba(244,247,250,0.3)',flexShrink:0}}>VS</span>}
       </div>
       <div style={{fontSize:11,color:'rgba(244,247,250,0.4)'}}>📍 {[game.rink?.sub_rink, game.rink?.name].filter(Boolean).join(' · ') || 'Rink TBD'}</div>
       {canScore && (

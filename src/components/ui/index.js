@@ -10,3 +10,6 @@ export { default as Skeleton } from './Skeleton';
 export { default as EmptyState } from './EmptyState';
 export { default as Tag } from './Tag';
 export { ToastProvider, useToast } from './ToastHost';
+export { default as BounceNumber } from './BounceNumber';
+export { default as RouteTransition } from './RouteTransition';
+export { MotionProvider, useExpand } from './MotionProvider';

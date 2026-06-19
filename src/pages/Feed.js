@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { C } from '../lib/tokens';
-import { Icon } from '../components/ui';
+import { Icon, useExpand } from '../components/ui';
+import { staggerStyle, useDelayedFlag } from '../lib/motion';
 import TapeText from '../components/TapeText';
 import { Avatar, TierBadge } from '../components/Logos';
 import { getPosts, getFollowingPosts, createPost, toggleLike, getLikedPosts, getComments, createComment, uploadMedia, timeAgo } from '../lib/posts';
@@ -173,8 +174,9 @@ function BroadcastHeader({ label, live }) {
   );
 }
 
-function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, reactions, onLike, onComment, onCommentRemoved, onPostHidden, onUserBlocked }) {
+function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, reactions, onLike, onComment, onCommentRemoved, onPostHidden, onUserBlocked, index = 0 }) {
   const navigate = useNavigate();
+  const expand = useExpand();
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState([]);
   const [commentText, setCommentText] = useState('');
@@ -270,6 +272,7 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
       boxShadow: isLive ? '0 8px 32px rgba(215,38,56,0.2)' : 'none',
       marginBottom: isLive ? 16 : 12,
       overflow: 'hidden',
+      ...staggerStyle(index),
     }}>
       {post.tag && <div style={{ height: 3, background: post.tag_color || C.blue }}/>}
       <div style={{ padding: '14px 16px' }}>
@@ -308,7 +311,7 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
         )}
         {post.recap_for_game_id && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-            <button type="button" onClick={() => navigate(`/game/${post.recap_for_game_id}`)}
+            <button type="button" onClick={(e) => expand(e, () => navigate(`/game/${post.recap_for_game_id}`))}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: 'rgba(46,91,140,0.2)', border: '1px solid #2E5B8C', color: '#F4F7FA', fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer' }}>
               <span style={{ fontSize: 16 }}>🏒</span> View game →
             </button>
@@ -320,7 +323,7 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
             card to peel the tape (the reveal lives there). No Share (would spoil). */}
         {post.gamepuck_reveal_game_id && (
           <div style={{ marginBottom: 10 }}>
-            <button type="button" onClick={() => navigate(`/game/${post.gamepuck_reveal_game_id}${post.league_id ? '?type=league' : ''}`)}
+            <button type="button" onClick={(e) => expand(e, () => navigate(`/game/${post.gamepuck_reveal_game_id}${post.league_id ? '?type=league' : ''}`))}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: 'rgba(215,38,56,0.15)', border: '1px solid #D72638', color: '#F4F7FA', fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer' }}>
               <span style={{ fontSize: 16 }}>🏒</span> Peel to reveal →
             </button>
@@ -504,6 +507,9 @@ export default function Feed({ currentUser, profile }) {
   const [reactionMap, setReactionMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  // Skeleton only appears once a load passes 1s (manifesto: under 300ms show
+  // nothing, over 1s show the skeleton) so fast feeds never flash placeholders.
+  const showSkeleton = useDelayedFlag(loading);
   const [hasMore, setHasMore] = useState(true);
   const [composerOpen, setComposerOpen] = useState(false);
   const [content, setContent] = useState('');
@@ -817,12 +823,14 @@ export default function Feed({ currentUser, profile }) {
         )}
 
         {loading ? (
-          <>
-            <div style={{ marginBottom: 12, color: C.steel, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 14, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              Getting the ice ready.
-            </div>
-            <FeedSkeleton count={4} />
-          </>
+          showSkeleton ? (
+            <>
+              <div style={{ marginBottom: 12, color: C.steel, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 14, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                Getting the ice ready.
+              </div>
+              <FeedSkeleton count={4} />
+            </>
+          ) : null
         ) : posts.length === 0 ? (
           <EmptyState
             icon="🏒"
@@ -840,9 +848,10 @@ export default function Feed({ currentUser, profile }) {
                 <span>to personalize your feed.</span>
               </div>
             )}
-            {liveFirst.map(post => (
+            {liveFirst.map((post, i) => (
               <PostCard
                 key={post.id}
+                index={i}
                 post={post}
                 currentUser={currentUser}
                 profile={profile}
