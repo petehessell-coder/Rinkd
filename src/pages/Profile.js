@@ -2,12 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { subscribeToPush, isPushSubscribed, unsubscribeFromPush } from '../lib/push';
 import Layout from '../components/Layout';
 import { C } from '../lib/tokens';
-import { Icon, StatNumber } from '../components/ui';
+import { Icon, StatNumber, ErrorState } from '../components/ui';
 import { number, plural } from '../lib/format';
 import { TierBadge } from '../components/Logos';
 import { updateProfile } from '../lib/auth';
 import { getTier, getTierProgress, getNextTier, TIERS } from '../lib/tiers';
 import { supabase } from '../lib/supabase';
+import { useOnline } from '../lib/useOnline';
 import { getPlayerLeagueStats, getPlayerTournamentStats } from '../lib/stats';
 import { getUserGamePuckCount } from '../lib/gamePucks';
 import { getPlayerMilestones, topStreak, seasonStory } from '../lib/milestones';
@@ -108,6 +109,8 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
   const { userId: urlUserId } = useParams();
   const navigate = useNavigate();
   const [profile, setProfile] = useState(myProfile);
+  const [loadError, setLoadError] = useState(null);
+  const online = useOnline();
   const [posts, setPosts] = useState([]);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -168,10 +171,13 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
   }, [profileId]);
 
   const loadProfile = useCallback(async () => {
+    try {
+    setLoadError(null);
     if (isOwnProfile) {
       setProfile(myProfile);
     } else {
-      const { data } = await supabase.from('profiles').select('*').eq('id', profileId).single();
+      const { data, error: e } = await supabase.from('profiles').select('*').eq('id', profileId).single();
+      if (e) throw e;
       setProfile(data);
     }
     if (profileId) {
@@ -213,6 +219,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
       ].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 20);
       setActivity(acts);
     }
+    } catch (e) { console.error('[Profile] load failed', e); setLoadError(e); }
   }, [profileId, isOwnProfile, myProfile, currentUser]);
 
   useEffect(() => { loadProfile(); }, [loadProfile]);
@@ -370,6 +377,14 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
     });
     setEditing(false);
   };
+
+  if (loadError && !profile) return (
+    <Layout profile={myProfile}>
+      <div style={{ padding: '32px 16px' }}>
+        <ErrorState title="Couldn’t load this profile" offline={!online} onRetry={() => loadProfile()} />
+      </div>
+    </Layout>
+  );
 
   if (!profile) return <Layout profile={myProfile}><div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.02em' }}>Getting the ice ready.</div></div></Layout>;
 

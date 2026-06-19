@@ -5,6 +5,8 @@ import SEO from '../components/SEO';
 import { Avatar } from '../components/Logos';
 import TapeText from '../components/TapeText';
 import { EmptyState, ListRowSkeleton } from '../components/Skeletons';
+import { ErrorState } from '../components/ui';
+import { useOnline } from '../lib/useOnline';
 import { timeAgo } from '../lib/posts';
 import {
   listConversations, getMessages, sendMessage, markConversationRead,
@@ -30,13 +32,16 @@ function Inbox({ currentUser, profile }) {
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [picker, setPicker] = useState(false);
+  const online = useOnline();
 
   const load = useCallback(async () => {
     try {
       const data = await listConversations();
       setItems(data);
-    } catch { /* hold last known */ }
+      setError(false);
+    } catch { setError(true); /* hold last known list if we have one */ }
     setLoading(false);
   }, []);
 
@@ -59,6 +64,13 @@ function Inbox({ currentUser, profile }) {
 
           {loading ? (
             <ListRowSkeleton rows={6} />
+          ) : error && items.length === 0 ? (
+            <ErrorState
+              title="Couldn’t load messages"
+              offline={!online}
+              onRetry={load}
+              retrying={loading}
+            />
           ) : items.length === 0 ? (
             <EmptyState
               icon="💬"

@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Icon } from '../components/ui';
+import { Icon, ErrorState } from '../components/ui';
 import Layout from '../components/Layout';
 import { getTeam, getTeamMembers, getTeamGames, getUserRoleOnTeam, isLeagueStaffOfTeam, requestToJoin } from '../lib/teams';
 import { captureDataError } from '../lib/sentry';
 import { supabase } from '../lib/supabase';
+import { useOnline } from '../lib/useOnline';
+import { prefetchGamePage, prefetchHandlers } from '../lib/prefetch';
 import RsvpBlock from '../components/RsvpBlock';
 import PinToNavButton from '../components/PinToNavButton';
 import MapLink from '../components/MapLink';
@@ -31,12 +33,14 @@ function Avatar({ name, color, initials, size = 34 }) {
 export default function TeamPage({ currentUser, profile }) {
   const { id } = useParams();
   const navigate = useNavigate();
+  const online = useOnline();
   const [team, setTeam] = useState(null);
   const [members, setMembers] = useState([]);
   const [games, setGames] = useState([]);
   const [userRole, setUserRole] = useState(null);
   const [isLeagueStaff, setIsLeagueStaff] = useState(false); // league commissioner/manager of this team's league
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('Roster');
   const [joinRequested, setJoinRequested] = useState(false);
   const [joinLoading, setJoinLoading] = useState(false);
@@ -48,6 +52,7 @@ export default function TeamPage({ currentUser, profile }) {
 
   const load = useCallback(async () => {
     try {
+      setError(null);
       const [t, m, g, r, ls] = await Promise.all([
         getTeam(id), getTeamMembers(id), getTeamGames(id), getUserRoleOnTeam(id), isLeagueStaffOfTeam(id)
       ]);
@@ -68,7 +73,7 @@ export default function TeamPage({ currentUser, profile }) {
           .maybeSingle();
         if (existing) setJoinRequested(true);
       }
-    } catch(e) { console.error(e); captureDataError(e, { where: 'Team.load', teamId: id }); }
+    } catch(e) { console.error(e); captureDataError(e, { where: 'Team.load', teamId: id }); setError(e); }
     finally { setLoading(false); }
   }, [id]);
 
@@ -95,6 +100,21 @@ export default function TeamPage({ currentUser, profile }) {
   if (loading) return (
     <Layout profile={profile}>
       <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Getting the ice ready.</div>
+    </Layout>
+  );
+
+  // Distinguish a fetch failure (retry-able, offline-aware) from a team that
+  // genuinely doesn't exist anymore.
+  if (error && !team) return (
+    <Layout profile={profile}>
+      <div style={{ background: C.dark, minHeight: '100vh', padding: '32px 16px' }}>
+        <ErrorState
+          title="Couldn’t load this team"
+          offline={!online}
+          onRetry={() => { setLoading(true); load(); }}
+          retrying={loading}
+        />
+      </div>
     </Layout>
   );
 
@@ -187,6 +207,7 @@ export default function TeamPage({ currentUser, profile }) {
     return (
       <div key={g.id}
         onClick={() => navigate(gameUrl)}
+        {...prefetchHandlers(prefetchGamePage)}
         style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)', cursor: 'pointer' }}
         onMouseEnter={e => { e.currentTarget.style.background = 'rgba(46,91,140,0.08)'; }}
         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>

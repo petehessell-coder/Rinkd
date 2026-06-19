@@ -8,18 +8,23 @@ import { EmptyState, ListRowSkeleton } from '../components/Skeletons';
 import { listNotifications, markRead, markAllRead, deleteNotification, KIND_META } from '../lib/notifications';
 import { timeAgo } from '../lib/posts';
 import { C } from '../lib/tokens';
-import { Icon } from '../components/ui';
+import { Icon, ErrorState } from '../components/ui';
+import { useOnline } from '../lib/useOnline';
+import { prefetchGamePage, prefetchHandlers } from '../lib/prefetch';
 
 export default function NotificationsPage({ currentUser, profile }) {
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all'); // all | unread
+  const online = useOnline();
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await listNotifications({ limit: 80, unreadOnly: filter === 'unread' });
-    setItems(data);
+    const { data, error: e } = await listNotifications({ limit: 80, unreadOnly: filter === 'unread' });
+    setItems(data || []);
+    setError(e || null);
     setLoading(false);
   }, [filter]);
 
@@ -91,6 +96,13 @@ export default function NotificationsPage({ currentUser, profile }) {
 
           {loading ? (
             <ListRowSkeleton rows={6} />
+          ) : error && items.length === 0 ? (
+            <ErrorState
+              title="Couldn’t load notifications"
+              offline={!online}
+              onRetry={load}
+              retrying={loading}
+            />
           ) : items.length === 0 ? (
             <EmptyState
               icon="🔔"
@@ -136,6 +148,8 @@ export default function NotificationsPage({ currentUser, profile }) {
 //  · gold  → POTG / milestones (scarce, earned)
 //  · red   → urgency (suspension, sub needed, game reminder)
 //  · white → everyday social (follow, like, comment, mention, …)
+// A notification that deep-links to a game → prefetch the game chunk on touch.
+const isGameUrl = (u) => typeof u === 'string' && (u.includes('/game/') || u.includes('/league-game/'));
 const RED_KINDS = new Set(['suspension', 'sub_alert', 'game_reminder']);
 const GOLD_KINDS = new Set(['game_puck_won', 'milestone']);
 function toneFor(kind) {
@@ -168,6 +182,7 @@ function NotifRow({ n, first, onOpen, onDelete }) {
   const action = hasName ? body.slice(actorName.length).replace(/^\s+/, '') : null;
   return (
     <div onClick={() => onOpen(n)}
+      {...(isGameUrl(n.url) ? prefetchHandlers(prefetchGamePage) : {})}
       style={{
         display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px',
         borderTop: first ? 'none' : '1px solid rgba(46,91,140,0.18)',

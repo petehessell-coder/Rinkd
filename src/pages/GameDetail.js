@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
 import { captureDataError } from '../lib/sentry';
 import { isExtraCommissioner } from '../lib/leagueCommissioners';
-import { Icon, BounceNumber } from '../components/ui';
+import { Icon, BounceNumber, ErrorState } from '../components/ui';
 import Layout from '../components/Layout';
 import RsvpBlock from '../components/RsvpBlock';
 import MapLink from '../components/MapLink';
@@ -15,6 +15,7 @@ import { teamInitials } from '../lib/teamInitials';
 import GamePuckCard from '../components/GamePuckCard';
 import ShareButton from '../components/ShareButton';
 import { loadGameCardData } from '../lib/gameCardData';
+import { useOnline } from '../lib/useOnline';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 
@@ -53,14 +54,17 @@ export default function GameDetail({ profile }) {
   const [shots, setShots] = useState([]);
   const [goalieChanges, setGoalieChanges] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [isOrganizer, setIsOrganizer] = useState(false);
   // jersey # → player name lookup, keyed by team_id. Populated from
   // game_lineups (and only for tournament/league games where lineups exist).
   // Built once on load and consulted by the goal & penalty renderers.
   const [lineupByTeam, setLineupByTeam] = useState({});
+  const online = useOnline();
 
   const load = useCallback(async () => {
     try {
+      setError(null);
       let g = null;
       if (isLeague) {
         const r = await supabase.from('league_games')
@@ -136,7 +140,7 @@ export default function GameDetail({ profile }) {
         });
         setLineupByTeam(lookup);
       }
-    } catch(e) { console.error('[GameDetail] load failed', e); captureDataError(e, { where: 'GameDetail.load', gameId }); }
+    } catch(e) { console.error('[GameDetail] load failed', e); captureDataError(e, { where: 'GameDetail.load', gameId }); setError(e); }
     setLoading(false);
   }, [gameId, isLeague, isTeamGame]);
 
@@ -180,6 +184,21 @@ export default function GameDetail({ profile }) {
   if (loading) return (
     <Layout profile={profile}>
       <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Getting the ice ready.</div>
+    </Layout>
+  );
+
+  // A real fetch error (flaky rink wifi, etc.) is not the same as a deleted
+  // game — give it a retry + offline copy instead of the dead-end "not found".
+  if (error && !game) return (
+    <Layout profile={profile}>
+      <div style={{ background: C.dark, minHeight: '100vh', padding: '32px 16px' }}>
+        <ErrorState
+          title="Couldn’t load this game"
+          offline={!online}
+          onRetry={() => { setLoading(true); load(); }}
+          retrying={loading}
+        />
+      </div>
     </Layout>
   );
 

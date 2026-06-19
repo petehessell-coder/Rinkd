@@ -23,6 +23,7 @@ import { resolveBracketSlotsFromSemis } from '../lib/tournamentManage';
 import { triggerTournamentRecapPush, triggerLeagueRecapPush } from '../lib/push';
 import { recordGameMilestones } from '../lib/milestones';
 import { isExtraCommissioner } from '../lib/leagueCommissioners';
+import { numericInputProps } from '../lib/forms';
 // GS-2 — suspension filing prompt, raised after a Game Misconduct / Match
 // Penalty is logged on a tournament game. The filing write itself goes
 // through queuedWrite (rink-side, offline-safe).
@@ -1181,7 +1182,7 @@ export default function ScorerView() {
     </div>
   );
 
-  if (loading) return <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif' }}>Loading game...</div>;
+  if (loading) return <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif' }}>Getting the ice ready.</div>;
 
   if (!authorized) return (
     <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', padding: 24 }}>
@@ -1802,12 +1803,12 @@ export default function ScorerView() {
           <PlayerPicker label="Who scored?" players={rosterFor(goalForm.team_id)}
             value={goalForm.scorer_number}
             onPick={n => setGoalForm(p => ({ ...p, scorer_number: n }))}
-            fallback={<MField label="Scorer #"><input style={inputStyle} type="number" inputMode="numeric" placeholder="Jersey # — no lineup set" value={goalForm.scorer_number} onChange={e => setGoalForm(p => ({ ...p, scorer_number: e.target.value }))} /></MField>} />
+            fallback={<MField label="Scorer #"><input style={inputStyle} {...numericInputProps} placeholder="Jersey # — no lineup set" value={goalForm.scorer_number} onChange={e => setGoalForm(p => ({ ...p, scorer_number: e.target.value }))} /></MField>} />
           <PlayerPicker label="Assist (optional)" players={rosterFor(goalForm.team_id)}
             value={goalForm.assist1_number} allowClear clearLabel="No assist"
             disabledJerseys={[goalForm.scorer_number]}
             onPick={n => setGoalForm(p => ({ ...p, assist1_number: n, ...(n === '' ? { assist2_number: '' } : {}) }))}
-            fallback={<MField label="Assist 1 #"><input style={inputStyle} type="number" inputMode="numeric" placeholder="Optional" value={goalForm.assist1_number} onChange={e => setGoalForm(p => ({ ...p, assist1_number: e.target.value }))} /></MField>} />
+            fallback={<MField label="Assist 1 #"><input style={inputStyle} {...numericInputProps} placeholder="Optional" value={goalForm.assist1_number} onChange={e => setGoalForm(p => ({ ...p, assist1_number: e.target.value }))} /></MField>} />
           {/* Second assist only appears once the first is picked — keeps the
               common (0–1 assist) case clean. */}
           {goalForm.assist1_number !== '' && goalForm.assist1_number != null && (
@@ -1815,7 +1816,7 @@ export default function ScorerView() {
               value={goalForm.assist2_number} allowClear clearLabel="No second assist"
               disabledJerseys={[goalForm.scorer_number, goalForm.assist1_number]}
               onPick={n => setGoalForm(p => ({ ...p, assist2_number: n }))}
-              fallback={<MField label="Assist 2 #"><input style={inputStyle} type="number" inputMode="numeric" placeholder="Optional" value={goalForm.assist2_number} onChange={e => setGoalForm(p => ({ ...p, assist2_number: e.target.value }))} /></MField>} />
+              fallback={<MField label="Assist 2 #"><input style={inputStyle} {...numericInputProps} placeholder="Optional" value={goalForm.assist2_number} onChange={e => setGoalForm(p => ({ ...p, assist2_number: e.target.value }))} /></MField>} />
           )}
           <MField label="Time (optional)"><input style={inputStyle} inputMode="numeric" placeholder="e.g. 8:42 — leave blank if unsure" value={goalForm.time_in_period} onChange={e => setGoalForm(p => ({ ...p, time_in_period: e.target.value }))} /></MField>
           <Row2>
@@ -1856,7 +1857,7 @@ export default function ScorerView() {
           <PlayerPicker label="Who got the penalty?" players={rosterFor(penaltyForm.team_id)}
             value={penaltyForm.player_number}
             onPick={n => setPenaltyForm(p => ({ ...p, player_number: n }))}
-            fallback={<MField label="Player #"><input style={inputStyle} type="number" inputMode="numeric" placeholder="Jersey # — no lineup set" value={penaltyForm.player_number} onChange={e => setPenaltyForm(p => ({ ...p, player_number: e.target.value }))} /></MField>} />
+            fallback={<MField label="Player #"><input style={inputStyle} {...numericInputProps} placeholder="Jersey # — no lineup set" value={penaltyForm.player_number} onChange={e => setPenaltyForm(p => ({ ...p, player_number: e.target.value }))} /></MField>} />
           <MField label="Time (optional)"><input style={inputStyle} inputMode="numeric" placeholder="e.g. 11:20 — leave blank if unsure" value={penaltyForm.time_in_period} onChange={e => setPenaltyForm(p => ({ ...p, time_in_period: e.target.value }))} /></MField>
           <MField label="Severity">
             <select style={selectStyle} value={penaltyForm.severity} onChange={e => setPenaltyForm(p => ({ ...p, severity: e.target.value, penalty_type: PENALTIES[e.target.value]?.[0] || '' }))}>
@@ -1903,12 +1904,12 @@ export default function ScorerView() {
           <PlayerPicker label="Goalie coming out" players={rosterFor(goalieModal, { goaliesOnly: true })}
             value={goalieForm.goalie_out_number}
             onPick={n => setGoalieForm(p => ({ ...p, goalie_out_number: n }))}
-            fallback={<MField label="Out #"><input style={inputStyle} type="number" inputMode="numeric" placeholder="Jersey # — no goalies in lineup" value={goalieForm.goalie_out_number} onChange={e => setGoalieForm(p => ({ ...p, goalie_out_number: e.target.value }))} /></MField>} />
+            fallback={<MField label="Out #"><input style={inputStyle} {...numericInputProps} placeholder="Jersey # — no goalies in lineup" value={goalieForm.goalie_out_number} onChange={e => setGoalieForm(p => ({ ...p, goalie_out_number: e.target.value }))} /></MField>} />
           <PlayerPicker label="Goalie going in" players={rosterFor(goalieModal, { goaliesOnly: true })}
             value={goalieForm.goalie_in_number} allowClear clearLabel="Empty net (no goalie)"
             disabledJerseys={[goalieForm.goalie_out_number]}
             onPick={n => setGoalieForm(p => ({ ...p, goalie_in_number: n }))}
-            fallback={<MField label="In #"><input style={inputStyle} type="number" inputMode="numeric" placeholder="Jersey # — blank = empty net" value={goalieForm.goalie_in_number} onChange={e => setGoalieForm(p => ({ ...p, goalie_in_number: e.target.value }))} /></MField>} />
+            fallback={<MField label="In #"><input style={inputStyle} {...numericInputProps} placeholder="Jersey # — blank = empty net" value={goalieForm.goalie_in_number} onChange={e => setGoalieForm(p => ({ ...p, goalie_in_number: e.target.value }))} /></MField>} />
           <Row2>
             <MField label="Time (optional)"><input style={inputStyle} inputMode="numeric" placeholder="e.g. 10:00" value={goalieForm.time_in_period} onChange={e => setGoalieForm(p => ({ ...p, time_in_period: e.target.value }))} /></MField>
             <MField label="Period">
