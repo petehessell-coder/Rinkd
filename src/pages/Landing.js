@@ -16,23 +16,20 @@ const C = {
  * Landing — the front door for rinkd.app.
  *
  * Decision tree:
- *   1. Already running in installed PWA (display-mode: standalone) → render Auth
- *      inline. The user installed us, they don't need a "Install Rinkd" CTA.
- *   2. Desktop browser → render Auth inline (existing two-column layout is great
- *      for desktop, and desktop users rarely install PWAs anyway).
- *   3. Mobile browser, not installed → marketing splash with big Install
- *      Rinkd CTA. iOS shows an Add-to-Home-Screen modal; Android either fires
- *      the native beforeinstallprompt or shows the same modal.
+ *   1. Installed PWA (display-mode: standalone) or desktop browser → render Auth
+ *      inline (the existing two-column layout is great for desktop).
+ *   2. Mobile browser, not installed → marketing splash whose only actions are
+ *      "Create Free Account" and "Log in" — both drop straight into Auth.
  *
- * The "Continue in browser →" link always falls through to Auth without
- * forcing the install.
+ * The PWA-install CTA was removed: installing the home-screen shortcut didn't
+ * actually get anyone into the app, so account creation / login is the one path.
  */
 
 // iPadOS 13+ reports itself as `Macintosh` in navigator.userAgent — the
 // "request desktop site" default Apple ships with. The only reliable signal
 // that you're on an iPad and not a real Mac is touch support
-// (maxTouchPoints > 1 on Macintosh). Without this, iPad pilot users skip the
-// Install-Rinkd CTA and land on the desktop Auth screen.
+// (maxTouchPoints > 1 on Macintosh). Without this, iPad pilot users would be
+// treated as desktop and skip the mobile marketing splash.
 function isIPadOS() {
   if (typeof navigator === 'undefined') return false;
   return /Macintosh/i.test(navigator.userAgent || '') && (navigator.maxTouchPoints || 0) > 1;
@@ -44,11 +41,6 @@ function detectMobile() {
   return /iPhone|iPad|iPod|Android|Mobile/i.test(ua) || isIPadOS();
 }
 
-function detectIOS() {
-  if (typeof navigator === 'undefined') return false;
-  return /iPhone|iPad|iPod/i.test(navigator.userAgent || '') || isIPadOS();
-}
-
 function detectStandalone() {
   if (typeof window === 'undefined') return false;
   return window.matchMedia?.('(display-mode: standalone)').matches
@@ -58,9 +50,10 @@ function detectStandalone() {
 export default function LandingPage() {
   const navigate = useNavigate();
   const [showMarketing, setShowMarketing] = useState(false);
-  const [showInstall, setShowInstall] = useState(false);
-  const [installPrompt, setInstallPrompt] = useState(null);
-  const [continueClicked, setContinueClicked] = useState(false);
+  // Which Auth view to drop into when the user taps a CTA. null = still on the
+  // marketing splash. The install-PWA path was removed — it couldn't get anyone
+  // into the app — so the only actions are create-account and log-in.
+  const [authMode, setAuthMode] = useState(null); // null | 'signup' | 'login'
   // Settings.handleDelete redirects to /?deleted=1 after a successful account
   // deletion. We surface a brief confirmation toast and strip the param so a
   // refresh doesn't show it again.
@@ -87,33 +80,16 @@ export default function LandingPage() {
         window.history.replaceState({}, '', url.pathname + url.hash);
       }
     } catch (_) { /* old browser */ }
-
-    // Capture the Android install prompt for later use
-    const onBeforeInstall = (e) => {
-      e.preventDefault();
-      setInstallPrompt(e);
-    };
-    window.addEventListener('beforeinstallprompt', onBeforeInstall);
-    return () => window.removeEventListener('beforeinstallprompt', onBeforeInstall);
   }, []);
 
-  const handleInstall = async () => {
-    track('landing_install_clicked', { has_prompt: !!installPrompt });
-    if (installPrompt) {
-      // Android native install prompt
-      installPrompt.prompt();
-      const choice = await installPrompt.userChoice;
-      track('landing_install_choice', { outcome: choice.outcome });
-      if (choice.outcome === 'accepted') setShowInstall(false);
-      return;
-    }
-    // iOS or browsers without the native prompt — show our instructions modal
-    setShowInstall(true);
+  const goSignup = () => {
+    track('landing_create_account');
+    setAuthMode('signup');
   };
 
-  const handleContinue = () => {
-    track('landing_continue_in_browser');
-    setContinueClicked(true);
+  const goLogin = () => {
+    track('landing_login');
+    setAuthMode('login');
   };
 
   // Shared confirmation banner shown after a successful account deletion —
@@ -132,10 +108,10 @@ export default function LandingPage() {
     </div>
   ) : null;
 
-  // If user opts to continue in browser, just render Auth inline.
-  // Cold visitors land here from the marketing page → open on signup, not login.
-  if (!showMarketing || continueClicked) {
-    return <>{deletedBanner}<Auth defaultMode="signup" /></>;
+  // Once a CTA is tapped (or on desktop/standalone), render Auth inline in the
+  // requested mode. Desktop/standalone default to signup, matching the old flow.
+  if (!showMarketing || authMode) {
+    return <>{deletedBanner}<Auth defaultMode={authMode === 'login' ? 'login' : 'signup'} /></>;
   }
 
   return (
@@ -174,28 +150,28 @@ export default function LandingPage() {
         Teams, leagues, schedules, live scores — the off-ice home the sport has never had.
       </div>
 
-      {/* PRIMARY CTA — single red pill, the one action. */}
-      <button onClick={handleInstall} style={{
+      {/* PRIMARY CTA — single red pill, the one action: create an account. */}
+      <button onClick={goSignup} style={{
         width: '100%', maxWidth: 360,
         background: C.red, color: '#fff', border: 'none',
         padding: '16px 22px', borderRadius: 999, cursor: 'pointer',
         fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic',
         fontSize: 18, letterSpacing: '0.05em', textTransform: 'uppercase',
         boxShadow: '0 10px 30px rgba(215,38,56,0.4)',
-        marginBottom: 12,
+        marginBottom: 14,
       }}>
-        📲 Install Rinkd
+        Create Free Account
       </button>
 
-      {/* Secondary — visually subordinate text link, never a competing button. */}
-      <button onClick={handleContinue} style={{
+      {/* Secondary — log in for returning users. Subordinate text link. */}
+      <button onClick={goLogin} style={{
         background: 'transparent', color: C.steel, border: 'none',
         padding: '8px 16px', cursor: 'pointer',
         fontFamily: 'Barlow, sans-serif', fontSize: 14, fontWeight: 500,
-        textDecoration: 'underline', textUnderlineOffset: 3,
         marginBottom: 30,
       }}>
-        Continue in browser →
+        Already have an account?{' '}
+        <span style={{ color: C.ice, textDecoration: 'underline', textUnderlineOffset: 3 }}>Log in →</span>
       </button>
 
       {/* Stat bar — hockey is big. Jersey-size numbers (Barlow Condensed 900). */}
@@ -241,82 +217,7 @@ export default function LandingPage() {
         <br />© 2026 Rinkd LLC
       </div>
 
-      {/* Install instructions modal (iOS + Android fallback) */}
-      {showInstall && <InstallInstructionsModal onClose={() => setShowInstall(false)} />}
       {deletedBanner}
-    </div>
-  );
-}
-
-function InstallInstructionsModal({ onClose }) {
-  const isIOS = detectIOS();
-  return (
-    <div onClick={onClose} style={{
-      position: 'fixed', inset: 0, zIndex: 9999,
-      background: 'rgba(7,17,31,0.92)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18,
-    }}>
-      <div onClick={(e) => e.stopPropagation()} style={{
-        background: C.navy, border: `1px solid ${C.border}`, borderRadius: 16,
-        padding: 24, width: '100%', maxWidth: 420, color: C.ice,
-        boxShadow: '0 20px 50px rgba(0,0,0,0.6)',
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 22, textTransform: 'uppercase' }}>
-            Add to home screen
-          </div>
-          <button onClick={onClose} style={{ background: 'transparent', color: C.steel, border: 'none', fontSize: 24, cursor: 'pointer', padding: 4, lineHeight: 1 }}>×</button>
-        </div>
-
-        {isIOS ? (
-          <>
-            <div style={{ fontSize: 14, color: C.steel, lineHeight: 1.55, marginBottom: 14 }}>
-              Three taps to install Rinkd as a real app on your iPhone.
-            </div>
-            {[
-              { n: 1, body: <>Tap the <strong style={{ color: C.ice }}>Share</strong> button at the bottom of Safari — the square with an arrow pointing up.</> },
-              { n: 2, body: <>Scroll the share sheet and tap <strong style={{ color: C.ice }}>"Add to Home Screen"</strong>.</> },
-              { n: 3, body: <>Tap <strong style={{ color: C.ice }}>Add</strong> in the top right.</> },
-            ].map(({ n, body }) => (
-              <div key={n} style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-                <div style={{ width: 28, height: 28, borderRadius: '50%', background: C.red, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 16, flexShrink: 0 }}>{n}</div>
-                <div style={{ fontSize: 14, color: C.ice, lineHeight: 1.55, flex: 1 }}>{body}</div>
-              </div>
-            ))}
-            <div style={{ fontSize: 12, color: C.steel, marginTop: 14, lineHeight: 1.5 }}>
-              Note: this works in Safari only — not in Chrome or in-app browsers like Instagram or Twitter.
-            </div>
-          </>
-        ) : (
-          <>
-            <div style={{ fontSize: 14, color: C.steel, lineHeight: 1.55, marginBottom: 14 }}>
-              Two taps to install Rinkd as a real app on your phone.
-            </div>
-            {[
-              { n: 1, body: <>Tap the <strong style={{ color: C.ice }}>three-dot menu</strong> in the top right of your browser.</> },
-              { n: 2, body: <>Choose <strong style={{ color: C.ice }}>"Install app"</strong> or <strong style={{ color: C.ice }}>"Add to Home screen"</strong>.</> },
-            ].map(({ n, body }) => (
-              <div key={n} style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-                <div style={{ width: 28, height: 28, borderRadius: '50%', background: C.red, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 16, flexShrink: 0 }}>{n}</div>
-                <div style={{ fontSize: 14, color: C.ice, lineHeight: 1.55, flex: 1 }}>{body}</div>
-              </div>
-            ))}
-            <div style={{ fontSize: 12, color: C.steel, marginTop: 14, lineHeight: 1.5 }}>
-              Note: works best in Chrome or Edge. Some browsers may not show the install option.
-            </div>
-          </>
-        )}
-
-        <button onClick={onClose} style={{
-          width: '100%', marginTop: 16,
-          background: C.red, color: '#fff', border: 'none',
-          padding: '12px', borderRadius: 999, cursor: 'pointer',
-          fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic',
-          fontSize: 15, letterSpacing: '0.05em', textTransform: 'uppercase',
-        }}>
-          Got it
-        </button>
-      </div>
     </div>
   );
 }
