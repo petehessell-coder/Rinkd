@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { subscribeToPush, isPushSubscribed, unsubscribeFromPush } from '../lib/push';
 import Layout, { BRAND_COLORS as C } from '../components/Layout';
-import { Avatar, TierBadge } from '../components/Logos';
+import { TierBadge } from '../components/Logos';
 import { updateProfile } from '../lib/auth';
 import { getTier, getTierProgress, getNextTier, TIERS } from '../lib/tiers';
 import { supabase } from '../lib/supabase';
@@ -19,27 +19,80 @@ import { classifyImage } from '../lib/imageModeration';
 const POSITIONS = ['Forward', 'Defense', 'Goalie', 'Coach', 'Parent', 'Official', 'Fan'];
 const LEVELS = ['Youth (Mite-Bantam)', 'Youth (Midget)', 'High School', 'Junior (Tier I)', 'Junior (Tier II/III)', 'College', 'Minor Pro', 'Beer League', 'Adult Rec', 'Fan'];
 
+// First+last initial, for the avatar fallback.
+const initialsFromName = (name) => {
+  if (!name) return '';
+  const parts = String(name).trim().split(/\s+/);
+  return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase();
+};
+
+// Broadcast lower-third section header — white Barlow Condensed 700 italic caps
+// on solid navy (#0f2847), bleeding to the column's left edge with a red accent
+// slab. The manifesto section-header pattern, not a generic label.
+function LowerThird({ label }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center',
+      background: '#0f2847', borderLeft: '4px solid #D72638',
+      marginLeft: -16, marginBottom: 12, padding: '8px 14px 8px 16px',
+      borderTopRightRadius: 4, borderBottomRightRadius: 4,
+    }}>
+      <span style={{
+        flex: 1, minWidth: 0,
+        fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic',
+        fontSize: 18, lineHeight: 1, letterSpacing: '0.05em', color: '#F4F7FA',
+        textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>{label}</span>
+    </div>
+  );
+}
+
+// Profile avatar — object-fit:cover at a fixed square aspect. On a missing or
+// broken image it falls back to initials on the elevated dark surface (#162f55),
+// never a broken-image icon.
+function ProfileAvatar({ profile, size = 72 }) {
+  const [imgError, setImgError] = useState(false);
+  const initials = profile?.avatar_initials || initialsFromName(profile?.name) || '?';
+  const showImg = profile?.avatar_url && !imgError;
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
+      background: '#162f55', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      border: '2px solid rgba(255,255,255,0.16)',
+    }}>
+      {showImg ? (
+        <img src={profile.avatar_url} alt={profile?.name || ''} onError={() => setImgError(true)}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+      ) : (
+        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: Math.round(size * 0.4), color: '#F4F7FA', lineHeight: 1 }}>{initials}</span>
+      )}
+    </div>
+  );
+}
+
 // STATS-3: one stat-line card (team header + GP/G/A/PTS/PIM grid). Shared by the
 // Leagues and Tournaments sections so both read identically; the two are never
 // blended. Logo color/initials fall back gracefully (tournament teams don't
 // carry a logo color, so the caller passes a neutral one + derived initials).
 function StatLine({ logoColor, initials, title, subtitle, gp, goals, assists, points, pim }) {
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px', marginBottom: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 16px', marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
         <div style={{ width: 36, height: 36, borderRadius: 8, background: logoColor || '#2E5B8C', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 14, color: '#fff', flexShrink: 0 }}>
           {initials}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: C.ice }}>{title}</div>
-          <div style={{ fontSize: 11, color: C.steel, marginTop: 2 }}>{subtitle}</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
+          <div style={{ fontSize: 11, color: C.steel, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subtitle}</div>
         </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
+      {/* Number first, huge — never a bordered table. Tight grid of number+label
+          pairs (TV score-overlay treatment). PTS emphasized in red. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 4 }}>
         {[['GP', gp], ['G', goals], ['A', assists], ['PTS', points], ['PIM', pim]].map(([label, val]) => (
-          <div key={label} style={{ background: '#07111F', borderRadius: 8, padding: '10px 0', textAlign: 'center' }}>
-            <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: label === 'PTS' ? 22 : 18, color: label === 'PTS' ? '#D72638' : C.ice, lineHeight: 1 }}>{val}</div>
-            <div style={{ fontSize: 9, fontWeight: 700, color: C.steel, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 3 }}>{label}</div>
+          <div key={label} style={{ textAlign: 'center', minWidth: 0 }}>
+            <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: label === 'PTS' ? 40 : 36, color: label === 'PTS' ? C.red : C.ice, lineHeight: 1, whiteSpace: 'nowrap' }}>{val ?? 0}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.steel, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 4 }}>{label}</div>
           </div>
         ))}
       </div>
@@ -305,7 +358,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
     setEditing(false);
   };
 
-  if (!profile) return <Layout profile={myProfile}><div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><div style={{ color: C.steel }}>Loading...</div></div></Layout>;
+  if (!profile) return <Layout profile={myProfile}><div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.02em' }}>Getting the ice ready.</div></div></Layout>;
 
   const tier = getTier(profile.points || 0);
   const progress = getTierProgress(profile.points || 0);
@@ -346,7 +399,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                   <input id="avatar-upload" type="file" accept="image/*" onChange={handleAvatarUpload} style={{ display: 'none' }} />
                   <label htmlFor="avatar-upload" title="Change profile picture"
                     style={{ cursor: 'pointer', display: 'inline-block', position: 'relative' }}>
-                    <Avatar profile={profile} size={72} />
+                    <ProfileAvatar profile={profile} size={72} />
                     <span style={{
                       position: 'absolute', right: -2, bottom: -2,
                       width: 24, height: 24, borderRadius: '50%',
@@ -358,7 +411,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                   </label>
                 </>
               ) : (
-                <Avatar profile={profile} size={72} />
+                <ProfileAvatar profile={profile} size={72} />
               )}
             </div>
           </div>
@@ -404,10 +457,10 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
               </div>
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-              <div>
-                <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 26, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.02em' }}>{profile.name}</div>
-                <div style={{ fontSize: 13, color: C.steel }}>@{profile.handle}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, gap: 12 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 26, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.02em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.name}</div>
+                <div style={{ fontSize: 13, color: C.steel, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{profile.handle}</div>
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 <TierBadge tier={tier.name} size="md" />
@@ -464,7 +517,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
               <span style={{ fontSize: 13, color: C.steel }}><strong style={{ color: C.ice }}>{followCounts.followers}</strong> Followers</span>
               <span style={{ fontSize: 13, color: C.steel }}><strong style={{ color: C.ice }}>{followCounts.following}</strong> Following</span>
               {puckCount > 0 && (
-                <span title="Game Pucks won (fans' pick)" style={{ fontSize: 12, fontWeight: 800, color: '#fff', background: 'rgba(215,38,56,0.85)', padding: '2px 9px', borderRadius: 999 }}>🏒 {puckCount}× Game Puck</span>
+                <span title="Game Pucks won — the fans' Player of the Game pick" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: '#0B1F3A', background: '#C9A84C', padding: '3px 10px', borderRadius: 999, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', letterSpacing: '0.04em', textTransform: 'uppercase' }}>🏆 {puckCount}× Game Puck</span>
               )}
             </div>
 
@@ -509,23 +562,40 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
           </div>
         </div>
 
-        {/* League season totals — quick view across all leagues. League-only by
-            design: tournament stats live in their own section and are NEVER
-            blended into this number (the two aren't comparable). */}
-        {leagueStats.length > 0 && (() => {
-          const tot = leagueStats.reduce((acc, s) => ({
+        {/* Shareable stat hero — the screenshot-for-the-family-group-chat
+            graphic. ESPN player-card energy: name large, the headline number
+            front and center. Reads from a SINGLE source — league totals when
+            present, otherwise tournament — never blended (the two aren't
+            comparable). */}
+        {(leagueStats.length > 0 || tournamentStats.length > 0) && (() => {
+          const fromLeague = leagueStats.length > 0;
+          const rows = fromLeague ? leagueStats : tournamentStats;
+          const tot = rows.reduce((acc, s) => ({
             gp: acc.gp + (s.gp || 0), goals: acc.goals + (s.goals || 0),
             assists: acc.assists + (s.assists || 0), points: acc.points + (s.points || 0),
             pim: acc.pim + (s.pim || 0),
           }), { gp: 0, goals: 0, assists: 0, points: 0, pim: 0 });
+          const kicker = fromLeague
+            ? `League Season · ${leagueStats.length} League${leagueStats.length === 1 ? '' : 's'}`
+            : `Tournament Play · ${tournamentStats.length} Event${tournamentStats.length === 1 ? '' : 's'}`;
+          const sub = [profile.position, profile.level].filter(Boolean).join(' · ');
           return (
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14, marginBottom: 16 }}>
-              <div style={{ fontSize: 10, color: C.steel, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 8 }}>League Season Totals · across {leagueStats.length} league{leagueStats.length === 1 ? '' : 's'}</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
-                {[['GP', tot.gp], ['G', tot.goals], ['A', tot.assists], ['PTS', tot.points], ['PIM', tot.pim]].map(([label, val]) => (
-                  <div key={label} style={{ background: '#07111F', borderRadius: 8, padding: '10px 0', textAlign: 'center' }}>
-                    <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: label === 'PTS' ? 24 : 20, color: label === 'PTS' ? C.red : C.ice, lineHeight: 1 }}>{val}</div>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: C.steel, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 3 }}>{label}</div>
+            <div style={{ position: 'relative', overflow: 'hidden', background: 'linear-gradient(135deg, #162f55 0%, #0B1F3A 100%)', border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px 18px', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <span style={{ width: 3, height: 14, background: C.red, borderRadius: 2, flexShrink: 0 }} />
+                <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.steel, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{kicker}</span>
+              </div>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 32, lineHeight: 1, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.name}</div>
+              {sub && <div style={{ fontSize: 12, color: C.steel, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</div>}
+              <div style={{ textAlign: 'center', margin: '16px 0 4px' }}>
+                <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 64, color: C.ice, lineHeight: 0.9, whiteSpace: 'nowrap' }}>{tot.points}</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.steel, letterSpacing: '0.12em', textTransform: 'uppercase', marginTop: 2 }}>Points</div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8, marginTop: 10 }}>
+                {[['GP', tot.gp], ['G', tot.goals], ['A', tot.assists], ['PIM', tot.pim]].map(([label, val]) => (
+                  <div key={label} style={{ textAlign: 'center', minWidth: 0 }}>
+                    <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 36, color: C.ice, lineHeight: 1, whiteSpace: 'nowrap' }}>{val}</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: C.steel, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 4 }}>{label}</div>
                   </div>
                 ))}
               </div>
@@ -570,7 +640,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
         </div>
 
         {activeTab === 'posts' && (
-          posts.length === 0 ? <div style={{ textAlign: 'center', color: C.steel, padding: '40px', fontSize: 14 }}>No posts yet.</div>
+          posts.length === 0 ? <div style={{ textAlign: 'center', color: C.steel, padding: '40px', fontSize: 14 }}>{isOwnProfile ? 'No chirps yet — drop your first one from the feed.' : 'No chirps yet.'}</div>
           : posts.map(post => (
             <div key={post.id} style={{ background: C.card, borderRadius: 12, padding: '14px 16px', border: `1px solid ${C.border}`, marginBottom: 10 }}>
               {post.tag && <span style={{ display: 'inline-block', marginBottom: 8, fontSize: 10, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '0.06em', padding: '2px 7px', borderRadius: 4, background: (post.tag_color || C.blue) + '22', color: post.tag_color || C.blue }}>{post.tag}</span>}
@@ -593,16 +663,24 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
         {activeTab === 'stats' && (
           <div>
             {leagueStats.length === 0 && tournamentStats.length === 0 ? (
-              <div style={{ textAlign: 'center', color: C.steel, padding: '40px', fontSize: 14 }}>
-                <div style={{ fontSize: 32, marginBottom: 10 }}>🏒</div>
-                No stats yet. Play in a league or tournament to see your stats here.
+              <div style={{ textAlign: 'center', padding: '40px 24px', background: C.card, border: `1px solid ${C.border}`, borderRadius: 14 }}>
+                <picture>
+                  <source srcSet="/mascot-rizzo.webp" type="image/webp" />
+                  <img src="/mascot-rizzo.png" alt="Rinkd Rat" width="120" height="120" style={{ display: 'block', margin: '0 auto 14px', maxWidth: '40%', height: 'auto' }} />
+                </picture>
+                <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 20, color: C.ice, textTransform: 'uppercase', marginBottom: 8 }}>No stat line yet</div>
+                <div style={{ fontSize: 14, color: C.steel, lineHeight: 1.5, maxWidth: 340, margin: '0 auto' }}>
+                  {isOwnProfile
+                    ? 'Lace ’em up — play a league or tournament game and your goals, assists, and points light up right here.'
+                    : 'No games logged yet. Check back once the season drops the puck.'}
+                </div>
               </div>
             ) : (
               <>
                 {/* Leagues — kept separate from Tournaments; never a blended total. */}
                 {leagueStats.length > 0 && (
                   <div style={{ marginBottom: tournamentStats.length > 0 ? 22 : 0 }}>
-                    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.12em', color: C.steel, textTransform: 'uppercase', marginBottom: 10 }}>Leagues</div>
+                    <LowerThird label="League Stats" />
                     {leagueStats.map((s, i) => (
                       <StatLine key={`lg-${i}`}
                         logoColor={s.team_logo_color}
@@ -617,7 +695,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                     players until a tournament lineup carries their user_id. */}
                 {tournamentStats.length > 0 && (
                   <div>
-                    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.12em', color: C.steel, textTransform: 'uppercase', marginBottom: 10 }}>Tournaments</div>
+                    <LowerThird label="Tournament Stats" />
                     {tournamentStats.map((s, i) => (
                       <StatLine key={`tn-${i}`}
                         logoColor="#2E5B8C"
