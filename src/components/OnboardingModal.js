@@ -111,6 +111,9 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
   const [step, setStep] = useState(0);
   const [chosenRole, setChosenRole] = useState(null);
   const [suggested, setSuggested] = useState([]);
+  // false until the suggestions query resolves — so the skeleton can't shimmer
+  // forever if it returns empty (or errors); we show an invitation instead.
+  const [suggestLoaded, setSuggestLoaded] = useState(false);
   const [followingMap, setFollowingMap] = useState({});
   const [pushBusy, setPushBusy] = useState(false);
   // 'loading' | 'ready' | 'failed' — gates whether the tunnel may play.
@@ -140,19 +143,23 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
     const COLS = 'id, name, handle, position, avatar_color, avatar_initials, tier';
     const self = currentUser?.id || '';
     (async () => {
-      const [seedRes, fillRes] = await Promise.all([
-        supabase.from('profiles').select(COLS).in('email', SEED_EMAILS).neq('id', self),
-        supabase.from('profiles').select(COLS).neq('id', self)
-          .not('email', 'ilike', '%@demo.rinkd.app')
-          .order('points', { ascending: false, nullsFirst: false })
-          .limit(8),
-      ]);
-      const seen = new Set();
-      const merged = [];
-      for (const p of [...(seedRes.data || []), ...(fillRes.data || [])]) {
-        if (p && !seen.has(p.id)) { seen.add(p.id); merged.push(p); }
+      try {
+        const [seedRes, fillRes] = await Promise.all([
+          supabase.from('profiles').select(COLS).in('email', SEED_EMAILS).neq('id', self),
+          supabase.from('profiles').select(COLS).neq('id', self)
+            .not('email', 'ilike', '%@demo.rinkd.app')
+            .order('points', { ascending: false, nullsFirst: false })
+            .limit(8),
+        ]);
+        const seen = new Set();
+        const merged = [];
+        for (const p of [...(seedRes.data || []), ...(fillRes.data || [])]) {
+          if (p && !seen.has(p.id)) { seen.add(p.id); merged.push(p); }
+        }
+        setSuggested(merged.slice(0, 6));
+      } finally {
+        setSuggestLoaded(true);
       }
-      setSuggested(merged.slice(0, 6));
     })();
   }, [step, suggested.length, currentUser]);
 
@@ -336,7 +343,11 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
                 Follow a few players to start building your feed. You can always add more from the Discover tab.
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {suggested.length === 0 ? (
+                {suggested.length === 0 ? (suggestLoaded ? (
+                  <div style={{ color: C.ice, opacity: 0.85, fontSize: 13, lineHeight: 1.55, padding: '16px 14px', background: 'rgba(11,31,58,0.82)', borderRadius: 10, border: `1px solid ${C.border}`, backdropFilter: 'blur(2px)', textAlign: 'center' }}>
+                    We’ll surface players to follow as your rink fills up — you can always find people from the Discover tab.
+                  </div>
+                ) : (
                   <>
                     {/* Geometric skeleton matching the follow-row exactly (avatar
                         + name + handle + Follow pill) — never a spinner or
@@ -353,7 +364,7 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
                     ))}
                     <style>{`.rinkd-ob-sk{background:rgba(46,91,140,0.32);animation:rinkdObPulse 1.3s ease-in-out infinite}@keyframes rinkdObPulse{0%,100%{opacity:1}50%{opacity:0.5}}@media (prefers-reduced-motion:reduce){.rinkd-ob-sk{animation:none}}`}</style>
                   </>
-                ) : suggested.map((p) => (
+                )) : suggested.map((p) => (
                   <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'rgba(11,31,58,0.82)', borderRadius: 10, border: `1px solid ${C.border}`, backdropFilter: 'blur(2px)' }}>
                     <Avatar profile={p} size={36} />
                     <div style={{ flex: 1, minWidth: 0 }}>

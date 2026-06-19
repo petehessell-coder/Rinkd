@@ -107,7 +107,7 @@ function ProtectedRoute({ children }) {
   if (loading) return (
     <div style={{ minHeight: '100vh', background: '#0B1F3A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow', sans-serif", color: '#8BA3BE', fontSize: 15 }}>
       <div style={{ textAlign: 'center' }}>
-        <img src={LOADING_MARK.src} alt={LOADING_MARK.alt} width={LOADING_MARK.size} height={LOADING_MARK.size}
+        <img className="rinkd-loading-mark" src={LOADING_MARK.src} alt={LOADING_MARK.alt} width={LOADING_MARK.size} height={LOADING_MARK.size}
           style={{ display: 'block', margin: '0 auto 16px', borderRadius: LOADING_MARK.borderRadius, animation: 'rinkd-pulse 1.6s ease-in-out infinite' }} />
         <div>Getting the ice ready.</div>
         {loadingSlow && (
@@ -119,7 +119,7 @@ function ProtectedRoute({ children }) {
             </button>
           </div>
         )}
-        <style>{`@keyframes rinkd-pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.65; transform: scale(0.96); } }`}</style>
+        <style>{`@keyframes rinkd-pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.65; transform: scale(0.96); } } @media (prefers-reduced-motion: reduce) { .rinkd-loading-mark { animation: none !important; } }`}</style>
       </div>
     </div>
   );
