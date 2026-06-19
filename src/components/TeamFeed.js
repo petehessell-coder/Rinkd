@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Icon } from './ui';
+import { Icon, Img, ErrorState } from './ui';
+import { useOnline } from '../lib/useOnline';
 import { Avatar, TierBadge } from './Logos';
 import {
   getTeamPosts, createPost, toggleLike, getLikedPosts,
@@ -59,25 +60,27 @@ function MediaDisplay({ url, type }) {
   if (!url) return null;
   if (type === 'video') return (
     <>
-      <div style={{ borderRadius: 10, overflow: 'hidden', marginBottom: 10, background: '#000', position: 'relative' }}>
-        <video src={url} controls playsInline preload="metadata" style={{ width: '100%', maxHeight: 400, display: 'block' }}/>
+      {/* Reserved 16:9 box — no layout shift while the poster frame loads. */}
+      <div style={{ position: 'relative', aspectRatio: '16 / 9', borderRadius: 10, overflow: 'hidden', marginBottom: 10, background: '#000' }}>
+        <video src={url} controls playsInline preload="metadata" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}/>
         <button onClick={() => setOpen(true)}
-          style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer' }}>⤢</button>
+          style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer', zIndex: 1 }}>⤢</button>
       </div>
       {open && <MediaLightbox url={url} type="video" onClose={() => setOpen(false)} />}
     </>
   );
   return (
     <>
-      <div onClick={() => setOpen(true)} style={{ borderRadius: 10, overflow: 'hidden', marginBottom: 10, cursor: 'zoom-in' }}>
-        <img src={url} alt="" style={{ width: '100%', maxHeight: 500, objectFit: 'cover', display: 'block' }} loading="lazy"/>
-      </div>
+      {/* Reserved 5:4 box + blur-up — the page never jumps when the photo
+          decodes, and a slow rink connection gets a designed shimmer. */}
+      <Img src={url} alt="Post" ratio={5 / 4} radius={10} loading="lazy"
+        onClick={() => setOpen(true)} style={{ marginBottom: 10, cursor: 'zoom-in' }} />
       {open && <MediaLightbox url={url} type="image" onClose={() => setOpen(false)} />}
     </>
   );
 }
 
-function PostCard({ post, currentUser, isLiked, reactions, onLike, onCommentChange, onPostHidden, onUserBlocked }) {
+function PostCard({ post, currentUser, isLiked, reactions, onLike, onCommentChange, onPostHidden, onPostDelete, onUserBlocked }) {
   const navigate = useNavigate();
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState([]);
@@ -134,6 +137,7 @@ function PostCard({ post, currentUser, isLiked, reactions, onLike, onCommentChan
             onReported={() => onPostHidden?.(post.id)}
             onBlocked={() => onUserBlocked?.(post.author_id)}
             onDeleted={() => onPostHidden?.(post.id)}
+            onDelete={onPostDelete ? () => onPostDelete(post) : undefined}
           />
         </div>
         {post.content && <p style={{ fontSize: 15, color: C.ice, lineHeight: 1.55, marginBottom: 10, wordBreak: 'break-word' }}><MentionText text={post.content} mentions={postMentionMap} /></p>}
@@ -183,6 +187,18 @@ function PostCard({ post, currentUser, isLiked, reactions, onLike, onCommentChan
                         setComments(prev => prev.filter(x => x.id !== c.id));
                         onCommentChange?.();
                       }}
+                      onDelete={() => {
+                        // Optimistic remove + restore (the menu wraps this in a 5s Undo).
+                        const idx = comments.findIndex(x => x.id === c.id);
+                        setComments(prev => prev.filter(x => x.id !== c.id));
+                        onCommentChange?.();
+                        return () => {
+                          setComments(prev => prev.some(x => x.id === c.id)
+                            ? prev
+                            : (() => { const n = [...prev]; n.splice(idx < 0 ? n.length : Math.min(idx, n.length), 0, c); return n; })());
+                          onCommentChange?.();
+                        };
+                      }}
                     />
                   </div>
                 </div>
@@ -215,6 +231,8 @@ export default function TeamFeed({ teamId, currentUser, isMember }) {
   const [likedPosts, setLikedPosts] = useState([]);
   const [reactionMap, setReactionMap] = useState({});
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const online = useOnline();
   const [composerOpen, setComposerOpen] = useState(false);
   const [content, setContent] = useState('');
   const [postMentionIds, setPostMentionIds] = useState([]);
@@ -226,15 +244,24 @@ export default function TeamFeed({ teamId, currentUser, isMember }) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await getTeamPosts(teamId, 50);
-    const page = data || [];
-    setPosts(page);
-    if (currentUser) {
-      const liked = await getLikedPosts(currentUser.id, page.map(p => p.id));
-      setLikedPosts(liked);
+    setError(false);
+    try {
+      const { data } = await getTeamPosts(teamId, 50);
+      const page = data || [];
+      setPosts(page);
+      if (currentUser) {
+        const liked = await getLikedPosts(currentUser.id, page.map(p => p.id));
+        setLikedPosts(liked);
+      }
+      setReactionMap(await getReactions(currentUser?.id, page.map(p => p.id)));
+    } catch (e) {
+      // A network drop / server hiccup must surface a retry, never hang the
+      // skeleton forever.
+      console.error('[TeamFeed] load failed', e);
+      setError(true);
+    } finally {
+      setLoading(false);
     }
-    setReactionMap(await getReactions(currentUser?.id, page.map(p => p.id)));
-    setLoading(false);
   }, [teamId, currentUser]);
 
   useEffect(() => { load(); }, [load]);
@@ -337,6 +364,17 @@ export default function TeamFeed({ teamId, currentUser, isMember }) {
     })();
   };
 
+  // RESILIENCE — optimistic post delete. Removes the row now and returns a
+  // restore fn; PostActionMenu wraps both in a 5-second Undo toast and only
+  // fires the irreversible server delete once it expires.
+  const removePostOptimistic = (post) => {
+    const idx = posts.findIndex(p => p.id === post.id);
+    setPosts(prev => prev.filter(p => p.id !== post.id));
+    return () => setPosts(prev => prev.some(p => p.id === post.id)
+      ? prev
+      : (() => { const next = [...prev]; next.splice(idx < 0 ? next.length : Math.min(idx, next.length), 0, post); return next; })());
+  };
+
   return (
     <div>
       {/* COMPOSER (members only) */}
@@ -393,6 +431,13 @@ export default function TeamFeed({ teamId, currentUser, isMember }) {
       {/* POSTS */}
       {loading ? (
         <FeedSkeleton count={2} />
+      ) : error ? (
+        <ErrorState
+          title="Couldn’t load the feed"
+          offline={!online}
+          onRetry={load}
+          retrying={loading}
+        />
       ) : posts.length === 0 ? (
         <EmptyState
           icon="📣"
@@ -405,6 +450,7 @@ export default function TeamFeed({ teamId, currentUser, isMember }) {
           isLiked={likedPosts.includes(post.id)} reactions={reactionMap[post.id]} onLike={onLike}
           onCommentChange={load}
           onPostHidden={(id) => setPosts(prev => prev.filter(p => p.id !== id))}
+          onPostDelete={removePostOptimistic}
           onUserBlocked={(uid) => setPosts(prev => prev.filter(p => p.author_id !== uid))}
         />
       ))}

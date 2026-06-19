@@ -29,7 +29,9 @@ import RecapCard from '../components/RecapCard';
 import { recapSourceFromPost, getRecapCardWithSponsor } from '../lib/recapCard';
 import { loadGameCardData } from '../lib/gameCardData';
 import { C } from '../lib/tokens';
-import { Icon, BounceNumber, useExpand } from '../components/ui';
+import { Icon, BounceNumber, useExpand, Img, ErrorState } from '../components/ui';
+import { useOnline } from '../lib/useOnline';
+import { prefetchGamePage, prefetchHandlers } from '../lib/prefetch';
 import { staggerStyle } from '../lib/motion';
 
 
@@ -150,6 +152,10 @@ export default function TournamentPage({ currentUser }) {
   // so the standings/schedule landing stays fast.
   const [feedPosts, setFeedPosts] = useState(null); // null = not loaded yet
   const [feedLoading, setFeedLoading] = useState(false);
+  const [feedError, setFeedError] = useState(false);
+  // Connectivity — so the Feed tab can swap to its offline error copy instead
+  // of spinning forever when the device drops off the network.
+  const online = useOnline();
   // GS-2 — team_id → pending-suspension count, via the team-level-only RPC
   // (no names ever reach this page). Drives the ⚠️ badge on standings rows.
   const [suspendedTeams, setSuspendedTeams] = useState({});
@@ -314,18 +320,29 @@ export default function TournamentPage({ currentUser }) {
 
   // Lazy-load the tournament-scoped feed the first time the Feed tab opens.
   // Avoids paying for the query on every visit when most users land on
-  // Standings/Schedule and never click Feed.
-  useEffect(() => {
-    let cancelled = false;
-    if (activeTab !== 'Feed' || !id || feedPosts !== null) return;
+  // Standings/Schedule and never click Feed. Surfaces an error/retry state on
+  // a network drop instead of hanging the "Getting the ice ready." placeholder.
+  const loadFeed = useCallback(async () => {
+    if (!id) return;
     setFeedLoading(true);
-    getTournamentPosts(id, 50).then(({ data }) => {
-      if (cancelled) return;
+    setFeedError(false);
+    try {
+      const { data, error } = await getTournamentPosts(id, 50);
+      if (error) throw error;
       setFeedPosts(data || []);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[Tournament] feed load failed', e);
+      setFeedError(true);
+    } finally {
       setFeedLoading(false);
-    });
-    return () => { cancelled = true; };
-  }, [activeTab, id, feedPosts]);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (activeTab !== 'Feed' || feedPosts !== null) return;
+    loadFeed();
+  }, [activeTab, feedPosts, loadFeed]);
 
   const handleFollowToggle = async () => {
     if (!currentUser?.id || !id || followBusy) return;
@@ -780,6 +797,9 @@ export default function TournamentPage({ currentUser }) {
             posts={feedPosts}
             setPosts={setFeedPosts}
             loading={feedLoading}
+            error={feedError}
+            online={online}
+            onRetry={loadFeed}
             navigate={navigate}
             currentUser={currentUser}
             tournamentId={id}
@@ -837,6 +857,7 @@ function LiveGameStrip({ games, accent, navigate }) {
           return (
             <button
               key={g.id}
+              {...prefetchHandlers(prefetchGamePage)}
               onClick={() => navigate(`/game/${g.id}`)}
               style={{
                 flex: many ? '0 0 auto' : '1 1 auto', minWidth: many ? 200 : 'auto', textAlign: 'left',
@@ -865,7 +886,7 @@ function LiveGameStrip({ games, accent, navigate }) {
 // shared PostCard later when there's enough reuse to justify the refactor.
 // User posts do NOT trigger pushes (only recaps do) to keep notification
 // volume sane.
-function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId, liveGames = [], accent = C.red, canModerate = false }) {
+function FeedTab({ posts, setPosts, loading, error = false, online = true, onRetry, navigate, currentUser, tournamentId, liveGames = [], accent = C.red, canModerate = false }) {
   const [draft, setDraft] = useState('');
   const [postMentionIds, setPostMentionIds] = useState([]);
   const [mediaFile, setMediaFile] = useState(null);
@@ -984,6 +1005,17 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
   const handleHidden = (postId) => setPosts((prev) => (prev || []).filter((p) => p.id !== postId));
   const handleAuthorBlocked = (authorId) => setPosts((prev) => (prev || []).filter((p) => p.author_id !== authorId));
 
+  // RESILIENCE — optimistic post delete. Removes the row now and returns a
+  // restore fn; PostActionMenu wraps both in a 5-second Undo toast and only
+  // fires the irreversible server delete once it expires.
+  const removePostOptimistic = (post) => {
+    const idx = (posts || []).findIndex((p) => p.id === post.id);
+    setPosts((prev) => (prev || []).filter((p) => p.id !== post.id));
+    return () => setPosts((prev) => (prev || []).some((p) => p.id === post.id)
+      ? prev
+      : (() => { const next = [...(prev || [])]; next.splice(idx < 0 ? next.length : Math.min(idx, next.length), 0, post); return next; })());
+  };
+
   return (
     <div style={{display:'flex',flexDirection:'column',gap:12,padding:'0 12px'}}>
       <LiveGameStrip games={liveGames} accent={accent} navigate={navigate} />
@@ -1027,7 +1059,16 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
         </div>
       )}
 
-      {loading || posts === null ? (
+      {loading ? (
+        <div style={{textAlign:'center',color:'#7C8B9F',fontSize:13,padding:'24px 16px'}}>Getting the ice ready.</div>
+      ) : error ? (
+        <ErrorState
+          title="Couldn’t load the feed"
+          offline={!online}
+          onRetry={onRetry}
+          retrying={loading}
+        />
+      ) : posts === null ? (
         <div style={{textAlign:'center',color:'#7C8B9F',fontSize:13,padding:'24px 16px'}}>Getting the ice ready.</div>
       ) : posts.length === 0 ? (
         <div style={{textAlign:'center',color:'#7C8B9F',fontSize:13,padding:'40px 16px',lineHeight:1.6}}>
@@ -1065,18 +1106,22 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
                     onReported={() => handleHidden(p.id)}
                     onBlocked={() => handleAuthorBlocked(p.author_id)}
                     onDeleted={() => handleHidden(p.id)}
+                    onDelete={() => removePostOptimistic(p)}
                     onModerated={() => handleHidden(p.id)}
                   />
                 )}
               </div>
               {p.media_url && (
-                <div style={{marginTop:6,marginBottom:6,borderRadius:6,overflow:'hidden'}}>
-                  {p.media_type === 'video' ? (
-                    <video src={p.media_url} controls style={{width:'100%',display:'block'}} />
-                  ) : (
-                    <img src={p.media_url} alt="" style={{width:'100%',display:'block'}} />
-                  )}
-                </div>
+                p.media_type === 'video' ? (
+                  // Reserved 16:9 box — the card never jumps while the poster
+                  // frame loads on a slow rink connection.
+                  <div style={{ position: 'relative', aspectRatio: '16 / 9', borderRadius: 6, overflow: 'hidden', marginTop: 6, marginBottom: 6, background: '#000' }}>
+                    <video src={p.media_url} controls playsInline preload="metadata" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
+                  </div>
+                ) : (
+                  // Reserved 5:4 box + blur-up — no layout shift when the photo decodes.
+                  <Img src={p.media_url} alt="" ratio={5 / 4} radius={6} loading="lazy" style={{ marginTop: 6, marginBottom: 6 }} />
+                )
               )}
               {p.recap_for_game_id && (
                 <div style={{margin:'8px 0'}}>
@@ -1101,6 +1146,7 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
                 {p.recap_for_game_id && (
                   <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
                     <button
+                      {...prefetchHandlers(prefetchGamePage)}
                       onClick={() => navigate(`/game/${p.recap_for_game_id}`)}
                       style={{background:'transparent',border:'none',color:'#5B9FE2',fontSize:12,fontWeight:600,cursor:'pointer',padding:0}}
                     >
@@ -1111,7 +1157,7 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
                   </div>
                 )}
                 {p.gamepuck_reveal_game_id && (
-                  <button onClick={() => navigate(`/game/${p.gamepuck_reveal_game_id}`)}
+                  <button {...prefetchHandlers(prefetchGamePage)} onClick={() => navigate(`/game/${p.gamepuck_reveal_game_id}`)}
                     style={{display:'inline-flex',alignItems:'center',gap:6,background:'rgba(215,38,56,0.15)',border:'1px solid #D72638',color:C.ice,fontSize:12,fontWeight:700,cursor:'pointer',padding:'6px 12px',borderRadius:999}}>
                     🏒 Peel to reveal →
                   </button>
@@ -1296,7 +1342,7 @@ function GameCard({ game, navigate, canScore }) {
   const awayWon = isFinal && ((game.away_score ?? 0) > (game.home_score ?? 0) || game.shootout_winner === 'away');
 
   return (
-    <div onClick={(e) => expand(e, () => navigate('/game/' + game.id), { bg: cardBackground })} style={{background:cardBackground,border:cardBorder,boxShadow:cardShadow,borderRadius:12,padding:'14px 16px',marginBottom:10,cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.border=cardHoverBorder} onMouseLeave={e=>e.currentTarget.style.border=cardBorder}>
+    <div {...prefetchHandlers(prefetchGamePage)} onClick={(e) => expand(e, () => navigate('/game/' + game.id), { bg: cardBackground })} style={{background:cardBackground,border:cardBorder,boxShadow:cardShadow,borderRadius:12,padding:'14px 16px',marginBottom:10,cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.border=cardHoverBorder} onMouseLeave={e=>e.currentTarget.style.border=cardBorder}>
       {/* Status row + round badge + start time. Date/time is now shown for
           every game state — not just scheduled — so spectators can find when
           a finalized game happened without opening the detail page. */}

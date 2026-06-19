@@ -4,6 +4,7 @@ import Layout, { BRAND_COLORS as C } from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { listSlotsForTeams, listMyAssignedSlots, createSlot, updateSlot, deleteSlot, releaseSlot } from '../lib/volunteers';
 import { getTeamGames } from '../lib/teams';
+import { useUndoable } from '../components/ui';
 
 const ROLE_PRESETS = ['Scorekeeper', 'Snack Parent', 'Locker Room Monitor', 'Gear Hauler', 'Statkeeper', 'Off-ice Official', 'Tournament Volunteer'];
 
@@ -47,6 +48,11 @@ export default function VolunteerCoordinator({ profile }) {
       setMySlots(mine);
     } catch (e) { setError(e.message); setSlots([]); }
   }, [profile?.id]);
+
+  // Optimistically drop a slot from the list (used by the deferred delete + Undo).
+  const removeSlotFromList = useCallback((id) => {
+    setSlots(prev => Array.isArray(prev) ? prev.filter(s => s.id !== id) : prev);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
@@ -110,7 +116,7 @@ export default function VolunteerCoordinator({ profile }) {
               </div>
 
               {/* Slot list */}
-              <SlotList slots={visibleSlots} teams={teams} onChange={load} profile={profile} />
+              <SlotList slots={visibleSlots} teams={teams} onChange={load} onOptimisticRemove={removeSlotFromList} profile={profile} />
 
               {/* Add slot composer */}
               <NewSlotForm teams={teams} onCreated={load} />
@@ -148,7 +154,7 @@ function StatCard({ num, label, color }) {
   );
 }
 
-function SlotList({ slots, teams, onChange, profile }) {
+function SlotList({ slots, teams, onChange, onOptimisticRemove, profile }) {
   if (!slots) return <div style={{ padding: 30, textAlign: 'center', color: C.steel, fontSize: 13 }}>Getting the ice ready.</div>;
   if (slots.length === 0) return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 24, textAlign: 'center', color: C.steel, fontSize: 13, marginBottom: 14 }}>
@@ -158,23 +164,28 @@ function SlotList({ slots, teams, onChange, profile }) {
 
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
-      {slots.map(s => <SlotRow key={s.id} slot={s} teams={teams} onChange={onChange} profile={profile} />)}
+      {slots.map(s => <SlotRow key={s.id} slot={s} teams={teams} onChange={onChange} onOptimisticRemove={onOptimisticRemove} profile={profile} />)}
     </div>
   );
 }
 
-function SlotRow({ slot, teams, onChange, profile }) {
+function SlotRow({ slot, teams, onChange, onOptimisticRemove, profile }) {
   const team = slot.team || teams.find(t => t.id === slot.team_id);
   const dateStr = slot.slot_time
     ? new Date(slot.slot_time).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
     : 'No date set';
   const assigned = slot.assigned_user;
   const [busy, setBusy] = useState(false);
+  const runUndoable = useUndoable();
 
-  const handleDelete = async () => {
-    if (!window.confirm(`Delete "${slot.role}" slot?`)) return;
-    setBusy(true); try { await deleteSlot(slot.id); onChange(); } finally { setBusy(false); }
-  };
+  // Optimistic delete + 5s Undo (no confirm) — the real delete is deferred, so
+  // Undo just cancels it; restore re-fetches the still-present slot.
+  const handleDelete = () => runUndoable({
+    message: `"${slot.role}" slot removed`,
+    apply: () => { onOptimisticRemove?.(slot.id); return onChange; },
+    commit: async () => { await deleteSlot(slot.id); onChange(); },
+    errorMessage: "That didn't go through — it's back. Try again.",
+  });
   const handleRelease = async () => {
     setBusy(true); try { await releaseSlot(slot.id); onChange(); } finally { setBusy(false); }
   };

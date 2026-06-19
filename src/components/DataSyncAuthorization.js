@@ -5,6 +5,7 @@ import {
   recordIntegrationAuthorization,
   revokeIntegrationAuthorization,
 } from '../lib/integrationAuthorizations';
+import { useUndoable } from './ui';
 
 // INTEGRATIONS-1 — reusable data-sync authorization clickwrap.
 //
@@ -43,6 +44,7 @@ export default function DataSyncAuthorization({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [me, setMe] = useState(null);
+  const runUndoable = useUndoable();
 
   const notify = useCallback((v) => { onAuthorizedChange?.(v); }, [onAuthorizedChange]);
 
@@ -71,16 +73,18 @@ export default function DataSyncAuthorization({
     notify(true);
   };
 
-  const revoke = async () => {
+  // Optimistic revoke + 5s Undo (no confirm) — the real revoke is deferred, so
+  // Undo just cancels it; restore re-fetches the still-present authorization.
+  const revoke = () => {
     if (!auth) return;
-    // eslint-disable-next-line no-alert
-    if (!window.confirm(`Revoke the ${label} data-sync authorization? Syncing stays off until someone re-authorizes it.`)) return;
-    setBusy(true); setError('');
-    const { error: e } = await revokeIntegrationAuthorization(auth.id);
-    setBusy(false);
-    if (e) { setError(e.message || "That didn't revoke — check your connection and try again."); return; }
-    setAuth(null);
-    notify(false);
+    const id = auth.id;
+    setError('');
+    runUndoable({
+      message: `${label} data sync authorization revoked`,
+      apply: () => { setAuth(null); notify(false); return load; },
+      commit: async () => { const { error: e } = await revokeIntegrationAuthorization(id); if (e) throw e; },
+      errorMessage: "That didn't go through — it's back. Try again.",
+    });
   };
 
   if (loading) {

@@ -34,7 +34,9 @@ import RecapCard from '../components/RecapCard';
 import { recapSourceFromPost, getRecapCardWithSponsor } from '../lib/recapCard';
 import { loadGameCardData } from '../lib/gameCardData';
 import { C } from '../lib/tokens';
-import { Icon, BounceNumber, useExpand } from '../components/ui';
+import { Icon, BounceNumber, useExpand, Img, ErrorState } from '../components/ui';
+import { useOnline } from '../lib/useOnline';
+import { prefetchGamePage, prefetchHandlers } from '../lib/prefetch';
 import { staggerStyle } from '../lib/motion';
 const TABS = ['Schedule', 'Standings', 'Stats', 'Teams', 'Feed', 'Gallery', 'Info'];
 
@@ -88,7 +90,7 @@ function GameRow({ game, isCommissioner, navigate }) {
   const streamPlatform = streamUrl ? detectStreamPlatform(streamUrl) : null;
 
   return (
-    <div onClick={(e) => expand(e, () => navigate('/league-game/' + game.id + '?type=league'), { bg: C.card, radius: 0 })} style={{ padding: '12px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)', cursor: 'pointer' }} onMouseEnter={e=>e.currentTarget.style.background='rgba(46,91,140,0.08)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+    <div {...prefetchHandlers(prefetchGamePage)} onClick={(e) => expand(e, () => navigate('/league-game/' + game.id + '?type=league'), { bg: C.card, radius: 0 })} style={{ padding: '12px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)', cursor: 'pointer' }} onMouseEnter={e=>e.currentTarget.style.background='rgba(46,91,140,0.08)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {/* Date */}
         <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(244,247,250,0.4)', width: 44, flexShrink: 0, lineHeight: 1.5 }}>
@@ -211,6 +213,8 @@ export default function LeaguePage({ currentUser, profile }) {
   // fast.
   const [feedPosts, setFeedPosts] = useState(null); // null = not loaded yet
   const [feedLoading, setFeedLoading] = useState(false);
+  const [feedError, setFeedError] = useState(false);
+  const online = useOnline();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -289,17 +293,29 @@ export default function LeaguePage({ currentUser, profile }) {
   }, [divisions, selectedDivisionId, currentUser?.id, id, searchParams]);
 
   // Lazy-load the league-scoped feed the first time the Feed tab opens.
-  useEffect(() => {
-    let cancelled = false;
-    if (activeTab !== 'Feed' || !id || feedPosts !== null) return;
+  // Wrapped in try/catch so a network drop surfaces a retry instead of a feed
+  // that's stuck on "Warming up." forever (mirrors Feed.js load()).
+  const loadFeed = useCallback(async () => {
+    if (!id) return;
     setFeedLoading(true);
-    getLeaguePosts(id, 50).then(({ data }) => {
-      if (cancelled) return;
+    setFeedError(false);
+    try {
+      const { data, error: e } = await getLeaguePosts(id, 50);
+      if (e) throw e;
       setFeedPosts(data || []);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[League] feed load failed', e);
+      setFeedError(true);
+    } finally {
       setFeedLoading(false);
-    });
-    return () => { cancelled = true; };
-  }, [activeTab, id, feedPosts]);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (activeTab !== 'Feed' || feedPosts !== null) return;
+    loadFeed();
+  }, [activeTab, feedPosts, loadFeed]);
 
   // Realtime: spectators see scores update live when scorers finalize a
   // game. Mirrors the Tournament.js pattern (channel name carries a random
@@ -754,6 +770,9 @@ export default function LeaguePage({ currentUser, profile }) {
               posts={feedPosts}
               setPosts={setFeedPosts}
               loading={feedLoading}
+              error={feedError}
+              online={online}
+              onRetry={loadFeed}
               navigate={navigate}
               currentUser={currentUser}
               leagueId={id}
@@ -822,7 +841,7 @@ const card = { background: '#0f2847', border: '0.5px solid rgba(46,91,140,0.4)',
 // ScorerView finalize → createGameRecapPost + triggerLeagueRecapPush) AND
 // user-authored posts scoped to this league. User posts do NOT trigger
 // pushes — only recaps do — to keep notification volume sane.
-function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, leagueId, canModerate = false }) {
+function LeagueFeedTab({ posts, setPosts, loading, error = false, online = true, onRetry, navigate, currentUser, leagueId, canModerate = false }) {
   const [draft, setDraft] = useState('');
   const [postMentionIds, setPostMentionIds] = useState([]);
   const [mediaFile, setMediaFile] = useState(null);
@@ -939,6 +958,17 @@ function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, league
   const handleHidden = (postId) => setPosts((prev) => (prev || []).filter((p) => p.id !== postId));
   const handleAuthorBlocked = (authorId) => setPosts((prev) => (prev || []).filter((p) => p.author_id !== authorId));
 
+  // RESILIENCE — optimistic post delete. Removes the row now and returns a
+  // restore fn; PostActionMenu wraps both in a 5-second Undo toast and only
+  // fires the irreversible server delete once it expires. (Mirrors Feed.js.)
+  const removePostOptimistic = (post) => {
+    const idx = (posts || []).findIndex((p) => p.id === post.id);
+    setPosts((prev) => (prev || []).filter((p) => p.id !== post.id));
+    return () => setPosts((prev) => (prev || []).some((p) => p.id === post.id)
+      ? prev
+      : (() => { const next = [...(prev || [])]; next.splice(idx < 0 ? next.length : Math.min(idx, next.length), 0, post); return next; })());
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {currentUser && (
@@ -974,7 +1004,9 @@ function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, league
         </div>
       )}
 
-      {loading || posts === null ? (
+      {error && !loading ? (
+        <ErrorState title="Couldn’t load the feed" offline={!online} onRetry={onRetry} retrying={loading} />
+      ) : loading || posts === null ? (
         <div style={{ textAlign: 'center', color: '#7C8B9F', fontSize: 13, padding: '24px 16px' }}>Warming up.</div>
       ) : posts.length === 0 ? (
         <div style={{ textAlign: 'center', color: '#7C8B9F', fontSize: 13, padding: '40px 16px', lineHeight: 1.6 }}>
@@ -1012,16 +1044,21 @@ function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, league
                     onReported={() => handleHidden(p.id)}
                     onBlocked={() => handleAuthorBlocked(p.author_id)}
                     onDeleted={() => handleHidden(p.id)}
+                    onDelete={() => removePostOptimistic(p)}
                     onModerated={() => handleHidden(p.id)}
                   />
                 )}
               </div>
               {p.media_url && (
-                <div style={{ marginTop: 6, marginBottom: 6, borderRadius: 6, overflow: 'hidden' }}>
-                  {p.media_type === 'video'
-                    ? <video src={p.media_url} controls style={{ width: '100%', display: 'block' }} />
-                    : <img src={p.media_url} alt="" style={{ width: '100%', display: 'block' }} />}
-                </div>
+                p.media_type === 'video' ? (
+                  // Reserved 16:9 box — no layout shift while the poster frame loads.
+                  <div style={{ position: 'relative', aspectRatio: '16 / 9', borderRadius: 6, overflow: 'hidden', marginTop: 6, marginBottom: 6, background: '#000' }}>
+                    <video src={p.media_url} controls playsInline preload="metadata" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
+                  </div>
+                ) : (
+                  // Reserved 5:4 box + blur-up — the card never jumps when the photo decodes.
+                  <Img src={p.media_url} alt="" ratio={5 / 4} radius={6} loading="lazy" style={{ marginTop: 6, marginBottom: 6 }} />
+                )
               )}
               {p.recap_for_game_id && (
                 <div style={{ margin: '8px 0' }}>
@@ -1045,7 +1082,7 @@ function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, league
                 </div>
                 {p.recap_for_game_id && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                    <button onClick={() => navigate(`/game/${p.recap_for_game_id}?type=league`)}
+                    <button {...prefetchHandlers(prefetchGamePage)} onClick={() => navigate(`/game/${p.recap_for_game_id}?type=league`)}
                       style={{ background: 'transparent', border: 'none', color: '#5B9FE2', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}>
                       View game →
                     </button>
@@ -1054,7 +1091,7 @@ function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, league
                   </div>
                 )}
                 {p.gamepuck_reveal_game_id && (
-                  <button onClick={() => navigate(`/game/${p.gamepuck_reveal_game_id}?type=league`)}
+                  <button {...prefetchHandlers(prefetchGamePage)} onClick={() => navigate(`/game/${p.gamepuck_reveal_game_id}?type=league`)}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(215,38,56,0.15)', border: '1px solid #D72638', color: '#F4F7FA', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '6px 12px', borderRadius: 999 }}>
                     🏒 Peel to reveal →
                   </button>

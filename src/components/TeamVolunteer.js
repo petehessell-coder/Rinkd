@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { listTeamSlots, createSlot, deleteSlot, claimSlot, releaseSlot } from '../lib/volunteers';
 import { getTeamGames } from '../lib/teams';
+import { useUndoable } from './ui';
 
 const C = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
@@ -37,6 +38,11 @@ export default function TeamVolunteer({ teamId, isManager, currentUser }) {
       setError(null);
     } catch (e) { setError(e.message); }
   }, [teamId]);
+
+  // Optimistically drop a slot from the list (used by the deferred delete + Undo).
+  const removeSlotFromList = useCallback((id) => {
+    setSlots(prev => Array.isArray(prev) ? prev.filter(s => s.id !== id) : prev);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
@@ -79,6 +85,7 @@ export default function TeamVolunteer({ teamId, isManager, currentUser }) {
               isManager={isManager}
               currentUser={currentUser}
               onChange={load}
+              onOptimisticRemove={removeSlotFromList}
             />
           ))}
         </div>
@@ -125,8 +132,9 @@ function StatPill({ num, label, color }) {
   );
 }
 
-function SlotRow({ slot, isManager, currentUser, onChange, isPast }) {
+function SlotRow({ slot, isManager, currentUser, onChange, onOptimisticRemove, isPast }) {
   const [busy, setBusy] = useState(false);
+  const runUndoable = useUndoable();
   const assigned = slot.assigned_user;
   const isClaimedByMe = currentUser && slot.assigned_user_id === currentUser.id;
   const dateStr = slot.slot_time
@@ -139,6 +147,15 @@ function SlotRow({ slot, isManager, currentUser, onChange, isPast }) {
     catch (e) { alert(e.message || "That didn't go through — check your connection and try again."); }
     finally { setBusy(false); }
   };
+
+  // Optimistic delete + 5s Undo (no confirm) — the real delete is deferred, so
+  // Undo just cancels it; restore re-fetches the still-present slot.
+  const remove = () => runUndoable({
+    message: `"${slot.role}" slot removed`,
+    apply: () => { onOptimisticRemove?.(slot.id); return onChange; },
+    commit: async () => { await deleteSlot(slot.id); await onChange(); },
+    errorMessage: "That didn't go through — it's back. Try again.",
+  });
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
@@ -182,7 +199,7 @@ function SlotRow({ slot, isManager, currentUser, onChange, isPast }) {
 
       {/* Manager-only delete */}
       {isManager && !isPast && (
-        <button onClick={() => { if (window.confirm(`Delete the "${slot.role}" slot? Anyone signed up loses it. You can post a new one anytime.`)) wrap(() => deleteSlot(slot.id)); }} disabled={busy}
+        <button onClick={remove} disabled={busy}
           style={{ background: 'transparent', border: 'none', color: 'rgba(244,247,250,0.3)', fontSize: 15, cursor: 'pointer', padding: 4 }} title="Delete">
           🗑
         </button>
