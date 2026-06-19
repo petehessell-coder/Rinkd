@@ -20,7 +20,34 @@ import {
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', ink:'#030C15', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 
+// One-time keyframe inject (this page renders outside <Layout>, styles inline).
+//  · pgLiveRing  — the manifesto live indicator: red ring expands 0→16px and
+//    fades to transparent, 1.5s infinite ("red light on, siren").
+//  · pgScorePop  — goal pop: scale(1.2)→(1.0), 200ms, hard like a puck hitting
+//    the post. Both disabled under prefers-reduced-motion.
+if (typeof document !== 'undefined' && !document.getElementById('rinkd-pg-anim')) {
+  const el = document.createElement('style');
+  el.id = 'rinkd-pg-anim';
+  el.textContent =
+    '@keyframes pgLiveRing{0%{box-shadow:0 0 0 0 rgba(215,38,56,0.7)}75%{box-shadow:0 0 0 16px rgba(215,38,56,0)}100%{box-shadow:0 0 0 0 rgba(215,38,56,0)}}'
+    + '@keyframes pgScorePop{0%{transform:scale(1.2)}100%{transform:scale(1)}}'
+    + '.pg-live-ring{animation:pgLiveRing 1.5s ease-out infinite}'
+    + '.pg-score-pop{animation:pgScorePop 200ms cubic-bezier(0.34,1.56,0.64,1)}'
+    + '@media (prefers-reduced-motion: reduce){.pg-live-ring{animation:none}.pg-score-pop{animation:none}}';
+  document.head.appendChild(el);
+}
+
 const periodLabel = (p) => p === 1 ? '1st' : p === 2 ? '2nd' : p === 3 ? '3rd' : p === 4 ? 'OT' : 'SO';
+
+// Broadcast period label — "2nd Period" / "Overtime" / "Shootout" (caps applied
+// in CSS). Tolerates null/0 (live game before the scorer sets a period).
+const periodDisplay = (p) => {
+  const n = p || 1;
+  if (n === 4) return 'Overtime';
+  if (n >= 5) return 'Shootout';
+  const ord = n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`;
+  return `${ord} Period`;
+};
 
 function TeamMark({ team, size = 76 }) {
   const initials = (team.logo_initials || teamInitials(team.name, 2) || '?').slice(0, 3).toUpperCase();
@@ -115,8 +142,29 @@ export default function PublicGame({ league }) {
 
   const { loading, game, parent, blocked } = state;
 
-  if (loading) return <Shell><Center>Loading…</Center></Shell>;
-  if (!game) return <Shell><Center>This game couldn’t be found.</Center></Shell>;
+  if (loading) return (
+    <Shell>
+      <Center>
+        <div style={{ fontSize: 34, marginBottom: 12 }}>🏒</div>
+        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 20, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.02em' }}>Getting the ice ready.</div>
+      </Center>
+    </Shell>
+  );
+  if (!game) return (
+    <Shell>
+      <SEO title="Rinkd" noIndex />
+      <Center>
+        {/* Rizzo the Rinkd Rat — the mascot makes the dead-end a brand moment.
+            WebP with PNG fallback for legacy Safari/IE (mirrors NotFound). */}
+        <picture>
+          <source srcSet="/mascot-rizzo.webp" type="image/webp" />
+          <img src="/mascot-rizzo.png" alt="Rinkd Rat" width="140" height="140" style={{ display: 'block', margin: '0 auto 16px', maxWidth: '45%', height: 'auto' }} />
+        </picture>
+        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 24, color: C.ice, textTransform: 'uppercase', marginBottom: 8 }}>This game’s not on the board</div>
+        <div style={{ maxWidth: 340, lineHeight: 1.5 }}>The link may be off, or the game hasn’t dropped the puck yet. Live scores, stats, and recaps for every game live on <Link to="/" style={{ color: '#9ec3ec', fontWeight: 700 }}>Rinkd →</Link></div>
+      </Center>
+    </Shell>
+  );
   if (blocked) return (
     <Shell>
       <SEO title="Rinkd" noIndex />
@@ -171,16 +219,15 @@ export default function PublicGame({ league }) {
     return arr.length ? arr.map(s => s.goals > 1 ? `${s.name} (${s.goals})` : s.name).join('  ·  ') : null;
   };
 
-  const goalScorer = (g) => {
-    if (scorersHidden) return 'Goal';
-    if (g.scorer_number == null) return 'Goal';
-    const name = lineupByTeam[g.team_id]?.[g.scorer_number];
-    return name ? `${name} (#${g.scorer_number})` : `#${g.scorer_number}`;
+  // Split jersey number from name so the box-score rows can render the number
+  // as a team-colored mark (no bullets) with the name beside it.
+  const goalScorerParts = (g) => {
+    if (scorersHidden || g.scorer_number == null) return { num: null, name: 'Goal' };
+    return { num: g.scorer_number, name: lineupByTeam[g.team_id]?.[g.scorer_number] || null };
   };
-  const penaltyPlayer = (p) => {
-    if (scorersHidden || p.player_number == null) return null;
-    const name = lineupByTeam[p.team_id]?.[p.player_number];
-    return name ? `${name} (#${p.player_number})` : `#${p.player_number}`;
+  const penaltyPlayerParts = (p) => {
+    if (scorersHidden || p.player_number == null) return { num: null, name: null };
+    return { num: p.player_number, name: lineupByTeam[p.team_id]?.[p.player_number] || null };
   };
   const teamColorFor = (id) => id === homeTeam.id ? (homeTeam.color || C.blue) : (awayTeam.color || C.red);
   const teamNameFor = (id) => id === homeTeam.id ? homeTeam.name : awayTeam.name;
@@ -211,18 +258,29 @@ export default function PublicGame({ league }) {
         </div>
 
         {/* scoreboard */}
-        <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 16, padding: '22px 18px', marginBottom: 16 }}>
-          <div style={{ textAlign: 'center', marginBottom: 16 }}>
-            <span style={{ display: 'inline-block', background: isLive ? C.red : isFinal ? 'rgba(244,247,250,0.12)' : 'rgba(46,91,140,0.3)', color: isLive ? '#fff' : C.ice, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 13, letterSpacing: '0.08em', padding: '4px 14px', borderRadius: 999 }}>
-              {isLive ? '● LIVE' : isFinal ? 'FINAL' : 'UPCOMING'}
-            </span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 16, padding: '22px 18px', marginBottom: 16, overflow: 'hidden' }}>
+          {isLive ? (
+            /* Live broadcast lower-third: red-accent slab bleeding to the card
+               edges, pulsing ring, "2ND PERIOD - LIVE". You feel it before you
+               read it. */
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '-22px -18px 18px', padding: '11px 18px', background: C.navy, borderLeft: `4px solid ${C.red}` }}>
+              <span className="pg-live-ring" style={{ width: 10, height: 10, borderRadius: 999, background: C.red, flex: '0 0 auto' }} />
+              <span style={{ flex: 1, minWidth: 0, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', textTransform: 'uppercase', letterSpacing: '0.05em', color: C.ice, fontSize: 17, lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {periodDisplay(game.period)} - Live
+              </span>
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', marginBottom: 16 }}>
+              <span style={{ display: 'inline-block', background: isFinal ? 'rgba(244,247,250,0.12)' : 'rgba(46,91,140,0.3)', color: C.ice, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 13, letterSpacing: '0.08em', padding: '4px 14px', borderRadius: 999 }}>
+                {isFinal ? 'FINAL' : 'UPCOMING'}
+              </span>
+            </div>
+          )}
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 12 }}>
             <TeamSide team={homeTeam} score={game.home_score} scorerLine={scorerLine(homeTeam.id)} hideScore={!isFinal && !isLive} />
-            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 22, color: C.steel, alignSelf: 'flex-start', marginTop: 26 }}>–</div>
             <TeamSide team={awayTeam} score={game.away_score} scorerLine={scorerLine(awayTeam.id)} hideScore={!isFinal && !isLive} />
           </div>
-          {venue && <div style={{ textAlign: 'center', marginTop: 16, fontSize: 12, color: C.steel }}>📍 {venue}</div>}
+          {venue && <div style={{ textAlign: 'center', marginTop: 16, fontSize: 12, color: C.steel, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📍 {venue}</div>}
         </div>
 
         {/* sponsor lockup — the recap "presented by" (GROWTH-SHARE-1 × ADS-1) */}
@@ -235,31 +293,47 @@ export default function PublicGame({ league }) {
           ) : <span style={{ color: C.ice, fontWeight: 700 }}>Rinkd</span>}
         </div>
 
-        {/* box score — goals */}
+        {/* box score — goals. Dense log: team-colored jersey #, scorer name in
+            Barlow Condensed, muted time. No bullets, no borders. */}
         {goals.length > 0 && (
           <Section title="Scoring">
-            {goals.map(g => (
-              <Row key={g.id}>
-                <Dot color={teamColorFor(g.team_id)} />
-                <span style={{ flex: 1 }}><b style={{ color: C.ice }}>{goalScorer(g)}</b> <span style={{ color: C.steel }}>· {teamNameFor(g.team_id)}</span></span>
-                <span style={{ color: C.steel, fontSize: 12 }}>{periodLabel(g.period)}{g.time_in_period ? ` ${g.time_in_period}` : ''}</span>
-              </Row>
-            ))}
+            {goals.map(g => {
+              const { num, name } = goalScorerParts(g);
+              const col = teamColorFor(g.team_id);
+              const team = teamNameFor(g.team_id) || '';
+              return (
+                <div key={g.id} style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '8px 16px' }}>
+                  {num != null && <span style={{ flex: '0 0 auto', minWidth: 32, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 16, color: col }}>#{num}</span>}
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 }}>
+                    {name && <b style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 16, color: C.ice }}>{name}</b>}
+                    <span style={{ color: C.steel, fontSize: 13 }}>{name ? ` · ${team}` : team}</span>
+                  </span>
+                  <span style={{ flex: '0 0 auto', color: C.steel, fontSize: 12, whiteSpace: 'nowrap' }}>{periodLabel(g.period)}{g.time_in_period ? ` ${g.time_in_period}` : ''}</span>
+                </div>
+              );
+            })}
           </Section>
         )}
 
-        {/* box score — penalties */}
+        {/* box score — penalties (same dense, borderless treatment) */}
         {penalties.length > 0 && (
           <Section title="Penalties">
             {penalties.map(p => {
-              const who = penaltyPlayer(p);
-              const mins = p.duration_minutes ? ` (${p.duration_minutes}m)` : '';
+              const { num, name } = penaltyPlayerParts(p);
+              const col = teamColorFor(p.team_id);
+              const team = teamNameFor(p.team_id) || '';
+              const mins = p.duration_minutes ? ` ${p.duration_minutes}m` : '';
+              const inf = `${p.penalty_type || p.severity || 'Penalty'}${mins}`;
               return (
-                <Row key={p.id}>
-                  <Dot color={teamColorFor(p.team_id)} />
-                  <span style={{ flex: 1, color: C.ice }}>{who ? <b>{who} </b> : null}{p.penalty_type || p.severity || 'Penalty'}{mins} <span style={{ color: C.steel }}>· {teamNameFor(p.team_id)}</span></span>
-                  <span style={{ color: C.steel, fontSize: 12 }}>{periodLabel(p.period)}{p.time_in_period ? ` ${p.time_in_period}` : ''}</span>
-                </Row>
+                <div key={p.id} style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '8px 16px' }}>
+                  {num != null && <span style={{ flex: '0 0 auto', minWidth: 32, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 16, color: col }}>#{num}</span>}
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 }}>
+                    {name && <b style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 16, color: C.ice }}>{name} </b>}
+                    <span style={{ color: name ? C.steel : C.ice, fontSize: name ? 13 : 14 }}>{inf}</span>
+                    <span style={{ color: C.steel, fontSize: 13 }}> · {team}</span>
+                  </span>
+                  <span style={{ flex: '0 0 auto', color: C.steel, fontSize: 12, whiteSpace: 'nowrap' }}>{periodLabel(p.period)}{p.time_in_period ? ` ${p.time_in_period}` : ''}</span>
+                </div>
               );
             })}
           </Section>
@@ -281,10 +355,13 @@ export default function PublicGame({ league }) {
 
 function TeamSide({ team, score, scorerLine, hideScore }) {
   return (
-    <div style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>
+    <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><TeamMark team={team} /></div>
-      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 800, fontSize: 17, color: '#F4F7FA', lineHeight: 1.1, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis' }}>{(team.name || 'TBD').toUpperCase()}</div>
-      {!hideScore && <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 52, color: '#F4F7FA', lineHeight: 1 }}>{score ?? 0}</div>}
+      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 800, fontSize: 17, color: '#F4F7FA', lineHeight: 1.1, marginBottom: 2, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(team.name || 'TBD').toUpperCase()}</div>
+      {/* TV score bug — Barlow Condensed 900 italic, 72px. key={score} remounts
+          on every score change so pgScorePop fires the hard puck-off-the-post
+          bounce. */}
+      {!hideScore && <div key={score ?? 0} className="pg-score-pop" style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 72, color: '#F4F7FA', lineHeight: 1 }}>{score ?? 0}</div>}
       {scorerLine && <div style={{ fontSize: 12, color: '#8BA3BE', marginTop: 6, lineHeight: 1.4 }}>{scorerLine}</div>}
     </div>
   );
@@ -296,10 +373,8 @@ function Center({ children }) { return <div style={{ minHeight: '100vh', display
 function Section({ title, children }) {
   return (
     <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 14, overflow: 'hidden', marginBottom: 14 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'rgba(244,247,250,0.4)', textTransform: 'uppercase', padding: '12px 16px 8px' }}>{title}</div>
-      <div>{children}</div>
+      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 700, fontSize: 13, letterSpacing: '0.06em', color: 'rgba(244,247,250,0.55)', textTransform: 'uppercase', padding: '11px 16px 5px' }}>{title}</div>
+      <div style={{ paddingBottom: 6 }}>{children}</div>
     </div>
   );
 }
-function Row({ children }) { return <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px', borderTop: '0.5px solid rgba(46,91,140,0.18)', fontSize: 14 }}>{children}</div>; }
-function Dot({ color }) { return <span style={{ width: 9, height: 9, borderRadius: '50%', background: color, flexShrink: 0 }} />; }
