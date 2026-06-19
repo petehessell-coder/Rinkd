@@ -16,7 +16,7 @@ const ANON =
   process.env.REACT_APP_SUPABASE_ANON_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRicG9vcHN5aGZ1cWNidWdyamJoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc1NjkxMjQsImV4cCI6MjA5MzE0NTEyNH0.0gcGgxkyqmgjGwctCrLBBW18O1LfqFkzKBqJkvCDVpo';
 
-const BOT_RE = /(facebookexternalhit|Facebot|Twitterbot|Slackbot|Slack-ImgProxy|WhatsApp|Discordbot|LinkedInBot|TelegramBot|Applebot|redditbot|Pinterest|Embedly|Iframely|vkShare|SkypeUriPreview|Googlebot|bingbot|W3C_Validator)/i;
+const BOT_RE = /(facebookexternalhit|Facebot|Twitterbot|Slackbot|Slack-ImgProxy|WhatsApp|Discordbot|LinkedInBot|TelegramBot|Applebot|redditbot|Pinterest|Embedly|Iframely|vkShare|SkypeUriPreview|Googlebot|Google-InspectionTool|bingbot|W3C_Validator|Mastodon|Bluesky|nuzzel)/i;
 
 function esc(s) {
   return String(s == null ? '' : s)

@@ -118,7 +118,7 @@ export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghos
           aria-label={err ? 'Could not build the card — tap to try again' : 'Share card'}
           title={err ? 'Could not build the card — tap to try again' : 'Share card'}
           style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 44, height: 44,
             borderRadius: 999, background: 'transparent', border: 'none', cursor: busy ? 'default' : 'pointer',
             color: err ? '#E26B6B' : busy ? '#8BA3BE' : '#9ec3ec', opacity: busy ? 0.7 : 1, padding: 0,
           }}>

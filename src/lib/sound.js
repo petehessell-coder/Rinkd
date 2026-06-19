@@ -49,6 +49,8 @@ export function setGoalHornEnabled(on) {
   enabled = !!on;
   try { localStorage.setItem(KEY, on ? '1' : '0'); } catch { /* runtime flag still holds */ }
   if (on) { unlockSound(); playGoalHorn({ force: true }); }
+  // Let any other mounted toggle (e.g. a second live card) re-sync its icon.
+  try { window.dispatchEvent(new Event('rinkd-goalhorn-change')); } catch { /* SSR / no window */ }
 }
 
 // One arena air-horn blast: a low brass chord (A2/A3/C#4/E4) through a moving

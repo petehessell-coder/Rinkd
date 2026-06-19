@@ -114,25 +114,35 @@ const NOOP = { toast: () => -1, dismiss: () => {} };
 // -----------------------------------------------------------------------------
 const UNDO_MS = 5000;
 export function useUndoable() {
-  const { toast } = useToast();
+  const { toast, dismiss } = useToast();
   return useCallback(({ message, apply, commit, errorMessage, actionLabel = 'Undo', tone = 'alert', icon }) => {
     let restore = null;
     try { restore = typeof apply === 'function' ? apply() : null; } catch { return; }
-    const undo = () => { if (typeof restore === 'function') { try { restore(); } catch { /* noop */ } } };
-    let undone = false;
-    const timer = setTimeout(async () => {
-      if (undone) return;
+    const doRestore = () => { if (typeof restore === 'function') { try { restore(); } catch { /* noop */ } } };
+
+    // `settled` makes Undo-vs-commit a clean check-and-set. JS is single-threaded,
+    // so whichever path runs first wins and the other is a no-op — the irreversible
+    // commit can NEVER race a late Undo tap during the toast's fade-out. useUndoable
+    // owns the toast lifecycle (manual dismiss + commit), so the auto-dismiss timer
+    // can't fire the commit as the button is still disappearing (the old bug).
+    let settled = false;
+    let timer = null;
+    const id = toast({
+      message, tone, icon, actionLabel,
+      duration: 0, // we dismiss it ourselves, in lock-step with the commit
+      undo: () => { if (settled) return; settled = true; clearTimeout(timer); dismiss(id); doRestore(); },
+    });
+    timer = setTimeout(async () => {
+      if (settled) return;
+      settled = true;
+      dismiss(id); // pull the (now non-undoable) toast before the irreversible write
       try { await (typeof commit === 'function' ? commit() : null); }
       catch {
-        undo();
+        doRestore();
         toast({ message: errorMessage || "That didn’t go through — it’s back where it was. Try again.", tone: 'alert' });
       }
     }, UNDO_MS);
-    toast({
-      message, tone, icon, actionLabel, duration: UNDO_MS,
-      undo: () => { undone = true; clearTimeout(timer); undo(); },
-    });
-  }, [toast]);
+  }, [toast, dismiss]);
 }
 
 // -----------------------------------------------------------------------------

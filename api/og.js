@@ -4,9 +4,10 @@ import { ImageResponse } from '@vercel/og';
 //
 // Renders a 1200×630 broadcast card at the edge from query params (so a pasted
 // Rinkd link unfurls richly on iMessage / Slack / X / Facebook, none of which run
-// the SPA's JS). Driven by /api/unfurl, which fetches the game/event and passes
-// the display values here. Pure rendering — no DB calls — so it's fast and can't
-// leak anything the unfurl layer didn't already decide to expose.
+// the SPA's JS). Driven by the root `middleware.js` (its `gameMeta`), which
+// fetches the game/event and passes the display values here. Pure rendering — no
+// DB calls — so it's fast and can't leak anything the middleware didn't already
+// decide to expose.
 //
 // Built with Satori's plain-object element form (NOT JSX) so there's no JSX
 // transpile / React-pragma dependency in the edge bundle. Satori REQUIRES a font

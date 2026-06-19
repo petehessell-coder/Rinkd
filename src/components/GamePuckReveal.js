@@ -177,13 +177,17 @@ export default function GamePuckReveal({
     finishedRef.current = true;
     draggingRef.current = false;
     if (!reduced) {
-      // Weight + spring into the rip: the clip springs from wherever it was to
-      // fully gone while the roll flings off (animation on the assembly).
+      // Weight + spring into the rip: the roll flings off while the flat tape's
+      // clip springs from wherever it was to fully gone. `ripping` first makes
+      // the spring transition the committed style; the clip value (→1) changes
+      // a paint LATER (double rAF) so the browser actually animates it instead
+      // of snapping (transition-added + value-changed in one frame won't tween).
       setRipping(true);
-      setPeel(1);
       haptics.rip();                 // rrrip
       setConfettiOn(true);
-      ripTimerRef.current = setTimeout(() => setRipping(false), 520);
+      const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (fn) => setTimeout(fn, 16);
+      raf(() => raf(() => { if (finishedRef.current) setPeel(1); }));
+      ripTimerRef.current = setTimeout(() => setRipping(false), 560);
     } else {
       // Reduced motion: no animation, no confetti — instant reveal.
       setPeel(1);
