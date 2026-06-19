@@ -6,7 +6,7 @@ import { Avatar, TierBadge } from '../components/Logos';
 import { getPosts, getFollowingPosts, createPost, toggleLike, getLikedPosts, getComments, createComment, uploadMedia, timeAgo } from '../lib/posts';
 import PushPrompt from '../components/PushPrompt';
 import { track } from '../lib/analytics';
-import { FeedSkeleton, EmptyState } from '../components/Skeletons';
+import { FeedSkeleton, PostSkeleton, EmptyState } from '../components/Skeletons';
 import { classifyImage } from '../lib/imageModeration';
 import PostActionMenu from '../components/PostActionMenu';
 import PostReactions from '../components/PostReactions';
@@ -49,11 +49,17 @@ const CHIRP_STARTERS = [
   'Rate the rink coffee ☕',
 ];
 
-// One-time keyframe inject for the prompt crossfade (app styles inline).
+// One-time keyframe inject for the prompt crossfade + live pulse (app styles
+// inline). The live dot uses the manifesto's "red light on" ring-expand and is
+// disabled under prefers-reduced-motion.
 if (typeof document !== 'undefined' && !document.getElementById('rinkd-feed-anim')) {
   const el = document.createElement('style');
   el.id = 'rinkd-feed-anim';
-  el.textContent = '@keyframes rinkdStarterFade{0%{opacity:0;transform:translateY(3px)}100%{opacity:1;transform:translateY(0)}}';
+  el.textContent =
+    '@keyframes rinkdStarterFade{0%{opacity:0;transform:translateY(3px)}100%{opacity:1;transform:translateY(0)}}'
+    + '@keyframes rinkdLivePulse{0%{box-shadow:0 0 0 0 rgba(215,38,56,0.55)}70%{box-shadow:0 0 0 7px rgba(215,38,56,0)}100%{box-shadow:0 0 0 0 rgba(215,38,56,0)}}'
+    + '.rinkd-live-dot{animation:rinkdLivePulse 1.5s ease-out infinite}'
+    + '@media (prefers-reduced-motion: reduce){.rinkd-live-dot{animation:none}}';
   document.head.appendChild(el);
 }
 
@@ -106,6 +112,65 @@ function MediaDisplay({ url, type }) {
   );
 }
 
+// Pulsing red light — the manifesto's "red light on, siren" live indicator.
+// Pure CSS ring-expand (see keyframes above); honors prefers-reduced-motion.
+function LiveDot({ size = 7 }) {
+  return (
+    <span className="rinkd-live-dot" aria-hidden="true"
+      style={{ width: size, height: size, borderRadius: 999, background: '#D72638', display: 'inline-block', flex: '0 0 auto' }} />
+  );
+}
+
+// "LIVE" pill for cards backed by an actually-live stream (LiveBarn). Kept
+// honest — only genuinely-live content claims LIVE.
+function LiveBadge() {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5, flex: '0 0 auto',
+      padding: '3px 8px', borderRadius: 6,
+      background: 'rgba(215,38,56,0.15)', border: '1px solid rgba(215,38,56,0.6)',
+      color: '#F4F7FA', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+      fontStyle: 'italic', fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase',
+    }}>
+      <LiveDot /> Live
+    </span>
+  );
+}
+
+// Broadcast lower-third — white Barlow Condensed 700 italic caps on solid navy
+// (#0f2847), bleeding to the column's left edge with a red accent slab. This is
+// the section header pattern from the manifesto ("PERIOD 2 · LIVE"), not a
+// generic label. `live` lights a pulsing LIVE marker when the view has live
+// content, so the 2-second test ("is something live?") passes from the header.
+function BroadcastHeader({ label, live }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      background: '#0f2847', borderLeft: '4px solid #D72638',
+      marginLeft: -16, marginBottom: 12,
+      padding: '8px 14px 8px 16px',
+      borderTopRightRadius: 4, borderBottomRightRadius: 4,
+    }}>
+      <span style={{
+        flex: 1, minWidth: 0,
+        fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic',
+        fontSize: 18, lineHeight: 1, letterSpacing: '0.05em',
+        color: '#F4F7FA', textTransform: 'uppercase',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>{label}</span>
+      {live && (
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6, flex: '0 0 auto',
+          color: '#D72638', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+          fontStyle: 'italic', fontSize: 13, letterSpacing: '0.1em', textTransform: 'uppercase',
+        }}>
+          <LiveDot /> Live
+        </span>
+      )}
+    </div>
+  );
+}
+
 function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, reactions, onLike, onComment, onCommentRemoved, onPostHidden, onUserBlocked }) {
   const navigate = useNavigate();
   const [showComments, setShowComments] = useState(false);
@@ -116,6 +181,14 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
   const isLiked = likedPosts.includes(post.id);
   const profile = post.profiles;
   const postMentionMap = mentionMapFromRows(post.post_mentions);
+
+  // Card-hero "live" treatment. Reserved for genuinely red-earning moments so
+  // the glow stays scarce and meaningful (manifesto: red = live/urgent only).
+  // A LiveBarn embed is an actually-live stream; a Goal Alert is the feed's
+  // urgent game moment. Derived purely from fields already on the post — no
+  // extra fetch, no change to data logic.
+  const isLiveStream = !!post.livebarn_venue_id;
+  const isLive = isLiveStream || post.tag === 'Goal Alert';
 
   const loadComments = async () => {
     if (!showComments) { const c = await getComments(post.id); setComments(c); }
@@ -186,21 +259,31 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
   };
 
   return (
-    <div style={{ background: C.card, borderRadius: 14, border: `1px solid ${C.border}`, marginBottom: 12, overflow: 'hidden' }}>
+    <div style={{
+      // card-hero (surface #162f55, 1px red border glow, red drop-shadow) when
+      // live so it floats above the flat standard cards; card-standard otherwise.
+      background: isLive ? '#162f55' : C.card,
+      borderRadius: 14,
+      border: isLive ? '1px solid rgba(215,38,56,0.6)' : `1px solid ${C.border}`,
+      boxShadow: isLive ? '0 8px 32px rgba(215,38,56,0.2)' : 'none',
+      marginBottom: isLive ? 16 : 12,
+      overflow: 'hidden',
+    }}>
       {post.tag && <div style={{ height: 3, background: post.tag_color || C.blue }}/>}
       <div style={{ padding: '14px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
           <div onClick={() => navigate(`/profile/${profile?.id}`)} style={{ cursor: 'pointer' }}><Avatar profile={profile} size={38} /></div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span onClick={() => navigate(`/profile/${profile?.id}`)} style={{ fontWeight: 600, fontSize: 14, color: C.ice, cursor: 'pointer', textDecoration: 'underline' }}>{profile?.name || 'Player'}</span>
+              <span onClick={() => navigate(`/profile/${profile?.id}`)} style={{ fontWeight: 600, fontSize: 14, color: C.ice, cursor: 'pointer', textDecoration: 'underline', minWidth: 0, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile?.name || 'Player'}</span>
               <TierBadge tier={profile?.tier || 'Mite'} size="xs" />
               {post.tag && (
                 <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', background: (post.tag_color || C.blue) + '22', color: post.tag_color || C.blue, border: `1px solid ${(post.tag_color || C.blue)}44`, borderRadius: 4, fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '0.06em' }}>{post.tag}</span>
               )}
             </div>
-            <div style={{ fontSize: 11, color: C.steel, marginTop: 1 }}>@{profile?.handle} · {profile?.position} · {timeAgo(post.created_at)}</div>
+            <div style={{ fontSize: 11, color: C.steel, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{profile?.handle} · {profile?.position} · {timeAgo(post.created_at)}</div>
           </div>
+          {isLiveStream && <LiveBadge />}
           <PostActionMenu
             kind="post"
             targetId={post.id}
@@ -261,10 +344,10 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
             {comments.map(c => (
               <div key={c.id} style={{ display: 'flex', gap: 8, marginBottom: 10, opacity: c.__pending ? 0.55 : 1, transition: 'opacity 0.18s' }}>
                 <Avatar profile={c.profiles} size={28} />
-                <div style={{ flex: 1, background: C.navy, borderRadius: 8, padding: '8px 10px' }}>
+                <div style={{ flex: 1, minWidth: 0, background: C.navy, borderRadius: 8, padding: '8px 10px' }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: C.ice, marginBottom: 2 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: C.ice, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {c.profiles?.name || (c.__pending ? 'You' : '')}
                         <span style={{ fontWeight: 400, color: C.steel }}> · {c.__pending ? 'sending…' : timeAgo(c.created_at)}</span>
                       </div>
@@ -645,6 +728,15 @@ export default function Feed({ currentUser, profile }) {
     })();
   };
 
+  // Broadcast lower-third label for the current view + whether any visible post
+  // is live (lights the header's LIVE marker).
+  const headerLabel = followingFallback ? 'Popular Now' : tab === 'following' ? 'Following' : 'For You';
+  const hasLive = posts.some(p => !!p.livebarn_venue_id || p.tag === 'Goal Alert');
+  // Live games float above everything else: genuinely-live (LiveBarn) posts are
+  // rendered first. Pure render-time ordering — the `posts` state array (and the
+  // keyset pagination cursor that reads its last element) is left untouched.
+  const liveFirst = [...posts.filter(p => !!p.livebarn_venue_id), ...posts.filter(p => !p.livebarn_venue_id)];
+
   return (
     <Layout profile={profile}>
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '24px 16px' }}>
@@ -723,16 +815,22 @@ export default function Feed({ currentUser, profile }) {
         )}
 
         {loading ? (
-          <FeedSkeleton count={4} />
+          <>
+            <div style={{ marginBottom: 12, color: C.steel, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 14, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              Getting the ice ready.
+            </div>
+            <FeedSkeleton count={4} />
+          </>
         ) : posts.length === 0 ? (
           <EmptyState
             icon="🏒"
-            title={tab === 'following' ? 'Your following feed is quiet' : 'No chirps yet'}
-            body={tab === 'following' ? 'Follow some players and teams to see their highlights and updates here.' : 'Be the first to chirp. Photos, video clips, goal alerts, locker-room takes — all welcome.'}
-            cta={tab === 'following' ? { label: 'Discover Players', onClick: () => navigate('/discover') } : { label: 'Drop a Chirp', onClick: () => setComposerOpen(true) }}
+            title={tab === 'following' ? 'Nobody on your line yet' : 'Fresh sheet of ice'}
+            body={tab === 'following' ? 'Follow players, teams, and leagues — their goals, clips, and chirps drop right here.' : 'No chirps yet. Grab the first shift — drop a goal clip, a hot take, or a locker-room photo.'}
+            cta={tab === 'following' ? { label: 'Find Players to Follow', onClick: () => navigate('/discover') } : { label: 'Drop the First Chirp', onClick: () => setComposerOpen(true) }}
           />
         ) : (
           <>
+            <BroadcastHeader label={headerLabel} live={hasLive} />
             {followingFallback && (
               <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, padding: '10px 12px', marginBottom: 8, borderRadius: 10, background: C.navy, border: `1px solid ${C.border}`, color: C.steel, fontSize: 13, fontFamily: "'Barlow', sans-serif" }}>
                 <span>✨ Showing popular chirps —</span>
@@ -740,7 +838,7 @@ export default function Feed({ currentUser, profile }) {
                 <span>to personalize your feed.</span>
               </div>
             )}
-            {posts.map(post => (
+            {liveFirst.map(post => (
               <PostCard
                 key={post.id}
                 post={post}
@@ -755,10 +853,13 @@ export default function Feed({ currentUser, profile }) {
                 onUserBlocked={(uid) => setPosts(prev => prev.filter(p => p.author_id !== uid))}
               />
             ))}
+            {/* Skeleton matching the exact card layout being loaded — never a
+                generic spinner — plus hockey copy on the trigger itself. */}
+            {loadingMore && <PostSkeleton />}
             {hasMore && (
               <button onClick={loadMore} disabled={loadingMore}
                 style={{ width: '100%', padding: '12px', marginTop: 4, borderRadius: 10, background: C.navy, border: `1px solid ${C.border}`, color: C.steel, fontFamily: "'Barlow', sans-serif", fontSize: 14, fontWeight: 600, cursor: loadingMore ? 'default' : 'pointer' }}>
-                {loadingMore ? 'Loading…' : 'Load more chirps'}
+                {loadingMore ? 'Warming up…' : 'Load more chirps'}
               </button>
             )}
           </>
