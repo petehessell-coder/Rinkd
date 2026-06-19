@@ -1,5 +1,4 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { Avatar } from './Logos';
 import { followUser } from '../lib/posts';
@@ -10,6 +9,20 @@ const C = {
   navy: '#0B1F3A', red: '#D72638', ice: '#F4F7FA',
   steel: '#8BA3BE', dark: '#07111F', card: '#0f2847', border: 'rgba(46,91,140,0.4)',
 };
+
+// Locker Room → Tunnel → Ice (DESIGN_MANIFESTO "Onboarding Narrative").
+// The locker-room photo sits BEHIND the onboarding steps; the tunnel plays once
+// on first finish and is gated by localStorage so it never becomes a loading
+// screen. These are the optimized assets (~200–500KB) served from /public.
+const LOCKER_IMG = '/onboarding-locker-room.jpg';
+const TUNNEL_IMG = '/onboarding-tunnel.jpg';
+const TUNNEL_SEEN_KEY = 'rinkd_tunnel_seen';
+// Feed listens for this and rises up from below as the white flash clears.
+const ICE_REVEAL_EVENT = 'rinkd:ice-reveal';
+
+const prefersReducedMotion = () =>
+  typeof window !== 'undefined' && window.matchMedia
+  && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ONBOARD-1 (May 28, 2026): the role chooser writes to `profiles.persona`
 // — the new segmentation column added in ENRICH-1. IDs MUST match the
@@ -37,23 +50,85 @@ const btnGhost = {
 };
 
 /**
+ * The Tunnel — plays once on first finish. A still tunnel photo (the manifesto's
+ * sanctioned fallback when no video asset exists) pushes forward: a slow zoom
+ * with brightness lifting toward the light, then a white flash that hands off to
+ * the feed. Pure inline CSS transitions (no @keyframes). Self-cleans its timers.
+ *
+ * Timeline:
+ *   0ms     start zoom (2500ms ease-in)
+ *   2500ms  white overlay begins fading in (400ms)
+ *   2900ms  white fully covers → dispatch ICE_REVEAL (feed snaps to hidden behind white)
+ *   2980ms  onDone() → modal unmounts, feed rises into the now-cleared white
+ */
+function TunnelOutro({ src, onDone }) {
+  const [zoom, setZoom] = useState(false);
+  const [white, setWhite] = useState(false);
+  const doneRef = useRef(onDone);
+  doneRef.current = onDone;
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setZoom(true));
+    const tWhite = setTimeout(() => setWhite(true), 2500);
+    const tReveal = setTimeout(() => {
+      try { window.dispatchEvent(new Event(ICE_REVEAL_EVENT)); } catch (_) {}
+    }, 2900);
+    const tDone = setTimeout(() => { doneRef.current?.(); }, 2980);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(tWhite); clearTimeout(tReveal); clearTimeout(tDone);
+    };
+  }, []);
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 10000, overflow: 'hidden', background: C.dark, perspective: 1000 }}>
+      <div style={{
+        position: 'absolute', inset: 0,
+        backgroundImage: `url(${src})`, backgroundSize: 'cover', backgroundPosition: 'center',
+        transform: zoom ? 'translateZ(20px) scale(1.08)' : 'translateZ(0px) scale(1.0)',
+        filter: zoom ? 'brightness(1.3)' : 'brightness(1)',
+        transition: 'transform 2500ms ease-in, filter 2500ms ease-in',
+        willChange: 'transform, filter',
+      }} />
+      <div style={{
+        position: 'absolute', inset: 0, background: '#fff', pointerEvents: 'none',
+        opacity: white ? 1 : 0, transition: 'opacity 400ms ease-in',
+      }} />
+    </div>
+  );
+}
+
+/**
  * First-run onboarding for new signups. Three steps:
- *   1. Choose role → writes to profiles.position when it's a recognised one,
- *      otherwise stored in metadata.
+ *   1. Choose role → writes to profiles.persona (segmentation column).
  *   2. Discover players to follow → optional, follows happen inline.
  *   3. Enable push notifications → optional, gracefully skipped if denied.
  * Always closes by setting profiles.welcome_seen = true so it never reappears.
+ *
+ * Visual: the three steps sit over a full-bleed locker-room photo; finishing
+ * (by ANY path — finish or skip) earns the one-time tunnel cinematic.
  */
 export default function OnboardingModal({ currentUser, profile, onClose, onProfileUpdate }) {
-  const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [chosenRole, setChosenRole] = useState(null);
   const [suggested, setSuggested] = useState([]);
   const [followingMap, setFollowingMap] = useState({});
   const [pushBusy, setPushBusy] = useState(false);
-  const [closing, setClosing] = useState(false);
+  // 'loading' | 'ready' | 'failed' — gates whether the tunnel may play.
+  const [tunnelStatus, setTunnelStatus] = useState('loading');
+  const [outro, setOutro] = useState(false);
 
   useEffect(() => { track('onboarding_started'); }, []);
+
+  // Preload the tunnel image while the user works the locker-room steps, so the
+  // cinematic never opens on a gray box. If it can't decode in time (or errors),
+  // we skip the tunnel entirely rather than show a half-loaded frame.
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => setTunnelStatus('ready');
+    img.onerror = () => setTunnelStatus('failed');
+    img.src = TUNNEL_IMG;
+  }, []);
 
   useEffect(() => {
     // Step 2 suggestions. Two rules: (1) lead with the community/seed accounts
@@ -88,14 +163,25 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
     try { sessionStorage.removeItem('rinkd_pending_onboarding'); } catch (_) {}
   };
 
-  const finish = async () => {
-    setClosing(true);
-    clearPendingFlag();
+  // Flip local app state (this unmounts the modal) and close. Deferred until the
+  // tunnel finishes — flipping welcome_seen earlier would drop showOnboarding to
+  // false in App.js and yank the tunnel out from under itself mid-play.
+  const closeOut = () => {
+    onProfileUpdate?.({
+      ...(profile || {}),
+      welcome_seen: true,
+      ...(chosenRole ? { profile_complete: true, persona: chosenRole } : {}),
+    });
+    onClose?.();
+  };
+
+  // Persist completion to the DB. Fired in the background the instant the outro
+  // starts so the cinematic never waits on a network round-trip.
+  const persist = async () => {
     try {
-      // ENRICH-1 + ONBOARD-1 (May 28, 2026): flip profile_complete = true if
-      // the user actually picked a persona (the segmentation field). If they
-      // skipped the role step entirely, leave profile_complete = false so the
-      // dismissible Feed banner (added in this build) keeps nudging them.
+      // ENRICH-1 + ONBOARD-1: flip profile_complete = true only if the user
+      // actually picked a persona. If they skipped the role step, leave it false
+      // so the dismissible Feed banner keeps nudging them.
       const updates = {
         welcome_seen: true,
         onboarding_completed_at: new Date().toISOString(),
@@ -105,37 +191,45 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
         .from('profiles')
         .update(updates)
         .eq('id', currentUser.id);
-      // profile may still be null if we mounted via the race-fix path before
-      // the profile fetch returned — spread-of-null is fine.
-      onProfileUpdate?.({
-        ...(profile || {}),
-        welcome_seen: true,
-        ...(chosenRole ? { profile_complete: true, persona: chosenRole } : {}),
-      });
       track('onboarding_completed', { role: chosenRole, profile_complete: !!chosenRole });
     } catch { /* don't block close */ }
-    onClose?.();
+  };
+
+  // Decide between the cinematic and an instant close. The tunnel plays only on
+  // the very first finish (localStorage gate), with motion enabled, and only if
+  // the image actually decoded. Otherwise we close straight to the feed.
+  const startOutro = () => {
+    let seen = false;
+    try { seen = localStorage.getItem(TUNNEL_SEEN_KEY) === '1'; } catch (_) {}
+    if (seen || prefersReducedMotion() || tunnelStatus !== 'ready') {
+      closeOut();
+      return;
+    }
+    try { localStorage.setItem(TUNNEL_SEEN_KEY, '1'); } catch (_) {}
+    track('onboarding_tunnel_played');
+    setOutro(true);
+  };
+
+  // Any exit path that ends onboarding routes through here. Finishing OR skipping
+  // earns the tunnel (Pete's call: skipping still earns the ice).
+  const finish = () => {
+    clearPendingFlag();
+    persist();        // background — don't await
+    startOutro();     // tunnel or instant close
   };
 
   const handleSkip = () => {
     track('onboarding_skipped', { at_step: step });
-    clearPendingFlag();
     finish();
   };
 
   const handleRoleNext = async () => {
     if (chosenRole) {
-      // ENRICH-1 + ONBOARD-1 (May 28, 2026): write the chosen role to the
-      // new `profiles.persona` segmentation column — NOT to `profiles.position`.
-      // Position is reserved for on-ice (Forward / Defense / Goalie); persona
-      // is who-am-I-in-hockey (player / parent / coach / commissioner /
-      // official / fan). Both columns coexist. The chosenRole id values are
-      // exactly the persona CHECK constraint set.
+      // Write the chosen role to `profiles.persona` (NOT `profiles.position`).
+      // Position is on-ice (Forward/Defense/Goalie); persona is who-am-I-in-hockey.
       await supabase.from('profiles').update({ persona: chosenRole }).eq('id', currentUser.id);
-      // Only do the optimistic state update if profile is already loaded —
-      // otherwise spreading null overwrites the full profile with just
-      // { persona }, losing every other field. The next profile fetch
-      // will pick up the new persona regardless.
+      // Only optimistic-update if profile is already loaded — otherwise spreading
+      // null would overwrite the full profile with just { persona }.
       if (profile) {
         onProfileUpdate?.({ ...profile, persona: chosenRole });
       }
@@ -159,55 +253,68 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
     finish();
   };
 
-  if (closing) return null;
+  // The tunnel takes over the whole viewport once it starts.
+  if (outro) {
+    return <TunnelOutro src={TUNNEL_IMG} onDone={closeOut} />;
+  }
 
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 9999,
-      background: 'rgba(7,17,31,0.85)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
-      fontFamily: 'Barlow, sans-serif',
+      fontFamily: 'Barlow, sans-serif', overflow: 'hidden',
     }}>
+      {/* Locker room — full-bleed photograph behind everything (manifesto: the UI
+          sits ON the photo, not in front of a generic dark background). */}
       <div style={{
-        background: C.card, border: `1px solid ${C.border}`, borderRadius: 16,
+        position: 'fixed', inset: 0,
+        backgroundImage: `url(${LOCKER_IMG})`, backgroundSize: 'cover', backgroundPosition: 'center',
+      }} />
+      {/* Readability overlay so the white type holds over any frame of the photo. */}
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(7,17,31,0.65)' }} />
+
+      {/* Content column — sits over the photo, no competing card surface. */}
+      <div style={{
+        position: 'relative', zIndex: 1,
         width: '100%', maxWidth: 480, color: C.ice,
-        boxShadow: '0 20px 50px rgba(0,0,0,0.6)',
         maxHeight: '92vh', overflowY: 'auto',
       }}>
         {/* Header */}
-        <div style={{ padding: '18px 20px 12px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ padding: '0 4px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             {[0, 1, 2].map((i) => (
               <div key={i} style={{ width: i === step ? 18 : 6, height: 6, borderRadius: 999, background: i <= step ? C.red : C.border, transition: 'all 0.2s' }} />
             ))}
           </div>
-          <button onClick={handleSkip} style={{ background: 'transparent', color: C.steel, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Skip for now</button>
+          <button onClick={handleSkip} style={{ background: 'transparent', color: C.ice, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, opacity: 0.85 }}>Skip for now</button>
         </div>
 
         {/* Body */}
-        <div style={{ padding: 24 }}>
+        <div style={{ padding: '4px 4px 0' }}>
           {step === 0 && (
             <>
               <div style={{
                 fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900,
                 fontSize: 30, lineHeight: 1.1, textTransform: 'uppercase', marginBottom: 8,
+                textShadow: '0 2px 12px rgba(0,0,0,0.6)',
               }}>
                 Welcome to <span style={{ color: C.red }}>Rinkd</span> 🏒
               </div>
-              <div style={{ fontSize: 14, color: C.steel, marginBottom: 20, lineHeight: 1.55 }}>
+              <div style={{ fontSize: 14, color: C.ice, opacity: 0.9, marginBottom: 20, lineHeight: 1.55, textShadow: '0 1px 8px rgba(0,0,0,0.6)' }}>
                 Built for everyone in the hockey community — players, parents, coaches, fans. Three quick questions and you're in.
               </div>
-              <div style={{ fontSize: 11, color: C.steel, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: C.ice, opacity: 0.8, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 10 }}>
                 What brings you here?
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 4 }}>
                 {ROLES.map((r) => (
                   <button key={r.id} onClick={() => setChosenRole(r.id)}
                     style={{
-                      background: chosenRole === r.id ? 'rgba(215,38,56,0.15)' : C.navy,
+                      background: chosenRole === r.id ? 'rgba(215,38,56,0.22)' : 'rgba(11,31,58,0.82)',
                       border: `1px solid ${chosenRole === r.id ? C.red : C.border}`,
                       color: C.ice, padding: 14, borderRadius: 12, cursor: 'pointer',
                       textAlign: 'left', fontFamily: 'Barlow, sans-serif', transition: 'all 0.15s',
+                      backdropFilter: 'blur(2px)',
                     }}>
                     <div style={{ fontSize: 24, marginBottom: 6 }}>{r.icon}</div>
                     <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 2 }}>{r.label}</div>
@@ -220,21 +327,21 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
 
           {step === 1 && (
             <>
-              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 26, lineHeight: 1.1, textTransform: 'uppercase', marginBottom: 8 }}>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 26, lineHeight: 1.1, textTransform: 'uppercase', marginBottom: 8, textShadow: '0 2px 12px rgba(0,0,0,0.6)' }}>
                 Find your people
               </div>
-              <div style={{ fontSize: 14, color: C.steel, marginBottom: 18, lineHeight: 1.55 }}>
+              <div style={{ fontSize: 14, color: C.ice, opacity: 0.9, marginBottom: 18, lineHeight: 1.55, textShadow: '0 1px 8px rgba(0,0,0,0.6)' }}>
                 Follow a few players to start building your feed. You can always add more from the Discover tab.
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {suggested.length === 0 ? (
-                  <div style={{ color: C.steel, fontSize: 13, padding: '20px 0', textAlign: 'center' }}>Loading suggestions…</div>
+                  <div style={{ color: C.ice, opacity: 0.8, fontSize: 13, padding: '20px 0', textAlign: 'center' }}>Loading suggestions…</div>
                 ) : suggested.map((p) => (
-                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: C.navy, borderRadius: 10, border: `1px solid ${C.border}` }}>
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'rgba(11,31,58,0.82)', borderRadius: 10, border: `1px solid ${C.border}`, backdropFilter: 'blur(2px)' }}>
                     <Avatar profile={p} size={36} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, color: C.ice, fontWeight: 600 }}>{p.name}</div>
-                      <div style={{ fontSize: 11, color: C.steel }}>@{p.handle}{p.position ? ` · ${p.position}` : ''}</div>
+                      <div style={{ fontSize: 14, color: C.ice, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                      <div style={{ fontSize: 11, color: C.steel, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{p.handle}{p.position ? ` · ${p.position}` : ''}</div>
                     </div>
                     <button onClick={() => toggleFollow(p.id)}
                       disabled={!!followingMap[p.id]}
@@ -243,7 +350,7 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
                         color: followingMap[p.id] ? C.steel : '#fff',
                         border: followingMap[p.id] ? `1px solid ${C.border}` : 'none',
                         padding: '6px 14px', borderRadius: 999, cursor: followingMap[p.id] ? 'default' : 'pointer',
-                        fontSize: 12, fontWeight: 700, fontFamily: 'Barlow, sans-serif',
+                        fontSize: 12, fontWeight: 700, fontFamily: 'Barlow, sans-serif', flex: '0 0 auto',
                       }}>
                       {followingMap[p.id] ? 'Following ✓' : 'Follow'}
                     </button>
@@ -255,13 +362,13 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
 
           {step === 2 && (
             <>
-              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 26, lineHeight: 1.1, textTransform: 'uppercase', marginBottom: 8 }}>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 26, lineHeight: 1.1, textTransform: 'uppercase', marginBottom: 8, textShadow: '0 2px 12px rgba(0,0,0,0.6)' }}>
                 Never miss a puck drop
               </div>
-              <div style={{ fontSize: 14, color: C.steel, marginBottom: 20, lineHeight: 1.55 }}>
+              <div style={{ fontSize: 14, color: C.ice, opacity: 0.9, marginBottom: 20, lineHeight: 1.55, textShadow: '0 1px 8px rgba(0,0,0,0.6)' }}>
                 Turn on notifications and we'll ping you 24 hours before your team's next game, when a teammate replies, or when your roster needs you.
               </div>
-              <div style={{ background: C.navy, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 18 }}>
+              <div style={{ background: 'rgba(11,31,58,0.82)', border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 18, backdropFilter: 'blur(2px)' }}>
                 {[
                   '⏰ Game reminders 24 hours out',
                   '💬 Comments and replies',
@@ -270,7 +377,7 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
                   <div key={line} style={{ fontSize: 13, color: C.ice, padding: '5px 0' }}>{line}</div>
                 ))}
               </div>
-              <div style={{ fontSize: 11, color: C.steel, lineHeight: 1.5 }}>
+              <div style={{ fontSize: 11, color: C.ice, opacity: 0.8, lineHeight: 1.5 }}>
                 You can change this anytime from your profile.
               </div>
             </>
@@ -278,7 +385,7 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
         </div>
 
         {/* Footer */}
-        <div style={{ padding: '14px 20px 18px', borderTop: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+        <div style={{ padding: '18px 4px 4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
           {step > 0 ? (
             <button onClick={() => setStep((s) => s - 1)} style={btnGhost}>← Back</button>
           ) : <span />}

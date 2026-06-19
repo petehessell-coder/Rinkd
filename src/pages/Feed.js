@@ -521,6 +521,26 @@ export default function Feed({ currentUser, profile }) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [starterIdx, setStarterIdx] = useState(0);
 
+  // ICE reveal — the third beat of the Locker Room → Tunnel → Ice onboarding.
+  // OnboardingModal's tunnel dispatches `rinkd:ice-reveal` from behind the white
+  // flash; the feed snaps to hidden (still covered), then rises up from below as
+  // the white clears. `null` = no reveal (normal load). Skipped under
+  // prefers-reduced-motion so the feed is simply present.
+  const [iceReveal, setIceReveal] = useState(null);
+  useEffect(() => {
+    const reduce = typeof window !== 'undefined' && window.matchMedia
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const onReveal = () => {
+      if (reduce) return;
+      setIceReveal('hidden');
+      // Double rAF guarantees the hidden frame paints before we transition to
+      // shown — otherwise the browser may collapse both into one frame (no anim).
+      requestAnimationFrame(() => requestAnimationFrame(() => setIceReveal('shown')));
+    };
+    window.addEventListener('rinkd:ice-reveal', onReveal);
+    return () => window.removeEventListener('rinkd:ice-reveal', onReveal);
+  }, []);
+
   // Cycle the composer prompt while it's collapsed so the feed feels alive.
   // Pauses while composing; respects prefers-reduced-motion.
   useEffect(() => {
@@ -737,9 +757,15 @@ export default function Feed({ currentUser, profile }) {
   // keyset pagination cursor that reads its last element) is left untouched.
   const liveFirst = [...posts.filter(p => !!p.livebarn_venue_id), ...posts.filter(p => !p.livebarn_venue_id)];
 
+  const iceRevealStyle = iceReveal === 'hidden'
+    ? { transform: 'translateY(40px)', opacity: 0 }
+    : iceReveal === 'shown'
+    ? { transform: 'translateY(0)', opacity: 1, transition: 'transform 400ms ease-out, opacity 400ms ease-out' }
+    : null;
+
   return (
     <Layout profile={profile}>
-      <div style={{ maxWidth: 640, margin: '0 auto', padding: '24px 16px' }}>
+      <div style={{ maxWidth: 640, margin: '0 auto', padding: '24px 16px', ...(iceRevealStyle || {}) }}>
         <h1 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 32, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.02em', marginBottom: 20 }}><TapeText height={32}>Chirps</TapeText></h1>
 
         {/* ONBOARD-1 progressive-disclosure nudge — only renders for users who
