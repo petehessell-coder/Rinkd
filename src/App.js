@@ -149,6 +149,18 @@ function RouteFallback() {
 function AppRoutes() {
   const { user, profile, setProfile } = useAuth();
 
+  // ICE reveal — the third beat of the onboarding cinematic (Locker Room →
+  // Tunnel → Ice). The OnboardingModal's tunnel calls onReveal() as its white
+  // flash peaks; we add a keyframe class to the routed-content wrapper so the
+  // feed rises into view. Driven here (not inside Feed) because this wrapper is
+  // ALWAYS mounted — no cross-component event, no Feed mount-timing race. Auto-
+  // clears so it can never replay on a later route change.
+  const [iceRise, setIceRise] = useState(false);
+  const triggerIceReveal = () => {
+    setIceRise(true);
+    setTimeout(() => setIceRise(false), 900);
+  };
+
   // Fire the onboarding modal the first time a fresh signup lands logged in.
   // welcome_seen flips to true once they finish or skip — never re-shows.
   //
@@ -172,6 +184,7 @@ function AppRoutes() {
         currentUser={user}
         profile={profile}
         onProfileUpdate={setProfile}
+        onReveal={triggerIceReveal}
         // Functional updater + null guard. The race-fix path can mount this
         // modal BEFORE the profile fetch resolves; if the user closes it in
         // that window, a plain `{ ...profile, welcome_seen: true }` would
@@ -181,6 +194,8 @@ function AppRoutes() {
         onClose={() => setProfile((p) => ({ ...(p || {}), welcome_seen: true }))}
       />
     )}
+    <style>{'@keyframes rinkdIceRise{from{opacity:0;transform:translateY(48px)}to{opacity:1;transform:translateY(0)}}.rinkd-ice-rise{animation:rinkdIceRise 560ms cubic-bezier(0.22,0.61,0.36,1) both}@media (prefers-reduced-motion: reduce){.rinkd-ice-rise{animation:none}}'}</style>
+    <div className={iceRise ? 'rinkd-ice-rise' : undefined}>
     <Suspense fallback={<RouteFallback />}>
     <Routes>
       {/* Root: Landing handles the "first time mobile visitor" install pitch
@@ -278,6 +293,7 @@ function AppRoutes() {
       <Route path="*" element={<NotFound />} />
     </Routes>
     </Suspense>
+    </div>
     </>
   );
 }

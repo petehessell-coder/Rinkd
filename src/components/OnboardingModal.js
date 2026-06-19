@@ -17,12 +17,6 @@ const C = {
 const LOCKER_IMG = '/onboarding-locker-room.jpg';
 const TUNNEL_IMG = '/onboarding-tunnel.jpg';
 const TUNNEL_SEEN_KEY = 'rinkd_tunnel_seen';
-// Feed rises up from below as the white flash clears. We signal it TWO ways so
-// the reveal can't be dropped to a mount-timing race: a durable sessionStorage
-// flag (caught if Feed mounts AFTER the tunnel) AND a live event (caught if Feed
-// is already mounted under the modal). Feed consumes whichever lands first.
-const ICE_REVEAL_EVENT = 'rinkd:ice-reveal';
-const ICE_REVEAL_FLAG = 'rinkd_ice_reveal';
 
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia
@@ -62,21 +56,21 @@ const btnGhost = {
  * Timeline:
  *   0ms     start zoom (2500ms ease-in)
  *   2500ms  white overlay begins fading in (400ms)
- *   2900ms  white fully covers → dispatch ICE_REVEAL (feed snaps to hidden behind white)
+ *   2900ms  white fully covers → onReveal() (App starts the feed rising behind the white)
  *   2980ms  onDone() → modal unmounts, feed rises into the now-cleared white
  */
-function TunnelOutro({ src, onDone }) {
+function TunnelOutro({ src, onReveal, onDone }) {
   const [zoom, setZoom] = useState(false);
   const [white, setWhite] = useState(false);
   const doneRef = useRef(onDone);
   doneRef.current = onDone;
+  const revealRef = useRef(onReveal);
+  revealRef.current = onReveal;
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => setZoom(true));
     const tWhite = setTimeout(() => setWhite(true), 2500);
-    const tReveal = setTimeout(() => {
-      try { window.dispatchEvent(new Event(ICE_REVEAL_EVENT)); } catch (_) {}
-    }, 2900);
+    const tReveal = setTimeout(() => { revealRef.current?.(); }, 2900);
     const tDone = setTimeout(() => { doneRef.current?.(); }, 2980);
     return () => {
       cancelAnimationFrame(raf);
@@ -112,7 +106,7 @@ function TunnelOutro({ src, onDone }) {
  * Visual: the three steps sit over a full-bleed locker-room photo; finishing
  * (by ANY path — finish or skip) earns the one-time tunnel cinematic.
  */
-export default function OnboardingModal({ currentUser, profile, onClose, onProfileUpdate }) {
+export default function OnboardingModal({ currentUser, profile, onClose, onProfileUpdate, onReveal }) {
   const [step, setStep] = useState(0);
   const [chosenRole, setChosenRole] = useState(null);
   const [suggested, setSuggested] = useState([]);
@@ -210,9 +204,6 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
       return;
     }
     try { localStorage.setItem(TUNNEL_SEEN_KEY, '1'); } catch (_) {}
-    // Arm the ice reveal BEFORE the tunnel renders, so a freshly-mounting Feed
-    // sees the flag and starts hidden (no flash of the fully-laid-out feed).
-    try { sessionStorage.setItem(ICE_REVEAL_FLAG, '1'); } catch (_) {}
     track('onboarding_tunnel_played');
     setOutro(true);
   };
@@ -262,7 +253,7 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
 
   // The tunnel takes over the whole viewport once it starts.
   if (outro) {
-    return <TunnelOutro src={TUNNEL_IMG} onDone={closeOut} />;
+    return <TunnelOutro src={TUNNEL_IMG} onReveal={onReveal} onDone={closeOut} />;
   }
 
   return (
