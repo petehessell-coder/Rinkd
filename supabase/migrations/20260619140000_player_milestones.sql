@@ -9,8 +9,9 @@
 -- Recognition stays scarce + earned (manifesto: gold is for milestones only).
 -- The fan Game Puck remains the separate Player-of-the-Game award.
 --
--- NOTE: written against the prod schema but NOT YET prod-shape tested
--- (per the migration-testing mandate) — gate before apply.
+-- Validated against a prod-shaped PGlite Postgres
+-- (scripts/engage-smoke/milestones.mjs): applies + first-goal/100th-point/
+-- streak/notify/idempotency/reset all pass. RLS verified on apply.
 
 -- ── table ──────────────────────────────────────────────────────────────────
 create table if not exists public.player_milestones (
