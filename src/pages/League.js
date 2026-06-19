@@ -35,6 +35,29 @@ import { loadGameCardData } from '../lib/gameCardData';
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 const TABS = ['Schedule', 'Standings', 'Stats', 'Teams', 'Feed', 'Gallery', 'Info'];
 
+// Broadcast lower-third section header — white Barlow Condensed 700 italic caps
+// on solid navy (#0f2847), bleeding to the content column's left edge (content
+// padding is 16px) with a red accent slab. Optional muted `sub`.
+function LowerThird({ label, sub }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, background: '#0f2847', borderLeft: '4px solid #D72638', marginLeft: -16, marginBottom: 12, padding: '8px 14px 8px 16px', borderTopRightRadius: 4, borderBottomRightRadius: 4 }}>
+      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 18, lineHeight: 1, letterSpacing: '0.05em', color: '#F4F7FA', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{label}</span>
+      {sub && <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 11, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.45)', textTransform: 'uppercase', whiteSpace: 'nowrap', flexShrink: 0 }}>{sub}</span>}
+    </div>
+  );
+}
+
+// Designed empty state for tab content — an invitation, not a blank space.
+function TabEmptyState({ icon = '🏒', title, body }) {
+  return (
+    <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+      <div style={{ fontSize: 40, marginBottom: 12, lineHeight: 1 }}>{icon}</div>
+      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 20, color: '#F4F7FA', textTransform: 'uppercase', marginBottom: 6 }}>{title}</div>
+      {body && <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.5)', lineHeight: 1.5, maxWidth: 320, margin: '0 auto' }}>{body}</div>}
+    </div>
+  );
+}
+
 function TeamLogo({ team, size = 32 }) {
   const logoUrl = team?.logo_url;
   return (
@@ -90,11 +113,11 @@ function GameRow({ game, isCommissioner, navigate }) {
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           {isLive && <>
             <span style={{ background: C.red, color: '#fff', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, display: 'block', marginBottom: 4 }}>● LIVE</span>
-            <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 16, color: C.ice }}>{game.home_score} – {game.away_score}</span>
+            <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice }}>{game.home_score} – {game.away_score}</span>
           </>}
           {isFinal && <>
             <span style={{ background: 'rgba(244,247,250,0.08)', color: 'rgba(244,247,250,0.4)', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, display: 'block', marginBottom: 4 }}>FINAL</span>
-            <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 16, color: C.ice }}>{game.home_score} – {game.away_score}</span>
+            <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice }}>{game.home_score} – {game.away_score}</span>
           </>}
           {!isLive && !isFinal && (
             <span style={{ background: 'rgba(46,91,140,0.4)', color: C.steel, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>
@@ -347,15 +370,15 @@ export default function LeaguePage({ currentUser, profile }) {
       onMouseEnter={e => e.currentTarget.style.background = 'rgba(46,91,140,0.1)'}
       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
       <TeamLogo team={lt.team || { name: lt.team_name, logo_color: lt.logo_color, logo_initials: lt.logo_initials, logo_url: lt.logo_url }} size={36} />
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{lt.team?.name || lt.team_name}</div>
-        <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>{lt.team?.home_rink || lt.team?.location || ''}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lt.team?.name || lt.team_name}</div>
+        <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lt.team?.home_rink || lt.team?.location || ''}</div>
       </div>
       <div style={{ color: 'rgba(244,247,250,0.25)', fontSize: 18 }}>›</div>
     </div>
   );
 
-  if (loading) return <Layout profile={profile}><div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Loading...</div></Layout>;
+  if (loading) return <Layout profile={profile}><div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, textTransform: 'uppercase', letterSpacing: '0.02em' }}>Getting the ice ready.</div></Layout>;
   if (error) return (
     <Layout profile={profile}>
       <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif', padding: 20, textAlign: 'center' }}>
@@ -430,10 +453,14 @@ export default function LeaguePage({ currentUser, profile }) {
   // Until M3's ScorerView capture marks a game OT/SO, every league renders
   // exactly as today — the safest reading of the byte-identical guardrail.
   const showOtl = scopedStandings.some(r => (r.otl || 0) > 0);
-  const standingsCols = showOtl ? '1fr 26px 26px 26px 30px 26px 26px 34px' : '1fr 28px 28px 28px 28px 28px 34px';
+  const standingsCols = showOtl ? '1fr 30px 30px 30px 34px 30px 38px 44px' : '1fr 32px 32px 32px 32px 38px 44px';
 
   const now = new Date();
   const liveGames = scopedGames.filter(g => g.status === 'live');
+  // Hero status chip: a red pill when the league is active (a game live now, or
+  // in season), muted text otherwise (season complete / draft).
+  const statusActive = liveGames.length > 0 || league.status === 'active';
+  const statusLabel = liveGames.length > 0 ? 'LIVE' : league.status === 'active' ? 'In Season' : league.status === 'complete' ? 'Season Complete' : 'Draft';
   const upcomingGames = scopedGames.filter(g => g.status === 'scheduled' && new Date(g.start_time) >= now);
   const recentGames = scopedGames.filter(g => g.status === 'final').slice(-5).reverse();
   const allGamesByWeek = scopedGames.reduce((acc, g) => {
@@ -467,13 +494,13 @@ export default function LeaguePage({ currentUser, profile }) {
               {!league.logo_url && (league.logo_initials || league.name.slice(0, 2).toUpperCase())}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 22, color: C.ice, lineHeight: 1.1 }}>{league.name}</div>
-              <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.45)', marginTop: 4 }}>
-                {[league.division, league.season, league.location].filter(Boolean).join(' · ')}
+              <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 36, color: C.ice, lineHeight: 1.02, textTransform: 'uppercase', letterSpacing: '0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{league.name}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+                {statusActive
+                  ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: C.red, color: '#fff', fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 700, fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', padding: '3px 11px', borderRadius: 999 }}>● {statusLabel}</span>
+                  : <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 700, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(244,247,250,0.45)' }}>{statusLabel}</span>}
+                <span style={{ fontSize: 12, color: 'rgba(244,247,250,0.45)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{[league.division, league.season, league.location].filter(Boolean).join(' · ')}</span>
               </div>
-              <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, marginTop: 6, background: league.status === 'active' ? 'rgba(34,197,94,0.15)' : 'rgba(244,247,250,0.08)', color: league.status === 'active' ? '#22C55E' : 'rgba(244,247,250,0.4)', letterSpacing: '0.06em' }}>
-                {league.status === 'active' ? '● IN SEASON' : league.status === 'complete' ? 'SEASON COMPLETE' : 'DRAFT'}
-              </span>
               {league.is_activated === false && (
                 <span title="Live scoring + push notifications are locked until a Rinkd admin activates this league."
                   style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, marginTop: 6, marginLeft: 6, background: 'rgba(245,158,11,0.18)', color: '#F59E0B', letterSpacing: '0.06em' }}>
@@ -526,15 +553,18 @@ export default function LeaguePage({ currentUser, profile }) {
           </div>
 
           {/* Tabs */}
-          <div style={{ display: 'flex', borderBottom: '2px solid rgba(46,91,140,0.3)', overflowX: 'auto' }}>
-            {TABS.map(tab => (
-              <button key={tab} onClick={() => setActiveTab(tab)}
-                style={{ fontSize: 13, fontWeight: 700, padding: '10px 16px', color: '#FFFFFF', background: 'transparent', border: 'none', borderBottom: activeTab === tab ? '3px solid #D72638' : '3px solid transparent', marginBottom: -2, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap', opacity: activeTab === tab ? 1 : 0.5, transition: 'opacity 0.15s' }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.color = '#0B1F3A'; e.currentTarget.style.opacity = '1'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#FFFFFF'; e.currentTarget.style.opacity = activeTab === tab ? '1' : '0.5'; }}>
-                {tab}
-              </button>
-            ))}
+          {/* Scoreboard tab strip — red underline on the active tab, muted steel
+              when inactive. No box shadow, no Material hover. */}
+          <div style={{ display: 'flex', borderBottom: '1px solid rgba(46,91,140,0.3)', overflowX: 'auto' }}>
+            {TABS.map(tab => {
+              const on = activeTab === tab;
+              return (
+                <button key={tab} onClick={() => setActiveTab(tab)}
+                  style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 700, fontSize: 15, letterSpacing: '0.04em', textTransform: 'uppercase', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: on ? '3px solid #D72638' : '3px solid transparent', marginBottom: -1, cursor: 'pointer', whiteSpace: 'nowrap', color: on ? '#F4F7FA' : '#8BA3BE', transition: 'color 0.15s' }}>
+                  {tab}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -579,23 +609,24 @@ export default function LeaguePage({ currentUser, profile }) {
                 <>
                   {liveGames.length > 0 && (
                     <>
-                      <div style={secLabel}>Live Now</div>
-                      <div style={card}>{liveGames.map(g => <GameRow key={g.id} game={g} isCommissioner={isCommissioner} navigate={navigate} />)}</div>
+                      <LowerThird label="Live Now" />
+                      {/* Card-hero: live games float on an elevated surface with a red glow. */}
+                      <div style={{ background: '#162f55', border: '1px solid rgba(215,38,56,0.6)', boxShadow: '0 8px 32px rgba(215,38,56,0.2)', borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>{liveGames.map(g => <GameRow key={g.id} game={g} isCommissioner={isCommissioner} navigate={navigate} />)}</div>
                     </>
                   )}
                   {upcomingGames.length > 0 && (
                     <>
-                      <div style={secLabel}>Upcoming</div>
+                      <LowerThird label="Upcoming" />
                       <div style={card}>{upcomingGames.slice(0, 5).map(g => <GameRow key={g.id} game={g} isCommissioner={isCommissioner} navigate={navigate} />)}</div>
                     </>
                   )}
                   {recentGames.length > 0 && (
                     <>
-                      <div style={secLabel}>Recent Results</div>
+                      <LowerThird label="Recent Results" />
                       <div style={card}>{recentGames.map(g => <GameRow key={g.id} game={g} isCommissioner={isCommissioner} navigate={navigate} />)}</div>
                     </>
                   )}
-                  {scopedGames.length === 0 && <div style={{ textAlign: 'center', color: 'rgba(244,247,250,0.3)', fontSize: 13, padding: '40px 0' }}>No games scheduled yet</div>}
+                  {scopedGames.length === 0 && <TabEmptyState icon="🗓️" title="Schedule drops soon" body="No games on the board yet. They'll show up here the moment the commissioner posts the slate." />}
                   {scopedGames.length > 0 && (
                     <button onClick={() => setShowAll(true)}
                       style={{ width: '100%', padding: 12, background: 'rgba(46,91,140,0.15)', border: '0.5px solid rgba(46,91,140,0.4)', borderRadius: 10, color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', marginTop: 4 }}
@@ -613,7 +644,7 @@ export default function LeaguePage({ currentUser, profile }) {
                   </div>
                   {Object.entries(allGamesByWeek).map(([week, wGames]) => (
                     <div key={week}>
-                      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'rgba(244,247,250,0.3)', textTransform: 'uppercase', marginBottom: 8, marginTop: 4 }}>{week}</div>
+                      <LowerThird label={week} />
                       <div style={card}>{wGames.map(g => <GameRow key={g.id} game={g} isCommissioner={isCommissioner} navigate={navigate} />)}</div>
                     </div>
                   ))}
@@ -626,30 +657,40 @@ export default function LeaguePage({ currentUser, profile }) {
           {activeTab === 'Standings' && (
             <>
               <AdSlot slot="standings_presented" targetType="league" targetId={league.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
-              <div style={secLabel}>Season Standings</div>
-              <div style={card}>
-                <div style={{ display: 'grid', gridTemplateColumns: standingsCols, padding: '8px 12px', background: 'rgba(46,91,140,0.2)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.35)', textTransform: 'uppercase' }}>
-                  <span>Team</span><span style={{textAlign:'center'}}>GP</span><span style={{textAlign:'center'}}>W</span><span style={{textAlign:'center'}}>L</span>{showOtl && <span style={{textAlign:'center'}}>OTL</span>}<span style={{textAlign:'center'}}>T</span><span style={{textAlign:'center'}}>GF</span><span style={{textAlign:'center'}}>PTS</span>
-                </div>
-                {scopedStandings.length === 0 && <div style={{ padding: 16, fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center' }}>No games played yet</div>}
-                {scopedStandings.map((row, i) => (
-                  <div key={row.lt_id} style={{ display: 'grid', gridTemplateColumns: standingsCols, padding: '10px 12px', borderTop: '0.5px solid rgba(244,247,250,0.06)', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 28, height: 28, borderRadius: 5, background: row.logo_url ? `url(${row.logo_url}) center/cover, ${row.logo_color || C.blue}` : (row.logo_color || C.blue), display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 11, color: '#fff', flexShrink: 0 }}>
-                        {!row.logo_url && (row.logo_initials || row.team_name.slice(0, 2).toUpperCase())}
-                      </div>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>{row.team_name}</span>
-                    </div>
-                    <span style={{ fontSize: 12, textAlign: 'center', color: 'rgba(244,247,250,0.65)' }}>{row.gp}</span>
-                    <span style={{ fontSize: 12, textAlign: 'center', color: 'rgba(244,247,250,0.65)' }}>{row.wins}</span>
-                    <span style={{ fontSize: 12, textAlign: 'center', color: 'rgba(244,247,250,0.65)' }}>{row.losses}</span>
-                    {showOtl && <span style={{ fontSize: 12, textAlign: 'center', color: 'rgba(244,247,250,0.65)' }}>{row.otl || 0}</span>}
-                    <span style={{ fontSize: 12, textAlign: 'center', color: 'rgba(244,247,250,0.65)' }}>{row.ties}</span>
-                    <span style={{ fontSize: 12, textAlign: 'center', color: 'rgba(244,247,250,0.65)' }}>{row.gf}</span>
-                    <span style={{ fontSize: 13, fontWeight: 700, textAlign: 'center', color: row.rank === 1 ? C.red : row.pts === 0 ? 'rgba(244,247,250,0.25)' : C.ice }}>{row.pts}</span>
+              <LowerThird label="Season Standings" />
+              {scopedStandings.length === 0 ? (
+                <TabEmptyState title="No standings yet" body="The table fills in the moment the first game goes final. Check back after the puck drops." />
+              ) : (
+                <div style={card}>
+                  <div style={{ display: 'grid', gridTemplateColumns: standingsCols, padding: '8px 12px', background: 'rgba(46,91,140,0.2)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.35)', textTransform: 'uppercase' }}>
+                    <span>Team</span><span style={{textAlign:'center'}}>GP</span><span style={{textAlign:'center'}}>W</span><span style={{textAlign:'center'}}>L</span>{showOtl && <span style={{textAlign:'center'}}>OTL</span>}<span style={{textAlign:'center'}}>T</span><span style={{textAlign:'center'}}>GF</span><span style={{textAlign:'center'}}>PTS</span>
                   </div>
-                ))}
-              </div>
+                  {scopedStandings.map((row, i) => {
+                    const rank = row.rank ?? i + 1;
+                    // Number first, no cell borders. PTS gold on the 1st-place row only.
+                    const stat = { fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 16, textAlign: 'center', color: 'rgba(244,247,250,0.75)' };
+                    return (
+                    <div key={row.lt_id} style={{ display: 'grid', gridTemplateColumns: standingsCols, padding: '9px 12px', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+                        {/* Rank as a large muted number (gold for 1st), not a column. */}
+                        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, lineHeight: 1, minWidth: 16, textAlign: 'center', color: rank === 1 ? '#C9A84C' : 'rgba(244,247,250,0.35)', flexShrink: 0 }}>{rank}</span>
+                        <div style={{ width: 24, height: 24, borderRadius: 5, background: row.logo_url ? `url(${row.logo_url}) center/cover, ${row.logo_color || C.blue}` : (row.logo_color || C.blue), display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 10, color: '#fff', flexShrink: 0 }}>
+                          {!row.logo_url && (row.logo_initials || row.team_name.slice(0, 2).toUpperCase())}
+                        </div>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{row.team_name}</span>
+                      </div>
+                      <span style={stat}>{row.gp}</span>
+                      <span style={stat}>{row.wins}</span>
+                      <span style={stat}>{row.losses}</span>
+                      {showOtl && <span style={stat}>{row.otl || 0}</span>}
+                      <span style={stat}>{row.ties}</span>
+                      <span style={stat}>{row.gf}</span>
+                      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, textAlign: 'center', color: rank === 1 ? '#C9A84C' : row.pts === 0 ? 'rgba(244,247,250,0.4)' : C.ice }}>{row.pts}</span>
+                    </div>
+                    );
+                  })}
+                </div>
+              )}
             </>
           )}
 
@@ -678,7 +719,7 @@ export default function LeaguePage({ currentUser, profile }) {
                   if (divTeams.length === 0) return null;
                   return (
                     <div key={d.id}>
-                      <div style={secLabel}>{d.name} · {divTeams.length}</div>
+                      <LowerThird label={d.name} sub={`${divTeams.length} ${divTeams.length === 1 ? 'team' : 'teams'}`} />
                       <div style={card}>{divTeams.map(renderLeagueTeamRow)}</div>
                     </div>
                   );
@@ -686,11 +727,10 @@ export default function LeaguePage({ currentUser, profile }) {
               </>
             ) : (
               <>
-                <div style={secLabel}>{teams.length} Teams</div>
-                <div style={card}>
-                  {teams.length === 0 && <div style={{ padding: 16, fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center' }}>No teams yet</div>}
-                  {teams.map(renderLeagueTeamRow)}
-                </div>
+                <LowerThird label={`${teams.length} Teams`} />
+                {teams.length === 0
+                  ? <TabEmptyState icon="👥" title="No teams yet" body="Teams show up here as the commissioner adds them to the league." />
+                  : <div style={card}>{teams.map(renderLeagueTeamRow)}</div>}
               </>
             )
           )}
@@ -722,12 +762,10 @@ export default function LeaguePage({ currentUser, profile }) {
                   this is a real paying customer's page; the lead-gen CTA
                   belongs on demos + draft leagues only. */}
               {league.is_activated === false && (
-                <div style={{ background: 'linear-gradient(135deg,#0f2847 0%,#0B1F3A 100%)', border: '1px solid rgba(46,91,140,0.6)', borderRadius: 14, padding: '20px 18px', marginBottom: 16, textAlign: 'center' }}>
-                  <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, marginBottom: 6 }}>Run your league on Rinkd</div>
-                  <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.5)', marginBottom: 14, lineHeight: 1.6 }}>Live standings · real-time scoring · team management · season scheduling</div>
-                  <a href="mailto:hello@rinkd.app?subject=League Hosting Inquiry" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: C.red, color: '#fff', border: 'none', borderRadius: 999, padding: '11px 22px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>✉️ hello@rinkd.app</a>
-                  <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.3)', marginTop: 10 }}>We'll respond within 24 hours</div>
-                  <div style={{ marginTop: 8 }}><a href="/pricing" style={{ color: 'rgba(244,247,250,0.6)', fontSize: 12, textDecoration: 'underline' }}>See pricing →</a></div>
+                <div style={{ background: 'linear-gradient(135deg,#0f2847 0%,#0B1F3A 100%)', border: '1px solid rgba(46,91,140,0.6)', borderRadius: 14, padding: '22px 18px', marginBottom: 16, textAlign: 'center' }}>
+                  <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 22, textTransform: 'uppercase', marginBottom: 8 }}>Run your league on Rinkd</div>
+                  <div style={{ fontSize: 14, color: 'rgba(244,247,250,0.7)', lineHeight: 1.5, maxWidth: 340, margin: '0 auto 18px' }}>Live standings and scoring your whole league can follow from their phone.</div>
+                  <a href="mailto:hello@rinkd.app?subject=League Hosting Inquiry" style={{ display: 'inline-block', background: C.red, color: '#fff', borderRadius: 999, padding: '13px 30px', fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 15, letterSpacing: '0.04em', textTransform: 'uppercase', textDecoration: 'none' }}>Get pricing →</a>
                 </div>
               )}
               <div style={card}>
@@ -1055,19 +1093,19 @@ function PublicLeagueLanding({ league, teams, games, navigate }) {
 
       <div style={{ padding: '20px 18px', maxWidth: 560, margin: '0 auto' }}>
         {/* Sign-up hero */}
-        <div style={{ background: `linear-gradient(135deg,${accent}33 0%,#0f2847 100%)`, border: `1px solid ${accent}66`, borderRadius: 14, padding: '20px 18px', marginBottom: 18, textAlign: 'center' }}>
-          <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, marginBottom: 6, textTransform: 'uppercase' }}>Follow every game</div>
-          <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.75)', marginBottom: 16, lineHeight: 1.55 }}>
-            Live scores, standings, and the schedule — plus a recap the moment each game ends. Sign up free to follow the season.
+        <div style={{ background: `linear-gradient(135deg,${accent}33 0%,#0f2847 100%)`, border: `1px solid ${accent}66`, borderRadius: 14, padding: '24px 18px', marginBottom: 18, textAlign: 'center' }}>
+          <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 24, marginBottom: 8, textTransform: 'uppercase' }}>Follow the whole season</div>
+          <div style={{ fontSize: 14, color: 'rgba(244,247,250,0.75)', lineHeight: 1.5, maxWidth: 360, margin: '0 auto 20px' }}>
+            Live scores and standings, free — the second each game ends.
           </div>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button onClick={() => navigate(`/login?returnTo=${returnTo}`)}
+            style={{ background: accent, color: '#fff', border: 'none', borderRadius: 999, padding: '14px 34px', fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 16, letterSpacing: '0.04em', textTransform: 'uppercase', cursor: 'pointer' }}>
+            Sign up free →
+          </button>
+          <div style={{ marginTop: 14 }}>
             <button onClick={() => navigate(`/login?returnTo=${returnTo}`)}
-              style={{ background: accent, color: '#fff', border: 'none', borderRadius: 999, padding: '12px 28px', fontFamily: 'Barlow, sans-serif', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-              Sign up free →
-            </button>
-            <button onClick={() => navigate(`/login?returnTo=${returnTo}`)}
-              style={{ background: 'transparent', color: C.ice, border: '1px solid rgba(244,247,250,0.3)', borderRadius: 999, padding: '12px 22px', fontFamily: 'Barlow, sans-serif', fontSize: 13, cursor: 'pointer' }}>
-              Sign in
+              style={{ background: 'transparent', color: 'rgba(244,247,250,0.7)', border: 'none', fontFamily: 'Barlow, sans-serif', fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}>
+              Already have an account? Sign in
             </button>
           </div>
         </div>
@@ -1103,7 +1141,7 @@ function PublicLeagueLanding({ league, teams, games, navigate }) {
                     <div style={{ width: 30, height: 30, borderRadius: '50%', background: logoUrl ? `url(${logoUrl}) center/cover, ${color}` : color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 11, color: '#fff', flexShrink: 0 }}>
                       {!logoUrl && initials}
                     </div>
-                    <span style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{name}</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: C.ice, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
                   </div>
                 );
               })}
