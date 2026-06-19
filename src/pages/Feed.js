@@ -10,6 +10,7 @@ import { getPosts, getFollowingPosts, createPost, toggleLike, getLikedPosts, get
 import PushPrompt from '../components/PushPrompt';
 import { track } from '../lib/analytics';
 import { FeedSkeleton, PostSkeleton, EmptyState } from '../components/Skeletons';
+import GamedayStrip from '../components/Gameday/GamedayStrip';
 import { classifyImage } from '../lib/imageModeration';
 import PostActionMenu from '../components/PostActionMenu';
 import PostReactions from '../components/PostReactions';
@@ -821,6 +822,10 @@ export default function Feed({ currentUser, profile }) {
             )}
           </div>
         )}
+
+        {/* Game-day loop: live games float here, then the next game's hype card.
+            Self-hides when the user has no live/upcoming games in followed events. */}
+        <GamedayStrip currentUserId={currentUser?.id} navigate={navigate} />
 
         {loading ? (
           showSkeleton ? (
