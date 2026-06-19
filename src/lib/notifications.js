@@ -118,4 +118,5 @@ export const KIND_META = {
   team_invite:         { icon: 'teamInvite', label: 'Team invite' },
   league_invite:       { icon: 'leagueInvite', label: 'League invite' },
   game_puck_won:       { icon: 'gamePuck', label: 'Game Puck' },
+  milestone:           { icon: 'milestone', label: 'Milestone' },
 };

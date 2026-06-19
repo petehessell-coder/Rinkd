@@ -10,6 +10,7 @@ import { getTier, getTierProgress, getNextTier, TIERS } from '../lib/tiers';
 import { supabase } from '../lib/supabase';
 import { getPlayerLeagueStats, getPlayerTournamentStats } from '../lib/stats';
 import { getUserGamePuckCount } from '../lib/gamePucks';
+import { getPlayerMilestones, topStreak, seasonStory } from '../lib/milestones';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getOrCreateDm } from '../lib/messages';
 import { followUser, unfollowUser, isFollowing, getFollowCounts, timeAgo, uploadMedia } from '../lib/posts';
@@ -121,6 +122,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
   const [leagueStats, setLeagueStats] = useState([]);
   const [tournamentStats, setTournamentStats] = useState([]);
   const [puckCount, setPuckCount] = useState(0);
+  const [milestones, setMilestones] = useState([]);
 
   const [editName, setEditName] = useState('');
   const [editHandle, setEditHandle] = useState('');
@@ -156,6 +158,14 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
 
   const profileId = urlUserId || currentUser?.id;
   const isOwnProfile = !urlUserId || urlUserId === currentUser?.id;
+
+  // Earned career milestones — drives the identity header. Fail-safe ([] until
+  // the migration is applied), so the profile renders normally regardless.
+  useEffect(() => {
+    let alive = true;
+    if (profileId) getPlayerMilestones(profileId).then((m) => { if (alive) setMilestones(m); });
+    return () => { alive = false; };
+  }, [profileId]);
 
   const loadProfile = useCallback(async () => {
     if (isOwnProfile) {
@@ -532,6 +542,21 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                 {profile.home_rink && <span style={{ fontSize: 12, color: C.steel }}>🏟️ <MapLink text={profile.home_rink} icon="" style={{ color: 'inherit', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 2 }} /></span>}
               </div>
             )}
+
+            {/* Identity header — the season story up top. Tier (badge above) +
+                Game Puck (badge above) + this earned-moment line. Gold accent
+                stays scarce: one mark, and only when there's a real story. */}
+            {!editing && (() => {
+              const story = seasonStory(milestones);
+              if (!story) return null;
+              const hot = topStreak(milestones) >= 3;
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 10, flexWrap: 'wrap' }}>
+                  <Icon name={hot ? 'reaction' : 'milestone'} size={14} color={C.gold} />
+                  <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 700, fontSize: 13, letterSpacing: '0.02em', color: C.ice, textTransform: 'uppercase' }}>{story}</span>
+                </div>
+              );
+            })()}
 
             {editing && (
               <form onSubmit={saveEdit} style={{ marginTop: 12 }}>

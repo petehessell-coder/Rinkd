@@ -21,6 +21,7 @@ import { useWakeLock } from '../lib/useWakeLock';
 import { createGameRecapPost } from '../lib/posts';
 import { resolveBracketSlotsFromSemis } from '../lib/tournamentManage';
 import { triggerTournamentRecapPush, triggerLeagueRecapPush } from '../lib/push';
+import { recordGameMilestones } from '../lib/milestones';
 import { isExtraCommissioner } from '../lib/leagueCommissioners';
 // GS-2 — suspension filing prompt, raised after a Game Misconduct / Match
 // Penalty is logged on a tournament game. The filing write itself goes
@@ -898,6 +899,13 @@ export default function ScorerView() {
         // eslint-disable-next-line no-console
         console.warn('[scorer] league recap post failed; game still finalized:', e?.message || e);
       }
+    }
+
+    // Recognition: detect earned milestones (first goal, 100th point, streaks)
+    // for everyone who appeared. Idempotent + server-validated + fail-safe, so
+    // it runs independent of the recap and never blocks finalize.
+    if (!error && newStatus === 'final') {
+      recordGameMilestones(gameId, isLeague ? 'league' : 'tournament');
     }
   };
 

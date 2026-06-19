@@ -137,7 +137,7 @@ export default function NotificationsPage({ currentUser, profile }) {
 //  · red   → urgency (suspension, sub needed, game reminder)
 //  · white → everyday social (follow, like, comment, mention, …)
 const RED_KINDS = new Set(['suspension', 'sub_alert', 'game_reminder']);
-const GOLD_KINDS = new Set(['game_puck_won']);
+const GOLD_KINDS = new Set(['game_puck_won', 'milestone']);
 function toneFor(kind) {
   if (GOLD_KINDS.has(kind)) return 'gold';
   if (RED_KINDS.has(kind)) return 'red';

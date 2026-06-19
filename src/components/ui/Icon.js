@@ -57,6 +57,7 @@ const MAP = {
   teamInvite: Mail,
   leagueInvite: Trophy,
   gamePuck: Award,
+  milestone: Trophy,
 
   // Action buttons
   bell: Bell,
