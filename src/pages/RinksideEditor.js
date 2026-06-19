@@ -93,7 +93,7 @@ export default function RinksideEditor({ currentUser, profile }) {
     return (
       <Layout profile={profile} currentPage="rinkside">
         <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.steel, fontFamily: 'Barlow, sans-serif', fontSize: 14 }}>
-          Loading…
+          Getting the ice ready.
         </div>
       </Layout>
     );
@@ -103,7 +103,7 @@ export default function RinksideEditor({ currentUser, profile }) {
     return (
       <Layout profile={profile} currentPage="rinkside">
         <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.ice, gap: 12 }}>
-          <div>You don't have access to this editor.</div>
+          <div>The Rinkside editor is Rinkd staff only.</div>
           <button onClick={() => navigate('/rinkside')} style={{ background: C.red, color: '#fff', border: 'none', padding: '10px 18px', borderRadius: 999, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>Back to Rinkside</button>
         </div>
       </Layout>
@@ -111,8 +111,8 @@ export default function RinksideEditor({ currentUser, profile }) {
   }
 
   const handleSave = async (publish = isPublished) => {
-    if (!title.trim()) { alert('Title is required'); return; }
-    if (!slugValue.trim()) { alert('Slug is required'); return; }
+    if (!title.trim()) { alert('Add a title to continue.'); return; }
+    if (!slugValue.trim()) { alert('Add a URL slug to continue.'); return; }
     setSaving(true);
     const fields = {
       slug: slugValue.trim(),
@@ -134,18 +134,18 @@ export default function RinksideEditor({ currentUser, profile }) {
       res = await updateArticle(articleId, fields);
     }
     setSaving(false);
-    if (res.error) { alert('Save failed: ' + res.error.message); return; }
+    if (res.error) { alert("That didn't save — " + res.error.message); return; }
     navigate(`/rinkside/${res.data.slug}`);
   };
 
   const handleDelete = async () => {
     if (!articleId || deleting) return;
-    if (!window.confirm('Delete this article permanently?')) return;
+    if (!window.confirm("Delete this article? This can't be undone.")) return;
     setDeleting(true);
     const { error } = await deleteArticle(articleId);
     if (error) {
       setDeleting(false);
-      alert('Delete failed: ' + error.message);
+      alert("That didn't delete — " + error.message);
       return;
     }
     navigate('/rinkside');

@@ -183,7 +183,7 @@ export default function GamePuckCard({
   );
 
   if (loading) {
-    return <Wrap><div style={{ color: C.faint, fontSize: 13, textAlign: 'center', padding: '12px 0' }}>Loading…</div></Wrap>;
+    return <Wrap><div style={{ color: C.faint, fontSize: 13, textAlign: 'center', padding: '12px 0' }}>Getting the ice ready.</div></Wrap>;
   }
 
   // SOCIAL-3 P2 — settled. GAMEPUCK-2: before the user has peeled the tape on
@@ -369,7 +369,7 @@ export default function GamePuckCard({
             : myVote
               ? `Tap another player to change your pick.${closesInMin != null && closesInMin > 0 ? ` Voting closes in ~${closesInMin} min.` : ''} Fan vote — separate from any team or league award.`
               : `Tap a player to cast your vote. One vote per game.${closesInMin != null && closesInMin > 0 ? ` Voting open ~${closesInMin} more min.` : ''}`}
-        {err && <span style={{ color: accent }}> · Something went wrong, try again.</span>}
+        {err && <span style={{ color: accent }}> · That vote didn't count — tap to try again.</span>}
       </div>
     </Wrap>
   );

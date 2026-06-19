@@ -59,7 +59,7 @@ function CreateTeam({ profile, navigate }) {
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   const handleCreate = async () => {
-    if (!form.name.trim()) { setError('Team name is required'); return; }
+    if (!form.name.trim()) { setError('Add a team name to continue.'); return; }
     setSaving(true); setError(null);
     try {
       const team = await createTeam(form);
@@ -75,13 +75,13 @@ function CreateTeam({ profile, navigate }) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
-      alert(`Logo is ${(file.size / 1024 / 1024).toFixed(1)}MB — max 5MB.`);
+      alert(`That logo's ${(file.size / 1024 / 1024).toFixed(1)} MB — keep it under 5 MB and upload again.`);
       e.target.value = '';
       return;
     }
     const verdict = await classifyImage(file);
     if (!verdict.ok) {
-      alert("Looks like this image may violate Rinkd's community guidelines. Try a different one.");
+      alert("That image doesn't pass our community guidelines — pick a different one.");
       e.target.value = '';
       return;
     }
@@ -89,7 +89,7 @@ function CreateTeam({ profile, navigate }) {
     const { data: { user } } = await supabase.auth.getUser();
     const { url, error: upErr } = await uploadMedia(file, user.id);
     setUploadingLogo(false);
-    if (upErr || !url) { alert('Upload failed. Try again.'); return; }
+    if (upErr || !url) { alert("That upload didn't go through — check your connection and try again."); return; }
     set('logo_url', url);
   };
 
@@ -146,7 +146,7 @@ function CreateTeam({ profile, navigate }) {
         style={{ width: '100%', padding: 14, background: C.red, border: 'none', borderRadius: 999, color: '#fff', fontSize: 15, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'Barlow, sans-serif', opacity: saving ? 0.7 : 1, transition: 'all 0.15s' }}
         onMouseEnter={e => { if (!saving) { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}}
         onMouseLeave={e => { e.currentTarget.style.background = C.red; e.currentTarget.style.color = '#fff'; }}>
-        {saving ? 'Creating...' : '🏒 Create Team'}
+        {saving ? 'Creating…' : '🏒 Create Team'}
       </button>
     </div>
   );
@@ -192,7 +192,7 @@ function ManageTeam({ id, profile, navigate }) {
   useEffect(() => { load(); }, [load]);
 
   const handleAddMember = async () => {
-    if (!memberForm.name.trim()) { setError('Player name is required'); return; }
+    if (!memberForm.name.trim()) { setError('Add a player name to add them to the roster.'); return; }
     setSaving(true); setError(null);
     try {
       let userId = null;
@@ -286,7 +286,7 @@ function ManageTeam({ id, profile, navigate }) {
 
   const MANAGE_TABS = ['Roster', 'Schedule', 'Requests', 'Settings'];
 
-  if (loading) return <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Loading...</div>;
+  if (loading) return <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Getting the ice ready.</div>;
 
   return (
     <div style={{ background: C.dark, minHeight: '100vh', fontFamily: 'Barlow, sans-serif', color: C.ice }}>
@@ -320,8 +320,8 @@ function ManageTeam({ id, profile, navigate }) {
             <SectionLabel>Bulk Roster Upload</SectionLabel>
             <Card>
               <div style={{ fontSize: 13, color: C.steel, lineHeight: 1.6, marginBottom: 12 }}>
-                Got the whole team in a spreadsheet? Drop a CSV and we'll send every player
-                a Rinkd signup invite. They'll appear on your roster as <strong style={{ color: '#F59E0B' }}>INVITED</strong> until they sign up.
+                Got the whole team in a spreadsheet? Drop a CSV and every player gets a Rinkd
+                signup invite. They show up on your roster as <strong style={{ color: '#F59E0B' }}>INVITED</strong> until they sign up.
               </div>
               <RosterUpload
                 teamId={id}
@@ -369,7 +369,7 @@ function ManageTeam({ id, profile, navigate }) {
 
             <SectionLabel>Current Roster ({members.length})</SectionLabel>
             <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
-              {members.length === 0 && <div style={{ padding: 16, fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center' }}>No players yet</div>}
+              {members.length === 0 && <div style={{ padding: 16, fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center' }}>No players yet — add one above or upload your roster.</div>}
               {members.map(m => (
                 <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
                   <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 16, color: 'rgba(244,247,250,0.3)', width: 24, textAlign: 'center', flexShrink: 0 }}>{m.jersey_number || '—'}</div>
@@ -413,7 +413,7 @@ function ManageTeam({ id, profile, navigate }) {
 
             <SectionLabel>Schedule ({games.length} games)</SectionLabel>
             <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
-              {games.length === 0 && <div style={{ padding: 16, fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center' }}>No games yet</div>}
+              {games.length === 0 && <div style={{ padding: 16, fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center' }}>No games yet — add your first above.</div>}
               {games.map(g => {
                 const date = new Date(g.start_time);
                 const teamScore = g.is_home ? g.home_score : g.away_score;
@@ -442,7 +442,7 @@ function ManageTeam({ id, profile, navigate }) {
         {activeTab === 'Requests' && (
           <>
             <SectionLabel>Pending Requests ({requests.length})</SectionLabel>
-            {requests.length === 0 && <div style={{ textAlign: 'center', color: 'rgba(244,247,250,0.3)', fontSize: 13, padding: '30px 0' }}>No pending requests</div>}
+            {requests.length === 0 && <div style={{ textAlign: 'center', color: 'rgba(244,247,250,0.3)', fontSize: 13, padding: '30px 0' }}>No requests right now — they'll land here when players ask to join.</div>}
             {requests.map(req => (
               <div key={req.id} style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: '14px 16px', marginBottom: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: req.message ? 10 : 14 }}>
@@ -504,13 +504,13 @@ function TeamSettings({ team, onSave }) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
-      alert(`Logo is ${(file.size / 1024 / 1024).toFixed(1)}MB — max 5MB.`);
+      alert(`That logo's ${(file.size / 1024 / 1024).toFixed(1)} MB — keep it under 5 MB and upload again.`);
       e.target.value = '';
       return;
     }
     const verdict = await classifyImage(file);
     if (!verdict.ok) {
-      alert("Looks like this image may violate Rinkd's community guidelines. Try a different one.");
+      alert("That image doesn't pass our community guidelines — pick a different one.");
       e.target.value = '';
       return;
     }
@@ -518,7 +518,7 @@ function TeamSettings({ team, onSave }) {
     const { data: { user } } = await supabase.auth.getUser();
     const { url, error: upErr } = await uploadMedia(file, user.id);
     setUploadingLogo(false);
-    if (upErr || !url) { alert('Upload failed. Try again.'); return; }
+    if (upErr || !url) { alert("That upload didn't go through — check your connection and try again."); return; }
     set('logo_url', url);
   };
 
@@ -563,7 +563,7 @@ function TeamSettings({ team, onSave }) {
         style={{ width: '100%', padding: 13, background: C.red, border: 'none', borderRadius: 999, color: '#fff', fontSize: 14, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'Barlow, sans-serif', opacity: saving ? 0.7 : 1, transition: 'all 0.15s' }}
         onMouseEnter={e => { if (!saving) { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}}
         onMouseLeave={e => { e.currentTarget.style.background = C.red; e.currentTarget.style.color = '#fff'; }}>
-        {saving ? 'Saving...' : 'Save Changes'}
+        {saving ? 'Saving…' : 'Save Changes'}
       </button>
     </>
   );
@@ -608,21 +608,21 @@ function ManagersSection({ teamId, foundingManagerId }) {
     } else if (res.status === 'no_account') {
       setMsg({ ok: false, text: `No Rinkd account for "${res.input}". Managers must sign up first — share the link and add them once they've joined.` });
     } else {
-      setMsg({ ok: false, text: res.message || 'Could not add manager.' });
+      setMsg({ ok: false, text: res.message || "Couldn't add that manager — double-check the handle or email and try again." });
     }
   };
 
   const handleRemove = async (memberId, name) => {
     if (!window.confirm(`Remove ${name} as a manager? They'll lose management access. (To keep them on the roster as a player, use Demote instead.)`)) return;
     const { error } = await removeTeamManager(memberId);
-    if (error) { alert(`Remove failed: ${error.message}`); return; }
+    if (error) { alert(`Couldn't remove them: ${error.message}`); return; }
     load();
   };
 
   const handleDemote = async (memberId, name) => {
     if (!window.confirm(`Demote ${name} to player? They'll stay on the roster but lose management access.`)) return;
     const { error } = await demoteTeamManager(memberId);
-    if (error) { alert(`Demote failed: ${error.message}`); return; }
+    if (error) { alert(`Couldn't demote them: ${error.message}`); return; }
     load();
   };
 
@@ -653,10 +653,10 @@ function ManagersSection({ teamId, foundingManagerId }) {
       </Card>
 
       {loading ? (
-        <div style={{ color: C.steel, fontSize: 13, padding: '16px 0', textAlign: 'center' }}>Loading managers…</div>
+        <div style={{ color: C.steel, fontSize: 13, padding: '16px 0', textAlign: 'center' }}>Warming up.</div>
       ) : managers.length === 0 ? (
         <div style={{ textAlign: 'center', color: C.steel, padding: '20px 0', fontSize: 13 }}>
-          No managers yet (the founder isn't tracked here separately — they're set on the team itself).
+          No extra managers yet — add one above to share the load. (The founder is set on the team itself, not listed here.)
         </div>
       ) : (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 24 }}>

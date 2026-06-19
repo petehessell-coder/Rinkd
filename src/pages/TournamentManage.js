@@ -171,7 +171,7 @@ export default function TournamentManagePage({ currentUser, profile }) {
       (st || []).forEach(r => { map[r.team_id] = r; });
       setStandingsByTeam(map);
     } catch (e) {
-      setError(e.message || 'Failed to load tournament');
+      setError(e.message || "This tournament didn't load — check your connection and try again.");
     } finally {
       setLoading(false);
     }
@@ -181,14 +181,14 @@ export default function TournamentManagePage({ currentUser, profile }) {
 
   if (loading) return (
     <Layout profile={profile}>
-      <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice }}>Loading…</div>
+      <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice }}>Getting the ice ready.</div>
     </Layout>
   );
   if (error || !tournament) return (
     <Layout profile={profile}>
       <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.ice, gap: 12 }}>
-        <div>{error || 'Tournament not found'}</div>
-        <button onClick={() => navigate('/tournaments')} style={btnPrimary}>Back</button>
+        <div>{error || "We couldn't find this tournament."}</div>
+        <button onClick={() => navigate('/tournaments')} style={btnPrimary}>Back to tournaments</button>
       </div>
     </Layout>
   );
@@ -198,7 +198,7 @@ export default function TournamentManagePage({ currentUser, profile }) {
   if (!extraDirectorChecked) return (
     <Layout profile={profile}>
       <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice }}>
-        Loading…
+        Getting the ice ready.
       </div>
     </Layout>
   );
@@ -207,7 +207,7 @@ export default function TournamentManagePage({ currentUser, profile }) {
       <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.ice, gap: 12, padding: 20, textAlign: 'center' }}>
         <div style={{ fontSize: 40 }}>🔒</div>
         <div>Only the tournament director can manage this event.</div>
-        <button onClick={() => navigate(`/tournament/${id}`)} style={btnPrimary}>View Tournament</button>
+        <button onClick={() => navigate(`/tournament/${id}`)} style={btnPrimary}>View tournament</button>
       </div>
     </Layout>
   );
@@ -353,20 +353,20 @@ function DivisionsTab({ tournamentId, divisions, teams, games, selectedDivisionI
     setBusyId(divisions[idx].id);
     const { error } = await reorderDivisions(ids);
     setBusyId(null);
-    if (error) { flash?.('error', `Reorder failed: ${error.message}`); return; }
+    if (error) { flash?.('error', `That reorder didn't save — ${error.message}`); return; }
     reload();
   };
 
   const remove = async (d) => {
     const c = counts[d.id] || { teams: 0, games: 0 };
     const warn = c.teams > 0 || c.games > 0
-      ? `Delete "${d.name}"? This permanently removes its ${c.teams} team${c.teams === 1 ? '' : 's'}${c.games ? ` and unassigns ${c.games} game${c.games === 1 ? '' : 's'}` : ''}. This cannot be undone.`
-      : `Delete "${d.name}"? This cannot be undone.`;
+      ? `Delete "${d.name}"? This removes its ${c.teams} team${c.teams === 1 ? '' : 's'}${c.games ? ` and unassigns ${c.games} game${c.games === 1 ? '' : 's'}` : ''} — this can't be undone.`
+      : `Delete "${d.name}"? This can't be undone.`;
     if (!window.confirm(warn)) return;
     setBusyId(d.id);
     const { error } = await deleteDivision(d.id);
     setBusyId(null);
-    if (error) { flash?.('error', `Delete failed: ${error.message}`); return; }
+    if (error) { flash?.('error', `That didn't delete — ${error.message}`); return; }
     flash?.('success', `Deleted ${d.name}.`);
     // If we just deleted the selected division, drop the selection so the page
     // re-defaults to the first remaining one on reload.
@@ -395,7 +395,7 @@ function DivisionsTab({ tournamentId, divisions, teams, games, selectedDivisionI
       {divisions.length === 0 && !adding && (
         <div style={{ textAlign: 'center', color: C.steel, padding: '40px 0' }}>
           <div style={{ fontSize: 32, marginBottom: 8 }}>🗂️</div>
-          No divisions yet. Add one to start scoping teams and games.
+          Add your first division to start scoping teams and games.
         </div>
       )}
 
@@ -451,7 +451,7 @@ function DivisionForm({ tournamentId, division, nextSortOrder = 0, flash, onDone
   const [localError, setLocalError] = useState('');
 
   const save = async () => {
-    if (!name.trim()) { setLocalError('Division name is required'); return; }
+    if (!name.trim()) { setLocalError('Add a division name to continue.'); return; }
     setLocalError('');
     setBusy(true);
     // 'custom' = keep the division's existing settings untouched; '' = inherit
@@ -464,7 +464,7 @@ function DivisionForm({ tournamentId, division, nextSortOrder = 0, flash, onDone
       ? await updateDivision(division.id, fields)
       : await createDivision(tournamentId, { ...fields, sortOrder: nextSortOrder });
     setBusy(false);
-    if (res.error) { flash?.('error', `Save failed: ${res.error.message}`); return; }
+    if (res.error) { flash?.('error', `That didn't save — ${res.error.message}`); return; }
     flash?.('success', division ? 'Division saved.' : `Added ${name}.`);
     onDone();
   };
@@ -542,7 +542,7 @@ function TeamsTab({ tournamentId, teams, divisionId = null, standingsByTeam = {}
       {teams.length === 0 && !adding && (
         <div style={{ textAlign: 'center', color: C.steel, padding: '40px 0' }}>
           <div style={{ fontSize: 32, marginBottom: 8 }}>🏒</div>
-          No teams yet. Add the first one above.
+          Add your first team to get this event on the ice.
         </div>
       )}
 
@@ -627,7 +627,7 @@ function TeamPlayerLinks({ tournamentId, team, flash }) {
   const doLink = async (jersey, profile) => {
     if (busy) return;
     if (profile.account_type === 'minor') {
-      flash?.('error', 'Minor players can’t be linked yet (needs guardian consent).');
+      flash?.('error', 'Minor players can’t be linked yet — that needs guardian consent.');
       return;
     }
     setBusy(true);
@@ -635,8 +635,8 @@ function TeamPlayerLinks({ tournamentId, team, flash }) {
     setBusy(false);
     if (error) {
       flash?.('error', /guardian consent/i.test(error.message || '')
-        ? 'Minor players can’t be linked yet (needs guardian consent).'
-        : (error.message || 'Could not link player.'));
+        ? 'Minor players can’t be linked yet — that needs guardian consent.'
+        : (error.message || "That didn't link — check your connection and try again."));
       return;
     }
     flash?.('success', `Linked ${profile.name} to #${jersey}${stamped ? ` · ${stamped} game${stamped === 1 ? '' : 's'}` : ''}.`);
@@ -649,7 +649,7 @@ function TeamPlayerLinks({ tournamentId, team, flash }) {
     setBusy(true);
     const { error } = await unlinkTournamentPlayer(team.id, jersey);
     setBusy(false);
-    if (error) { flash?.('error', error.message || 'Could not unlink.'); return; }
+    if (error) { flash?.('error', error.message || "That didn't unlink — check your connection and try again."); return; }
     flash?.('success', `Unlinked #${jersey}.`);
     load();
   };
@@ -662,10 +662,10 @@ function TeamPlayerLinks({ tournamentId, team, flash }) {
         New games for a linked jersey attach automatically.
       </div>
       {jerseys === null ? (
-        <div style={{ fontSize: 12, color: C.steel, padding: '8px 0' }}>Loading roster…</div>
+        <div style={{ fontSize: 12, color: C.steel, padding: '8px 0' }}>Warming up.</div>
       ) : jerseys.length === 0 ? (
         <div style={{ fontSize: 12, color: C.steel, padding: '8px 0' }}>
-          No jerseys yet — players appear here once this team has game lineups to attribute.
+          Jerseys show up here once this team has game lineups to attribute.
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -727,22 +727,22 @@ function TeamForm({ tournamentId, divisionId = null, team, pools, flash, onDone,
   const [localError, setLocalError] = useState('');
 
   const save = async () => {
-    if (!teamName.trim()) { setLocalError('Team name is required'); return; }
+    if (!teamName.trim()) { setLocalError('Add a team name to continue.'); return; }
     setLocalError('');
     setBusy(true);
     const fields = { teamName, pool, seed, contactEmail, logoUrl };
     const res = team ? await updateTeam(team.id, fields) : await createTeam(tournamentId, { ...fields, divisionId });
     setBusy(false);
-    if (res.error) { flash?.('error', `Save failed: ${res.error.message}`); return; }
+    if (res.error) { flash?.('error', `That didn't save — ${res.error.message}`); return; }
     flash?.('success', team ? 'Team saved.' : `Added ${teamName}.`);
     onDone();
   };
 
   const remove = async () => {
     if (!team) return;
-    if (!window.confirm(`Delete "${team.team_name}"? This cannot be undone.`)) return;
+    if (!window.confirm(`Delete "${team.team_name}"? This can't be undone.`)) return;
     const { error } = await deleteTeam(team.id);
-    if (error) { flash?.('error', `Delete failed: ${error.message}`); return; }
+    if (error) { flash?.('error', `That didn't delete — ${error.message}`); return; }
     flash?.('success', `Deleted ${team.team_name}.`);
     onDone();
   };
@@ -800,7 +800,7 @@ function ScheduleTab({ tournamentId, tournament, teams, games, divisionId = null
   const poolGames = games.filter((g) => (g.round || 'pool') === 'pool');
 
   const handleGenerate = async () => {
-    if (!genStart) { flash?.('error', 'Pick a start time before generating.'); return; }
+    if (!genStart) { flash?.('error', 'Pick a start date and time to generate the schedule.'); return; }
     setBusy(true);
     const { inserted, error, warning } = await generatePoolSchedule(tournamentId, {
       startDate: genStart,
@@ -810,7 +810,7 @@ function ScheduleTab({ tournamentId, tournament, teams, games, divisionId = null
       divisionId,
     });
     setBusy(false);
-    if (error) { flash?.('error', `Generate failed: ${error.message}`); return; }
+    if (error) { flash?.('error', `That didn't generate — ${error.message}`); return; }
     flash?.('success', warning || `Generated ${inserted} pool games.`);
     setShowGen(false); reload();
   };
@@ -821,7 +821,7 @@ function ScheduleTab({ tournamentId, tournament, teams, games, divisionId = null
   const hasPoolGames = poolGames.length > 0;
   const handleGenerateClick = () => {
     if (hasPoolGames && !showGen) {
-      const ok = window.confirm(`Regenerating will replace the ${poolGames.length} existing pool game${poolGames.length === 1 ? '' : 's'}. Bracket games stay intact. Continue?`);
+      const ok = window.confirm(`Regenerate the schedule? This wipes the ${poolGames.length} current pool game${poolGames.length === 1 ? '' : 's'} and rebuilds them. Bracket games stay intact.`);
       if (!ok) return;
     }
     setShowGen((v) => !v);
@@ -874,7 +874,7 @@ function ScheduleTab({ tournamentId, tournament, teams, games, divisionId = null
       {poolGames.length === 0 ? (
         <div style={{ textAlign: 'center', color: C.steel, padding: '40px 0' }}>
           <div style={{ fontSize: 32, marginBottom: 8 }}>📅</div>
-          No pool games yet. Generate a round-robin or add games manually.
+          Fill the board — generate a round-robin or add games one at a time.
         </div>
       ) : (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
@@ -989,8 +989,8 @@ function BracketTab({ tournamentId, tournament, divSettings, teams, games, divis
   }, [tournamentId, advPerPool, finalPoolCount, divisionId]);
 
   const addBracketGame = async () => {
-    if (!homeId || !awayId || homeId === awayId) { flash?.('error', 'Pick two different teams.'); return; }
-    if (!startTime) { flash?.('error', 'Pick a start time.'); return; }
+    if (!homeId || !awayId || homeId === awayId) { flash?.('error', 'Pick two different teams to set this matchup.'); return; }
+    if (!startTime) { flash?.('error', 'Pick a start date and time to continue.'); return; }
     setBusy(true);
     const { error } = await createBracketGame(tournamentId, {
       homeTeamId: homeId, awayTeamId: awayId, round,
@@ -999,7 +999,7 @@ function BracketTab({ tournamentId, tournament, divSettings, teams, games, divis
       divisionId,
     });
     setBusy(false);
-    if (error) { flash?.('error', `Failed to add bracket game: ${error.message}`); return; }
+    if (error) { flash?.('error', `That bracket game didn't save — ${error.message}`); return; }
     flash?.('success', `Added ${round} game.`);
     setHomeId(''); setAwayId(''); setStartTime(''); setRinkId('');
     reload();
@@ -1016,7 +1016,7 @@ function BracketTab({ tournamentId, tournament, divSettings, teams, games, divis
           {!loaded ? (
             <div style={{ padding: 14, color: C.steel, fontSize: 13 }}>Loading standings…</div>
           ) : qualifiers.length === 0 ? (
-            <div style={{ padding: 14, color: C.steel, fontSize: 13 }}>Bracket seeds lock in as pool games complete.</div>
+            <div style={{ padding: 14, color: C.steel, fontSize: 13 }}>Seeds lock in as pool games go final.</div>
           ) : qualifiers.map((q, i) => (
             <div key={q.team_id} style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none', gap: 10 }}>
               <span style={{ width: 22, height: 22, borderRadius: '50%', background: q.pool_rank === 1 ? C.red : C.blue, color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{q.pool_rank}</span>
@@ -1087,7 +1087,7 @@ function BracketTab({ tournamentId, tournament, divSettings, teams, games, divis
         Bracket Games ({bracketGames.length})
       </div>
       {bracketGames.length === 0 ? (
-        <div style={{ textAlign: 'center', color: C.steel, padding: 24, fontSize: 13 }}>No bracket games yet.</div>
+        <div style={{ textAlign: 'center', color: C.steel, padding: 24, fontSize: 13 }}>The bracket fills in once you seed it or add games above.</div>
       ) : (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
           {bracketGames.map((g, i) => {
@@ -1111,9 +1111,9 @@ function BracketTab({ tournamentId, tournament, divSettings, teams, games, divis
                 <div style={{ fontSize: 12, color: C.steel, marginTop: 2 }}>{fmtDateTime(g.start_time)}</div>
               </div>
               <button onClick={async () => {
-                if (!window.confirm('Delete this bracket game?')) return;
+                if (!window.confirm("Delete this bracket game? Its score and stats go with it — this can't be undone.")) return;
                 const { error } = await deleteGame(g.id);
-                if (error) { flash?.('error', `Delete failed: ${error.message}`); return; }
+                if (error) { flash?.('error', `That didn't delete — ${error.message}`); return; }
                 flash?.('success', 'Bracket game deleted.');
                 reload();
               }} style={{ ...btnGhost, color: C.red, borderColor: C.red }}>Delete</button>
@@ -1170,7 +1170,7 @@ function PlayoffBracketBuilder({ tournamentId, divisionId = null, games, bracket
   });
 
   const handleGenerate = async () => {
-    if (!size) { flash?.('error', 'Need at least 4 teams in the standings to seed a bracket.'); return; }
+    if (!size) { flash?.('error', 'You need at least four teams in the standings to seed a bracket.'); return; }
     const seedTeamIds = order.slice(0, size).map((t) => t.team_id);
     setBusy(true);
     const { inserted, error } = await generateBracketV2(tournamentId, {
@@ -1181,7 +1181,7 @@ function PlayoffBracketBuilder({ tournamentId, divisionId = null, games, bracket
       thirdPlace,
     });
     setBusy(false);
-    if (error) { flash?.('error', `Bracket generation failed: ${error.message}`); return; }
+    if (error) { flash?.('error', `That bracket didn't build — ${error.message}`); return; }
     flash?.('success', `Built a ${size}-team bracket (${inserted} games). Scores + advancement fill in automatically.`);
     setOpen(false);
     reload();
@@ -1217,7 +1217,7 @@ function PlayoffBracketBuilder({ tournamentId, divisionId = null, games, bracket
       {open && (
         <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
           {canFit.length === 0 ? (
-            <div style={{ fontSize: 13, color: C.amber }}>Need at least 4 teams in the standings to build a bracket — finish more pool games first.</div>
+            <div style={{ fontSize: 13, color: C.amber }}>You need at least four teams in the standings to build a bracket — finish more pool games first.</div>
           ) : (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 12 }}>
@@ -1323,7 +1323,7 @@ function RegistrationsTab({ tournamentId, tournament, reload, flash }) {
       maxTeams: maxTeams.trim() === '' ? null : Math.max(0, parseInt(maxTeams, 10) || 0),
     });
     setSavingCfg(false);
-    if (error) { flash('err', error.message || 'Could not save settings.'); return; }
+    if (error) { flash('err', error.message || "That didn't save — check your connection and try again."); return; }
     flash('ok', 'Registration settings saved.');
     reload();
   };
@@ -1335,7 +1335,7 @@ function RegistrationsTab({ tournamentId, tournament, reload, flash }) {
   const handleConnect = async () => {
     setConnecting(true);
     try { await startConnectOnboarding(`/tournament/${tournamentId}/manage`); } // redirects away on success
-    catch (e) { flash('err', e.message || 'Could not start payout setup.'); setConnecting(false); }
+    catch (e) { flash('err', e.message || "Payout setup didn't open — check your connection and try again."); setConnecting(false); }
   };
 
   const act = async (reg, action) => {
@@ -1344,7 +1344,7 @@ function RegistrationsTab({ tournamentId, tournament, reload, flash }) {
       if (action === 'approve') await approveTournamentRegistration(reg.id);
       else await updateTournamentRegistrationStatus(reg.id, action);
       await loadRegs();
-    } catch (e) { flash('err', e.message || 'Action failed.'); }
+    } catch (e) { flash('err', e.message || "That didn't go through — check your connection and try again."); }
     finally { setBusyId(null); }
   };
 
@@ -1387,7 +1387,7 @@ function RegistrationsTab({ tournamentId, tournament, reload, flash }) {
       <div style={sec}>Payouts</div>
       <div style={card}>
         {payoutsReady === null ? (
-          <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.5)' }}>Checking payout status…</div>
+          <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.5)' }}>Warming up.</div>
         ) : payoutsReady ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 18 }}>✅</span>
@@ -1537,12 +1537,12 @@ function SettingsTab({ tournament, currentUser, reload, flash }) {
     const file = e.target.files?.[0];
     if (!file || !currentUser?.id) { e.target.value = ''; return; }
     if (!file.type.startsWith('image/')) {
-      flash?.('error', 'Logo must be an image (PNG, JPG, SVG, WebP).');
+      flash?.('error', 'That file isn’t an image — upload a PNG, JPG, SVG, or WebP.');
       e.target.value = '';
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      flash?.('error', `Logo is ${(file.size / 1024 / 1024).toFixed(1)} MB — max 5 MB.`);
+      flash?.('error', `That logo is ${(file.size / 1024 / 1024).toFixed(1)} MB — keep it under 5 MB and try again.`);
       e.target.value = '';
       return;
     }
@@ -1550,14 +1550,14 @@ function SettingsTab({ tournament, currentUser, reload, flash }) {
     const verdict = await classifyImage(file);
     if (!verdict.ok) {
       setUploading(false);
-      flash?.('error', 'That image looks like it may violate Rinkd\'s guidelines. Try a different one.');
+      flash?.('error', 'That image may break Rinkd\'s guidelines — try a different one.');
       e.target.value = '';
       return;
     }
     const { url, error } = await uploadMedia(file, currentUser.id);
     setUploading(false);
     e.target.value = '';
-    if (error || !url) { flash?.('error', `Upload failed: ${error?.message || 'unknown error'}`); return; }
+    if (error || !url) { flash?.('error', error?.message || 'That logo didn’t upload — check your connection and try again.'); return; }
     setLogoUrl(url);
     flash?.('success', 'Logo uploaded — click Save Settings to apply.');
   };
@@ -1597,7 +1597,7 @@ function SettingsTab({ tournament, currentUser, reload, flash }) {
       usahClassification: usahClass, divisionLabel: usahDivision,
     });
     setBusy(false);
-    if (error) { flash?.('error', `Save failed: ${error.message}`); return; }
+    if (error) { flash?.('error', `That didn't save — ${error.message}`); return; }
     flash?.('success', 'Settings saved.');
     reload();
   };
@@ -1869,16 +1869,16 @@ function ScorersTab({ tournamentId, tournamentName, originalDirectorId, profile,
       // director can still send an invite without having to sign up the
       // person themselves first.
       setEmailPromptHandle(res.handle);
-      setMsg({ ok: false, text: `No Rinkd account for @${res.handle}. Enter their email to send a sign-up invite.` });
+      setMsg({ ok: false, text: `No Rinkd account for @${res.handle} yet. Enter their email and we’ll send a sign-up invite.` });
     } else {
-      setMsg({ ok: false, text: res.message || 'Could not add scorer.' });
+      setMsg({ ok: false, text: res.message || "That didn't go through — check your connection and try again." });
     }
   };
 
   const remove = async (roleId, name) => {
-    if (!window.confirm(`Remove ${name} as a scorer? They'll lose access to score this tournament's games.`)) return;
+    if (!window.confirm(`Remove ${name} as a scorer? They lose access to score this tournament's games.`)) return;
     const { error } = await removeScorer(roleId);
-    if (error) { flash?.('error', `Remove failed: ${error.message}`); return; }
+    if (error) { flash?.('error', `That didn't remove — ${error.message}`); return; }
     flash?.('success', `${name} removed as a scorer.`);
     loadScorers();
   };
@@ -1942,11 +1942,11 @@ function ScorersTab({ tournamentId, tournamentName, originalDirectorId, profile,
       </div>
 
       {loading ? (
-        <div style={{ color: C.steel, fontSize: 13, padding: '20px 0', textAlign: 'center' }}>Loading scorers…</div>
+        <div style={{ color: C.steel, fontSize: 13, padding: '20px 0', textAlign: 'center' }}>Warming up.</div>
       ) : scorers.length === 0 ? (
         <div style={{ textAlign: 'center', color: C.steel, padding: '40px 0' }}>
           <div style={{ fontSize: 32, marginBottom: 8 }}>🥅</div>
-          No scorers yet. You can always score as the director — add others above to share the load.
+          You can always score as the director — add others above to share the load.
         </div>
       ) : (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
@@ -2005,16 +2005,16 @@ function DirectorsSection({ tournamentId, originalDirectorId, flash }) {
       setMsg({ ok: true, text: `${res.profile.name || '@' + res.profile.handle} already has a ${res.role} role here.` });
       setInput('');
     } else if (res.status === 'no_account') {
-      setMsg({ ok: false, text: `No Rinkd account for "${res.input}". Directors must sign up first — share the link and add them once they've joined.` });
+      setMsg({ ok: false, text: `No Rinkd account for "${res.input}". Directors sign up first — share the link and add them once they've joined.` });
     } else {
-      setMsg({ ok: false, text: res.message || 'Could not add director.' });
+      setMsg({ ok: false, text: res.message || "That didn't go through — check your connection and try again." });
     }
   };
 
   const remove = async (roleId, name) => {
-    if (!window.confirm(`Remove ${name} as a director? They'll lose full management access.`)) return;
+    if (!window.confirm(`Remove ${name} as a director? They lose full management access.`)) return;
     const { error } = await removeDirector(roleId);
-    if (error) { flash?.('error', `Remove failed: ${error.message}`); return; }
+    if (error) { flash?.('error', `That didn't remove — ${error.message}`); return; }
     flash?.('success', `${name} removed as a director.`);
     load();
   };
@@ -2047,10 +2047,10 @@ function DirectorsSection({ tournamentId, originalDirectorId, flash }) {
       </div>
 
       {loading ? (
-        <div style={{ color: C.steel, fontSize: 13, padding: '20px 0', textAlign: 'center' }}>Loading directors…</div>
+        <div style={{ color: C.steel, fontSize: 13, padding: '20px 0', textAlign: 'center' }}>Warming up.</div>
       ) : directors.length === 0 ? (
         <div style={{ textAlign: 'center', color: C.steel, padding: '24px 0', fontSize: 13 }}>
-          No directors yet. (The original director isn't tracked here separately — they're set on the tournament itself.)
+          No extra directors yet — add one above to share full management access. (The original director is set on the tournament itself.)
         </div>
       ) : (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
@@ -2117,7 +2117,7 @@ function SuspensionsTab({ tournamentId, flash, onPendingCount }) {
       .eq('tournament_id', tournamentId)
       .order('created_at', { ascending: false });
     if (error) {
-      flash('error', `Could not load suspensions: ${error.message}`);
+      flash('error', `Suspensions didn't load — ${error.message}`);
       setRows([]);
       return;
     }
@@ -2160,7 +2160,7 @@ function SuspensionsTab({ tournamentId, flash, onPendingCount }) {
     }
   };
 
-  if (rows === null) return <div style={{ color: C.steel, fontSize: 13, padding: '24px 0', textAlign: 'center' }}>Loading suspensions…</div>;
+  if (rows === null) return <div style={{ color: C.steel, fontSize: 13, padding: '24px 0', textAlign: 'center' }}>Warming up.</div>;
 
   const pending = rows.filter(r => r.status === 'pending');
   const resolved = rows.filter(r => r.status !== 'pending');
@@ -2324,11 +2324,11 @@ function GameSheetTab({ tournamentId, tournament, games = [], reload, flash }) {
   }, [games, maps]);
 
   const addLink = async () => {
-    if (!seasonId.trim()) { flash?.('error', 'Paste the GameSheet season id first.'); return; }
+    if (!seasonId.trim()) { flash?.('error', 'Paste the GameSheet season id to link it.'); return; }
     setBusy(true);
     const { error } = await createLink(tournamentId, { seasonId, autoImport });
     setBusy(false);
-    if (error) { flash?.('error', `Couldn't link: ${error.message}`); return; }
+    if (error) { flash?.('error', `That didn't link — ${error.message}`); return; }
     flash?.('success', autoImport ? 'Linked — teams, games + scores will sync in automatically.' : 'Linked — scores sync onto your existing schedule (you confirm matches).');
     setSeasonId(''); reload?.(); load();
   };
@@ -2345,7 +2345,7 @@ function GameSheetTab({ tournamentId, tournament, games = [], reload, flash }) {
   };
   const doConfirm = async (m) => {
     const rid = m.rinkd_game_id || pick[m.id];
-    if (!rid) { flash?.('error', 'Pick the Rinkd game this matches first.'); return; }
+    if (!rid) { flash?.('error', 'Pick the Rinkd game this matches to confirm it.'); return; }
     setBusyMapId(m.id);
     const { error } = await confirmMatch(m.id, m.rinkd_game_id ? undefined : rid);
     setBusyMapId(null);
@@ -2404,7 +2404,7 @@ function GameSheetTab({ tournamentId, tournament, games = [], reload, flash }) {
       </div>
 
       {loading ? (
-        <div style={{ textAlign: 'center', color: C.steel, padding: '24px 0', fontSize: 13 }}>Loading…</div>
+        <div style={{ textAlign: 'center', color: C.steel, padding: '24px 0', fontSize: 13 }}>Warming up.</div>
       ) : !hasLink ? null : (
         <>
           {/* Pending matches — director confirms before any score is written */}

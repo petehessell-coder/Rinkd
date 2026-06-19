@@ -69,7 +69,7 @@ export default function SettingsPage({ currentUser, profile }) {
     setNotifBusy(null);
     if (error) {
       setNotifs(prev => ({ ...prev, [key]: !next })); // revert
-      setNotifError(error.message || "Couldn't save that change.");
+      setNotifError(error.message || "Couldn't save that just now — try the toggle again in a sec.");
       return;
     }
     track('notification_preference_changed', { key, value: next });
@@ -100,7 +100,7 @@ export default function SettingsPage({ currentUser, profile }) {
     return (
       <Layout profile={profile}>
         <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice }}>
-          You need to be signed in to manage settings.
+          Sign in to manage your settings.
         </div>
       </Layout>
     );
@@ -194,7 +194,7 @@ export default function SettingsPage({ currentUser, profile }) {
       URL.revokeObjectURL(url);
       track('data_export_downloaded');
     } catch (err) {
-      setExportError(err?.message || 'Export failed. Try again or email hello@rinkd.app.');
+      setExportError(err?.message || "That export didn't finish — try again, or email hello@rinkd.app and we'll send it over.");
     } finally {
       setExporting(false);
     }
@@ -207,16 +207,16 @@ export default function SettingsPage({ currentUser, profile }) {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const accessToken = session?.access_token;
-      if (!accessToken) throw new Error('No active session');
+      if (!accessToken) throw new Error('Your session expired — sign in again, then retry the delete.');
       const res = await fetch(
         `${process.env.REACT_APP_SUPABASE_URL || 'https://tbpoopsyhfuqcbugrjbh.supabase.co'}/functions/v1/delete-account`,
         { method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: '{}' }
       );
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok) throw new Error(data.error || `Failed (${res.status})`);
+      if (!res.ok || !data.ok) throw new Error(data.error || `We couldn't complete the delete (error ${res.status}) — try again, or email hello@rinkd.app and we'll handle it.`);
       track('account_deleted');
     } catch (err) {
-      setDeleteError(err?.message || 'Delete failed. Email hello@rinkd.app and we\'ll handle it.');
+      setDeleteError(err?.message || "We couldn't complete the delete — try again, or email hello@rinkd.app and we'll handle it.");
       setDeleting(false);
       return;
     }
@@ -350,7 +350,7 @@ export default function SettingsPage({ currentUser, profile }) {
               They won't see yours either.
             </p>
             {blocksLoading ? (
-              <div style={{ fontSize: 13, color: C.steel }}>Loading…</div>
+              <div style={{ fontSize: 13, color: C.steel }}>Warming up.</div>
             ) : blocks.length === 0 ? (
               <div style={{ fontSize: 13, color: C.steel, fontStyle: 'italic' }}>
                 You haven't blocked anyone.

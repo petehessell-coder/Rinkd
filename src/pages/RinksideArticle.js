@@ -33,7 +33,7 @@ export default function RinksideArticle({ currentUser, profile }) {
       // Distinguish a fetch failure from "article not found." The previous
       // version set article=null in both cases, so a flaky connection looked
       // like a permanent 404.
-      setError(qErr.message || 'Failed to load article');
+      setError(qErr.message || "Couldn't load this article — refresh and try again.");
       return;
     }
     setArticle(data);
@@ -54,7 +54,7 @@ export default function RinksideArticle({ currentUser, profile }) {
   if (loading) {
     return (
       <Layout profile={profile} currentPage="rinkside">
-        <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice }}>Loading…</div>
+        <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice }}>Getting the ice ready.</div>
       </Layout>
     );
   }

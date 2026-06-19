@@ -632,7 +632,7 @@ export default function Feed({ currentUser, profile }) {
       const verdict = await classifyImage(file);
       if (!verdict.ok) {
         // eslint-disable-next-line no-alert
-        alert('Looks like this image may violate Rinkd\'s community guidelines. Try a different one.');
+        alert("That image won't clear our community guidelines — pick a different one and try again.");
         if (fileInputRef.current) fileInputRef.current.value = '';
         track('upload_blocked_nsfw', { label: verdict.label, score: verdict.score });
         return;
@@ -652,7 +652,7 @@ export default function Feed({ currentUser, profile }) {
     if (mediaFile) {
       setUploadProgress(30);
       const { url, mediaType: mt, error } = await uploadMedia(mediaFile, currentUser.id);
-      if (error) { setPosting(false); alert('Upload failed. Please try again.'); return; }
+      if (error) { setPosting(false); alert("That upload didn't go through — check your connection and try again."); return; }
       mediaUrl = url; mediaType = mt; setUploadProgress(80);
     }
     const { data: newPost, error: postError } = await createPost(currentUser.id, { content: content.trim(), tag: selectedTag?.label || null, tagColor: selectedTag?.color || null, mediaUrl, mediaType });

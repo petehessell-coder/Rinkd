@@ -62,9 +62,9 @@ function Inbox({ currentUser, profile }) {
           ) : items.length === 0 ? (
             <EmptyState
               icon="💬"
-              title="No messages yet"
-              body="Start a conversation with a teammate, opponent, or commissioner."
-              cta={{ label: 'New message', onClick: () => setPicker(true) }}
+              title="Quiet in here"
+              body="Start a conversation with a teammate, an opponent, or your commissioner."
+              cta={{ label: 'Start a message', onClick: () => setPicker(true) }}
             />
           ) : (
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
@@ -88,7 +88,7 @@ function Inbox({ currentUser, profile }) {
                         {c.last_message_at && <span style={{ fontSize: 11, color: C.steel, flexShrink: 0 }}>{timeAgo(c.last_message_at)}</span>}
                       </div>
                       <div style={{ fontSize: 13, color: unread ? C.ice : C.steel, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: unread ? 600 : 400 }}>
-                        {c.last_message_preview ? `${mine ? 'You: ' : ''}${c.last_message_preview}` : 'No messages yet'}
+                        {c.last_message_preview ? `${mine ? 'You: ' : ''}${c.last_message_preview}` : 'Say hi to get things going'}
                       </div>
                     </div>
                     {unread && <div style={{ flexShrink: 0, minWidth: 20, height: 20, borderRadius: 999, background: C.red, color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{c.unread > 99 ? '99+' : c.unread}</div>}
@@ -106,7 +106,7 @@ function Inbox({ currentUser, profile }) {
           navigate(`/messages/${id}`);
         } catch (e) {
           // eslint-disable-next-line no-alert
-          alert(e?.message === 'cannot message this user' ? "You can't message this user." : "Couldn't start that conversation.");
+          alert(e?.message === 'cannot message this user' ? "You can't message this player right now." : "Couldn't start that conversation — try again in a sec.");
         }
       }} />}
     </Layout>
@@ -151,7 +151,7 @@ function NewMessageModal({ currentUser, onClose, onPicked }) {
         </div>
         <div style={{ maxHeight: '40vh', overflowY: 'auto', paddingBottom: 8 }}>
           {loading && <div style={{ padding: '8px 16px', color: C.steel, fontSize: 13 }}>Searching…</div>}
-          {!loading && q.trim() && results.length === 0 && <div style={{ padding: '8px 16px', color: C.steel, fontSize: 13 }}>No players found.</div>}
+          {!loading && q.trim() && results.length === 0 && <div style={{ padding: '8px 16px', color: C.steel, fontSize: 13 }}>No players match that — try a different name or @handle.</div>}
           {results.map((u) => (
             <button key={u.id} onClick={() => onPicked(u.id)}
               style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', color: C.ice }}

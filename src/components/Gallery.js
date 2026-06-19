@@ -113,12 +113,12 @@ export default function Gallery({ tournamentId = null, leagueId = null, currentU
       </div>
 
       {posts === null ? (
-        <div style={{ textAlign: 'center', color: C.dim, fontSize: 13, padding: '40px 16px' }}>Loading…</div>
+        <div style={{ textAlign: 'center', color: C.dim, fontSize: 13, padding: '40px 16px' }}>Getting the ice ready.</div>
       ) : posts.length === 0 ? (
         <div style={{ textAlign: 'center', color: C.dim, fontSize: 13, padding: '48px 16px', lineHeight: 1.6 }}>
           <div style={{ fontSize: 36, marginBottom: 8 }}>📸</div>
-          {teamFilter ? 'No photos for this team yet.' : `No photos yet.`}<br />
-          {currentUser ? 'Be the first — tap Add Photo.' : `Sign in to share photos from the ${scopeLabel}.`}
+          {teamFilter ? 'This team’s gallery is wide open.' : 'The gallery’s wide open.'}<br />
+          {currentUser ? 'Drop the first shot — tap Add Photo.' : `Sign in to share shots from the ${scopeLabel}.`}
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(108px, 1fr))', gap: 6 }}>
@@ -213,7 +213,7 @@ function AddPhotoModal({ scopeLabel, teams, currentUser, tournamentId, leagueId,
     setError(null);
     try {
       const up = await uploadMedia(file, currentUser.id);
-      if (up.error) { setError('Upload failed — try again.'); setSubmitting(false); return; }
+      if (up.error) { setError('That didn’t upload — check your connection and try again.'); setSubmitting(false); return; }
       const params = {
         content: caption.trim(),
         mediaUrl: up.url,
@@ -223,7 +223,7 @@ function AddPhotoModal({ scopeLabel, teams, currentUser, tournamentId, leagueId,
       };
       if (teamTag) params[isTournament ? 'tournamentTeamId' : 'leagueTeamId'] = teamTag;
       const { data, error: postErr } = await createPost(currentUser.id, params);
-      if (postErr) { setError(postErr.message || 'Post failed'); setSubmitting(false); return; }
+      if (postErr) { setError(postErr.message || 'That didn’t post — give it another shot.'); setSubmitting(false); return; }
       const tagged = teamTag ? teams.find((t) => t.id === teamTag) : null;
       // Stitch in the bits the grid/lightbox read, so the optimistic row matches
       // the shape getGalleryPosts returns (it embeds profiles + scoped team).
@@ -235,7 +235,7 @@ function AddPhotoModal({ scopeLabel, teams, currentUser, tournamentId, leagueId,
       };
       onAdded(enriched);
     } catch (e) {
-      setError(e?.message || 'Something went wrong');
+      setError(e?.message || 'That didn’t post — give it another shot.');
       setSubmitting(false);
     }
   };
@@ -264,7 +264,7 @@ function AddPhotoModal({ scopeLabel, teams, currentUser, tournamentId, leagueId,
               : <img src={previewUrl} alt="preview" style={{ width: '100%', display: 'block' }} />
           ) : (
             <span style={{ color: C.steel, fontSize: 13, textAlign: 'center', padding: 16 }}>
-              📷 Tap to choose a photo or video
+              📷 Tap to pick a photo or video
             </span>
           )}
           <input type="file" accept="image/*,video/*" style={{ display: 'none' }}
@@ -309,7 +309,7 @@ function AddPhotoModal({ scopeLabel, teams, currentUser, tournamentId, leagueId,
               borderRadius: 8, padding: '8px 16px', fontWeight: 700, fontSize: 13,
               cursor: (!file || submitting) ? 'default' : 'pointer',
             }}>
-            {submitting ? 'Posting…' : 'Share Photo'}
+            {submitting ? 'Posting…' : 'Post to the Feed'}
           </button>
         </div>
       </div>

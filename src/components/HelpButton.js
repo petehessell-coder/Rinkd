@@ -110,7 +110,7 @@ export default function HelpButton() {
       category,
     });
     setSubmitting(false);
-    if (error) { alert('Failed to submit: ' + error.message); return; }
+    if (error) { alert("That didn't send — try again: " + error.message); return; }
     track('bug_report_submitted', { category });
     setSubmitted(true);
     setDescription('');

@@ -59,7 +59,7 @@ export default function AdminFeedbackPage({ currentUser, profile }) {
     if (error) {
       setItems((prev) => prev.map((r) => r.id === id ? { ...r, status: prevStatus } : r));
       // eslint-disable-next-line no-alert
-      alert("Couldn't update that report's status. Try again.");
+      alert("That status didn't save — check your connection and try again.");
     }
   };
 
@@ -69,7 +69,7 @@ export default function AdminFeedbackPage({ currentUser, profile }) {
     return (
       <Layout profile={profile}>
         <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.steel, fontFamily: 'Barlow, sans-serif', fontSize: 14 }}>
-          Loading…
+          Getting the ice ready.
         </div>
       </Layout>
     );
@@ -80,7 +80,7 @@ export default function AdminFeedbackPage({ currentUser, profile }) {
       <Layout profile={profile}>
         <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.ice, gap: 12, padding: 24, textAlign: 'center' }}>
           <div style={{ fontSize: 40 }}>🔒</div>
-          <div>Feedback queue is Rinkd staff only.</div>
+          <div>The feedback queue is Rinkd staff only.</div>
           <button onClick={() => navigate('/feed')} style={{ background: C.red, color: '#fff', border: 'none', padding: '10px 18px', borderRadius: 999, cursor: 'pointer' }}>Back to Feed</button>
         </div>
       </Layout>
@@ -121,7 +121,7 @@ export default function AdminFeedbackPage({ currentUser, profile }) {
           {loading ? (
             <ListRowSkeleton rows={6} />
           ) : items.length === 0 ? (
-            <EmptyState icon="📬" title="Inbox zero" body={filter === 'new' ? 'No new reports — nice.' : 'Nothing here yet.'} />
+            <EmptyState icon="📬" title="Inbox zero" body={filter === 'new' ? 'No new reports — you’re all caught up.' : 'No feedback in this view yet.'} />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {items.map((r) => {

@@ -110,7 +110,7 @@ function ManageLeague({ id, navigate }) {
 
   const handleAssignManager = async (lt) => {
     if (!lt?.team_id) {
-      setAssignFlash({ kind: 'err', text: 'Link the team to Rinkd first (see "Link team" above).' });
+      setAssignFlash({ kind: 'err', text: 'Link this team to a Rinkd page first — use "Link team" above, then assign a manager.' });
       return;
     }
     setAssignBusy(true);
@@ -138,7 +138,7 @@ function ManageLeague({ id, navigate }) {
     } else if (result.status === 'needs_email') {
       setAssignFlash({ kind: 'err', text: `No Rinkd account for "@${result.handle}". Enter their email instead and we'll send an invite.` });
     } else {
-      setAssignFlash({ kind: 'err', text: result.message || 'Could not assign manager.' });
+      setAssignFlash({ kind: 'err', text: result.message || "Couldn't assign that manager — double-check the handle or email and try again." });
     }
   };
 
@@ -205,7 +205,7 @@ function ManageLeague({ id, navigate }) {
   };
 
   const handleAddUnlinkedTeam = async () => {
-    if (!teamSearch.trim()) { setError('Enter a team name first'); return; }
+    if (!teamSearch.trim()) { setError('Type a team name to add one.'); return; }
     try {
       // Use the create_league_team RPC instead of bare addLeagueTeam so the
       // new team gets a real public.teams row (manager_id NULL = unclaimed)
@@ -234,7 +234,7 @@ function ManageLeague({ id, navigate }) {
 
 
   const handleAddGame = async () => {
-    if (!gameForm.home_team_id || !gameForm.away_team_id || !gameForm.start_time) { setError('Home team, away team, and time required'); return; }
+    if (!gameForm.home_team_id || !gameForm.away_team_id || !gameForm.start_time) { setError('Pick both teams and a date & time to add the game.'); return; }
     try {
       // Pass rink_id when one is picked. If the rink has a LiveBarn venue ID,
       // inherit it so the schedule cards show the Watch-on-LiveBarn pill
@@ -265,7 +265,7 @@ function ManageLeague({ id, navigate }) {
   // ── LEAGUE-DIV-1 M3 — division management ──
   const handleAddDivision = async () => {
     const name = newDivisionName.trim();
-    if (!name) { setError('Division name required'); return; }
+    if (!name) { setError('Name the division to add it.'); return; }
     setDivBusy(true);
     try { await createLeagueDivision(id, name); setNewDivisionName(''); await load(); }
     catch (e) { setError(e.message); }
@@ -322,7 +322,7 @@ function ManageLeague({ id, navigate }) {
   // (billing, sponsor inventory, staff, delete).
   const MANAGE_TABS = ['Teams', 'Divisions', 'Schedule', 'Playoffs', ...(isCommissioner ? ['Registrations', 'Sponsors', 'Integrations', 'Staff', 'Settings'] : [])];
 
-  if (loading) return <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Loading...</div>;
+  if (loading) return <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Getting the ice ready.</div>;
 
   return (
     <div style={{ background: C.dark, minHeight: '100vh', fontFamily: 'Barlow, sans-serif', color: C.ice }}>
@@ -371,7 +371,7 @@ function ManageLeague({ id, navigate }) {
             <SecLabel>📋 Bulk add — import from a spreadsheet</SecLabel>
             <Card>
               <div style={{ fontSize: 13, color: C.steel, lineHeight: 1.6, marginBottom: 12 }}>
-                Have your teams (and schedule) in Excel or Google Sheets? Paste them in and add the whole league at once — fastest way to set up.
+                Got your teams (and schedule) in Excel or Google Sheets? Paste them in and stand up the whole league at once — fastest way to set up.
               </div>
               <button onClick={() => setShowImport(true)}
                 style={{ padding: '11px 18px', borderRadius: 999, background: C.blue, border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -421,7 +421,7 @@ function ManageLeague({ id, navigate }) {
 
             <SecLabel>League Teams ({scopedTeamsList.length})</SecLabel>
             <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
-              {scopedTeamsList.length === 0 && <div style={{ padding: 16, fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center' }}>No teams yet — add above</div>}
+              {scopedTeamsList.length === 0 && <div style={{ padding: 16, fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center' }}>No teams yet — add your first above.</div>}
               {scopedTeamsList.map(lt => {
                 const name = lt.team?.name || lt.team_name || 'Unknown';
                 const color = lt.team?.logo_color || lt.logo_color || C.blue;
@@ -625,7 +625,7 @@ function ManageLeague({ id, navigate }) {
             <SecLabel>📋 Already have a schedule? Import it</SecLabel>
             <Card>
               <div style={{ fontSize: 13, color: C.steel, lineHeight: 1.6, marginBottom: 12 }}>
-                Paste your teams and schedule straight from a spreadsheet (Excel / Google Sheets) and stand up the whole league in one shot — the fastest way to get a league live.
+                Paste your teams and schedule straight from a spreadsheet (Excel / Google Sheets) and stand up the whole league in one shot — the fastest way to get live.
               </div>
               <button onClick={() => setShowImport(true)}
                 style={{ padding: '11px 18px', borderRadius: 999, background: C.blue, border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -698,7 +698,7 @@ function ManageLeague({ id, navigate }) {
 
             <SecLabel>Schedule ({scopedGamesList.length} games)</SecLabel>
             <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
-              {scopedGamesList.length === 0 && <div style={{ padding: 16, fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center' }}>No games yet — try Generate Schedule above</div>}
+              {scopedGamesList.length === 0 && <div style={{ padding: 16, fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center' }}>No games yet — run the Smart Generator above to build the slate.</div>}
               {scopedGamesList.map(g => {
                 const home = g.home_lt?.team?.name || g.home_lt?.team_name;
                 const away = g.away_lt?.team?.name || g.away_lt?.team_name;
@@ -849,13 +849,13 @@ function LeagueIntegrationsTab({ league, games = [], onSave }) {
       };
       await onSave({ settings });
       setOk('Connected — HockeyShift data syncs on the next scheduled run.');
-    } catch (e) { setErr(e?.message || 'Save failed.'); }
+    } catch (e) { setErr(e?.message || "That didn't save — check your connection and try again."); }
     setBusy(false);
   };
 
   const disconnect = async () => {
     // eslint-disable-next-line no-alert
-    if (!window.confirm('Disconnect HockeyShift? Future syncs stop; already-imported teams/games stay.')) return;
+    if (!window.confirm('Disconnect HockeyShift? Future syncs stop — teams and games already imported stay put. You can reconnect anytime.')) return;
     setErr(''); setOk(''); setBusy(true);
     try {
       const hs = { ...(league.settings?.hockeyshift || {}) };
@@ -863,7 +863,7 @@ function LeagueIntegrationsTab({ league, games = [], onSave }) {
       await onSave({ settings: { ...(league.settings || {}), hockeyshift: hs } });
       setDivId('');
       setOk('Disconnected.');
-    } catch (e) { setErr(e?.message || 'Disconnect failed.'); }
+    } catch (e) { setErr(e?.message || "That didn't go through — try again."); }
     setBusy(false);
   };
 
@@ -987,7 +987,7 @@ function LeagueGameSheetSection({ league, games = [] }) {
   };
   const dropLink = async (lk) => {
     // eslint-disable-next-line no-alert
-    if (!window.confirm(`Unlink GameSheet season ${lk.gamesheet_season_id}? Scores already synced stay; future syncs stop.`)) return;
+    if (!window.confirm(`Unlink GameSheet season ${lk.gamesheet_season_id}? Scores already synced stay put — only future syncs stop. You can relink anytime.`)) return;
     const { error } = await removeLeagueLink(lk.id, leagueId);
     if (error) { setMsg({ kind: 'err', text: error.message }); return; }
     setMsg({ kind: 'ok', text: 'Unlinked.' }); load();
@@ -1067,7 +1067,7 @@ function LeagueGameSheetSection({ league, games = [] }) {
       {msg && <div style={{ color: msg.kind === 'ok' ? '#22C55E' : C.red, fontSize: 12.5, margin: '0 0 14px' }}>{msg.text}</div>}
 
       {loading ? (
-        <div style={{ textAlign: 'center', color: C.steel, padding: '24px 0', fontSize: 13 }}>Loading…</div>
+        <div style={{ textAlign: 'center', color: C.steel, padding: '24px 0', fontSize: 13 }}>Getting the ice ready.</div>
       ) : !hasLink ? null : (
         <>
           {/* Pending matches — commissioner confirms before any score is written */}
@@ -2034,7 +2034,7 @@ function LeagueSettings({ league, onSave }) {
     const { data: { user } } = await supabase.auth.getUser();
     const { url, error: upErr } = await uploadMedia(file, user.id);
     setUploadingLogo(false);
-    if (upErr || !url) { alert('Upload failed. Try again.'); return; }
+    if (upErr || !url) { alert("That logo didn't upload — check your connection and try again."); return; }
     set('logo_url', url);
   };
 

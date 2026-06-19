@@ -194,7 +194,7 @@ export default function AdminActivations({ currentUser, profile }) {
       setLeagues(l.data || []);
       setTeams(tm.data || []);
     } catch (e) {
-      setError(e?.message || 'Failed to load activations');
+      setError(e?.message || "Couldn't load activations — refresh and try again.");
     } finally {
       setLoading(false);
     }

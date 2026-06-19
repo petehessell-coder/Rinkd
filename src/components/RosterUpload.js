@@ -43,7 +43,7 @@ export default function RosterUpload({ teamId, teamName, invitedBy, onComplete }
       const out = parseRoster(text);
       setParsed(out);
     };
-    reader.onerror = () => setParsed({ headers: [], rows: [], errors: ['Could not read that file.'] });
+    reader.onerror = () => setParsed({ headers: [], rows: [], errors: ["We couldn't read that file — make sure it's a CSV and try again."] });
     reader.readAsText(file);
   };
 
@@ -160,7 +160,7 @@ export default function RosterUpload({ teamId, teamName, invitedBy, onComplete }
 
                 {willCap && (
                   <div style={{ fontSize: 12, color: B.amber, marginBottom: 8, padding: '8px 10px', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: 6, lineHeight: 1.5 }}>
-                    Heads up — uploads cap at <strong>{UPLOAD_CAP}</strong> invites per batch. The first {UPLOAD_CAP} will go out now; re-upload the rest in a follow-up batch.
+                    Heads up — uploads cap at <strong>{UPLOAD_CAP}</strong> invites per batch. The first {UPLOAD_CAP} go out now; upload the rest in a second batch.
                   </div>
                 )}
 
@@ -215,12 +215,12 @@ export default function RosterUpload({ teamId, teamName, invitedBy, onComplete }
                 border: `1px solid ${result.errors.length ? 'rgba(245,158,11,0.4)' : 'rgba(34,197,94,0.4)'}`,
                 fontSize: 13, color: B.ice, lineHeight: 1.55 }}>
                 <div style={{ fontWeight: 700, marginBottom: 4 }}>
-                  {result.inserted > 0 ? `✓ Added ${result.inserted} ${result.inserted === 1 ? 'player' : 'players'} to ${teamName}` : 'No new players added.'}
+                  {result.inserted > 0 ? `✓ Added ${result.inserted} ${result.inserted === 1 ? 'player' : 'players'} to ${teamName}` : 'No new players added — everyone in that file is already on the roster.'}
                 </div>
                 <div style={{ color: B.steel }}>
                   {result.sent > 0 && `📬 Sent ${result.sent} invite ${result.sent === 1 ? 'email' : 'emails'}. `}
                   {result.skipped > 0 && `Skipped ${result.skipped} already on the team. `}
-                  {result.capped > 0 && `${result.capped} more weren't sent — uploads cap at 50 per batch, so re-upload the rest. `}
+                  {result.capped > 0 && `${result.capped} more didn't send — uploads cap at 50 per batch, so upload the rest in a second batch. `}
                 </div>
                 {result.errors && result.errors.length > 0 && (
                   <ul style={{ fontSize: 12, color: B.amber, marginTop: 6, paddingLeft: 18 }}>

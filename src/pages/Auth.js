@@ -151,7 +151,7 @@ export default function Auth({ defaultMode = 'login' }) {
     // is on globally — without a token /auth/v1/signin returns
     // "captcha protection: request disallowed (no captcha_token found)".
     if (isTurnstileEnabled && !captchaToken) {
-      setError('Please complete the verification challenge below.');
+      setError('Finish the quick check below, then try again.');
       return;
     }
     setLoading(true); setError('');
@@ -172,7 +172,7 @@ export default function Auth({ defaultMode = 'login' }) {
     e.preventDefault();
     if (!forgotEmail.trim()) return;
     if (isTurnstileEnabled && !captchaToken) {
-      setError('Please complete the verification challenge below.');
+      setError('Finish the quick check below, then try again.');
       return;
     }
     setForgotBusy(true); setError('');
@@ -198,7 +198,7 @@ export default function Auth({ defaultMode = 'login' }) {
     // submit fires once, hits Supabase, and either lands on /feed (auto-confirm)
     // or the "check email" screen (email confirmation ON).
     if (isTurnstileEnabled && !captchaToken) {
-      setError('Please complete the verification challenge below.');
+      setError('Finish the quick check below, then try again.');
       return;
     }
     setLoading(true); setError('');
@@ -361,7 +361,7 @@ export default function Auth({ defaultMode = 'login' }) {
                     setting. */}
                 <TurnstileWidget
                   key={`forgot-${turnstileResetKey}`}
-                  onToken={(t) => { setCaptchaToken(t); if (error?.startsWith('Please complete')) setError(''); }}
+                  onToken={(t) => { setCaptchaToken(t); if (error?.startsWith('Finish the quick check')) setError(''); }}
                   onError={() => setCaptchaToken(null)}
                 />
                 {error && <p style={{ color: C.red, fontSize: 13, marginBottom: 12 }}>{error}</p>}
@@ -424,7 +424,7 @@ export default function Auth({ defaultMode = 'login' }) {
                   previous token so we need a new one). */}
               <TurnstileWidget
                 key={`login-${turnstileResetKey}`}
-                onToken={(t) => { setCaptchaToken(t); if (error?.startsWith('Please complete')) setError(''); }}
+                onToken={(t) => { setCaptchaToken(t); if (error?.startsWith('Finish the quick check')) setError(''); }}
                 onError={() => setCaptchaToken(null)}
               />
               {error && <p style={{ color: C.red, fontSize: 13, marginBottom: 12 }}>{error}</p>}
@@ -507,7 +507,7 @@ export default function Auth({ defaultMode = 'login' }) {
                   REACT_APP_TURNSTILE_SITE_KEY is set. */}
               <TurnstileWidget
                 key={`signup-${turnstileResetKey}`}
-                onToken={(t) => { setCaptchaToken(t); if (error?.startsWith('Please complete')) setError(''); }}
+                onToken={(t) => { setCaptchaToken(t); if (error?.startsWith('Finish the quick check')) setError(''); }}
                 onError={() => setCaptchaToken(null)}
               />
 

@@ -74,7 +74,7 @@ export default function PostActionMenu({
     const ok = window.confirm(
       kind === 'comment'
         ? "Delete this comment? This can't be undone."
-        : "Delete this post? Its comments, likes, and mentions are removed too. This can't be undone."
+        : "Delete this post? Its comments, likes, and mentions go with it — this can't be undone."
     );
     if (!ok) return;
     setDeleting(true);
@@ -82,7 +82,7 @@ export default function PostActionMenu({
     const { error: e } = await fn(targetId);
     setDeleting(false);
     if (e) {
-      window.alert(e.message || 'Could not delete. Try again.');
+      window.alert(e.message || "That didn't delete — check your connection and try again.");
       return;
     }
     setOpen(false);
@@ -93,8 +93,8 @@ export default function PostActionMenu({
     if (hiding) return;
     const ok = window.confirm(
       kind === 'comment'
-        ? "Hide this comment from your event? It's removed from the feed but recoverable."
-        : "Hide this post from your event? It's removed from the feed but recoverable."
+        ? "Hide this comment from your event? It drops off the feed, but you can bring it back."
+        : "Hide this post from your event? It drops off the feed, but you can bring it back."
     );
     if (!ok) return;
     setHiding(true);
@@ -102,7 +102,7 @@ export default function PostActionMenu({
     const { error: e } = await fn(targetId, true);
     setHiding(false);
     if (e) {
-      window.alert(e.message || 'Could not hide. Try again.');
+      window.alert(e.message || "That didn't hide — check your connection and try again.");
       return;
     }
     setOpen(false);
@@ -124,7 +124,7 @@ export default function PostActionMenu({
     const { error: e } = await fn(targetId, pickedReason, details);
     setSubmitting(false);
     if (e) {
-      setError(e.message || 'Could not send report. Try again.');
+      setError(e.message || "That report didn't send — check your connection and try again.");
       return;
     }
     setShowReportModal(false);
@@ -134,7 +134,7 @@ export default function PostActionMenu({
   const doBlock = async () => {
     setOpen(false);
     const ok = window.confirm(
-      `Block @${authorHandle || 'this user'}? You won't see each other's posts, comments, or notifications.`
+      `Block @${authorHandle || 'this user'}? You won't see each other's posts, comments, or notifications. You can unblock anytime.`
     );
     if (!ok) return;
     const { error: e } = await blockUser(authorId);

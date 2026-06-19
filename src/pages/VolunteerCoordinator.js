@@ -149,7 +149,7 @@ function StatCard({ num, label, color }) {
 }
 
 function SlotList({ slots, teams, onChange, profile }) {
-  if (!slots) return <div style={{ padding: 30, textAlign: 'center', color: C.steel, fontSize: 13 }}>Loading…</div>;
+  if (!slots) return <div style={{ padding: 30, textAlign: 'center', color: C.steel, fontSize: 13 }}>Getting the ice ready.</div>;
   if (slots.length === 0) return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 24, textAlign: 'center', color: C.steel, fontSize: 13, marginBottom: 14 }}>
       Nothing here. Use the form below to add a slot.

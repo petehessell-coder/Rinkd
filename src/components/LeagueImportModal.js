@@ -127,7 +127,7 @@ export default function LeagueImportModal({ open, onClose, leagueId, existingTea
           p_division: t.division || '',
           p_division_id: divisionId || null,
         });
-        if (e) throw new Error(`Couldn't create team "${t.name}": ${e.message}`);
+        if (e) throw new Error(`Couldn't create the team "${t.name}" — ${e.message}`);
       }
       // 2) Re-fetch teams to map names → league_team ids (covers new + existing).
       const all = await getLeagueTeams(leagueId);
@@ -145,14 +145,14 @@ export default function LeagueImportModal({ open, onClose, leagueId, existingTea
         })).filter(r => r.home_team_id && r.away_team_id);
         if (rows.length > 0) {
           const { error: e } = await bulkInsertLeagueGames(leagueId, rows, divisionId || null);
-          if (e) throw new Error(`Teams created, but the schedule import failed: ${e.message}`);
+          if (e) throw new Error(`Teams created, but the schedule didn't import — ${e.message}. Fix the flagged rows and try again.`);
           gamesInserted = rows.length;
         }
       }
       setDone({ teams: newTeams.length, games: gamesInserted });
       onImported?.();
     } catch (e) {
-      setError(e.message || 'Import failed — nothing was lost; fix the flagged rows and try again.');
+      setError(e.message || "That import didn't go through — nothing was lost. Fix the flagged rows and try again.");
     } finally {
       setBusy(false);
     }

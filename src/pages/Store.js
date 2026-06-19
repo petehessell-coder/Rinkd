@@ -308,7 +308,7 @@ export default function Store({ profile }) {
           Some links are affiliate links — Rinkd may earn a commission on purchases, at no extra cost to you.
         </div>
 
-        {loading && <div style={{ color: C.steel, fontSize: 14 }}>Loading…</div>}
+        {loading && <div style={{ color: C.steel, fontSize: 14 }}>Getting the ice ready.</div>}
 
         {!loading && (
           <>

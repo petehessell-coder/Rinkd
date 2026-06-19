@@ -190,7 +190,7 @@ export default function LineupModal({
       setSubAlertMsg(pushed
         ? `Posted on ${pool.team_name} and pushed to the pool.`
         : `Posted on ${pool.team_name} — the push may be delayed.`);
-    } catch (e) { setSubAlertMsg(`Could not post the alert: ${e.message}`); }
+    } catch (e) { setSubAlertMsg(`That alert didn’t go out — try again. (${e.message})`); }
     finally { setSubAlertBusy(null); }
   };
 
@@ -281,7 +281,7 @@ export default function LineupModal({
             });
             if (!linesPostId && post?.id) sendLineupPostPush(post.id);
           } catch (e) {
-            setError(`Lineup saved — but posting the lines failed: ${e.message}`);
+            setError(`Lineup’s saved — but the lines post didn’t go up. Save again to retry. (${e.message})`);
             setBusy(false);
             onSaved?.();
             return; // keep the modal open; saving again retries the post
@@ -392,7 +392,7 @@ export default function LineupModal({
 
                 {showSubs && (
                   subPools === null
-                    ? <div style={{ padding: 10, color: B.steel, fontSize: 12 }}>Loading pools…</div>
+                    ? <div style={{ padding: 10, color: B.steel, fontSize: 12 }}>Warming up.</div>
                     : subPools.length === 0
                       ? <div style={{ padding: 10, color: B.steel, fontSize: 12, lineHeight: 1.5 }}>No sub pools yet — a commissioner can create them from League Manage → Teams.</div>
                       : subPools.map(pool => {

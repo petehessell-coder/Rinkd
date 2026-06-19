@@ -36,7 +36,7 @@ export default function AdminPanel({ profile }) {
     return (
       <Layout profile={profile}>
         <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.steel, fontFamily: "'Barlow', sans-serif", fontSize: 14 }}>
-          Loading…
+          Getting the ice ready.
         </div>
       </Layout>
     );
@@ -437,5 +437,5 @@ function Field({ label, children }) {
   );
 }
 function Loading() {
-  return <div style={{ padding: 30, textAlign: 'center', color: C.steel, fontSize: 13 }}>Loading…</div>;
+  return <div style={{ padding: 30, textAlign: 'center', color: C.steel, fontSize: 13 }}>Getting the ice ready.</div>;
 }

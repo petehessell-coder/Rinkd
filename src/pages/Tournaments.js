@@ -60,7 +60,7 @@ export default function Tournaments({ profile, currentUser }) {
           </div>
         )}
 
-        {loading && <div style={{ color: 'rgba(244,247,250,0.3)', fontSize: 13 }}>Loading...</div>}
+        {loading && <div style={{ color: 'rgba(244,247,250,0.3)', fontSize: 13 }}>Getting the ice ready.</div>}
 
         {!loading && error && (
           <div style={{ background: '#0f2847', border: '0.5px solid rgba(215,38,56,0.4)', borderRadius: 12, padding: 24, textAlign: 'center' }}>

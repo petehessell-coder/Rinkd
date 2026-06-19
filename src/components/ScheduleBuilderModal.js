@@ -54,7 +54,7 @@ export default function ScheduleBuilderModal({
     setError(null);
     setResult(null);
     if (!leagueTeams || leagueTeams.length < 2) {
-      setError('Add at least 2 teams to the league before generating a schedule.');
+      setError('Add at least two teams to the league before you generate a schedule.');
       return;
     }
     const fixtures = generateRoundRobin(leagueTeams, form.format);

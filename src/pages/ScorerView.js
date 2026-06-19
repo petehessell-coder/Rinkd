@@ -40,8 +40,24 @@ const selectStyle = { ...inputStyle };
 // pool play gets the pool letter. Stays under 280 chars so it doesn't get
 // truncated in the Feed card preview.
 function buildRecapContent({ home, away, round, tournamentName, leagueName }) {
-  const winner = home.score > away.score ? 'home' : away.score > home.score ? 'away' : null;
-  const headline = `🏒 FINAL · ${home.name || 'Home'} ${home.score ?? 0}, ${away.name || 'Away'} ${away.score ?? 0}`;
+  const homeScore = home.score ?? 0, awayScore = away.score ?? 0;
+  const winner = homeScore > awayScore ? 'home' : awayScore > homeScore ? 'away' : null;
+  const homeName = home.name || 'Home', awayName = away.name || 'Away';
+  // This first line becomes the push title (send-recap-push uses it verbatim),
+  // so it carries the emotion: a win gets the goal-horn + a winner-forward verb
+  // scaled to the margin; a tie stays even and respectful. No team is ever
+  // piled on — the loser is named, not roasted.
+  let headline;
+  if (!winner) {
+    headline = `🏒 FINAL · ${homeName} and ${awayName} skate to a ${homeScore}–${awayScore} tie`;
+  } else {
+    const wName = winner === 'home' ? homeName : awayName;
+    const lName = winner === 'home' ? awayName : homeName;
+    const wScore = Math.max(homeScore, awayScore), lScore = Math.min(homeScore, awayScore);
+    const margin = wScore - lScore;
+    const verb = margin >= 4 ? 'roll past' : margin === 1 ? 'edge' : 'beat';
+    headline = `🚨 FINAL · ${wName} ${verb} ${lName} ${wScore}–${lScore}`;
+  }
   const isBracket = round && round !== 'pool';
   // League games don't use the tournament round concept — the round-label
   // branch below is a no-op for them (round is null), so the context line
@@ -1749,7 +1765,7 @@ export default function ScorerView() {
 
       {/* GS-6 — coach pre-game sign-off modal (compliant mode). */}
       {coachModal && (
-        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif' }}>Loading…</div>}>
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif' }}>Getting the ice ready.</div>}>
           <CoachSignoff
             game={game}
             isLeague={isLeague}

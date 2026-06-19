@@ -66,7 +66,7 @@ export default function DataSyncAuthorization({
       ownerType, ownerId, integration, statement: text, version,
     });
     setBusy(false);
-    if (e) { setError(e.message || 'Could not record the authorization.'); return; }
+    if (e) { setError(e.message || "That didn't save — check your connection and try again."); return; }
     setAuth(data);
     notify(true);
   };
@@ -74,17 +74,17 @@ export default function DataSyncAuthorization({
   const revoke = async () => {
     if (!auth) return;
     // eslint-disable-next-line no-alert
-    if (!window.confirm(`Revoke the ${label} data-sync authorization? Syncing should be turned off until it's re-authorized.`)) return;
+    if (!window.confirm(`Revoke the ${label} data-sync authorization? Syncing stays off until someone re-authorizes it.`)) return;
     setBusy(true); setError('');
     const { error: e } = await revokeIntegrationAuthorization(auth.id);
     setBusy(false);
-    if (e) { setError(e.message || 'Could not revoke the authorization.'); return; }
+    if (e) { setError(e.message || "That didn't revoke — check your connection and try again."); return; }
     setAuth(null);
     notify(false);
   };
 
   if (loading) {
-    return <div style={{ fontSize: 12, color: C.steel, padding: '8px 0' }}>Checking authorization…</div>;
+    return <div style={{ fontSize: 12, color: C.steel, padding: '8px 0' }}>Warming up.</div>;
   }
 
   if (auth) {

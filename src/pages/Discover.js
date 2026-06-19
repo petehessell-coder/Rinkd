@@ -391,7 +391,7 @@ export default function Discover({ currentUser, profile }) {
             {tab === 'players' && (
               loading ? <ListRowSkeleton rows={6} /> :
               error ? errorBlock :
-              players.length === 0 ? <EmptyState icon="👥" title={search$ ? `No players match "${search$}"` : 'No players yet'} body={search$ ? 'Try a different name or handle.' : 'Players will show up as the community grows.'} /> :
+              players.length === 0 ? <EmptyState icon="👥" title={search$ ? `No players match "${search$}"` : 'The roster is filling up'} body={search$ ? 'Try a different name or handle.' : 'New players join every week — check back soon.'} /> :
               <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
                 {players.map((p, i) => (
                   <div key={p.id} style={{ borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none' }}>
@@ -404,7 +404,7 @@ export default function Discover({ currentUser, profile }) {
             {tab === 'teams' && (
               loading ? <ListRowSkeleton rows={6} /> :
               error ? errorBlock :
-              teams.length === 0 ? <EmptyState icon="🏒" title={search$ ? `No teams match "${search$}"` : 'No teams yet'} body={search$ ? 'Try a different name or location.' : 'Create or join a team to see it here.'} cta={{ label: 'Create a Team', onClick: () => navigate('/team/create') }} /> :
+              teams.length === 0 ? <EmptyState icon="🏒" title={search$ ? `No teams match "${search$}"` : 'No teams on the ice yet'} body={search$ ? 'Try a different name or location.' : 'Be the first — spin up your team and it shows up here.'} cta={{ label: 'Create a Team', onClick: () => navigate('/team/create') }} /> :
               <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
                 {teams.map((t, i) => (
                   <div key={t.id} onClick={() => navigate(`/team/${t.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none', cursor: 'pointer' }}>
@@ -423,7 +423,7 @@ export default function Discover({ currentUser, profile }) {
             {tab === 'leagues' && (
               loading ? <ListRowSkeleton rows={6} /> :
               error ? errorBlock :
-              leagues.length === 0 ? <EmptyState icon="🏆" title={search$ ? `No leagues match "${search$}"` : 'No leagues yet'} body={search$ ? 'Try a different name.' : 'Start a league with the Create button.'} cta={{ label: 'Create a League', onClick: () => navigate('/league/create') }} /> :
+              leagues.length === 0 ? <EmptyState icon="🏆" title={search$ ? `No leagues match "${search$}"` : 'No leagues running yet'} body={search$ ? 'Try a different name.' : 'Be the first — start your league and it shows up here.'} cta={{ label: 'Create a League', onClick: () => navigate('/league/create') }} /> :
               <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
                 {leagues.map((l, i) => (
                   <div key={l.id} onClick={() => navigate(`/league/${l.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none', cursor: 'pointer' }}>
@@ -440,7 +440,7 @@ export default function Discover({ currentUser, profile }) {
             {tab === 'articles' && (
               loading ? <CardGridSkeleton count={6} /> :
               error ? errorBlock :
-              articles.length === 0 ? <EmptyState icon="📰" title={search$ ? `No articles match "${search$}"` : 'No articles yet'} body="Rinkside features are dropping soon." cta={{ label: 'Visit Rinkside', onClick: () => navigate('/rinkside') }} /> :
+              articles.length === 0 ? <EmptyState icon="📰" title={search$ ? `No articles match "${search$}"` : 'Fresh off the press soon'} body="Rinkside features are dropping soon." cta={{ label: 'Visit Rinkside', onClick: () => navigate('/rinkside') }} /> :
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
                 {articles.map((a) => (
                   <div key={a.id} onClick={() => navigate(`/rinkside/${a.slug}`)} style={{

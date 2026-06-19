@@ -42,7 +42,7 @@ export default function Leagues({ profile }) {
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search leagues..."
           style={{ width: '100%', background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 10, padding: '11px 14px', color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 14, outline: 'none', marginBottom: 16 }} />
 
-        {loading && <div style={{ color: 'rgba(244,247,250,0.3)', fontSize: 13 }}>Loading...</div>}
+        {loading && <div style={{ color: 'rgba(244,247,250,0.3)', fontSize: 13 }}>Getting the ice ready.</div>}
 
         {!loading && leagues.length === 0 && (
           <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: 28, textAlign: 'center' }}>

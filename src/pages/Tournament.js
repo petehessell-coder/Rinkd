@@ -351,7 +351,7 @@ export default function TournamentPage({ currentUser }) {
           window.dispatchEvent(new CustomEvent(IOS_INSTALL_EVENT));
         } else {
           // eslint-disable-next-line no-alert
-          window.alert("Push notifications are off for this device, so following won't deliver pushes yet. You can still enable them later from your Profile.");
+          window.alert("Push is off for this device, so following won't send alerts yet — turn it on anytime from your Profile.");
         }
         // Continue with the DB follow anyway — once they enable push, future
         // recaps will deliver.
@@ -597,7 +597,7 @@ export default function TournamentPage({ currentUser }) {
           <>
             <AdSlot slot="standings_presented" targetType="tournament" targetId={tournament.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
             {Object.keys(standings).length === 0
-            ? <TabEmptyState title="No standings yet" body="The table fills in the moment the first game goes final. Check back after the puck drops." />
+            ? <TabEmptyState title="Standings drop after game one" body="The table fills in the moment the first game goes final. Check back after the puck drops." />
             : Object.entries(standings).map(([pool, rawRows]) => {
               // Re-sort and re-rank client-side per the format's tiebreaker order.
               // The view ships a default sort that matches BLPA Bash exactly;
@@ -946,12 +946,12 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
       let mediaType = null;
       if (mediaFile) {
         const up = await uploadMedia(mediaFile, currentUser.id);
-        if (up.error) { setComposerError('Upload failed'); setSubmitting(false); return; }
+        if (up.error) { setComposerError("That image didn't upload — check your connection and try again."); setSubmitting(false); return; }
         mediaUrl = up.url;
         mediaType = up.mediaType;
       }
       const { data, error } = await createPost(currentUser.id, { content, mediaUrl, mediaType, tournamentId });
-      if (error) { setComposerError(error.message || 'Post failed'); setSubmitting(false); return; }
+      if (error) { setComposerError(error.message || "That post didn't go up — check your connection and try again."); setSubmitting(false); return; }
       // Optimistic: prepend the new post to the feed so the author sees it
       // immediately. The next refetch picks up the same row by id.
       if (data) {
@@ -964,7 +964,7 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
       setPostMentionIds([]);
       setMediaFile(null);
     } catch (e) {
-      setComposerError(e?.message || 'Post failed');
+      setComposerError(e?.message || "That post didn't go up — check your connection and try again.");
     } finally {
       setSubmitting(false);
     }
@@ -1017,12 +1017,12 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
       )}
 
       {loading || posts === null ? (
-        <div style={{textAlign:'center',color:'#7C8B9F',fontSize:13,padding:'24px 16px'}}>Loading…</div>
+        <div style={{textAlign:'center',color:'#7C8B9F',fontSize:13,padding:'24px 16px'}}>Getting the ice ready.</div>
       ) : posts.length === 0 ? (
         <div style={{textAlign:'center',color:'#7C8B9F',fontSize:13,padding:'40px 16px',lineHeight:1.6}}>
           <div style={{fontSize:32,marginBottom:8}}>📰</div>
-          No updates yet.<br />
-          Recaps appear here when games finalize. You can post too.
+          Be the first on the board.<br />
+          Recaps land here the second a game goes final — or post one yourself.
         </div>
       ) : (
         posts.map((p) => {

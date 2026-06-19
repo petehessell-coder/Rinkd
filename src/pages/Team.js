@@ -86,7 +86,7 @@ export default function TeamPage({ currentUser, profile }) {
         setJoinRequested(true);
       } else {
         // eslint-disable-next-line no-alert
-        alert("Couldn't send your join request. Check your connection and try again.");
+        alert("That join request didn't go through — check your connection and try again.");
       }
     }
     setJoinLoading(false);
@@ -94,13 +94,13 @@ export default function TeamPage({ currentUser, profile }) {
 
   if (loading) return (
     <Layout profile={profile}>
-      <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Loading...</div>
+      <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Getting the ice ready.</div>
     </Layout>
   );
 
   if (!team) return (
     <Layout profile={profile}>
-      <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Team not found</div>
+      <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>We couldn't find that team — it may have been removed.</div>
     </Layout>
   );
 
@@ -384,14 +384,14 @@ export default function TeamPage({ currentUser, profile }) {
                 </>
               )}
               {members.length === 0 && (
-                <div style={{ textAlign: 'center', color: 'rgba(244,247,250,0.3)', fontSize: 13, padding: '30px 0' }}>No players on roster yet</div>
+                <div style={{ textAlign: 'center', color: 'rgba(244,247,250,0.3)', fontSize: 13, padding: '30px 0' }}>Roster's empty for now — the manager adds players here.</div>
               )}
               {!isMember && (
                 <button onClick={handleJoin} disabled={joinLoading || joinRequested}
                   style={{ width: '100%', padding: 13, background: joinRequested ? 'rgba(46,91,140,0.2)' : C.red, border: 'none', borderRadius: 999, color: '#fff', fontSize: 14, fontWeight: 700, cursor: joinRequested ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif', transition: 'all 0.15s', marginTop: 4 }}
                   onMouseEnter={e => { if (!joinRequested) { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}}
                   onMouseLeave={e => { e.currentTarget.style.background = joinRequested ? 'rgba(46,91,140,0.2)' : C.red; e.currentTarget.style.color = '#fff'; }}>
-                  {joinRequested ? '✓ Request Sent' : joinLoading ? 'Sending...' : 'Request to Join Team'}
+                  {joinRequested ? '✓ Request sent' : joinLoading ? 'Sending…' : 'Request to join'}
                 </button>
               )}
             </>
@@ -507,7 +507,7 @@ export default function TeamPage({ currentUser, profile }) {
                 </div>
               )}
               {games.length === 0 && (
-                <div style={{ textAlign: 'center', color: 'rgba(244,247,250,0.3)', fontSize: 13, padding: '30px 0' }}>No games scheduled yet</div>
+                <div style={{ textAlign: 'center', color: 'rgba(244,247,250,0.3)', fontSize: 13, padding: '30px 0' }}>Schedule drops soon — games show up here once they're posted.</div>
               )}
             </>
           )}

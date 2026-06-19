@@ -22,11 +22,11 @@ export default function CreaseShowPage({ currentUser, profile }) {
     setLoading(true);
     setError(null);
     const { data: s, error: showErr } = await getShowBySlug(slug);
-    if (showErr) { setError(showErr.message || 'Failed to load show'); setLoading(false); return; }
+    if (showErr) { setError(showErr.message || "Couldn't load this show — refresh and try again."); setLoading(false); return; }
     if (!s) { setLoading(false); return; }
     setShow(s);
     const { data: eps, error: epErr } = await listEpisodes(s.id);
-    if (epErr) { setError(epErr.message || 'Failed to load episodes'); setLoading(false); return; }
+    if (epErr) { setError(epErr.message || "Couldn't load these episodes — refresh and try again."); setLoading(false); return; }
     setEpisodes(eps);
     if (currentUser) setHasAccess(await hasCreaseAccess(currentUser.id));
     setLoading(false);
@@ -37,7 +37,7 @@ export default function CreaseShowPage({ currentUser, profile }) {
   if (loading) {
     return (
       <Layout profile={profile} currentPage="crease">
-        <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice }}>Loading…</div>
+        <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice }}>Getting the ice ready.</div>
       </Layout>
     );
   }

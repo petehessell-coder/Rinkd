@@ -75,14 +75,14 @@ export default function TournamentRegister() {
     } catch (e) {
       if (e.reason === 'full') setError('This tournament is full — registration is closed.');
       else if (e.reason === 'deadline_passed' || e.reason === 'closed') setError('Registration is closed for this tournament.');
-      else setError(e.message || 'Something went wrong. Please try again.');
+      else setError(e.message || "That didn't go through — try again in a sec.");
     } finally {
       setSubmitting(false);
     }
   };
 
   if (loading) {
-    return <Shell><div style={{ textAlign: 'center', color: C.steel, fontSize: 14 }}>Loading…</div></Shell>;
+    return <Shell><div style={{ textAlign: 'center', color: C.steel, fontSize: 14 }}>Getting the ice ready.</div></Shell>;
   }
 
   if (!tournament) {

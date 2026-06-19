@@ -99,21 +99,21 @@ export default function EditGameModal({ game, rinks = [], teams = null, title = 
       await onSave(values);
       onClose?.();
     } catch (e) {
-      setErr(e?.message || 'Could not save the game.');
+      setErr(e?.message || "That didn't save — check your connection and try again.");
       setBusy(false);
     }
   };
 
   const handleDelete = async () => {
     if (!onDelete) return;
-    if (!window.confirm('Delete this game? This cannot be undone.')) return;
+    if (!window.confirm("Delete this game? Its score and stats go with it — this can't be undone.")) return;
     setErr(null);
     setBusy(true);
     try {
       await onDelete();
       onClose?.();
     } catch (e) {
-      setErr(e?.message || 'Could not delete the game.');
+      setErr(e?.message || "That didn't delete — check your connection and try again.");
       setBusy(false);
     }
   };
@@ -124,14 +124,14 @@ export default function EditGameModal({ game, rinks = [], teams = null, title = 
   const handleForfeit = async (winner) => {
     if (!onForfeit) return;
     const winName = (teams || []).find((t) => t.id === (winner === 'home' ? homeId : awayId))?.name || (winner === 'home' ? 'Home' : 'Away');
-    if (!window.confirm(`Record a forfeit win for ${winName} (3–0)? This finalizes the game with no goal log.`)) return;
+    if (!window.confirm(`Record a forfeit win for ${winName} (3–0)? This finalizes the game with no goal log — and can't be undone.`)) return;
     setErr(null);
     setBusy(true);
     try {
       await onForfeit(winner);
       onClose?.();
     } catch (e) {
-      setErr(e?.message || 'Could not record the forfeit.');
+      setErr(e?.message || "That didn't save — check your connection and try again.");
       setBusy(false);
     }
   };

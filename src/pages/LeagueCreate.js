@@ -183,7 +183,7 @@ function BtnRow({ onBack, onNext, nextLabel = 'Next →', loading = false }) {
       {onBack && <button onClick={onBack} style={{ background: 'rgba(244,247,250,0.08)', color: 'rgba(244,247,250,0.6)', border: 'none', borderRadius: 999, padding: '12px 20px', fontFamily: 'Barlow, sans-serif', fontSize: 14, cursor: 'pointer' }}>← Back</button>}
       <button onClick={onNext} disabled={loading}
         style={{ flex: 1, background: COLORS.red, color: '#fff', border: 'none', borderRadius: 999, padding: 12, fontFamily: 'Barlow, sans-serif', fontSize: 14, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
-        {loading ? 'Publishing...' : nextLabel}
+        {loading ? 'Publishing…' : nextLabel}
       </button>
     </div>
   );
@@ -201,13 +201,13 @@ function Step1({ data, onChange, onNext }) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
-      alert(`Logo is ${(file.size / 1024 / 1024).toFixed(1)}MB — max 5MB.`);
+      alert(`That logo's ${(file.size / 1024 / 1024).toFixed(1)} MB — keep it under 5 MB and upload again.`);
       e.target.value = '';
       return;
     }
     const verdict = await classifyImage(file);
     if (!verdict.ok) {
-      alert("Looks like this image may violate Rinkd's community guidelines. Try a different one.");
+      alert("That image doesn't pass our community guidelines — pick a different one.");
       e.target.value = '';
       return;
     }
@@ -215,7 +215,7 @@ function Step1({ data, onChange, onNext }) {
     const { data: { user } } = await supabase.auth.getUser();
     const { url, error: upErr } = await uploadMedia(file, user.id);
     setUploading(false);
-    if (upErr || !url) { alert('Upload failed. Try again.'); return; }
+    if (upErr || !url) { alert("That upload didn't go through — check your connection and try again."); return; }
     onChange('logo_url', url);
   };
 
@@ -622,13 +622,13 @@ export default function LeagueCreate({ profile }) {
 
   const handleSubmit = async () => {
     if (loading) return;
-    if (!data.name.trim()) { setError('League name is required'); setStep(1); return; }
+    if (!data.name.trim()) { setError('Add a league name to publish.'); setStep(1); return; }
     setLoading(true);
     setError(null);
     let leagueRow = null;
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Your session expired — please sign in again.');
+      if (!user) throw new Error('Your session timed out — sign in again to publish.');
 
       // 1. Create the league. Embeds extra wizard data (divisions list) into
       //    settings so LeagueManage can render them without a schema change.
@@ -700,11 +700,11 @@ export default function LeagueCreate({ profile }) {
         if (delErr) {
           // eslint-disable-next-line no-console
           console.warn('[LeagueCreate] cleanup failed:', delErr);
-          cleanupNote = ' (a partial league may still exist — contact hello@rinkd.app to clean it up)';
+          cleanupNote = ' (a half-built league may still exist — email hello@rinkd.app and we\'ll clear it)';
         }
         createdLeagueId.current = null;
       }
-      setError(`League setup failed: ${e.message}.${cleanupNote} Please try again.`);
+      setError(`Couldn't publish the league: ${e.message}.${cleanupNote} Give it another shot.`);
       setLoading(false);
     }
   };
@@ -715,7 +715,7 @@ export default function LeagueCreate({ profile }) {
         <button onClick={() => navigate('/leagues')} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.5)', fontSize: 13, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', marginBottom: 16 }}>← Leagues</button>
         <Progress step={step} />
         {error && <div style={{ background: 'rgba(215,38,56,0.15)', border: '0.5px solid rgba(215,38,56,0.4)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#D72638' }}>{error}</div>}
-        {step === 1 && <Step1 data={data} onChange={onChange} onNext={() => { if (!data.name.trim()) { setError('League name is required'); return; } setError(null); setStep(2); }} />}
+        {step === 1 && <Step1 data={data} onChange={onChange} onNext={() => { if (!data.name.trim()) { setError('Add a league name to continue.'); return; } setError(null); setStep(2); }} />}
         {step === 2 && <Step2 data={data} onChange={onChange} onBack={() => setStep(1)} onNext={() => setStep(3)} />}
         {step === 3 && <Step3 data={data} onChange={onChange} onBack={() => setStep(2)} onNext={() => setStep(4)} />}
         {step === 4 && <Step4 data={data} onChange={onChange} onBack={() => setStep(3)} onSubmit={handleSubmit} loading={loading} />}

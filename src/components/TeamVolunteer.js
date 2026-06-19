@@ -41,7 +41,7 @@ export default function TeamVolunteer({ teamId, isManager, currentUser }) {
   useEffect(() => { load(); }, [load]);
 
   if (slots === null) {
-    return <div style={{ padding: 30, textAlign: 'center', color: C.steel, fontSize: 13 }}>Loading…</div>;
+    return <div style={{ padding: 30, textAlign: 'center', color: C.steel, fontSize: 13 }}>Warming up.</div>;
   }
 
   const now = Date.now();
@@ -68,7 +68,7 @@ export default function TeamVolunteer({ teamId, isManager, currentUser }) {
       {/* Upcoming slots */}
       {upcoming.length === 0 ? (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 24, textAlign: 'center', color: C.steel, fontSize: 13, marginBottom: 14 }}>
-          {isManager ? 'No volunteer slots yet. Add one below.' : 'No volunteer slots posted yet — check back later.'}
+          {isManager ? 'No volunteer slots yet — post one below and the team can sign up.' : 'No slots posted yet. Check back when the manager opens some up.'}
         </div>
       ) : (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
@@ -136,7 +136,7 @@ function SlotRow({ slot, isManager, currentUser, onChange, isPast }) {
   const wrap = async (fn) => {
     setBusy(true);
     try { await fn(); await onChange(); }
-    catch (e) { alert(e.message || 'Action failed'); }
+    catch (e) { alert(e.message || "That didn't go through — check your connection and try again."); }
     finally { setBusy(false); }
   };
 
@@ -182,7 +182,7 @@ function SlotRow({ slot, isManager, currentUser, onChange, isPast }) {
 
       {/* Manager-only delete */}
       {isManager && !isPast && (
-        <button onClick={() => { if (window.confirm(`Delete "${slot.role}" slot?`)) wrap(() => deleteSlot(slot.id)); }} disabled={busy}
+        <button onClick={() => { if (window.confirm(`Delete the "${slot.role}" slot? Anyone signed up loses it. You can post a new one anytime.`)) wrap(() => deleteSlot(slot.id)); }} disabled={busy}
           style={{ background: 'transparent', border: 'none', color: 'rgba(244,247,250,0.3)', fontSize: 15, cursor: 'pointer', padding: 4 }} title="Delete">
           🗑
         </button>
@@ -225,7 +225,7 @@ function NewSlotForm({ teamId, onCreated }) {
   const handleSubmit = async () => {
     setError(null);
     const role = form.role === '__custom' ? form.custom_role.trim() : form.role;
-    if (!role) { setError('Role is required.'); return; }
+    if (!role) { setError('Name the role to post this slot.'); return; }
     setBusy(true);
     try {
       const g = gameChoice ? games.find(x => x.id === gameChoice) : null;

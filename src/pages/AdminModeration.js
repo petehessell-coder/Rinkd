@@ -93,20 +93,20 @@ export default function AdminModerationPage({ currentUser, profile }) {
     if (error) {
       // Don't drop it from the queue — it's still flagged in the database.
       // eslint-disable-next-line no-alert
-      alert("Couldn't approve that item. Try again.");
+      alert("That didn't go through — check your connection and try again.");
       return;
     }
     setItems((prev) => prev.filter((x) => x.id !== id));
   };
 
   const remove = async (kind, id) => {
-    if (!window.confirm('Permanently delete this content?')) return;
+    if (!window.confirm("Delete this content for good? This can't be undone.")) return;
     const table = kind === 'posts' ? 'posts' : 'comments';
     const { error } = await supabase.from(table).delete().eq('id', id);
     if (error) {
       // The row is still there — keep showing it rather than pretending it's gone.
       // eslint-disable-next-line no-alert
-      alert("Couldn't delete that item. Try again.");
+      alert("That didn't delete — check your connection and try again.");
       return;
     }
     setItems((prev) => prev.filter((x) => x.id !== id));
@@ -136,7 +136,7 @@ export default function AdminModerationPage({ currentUser, profile }) {
     return (
       <Layout profile={profile}>
         <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.steel, fontFamily: 'Barlow, sans-serif', fontSize: 14 }}>
-          Loading…
+          Getting the ice ready.
         </div>
       </Layout>
     );
@@ -147,7 +147,7 @@ export default function AdminModerationPage({ currentUser, profile }) {
       <Layout profile={profile}>
         <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.ice, gap: 12, padding: 24, textAlign: 'center' }}>
           <div style={{ fontSize: 40 }}>🔒</div>
-          <div>Moderation queue is Rinkd staff only.</div>
+          <div>The moderation queue is Rinkd staff only.</div>
           <button onClick={() => navigate('/feed')} style={{ background: C.red, color: '#fff', border: 'none', padding: '10px 18px', borderRadius: 999, cursor: 'pointer' }}>Back to Feed</button>
         </div>
       </Layout>
@@ -162,7 +162,7 @@ export default function AdminModerationPage({ currentUser, profile }) {
             Moderation
           </div>
           <div style={{ fontSize: 13, color: C.steel, marginBottom: 18 }}>
-            Auto-flagged content from the text blocklist + future image moderation hooks.
+            Content the text blocklist auto-flagged, plus future image moderation hooks.
           </div>
 
           <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${C.border}`, marginBottom: 18, overflowX: 'auto' }}>
@@ -184,7 +184,7 @@ export default function AdminModerationPage({ currentUser, profile }) {
             <>
               <form onSubmit={addWord} style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
                 <input value={newWord} onChange={(e) => setNewWord(e.target.value)}
-                  placeholder="Add word or phrase..."
+                  placeholder="Add a word or phrase to block"
                   style={{ flex: 1, background: C.navy, border: `1px solid ${C.border}`, color: C.ice, padding: '10px 12px', borderRadius: 8, fontSize: 14, fontFamily: 'Barlow, sans-serif', outline: 'none' }}/>
                 <select value={newSeverity} onChange={(e) => setNewSeverity(e.target.value)}
                   style={{ background: C.navy, border: `1px solid ${C.border}`, color: C.ice, padding: '10px 12px', borderRadius: 8, fontSize: 14, fontFamily: 'Barlow, sans-serif' }}>
@@ -198,7 +198,7 @@ export default function AdminModerationPage({ currentUser, profile }) {
                 </button>
               </form>
               {loading ? <ListRowSkeleton rows={6} /> : blocklist.length === 0 ? (
-                <EmptyState icon="📝" title="Empty blocklist" body="Add your first word above." />
+                <EmptyState icon="📝" title="Blocklist is empty" body="Add a word or phrase above and Rinkd auto-flags it on sight." />
               ) : (
                 <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
                   {blocklist.map((w, i) => {
@@ -216,7 +216,7 @@ export default function AdminModerationPage({ currentUser, profile }) {
               )}
             </>
           ) : loading ? <ListRowSkeleton rows={4} /> : items.length === 0 ? (
-            <EmptyState icon="✅" title={`No flagged ${tab}`} body="Everything's clean — nice." />
+            <EmptyState icon="✅" title="Clean sheet" body={`No flagged ${tab} right now. Nothing for you to review.`} />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {items.map((it) => (

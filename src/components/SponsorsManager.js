@@ -35,7 +35,7 @@ export default function SponsorsManager({ ownerType, ownerId, isYouth = false, s
 
   const load = useCallback(async () => {
     try { setSponsors(await listOwnerSponsors(ownerType, ownerId)); setNonce((n) => n + 1); }
-    catch (e) { flash('err', e.message || 'Could not load sponsors'); setSponsors([]); }
+    catch (e) { flash('err', e.message || "Sponsors didn't load — check your connection and try again."); setSponsors([]); }
   }, [ownerType, ownerId]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { supabase.auth.getUser().then(({ data }) => setUserId(data?.user?.id || null)); }, []);
@@ -43,21 +43,21 @@ export default function SponsorsManager({ ownerType, ownerId, isYouth = false, s
   const onUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file || !userId) { e.target.value = ''; return; }
-    if (!file.type.startsWith('image/')) { flash('err', 'Creative must be an image.'); e.target.value = ''; return; }
-    if (file.size > 5 * 1024 * 1024) { flash('err', `Image is ${(file.size / 1048576).toFixed(1)} MB — max 5 MB.`); e.target.value = ''; return; }
+    if (!file.type.startsWith('image/')) { flash('err', 'That file isn’t an image — upload a PNG, JPG, WebP, or SVG.'); e.target.value = ''; return; }
+    if (file.size > 5 * 1024 * 1024) { flash('err', `That image is ${(file.size / 1048576).toFixed(1)} MB — keep it under 5 MB and try again.`); e.target.value = ''; return; }
     setUploading(true);
     const verdict = await classifyImage(file);
-    if (!verdict.ok) { setUploading(false); e.target.value = ''; flash('err', 'That image may violate Rinkd’s guidelines. Try another.'); return; }
+    if (!verdict.ok) { setUploading(false); e.target.value = ''; flash('err', 'That image may break Rinkd’s guidelines — try a different one.'); return; }
     const { url, error } = await uploadCreativeImage(file, userId);
     setUploading(false); e.target.value = '';
-    if (error || !url) { flash('err', `Upload failed: ${error?.message || 'unknown'}`); return; }
+    if (error || !url) { flash('err', error?.message || 'That image didn’t upload — check your connection and try again.'); return; }
     setF('image_url', url);
     flash('ok', 'Creative uploaded — add the details and save.');
   };
 
   const add = async () => {
-    if (!form.sponsor_name.trim()) { flash('err', 'Sponsor name is required.'); return; }
-    if (isYouth && form.category && !isCategoryAllowedForYouth(form.category)) { flash('err', 'That category isn’t allowed on a youth event.'); return; }
+    if (!form.sponsor_name.trim()) { flash('err', 'Add a sponsor name to continue.'); return; }
+    if (isYouth && form.category && !isCategoryAllowedForYouth(form.category)) { flash('err', 'That category isn’t allowed on a youth event — pick another.'); return; }
     setBusy(true);
     try {
       await createSponsor({
@@ -74,22 +74,22 @@ export default function SponsorsManager({ ownerType, ownerId, isYouth = false, s
       setForm({ sponsor_name: '', link_url: '', category: '', image_url: '', slot: 'event_banner', weight: 1, starts_at: '', ends_at: '' });
       await load();
       flash('ok', 'Sponsor added — live on the event page.');
-    } catch (e) { flash('err', e.message || 'Could not add sponsor'); }
+    } catch (e) { flash('err', e.message || "That sponsor didn't save — check your connection and try again."); }
     setBusy(false);
   };
 
   const toggleActive = async (s, p) => {
     try { await updatePlacement(p.id, { is_active: !p.is_active }, ownerType, ownerId); await load(); }
-    catch (e) { flash('err', e.message || 'Update failed'); }
+    catch (e) { flash('err', e.message || "That change didn't save — check your connection and try again."); }
   };
   const setWeight = async (p, w) => {
     try { await updatePlacement(p.id, { weight: Math.max(1, parseInt(w, 10) || 1) }, ownerType, ownerId); await load(); }
-    catch (e) { flash('err', e.message || 'Update failed'); }
+    catch (e) { flash('err', e.message || "That change didn't save — check your connection and try again."); }
   };
   const remove = async (s) => {
-    if (!window.confirm(`Remove ${s.sponsor_name}? This deletes the creative + its placement.`)) return;
+    if (!window.confirm(`Remove ${s.sponsor_name}? This deletes the creative and its placement — this can't be undone.`)) return;
     try { await deleteSponsor(s.id, ownerType, ownerId); await load(); flash('ok', 'Sponsor removed.'); }
-    catch (e) { flash('err', e.message || 'Delete failed'); }
+    catch (e) { flash('err', e.message || "That didn't delete — check your connection and try again."); }
   };
 
   return (
@@ -152,9 +152,9 @@ export default function SponsorsManager({ ownerType, ownerId, isYouth = false, s
       {/* Existing sponsors */}
       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 8 }}>Active sponsors</div>
       {sponsors === null ? (
-        <div style={{ color: C.dim, fontSize: 13, padding: '14px 0' }}>Loading…</div>
+        <div style={{ color: C.dim, fontSize: 13, padding: '14px 0' }}>Warming up.</div>
       ) : sponsors.length === 0 ? (
-        <div style={{ color: C.dim, fontSize: 13, padding: '14px 0' }}>No sponsors yet — add one above and it goes live on your event page.</div>
+        <div style={{ color: C.dim, fontSize: 13, padding: '14px 0' }}>No sponsors on the board yet. Add one above and it goes live on your event page.</div>
       ) : sponsors.map((s) => {
         const p = (s.placements || [])[0];
         return (
@@ -211,7 +211,7 @@ function SponsorReport({ ownerType, ownerId, nonce }) {
     let cancelled = false;
     getAdReport(ownerType, ownerId, 30)
       .then((r) => { if (!cancelled) setRows(r); })
-      .catch((e) => { if (!cancelled) { setErr(e.message || 'Could not load report'); setRows([]); } });
+      .catch((e) => { if (!cancelled) { setErr(e.message || "The report didn't load — check your connection and try again."); setRows([]); } });
     return () => { cancelled = true; };
   }, [ownerType, ownerId, nonce]);
 
@@ -226,11 +226,11 @@ function SponsorReport({ ownerType, ownerId, nonce }) {
     <div style={{ marginTop: 26 }}>
       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 8 }}>Sponsor report · last 30 days</div>
       {rows === null ? (
-        <div style={{ color: C.dim, fontSize: 13, padding: '10px 0' }}>Loading…</div>
+        <div style={{ color: C.dim, fontSize: 13, padding: '10px 0' }}>Warming up.</div>
       ) : err ? (
         <div style={{ color: C.red, fontSize: 13, padding: '10px 0' }}>{err}</div>
       ) : rows.length === 0 ? (
-        <div style={{ color: C.dim, fontSize: 13, padding: '10px 0' }}>No impressions yet — once a sponsor runs on your public page, delivery shows here.</div>
+        <div style={{ color: C.dim, fontSize: 13, padding: '10px 0' }}>No impressions yet. Once a sponsor runs on your public page, delivery shows up here.</div>
       ) : (
         <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -286,7 +286,7 @@ function ShareCardSponsors({ settings = {}, onSaveSettings }) {
     try {
       await onSaveSettings({ recap_sponsor: clean(recap), gamepuck_sponsor: clean(puck) });
       setMsg({ kind: 'ok', text: 'Saved.' });
-    } catch (e) { setMsg({ kind: 'err', text: e.message || 'Could not save' }); }
+    } catch (e) { setMsg({ kind: 'err', text: e.message || "That didn't save — check your connection and try again." }); }
     setSaving(false); setTimeout(() => setMsg(null), 4000);
   };
 

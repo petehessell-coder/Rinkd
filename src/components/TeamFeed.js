@@ -97,7 +97,7 @@ function PostCard({ post, currentUser, isLiked, reactions, onLike, onCommentChan
     setSubmitting(true);
     const mentionIds = commentMentionIds;
     const { data, error } = await createComment(post.id, currentUser.id, commentText);
-    if (error) { setSubmitting(false); alert('Failed to post comment. Try again.'); return; }
+    if (error) { setSubmitting(false); alert("That comment didn't post — check your connection and try again."); return; }
     if (data?.id && mentionIds.length) {
       saveCommentMentions(data.id, mentionIds).then(({ error: mErr }) => {
         if (mErr) console.warn('[TeamFeed comment] mention save failed:', mErr?.message || mErr);
@@ -270,7 +270,7 @@ export default function TeamFeed({ teamId, currentUser, isMember }) {
     let mediaUrl = null, mediaType = null;
     if (mediaFile) {
       const { url, mediaType: mt, error } = await uploadMedia(mediaFile, currentUser.id);
-      if (error) { setPosting(false); alert('Upload failed. Try again.'); return; }
+      if (error) { setPosting(false); alert("That upload didn't go through — check your connection and try again."); return; }
       mediaUrl = url; mediaType = mt;
     }
     const { data, error } = await createPost(currentUser.id, {
@@ -280,7 +280,7 @@ export default function TeamFeed({ teamId, currentUser, isMember }) {
       mediaUrl, mediaType,
       teamId,
     });
-    if (error) { setPosting(false); alert('Failed to post. Try again.'); return; }
+    if (error) { setPosting(false); alert("That post didn't go up — check your connection and try again."); return; }
     if (data?.id && postMentionIds.length) {
       const { error: mErr } = await savePostMentions(data.id, postMentionIds);
       if (mErr) console.warn('[TeamFeed post] mention save failed:', mErr?.message || mErr);

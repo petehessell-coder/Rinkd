@@ -413,10 +413,10 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
   // in-memory team list (teams have no DB ids yet at this step).
   const generateRoundRobin = () => {
     const teamList = data.teams || [];
-    if (teamList.length < 2) return alert('Add at least 2 teams in Step 3 first.');
-    if (!genStart) return alert('Pick a start date & time for the first game.');
+    if (teamList.length < 2) return alert('Add at least two teams in Step 3 first.');
+    if (!genStart) return alert('Pick a start date and time for the first game.');
     if ((data.games || []).length > 0 &&
-        !window.confirm(`This replaces the ${data.games.length} game(s) already listed. Continue?`)) return;
+        !window.confirm(`Regenerate the schedule? This replaces the ${data.games.length} game${data.games.length === 1 ? '' : 's'} already listed.`)) return;
 
     const byPool = {};
     for (const t of teamList) {
@@ -426,7 +426,7 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
     const minutes = parseInt(genMinutes, 10) || 60;
     const rink = useOneRink ? soleRink : genRink;
     let cursor = new Date(genStart);
-    if (isNaN(cursor.getTime())) return alert("That start time didn't parse — pick it again.");
+    if (isNaN(cursor.getTime())) return alert("That start time didn't read right — pick the date and time again.");
 
     const games = [];
     for (const pool of Object.keys(byPool).sort()) {
@@ -435,7 +435,7 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
         cursor = new Date(cursor.getTime() + minutes * 60 * 1000);
       }
     }
-    if (!games.length) return alert('No games generated — each pool needs at least 2 teams.');
+    if (!games.length) return alert('No games to generate — each pool needs at least two teams.');
     onChange('games', games);
   };
 
@@ -600,7 +600,7 @@ export default function TournamentCreate({ profile }) {
     let tournamentRow = null;
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Your session expired — please sign in again.');
+      if (!user) throw new Error('Your session expired — sign in again to publish.');
 
       // 1. Create rinks. Rinks are GLOBAL (not owned by a tournament), so
       // they're left in place even if later steps fail — they're reusable.
@@ -698,11 +698,11 @@ export default function TournamentCreate({ profile }) {
         if (delErr) {
           // eslint-disable-next-line no-console
           console.warn('[TournamentCreate] cleanup failed:', delErr);
-          cleanupNote = ' (a partial tournament may still exist — contact hello@rinkd.app to clean it up)';
+          cleanupNote = ' (a partial tournament may still exist — email hello@rinkd.app and we’ll clean it up)';
         }
         createdTournamentId.current = null;
       }
-      setError(`Tournament setup failed: ${e.message}.${cleanupNote} Please try again.`);
+      setError(`Setup didn’t finish — ${e.message}.${cleanupNote} Give it another try.`);
       setLoading(false);
     }
   };

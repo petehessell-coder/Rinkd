@@ -95,7 +95,7 @@ export default function AdminAnalytics({ currentUser, profile }) {
       // Without this catch, the entire useEffect's promise rejects unhandled
       // and `loading` stays true forever — the page hangs on "Loading
       // analytics…" with no path forward.
-      setError(e?.message || 'Failed to load analytics');
+      setError(e?.message || "Couldn't load analytics — refresh and try again.");
     } finally {
       setLoading(false);
     }

@@ -28,13 +28,13 @@ export default function LeagueStaffManager({ leagueId, leagueName, invitedBy }) 
 
   const load = useCallback(async () => {
     try { setStaff(await listLeagueStaff(leagueId)); }
-    catch (e) { flash('err', e.message || 'Could not load staff'); setStaff({ managers: [], pending_invites: [] }); }
+    catch (e) { flash('err', e.message || "Couldn't load staff — check your connection and try again."); setStaff({ managers: [], pending_invites: [] }); }
   }, [leagueId]);
   useEffect(() => { load(); }, [load]);
 
   const add = async () => {
     const raw = input.trim();
-    if (!raw) { flash('err', 'Enter a handle or email.'); return; }
+    if (!raw) { flash('err', 'Enter a handle or email to add a manager.'); return; }
     setBusy(true); setMsg(null);
     const res = await assignLeagueManagerByInput({
       leagueId, input: raw, leagueName, invitedBy,
@@ -53,20 +53,20 @@ export default function LeagueStaffManager({ leagueId, leagueName, invitedBy }) 
       setNeedsEmailFor(res.handle);
       flash('err', `No Rinkd account for "@${res.handle}". Enter their email and we'll send an invite.`);
     } else {
-      flash('err', res.message || 'Could not add manager.');
+      flash('err', res.message || "Couldn't add that manager — double-check the handle or email and try again.");
     }
   };
 
   const remove = async (m) => {
-    if (!window.confirm(`Remove ${m.name || '@' + m.handle} as a league manager?`)) return;
+    if (!window.confirm(`Remove ${m.name || '@' + m.handle} as a league manager? They lose manager access — you can add them back anytime.`)) return;
     try { await removeLeagueManager(leagueId, m.user_id); flash('ok', 'Manager removed.'); await load(); }
-    catch (e) { flash('err', e.message || 'Remove failed'); }
+    catch (e) { flash('err', e.message || "That didn't go through — try again."); }
   };
 
   const revoke = async (inv) => {
-    if (!window.confirm(`Revoke the pending invite to ${inv.email}?`)) return;
+    if (!window.confirm(`Revoke the invite to ${inv.email}? Their magic link stops working — you can re-invite them later.`)) return;
     try { await revokeLeagueManagerInvite(inv.id); flash('ok', 'Invite revoked.'); await load(); }
-    catch (e) { flash('err', e.message || 'Revoke failed'); }
+    catch (e) { flash('err', e.message || "That didn't go through — try again."); }
   };
 
   const managers = staff?.managers || [];
@@ -104,9 +104,9 @@ export default function LeagueStaffManager({ leagueId, leagueName, invitedBy }) 
       {/* Current managers */}
       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 8 }}>Managers</div>
       {staff === null ? (
-        <div style={{ color: C.dim, fontSize: 13, padding: '14px 0' }}>Loading…</div>
+        <div style={{ color: C.dim, fontSize: 13, padding: '14px 0' }}>Warming up.</div>
       ) : managers.length === 0 ? (
-        <div style={{ color: C.dim, fontSize: 13, padding: '14px 0' }}>No managers yet. You (the commissioner) keep full control until you add one.</div>
+        <div style={{ color: C.dim, fontSize: 13, padding: '14px 0' }}>No managers yet — add one above to share the workload. You keep full commissioner control either way.</div>
       ) : managers.map((m) => (
         <div key={m.user_id} style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: 12, marginBottom: 10, display: 'flex', gap: 12, alignItems: 'center' }}>
           <div style={{ width: 38, height: 38, borderRadius: 999, background: m.avatar_color || C.blue, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: '#fff', flexShrink: 0 }}>{initials(m)}</div>

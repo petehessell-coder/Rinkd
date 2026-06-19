@@ -231,7 +231,7 @@ export default function LeaguePage({ currentUser, profile }) {
       // eslint-disable-next-line no-console
       console.error('[League] load failed', e);
       captureDataError(e, { where: 'League.load', leagueId: id });
-      setError(e?.message || 'Failed to load league');
+      setError(e?.message || "Couldn't load this league — refresh and try again.");
     } finally { setLoading(false); }
   }, [id, currentUser]);
 
@@ -349,7 +349,7 @@ export default function LeaguePage({ currentUser, profile }) {
       if (!sub) {
         setFollowBusy(false);
         // eslint-disable-next-line no-alert
-        window.alert("Push notifications are off for this device, so following won't deliver pushes yet. You can still enable them later from your Profile.");
+        window.alert("Push is off on this device, so following won't send alerts yet — flip it on anytime from your Profile.");
       }
     }
     const { error: followErr } = await followLeague(currentUser.id, id);
@@ -901,12 +901,12 @@ function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, league
       let mediaType = null;
       if (mediaFile) {
         const up = await uploadMedia(mediaFile, currentUser.id);
-        if (up.error) { setComposerError('Upload failed'); setSubmitting(false); return; }
+        if (up.error) { setComposerError("That photo didn't upload — check your connection and try again."); setSubmitting(false); return; }
         mediaUrl = up.url;
         mediaType = up.mediaType;
       }
       const { data, error } = await createPost(currentUser.id, { content, mediaUrl, mediaType, leagueId });
-      if (error) { setComposerError(error.message || 'Post failed'); setSubmitting(false); return; }
+      if (error) { setComposerError(error.message || "That post didn't go through — try again."); setSubmitting(false); return; }
       if (data) {
         // Persist resolved @-mentions (best-effort; failure shouldn't block the post).
         if (postMentionIds.length) savePostMentions(data.id, postMentionIds);
@@ -919,7 +919,7 @@ function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, league
       setPostMentionIds([]);
       setMediaFile(null);
     } catch (e) {
-      setComposerError(e?.message || 'Post failed');
+      setComposerError(e?.message || "That post didn't go through — try again.");
     } finally {
       setSubmitting(false);
     }
@@ -964,12 +964,12 @@ function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, league
       )}
 
       {loading || posts === null ? (
-        <div style={{ textAlign: 'center', color: '#7C8B9F', fontSize: 13, padding: '24px 16px' }}>Loading…</div>
+        <div style={{ textAlign: 'center', color: '#7C8B9F', fontSize: 13, padding: '24px 16px' }}>Warming up.</div>
       ) : posts.length === 0 ? (
         <div style={{ textAlign: 'center', color: '#7C8B9F', fontSize: 13, padding: '40px 16px', lineHeight: 1.6 }}>
           <div style={{ fontSize: 32, marginBottom: 8 }}>📰</div>
-          No updates yet.<br />
-          Recaps appear here when games finalize. You can post too.
+          Feed's quiet for now.<br />
+          Recaps drop here the moment a game goes final — or start the chatter yourself.
         </div>
       ) : (
         posts.map((p) => {
