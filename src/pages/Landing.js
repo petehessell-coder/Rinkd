@@ -117,12 +117,25 @@ export default function LandingPage() {
       color: C.ice, fontFamily: "'Barlow', sans-serif",
       padding: '24px 18px 60px',
       display: 'flex', flexDirection: 'column', alignItems: 'center',
+      position: 'relative', overflow: 'hidden',
     }}>
       <SEO
         title="The Platform Built for Hockey"
         description="Rinkd is the mobile-first social platform built exclusively for the hockey community. Teams, leagues, scores, and stories — all in one place."
       />
 
+      {/* Real arena photography behind the front door — the opening beat of the
+          Locker Room → Tunnel → Ice arc. A real rink, darkened and faded into the
+          navy so the type stays legible. The photo IS the hero (no gradient-as-
+          decoration); space is reserved at a fixed height so it can't shift. */}
+      <div aria-hidden style={{
+        position: 'absolute', top: 0, left: 0, right: 0, height: 540,
+        backgroundImage: 'linear-gradient(to bottom, rgba(10,30,56,0.50) 0%, rgba(10,30,56,0.78) 55%, #0A1E38 100%), url(/onboarding-ice.jpg)',
+        backgroundSize: 'cover', backgroundPosition: 'center top',
+        zIndex: 0,
+      }} />
+
+      <div style={{ position: 'relative', zIndex: 1, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       {/* Big brand mark — logo + the hand-taped "tape job" wordmark */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 18, marginBottom: 26 }}>
         <RinkdLogo size={84} />
@@ -211,6 +224,7 @@ export default function LandingPage() {
         {' · '}
         <a href="/terms" style={{ color: C.steel, textDecoration: 'none' }} onClick={(e) => { e.preventDefault(); navigate('/terms'); }}>Terms</a>
         <br />© 2026 Rinkd LLC
+      </div>
       </div>
 
       {deletedBanner}

@@ -260,7 +260,10 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 9999,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      // Safe-area insets so the centered card never tucks under the notch or
+      // the home indicator when its content runs tall.
+      padding: 'max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px))',
       fontFamily: 'Barlow, sans-serif', overflow: 'hidden',
     }}>
       {/* Locker room — full-bleed photograph behind everything (manifesto: the UI
@@ -334,7 +337,22 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {suggested.length === 0 ? (
-                  <div style={{ color: C.ice, opacity: 0.8, fontSize: 13, padding: '20px 0', textAlign: 'center' }}>Loading suggestions…</div>
+                  <>
+                    {/* Geometric skeleton matching the follow-row exactly (avatar
+                        + name + handle + Follow pill) — never a spinner or
+                        "Loading…" text (DESIGN_MANIFESTO: Period Intermission). */}
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'rgba(11,31,58,0.82)', borderRadius: 10, border: `1px solid ${C.border}`, backdropFilter: 'blur(2px)' }}>
+                        <div className="rinkd-ob-sk" style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div className="rinkd-ob-sk" style={{ width: '52%', height: 11, borderRadius: 4, marginBottom: 6 }} />
+                          <div className="rinkd-ob-sk" style={{ width: '32%', height: 9, borderRadius: 4 }} />
+                        </div>
+                        <div className="rinkd-ob-sk" style={{ width: 72, height: 28, borderRadius: 999, flexShrink: 0 }} />
+                      </div>
+                    ))}
+                    <style>{`.rinkd-ob-sk{background:rgba(46,91,140,0.32);animation:rinkdObPulse 1.3s ease-in-out infinite}@keyframes rinkdObPulse{0%,100%{opacity:1}50%{opacity:0.5}}@media (prefers-reduced-motion:reduce){.rinkd-ob-sk{animation:none}}`}</style>
+                  </>
                 ) : suggested.map((p) => (
                   <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'rgba(11,31,58,0.82)', borderRadius: 10, border: `1px solid ${C.border}`, backdropFilter: 'blur(2px)' }}>
                     <Avatar profile={p} size={36} />

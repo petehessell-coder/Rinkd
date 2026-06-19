@@ -105,11 +105,11 @@ function ProtectedRoute({ children }) {
     return () => clearTimeout(t);
   }, [loading]);
   if (loading) return (
-    <div style={{ minHeight: '100vh', background: '#07111F', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow', sans-serif", color: '#8BA3BE', fontSize: 15 }}>
+    <div style={{ minHeight: '100vh', background: '#0B1F3A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow', sans-serif", color: '#8BA3BE', fontSize: 15 }}>
       <div style={{ textAlign: 'center' }}>
         <img src={LOADING_MARK.src} alt={LOADING_MARK.alt} width={LOADING_MARK.size} height={LOADING_MARK.size}
           style={{ display: 'block', margin: '0 auto 16px', borderRadius: LOADING_MARK.borderRadius, animation: 'rinkd-pulse 1.6s ease-in-out infinite' }} />
-        <div>Loading Rinkd...</div>
+        <div>Getting the ice ready.</div>
         {loadingSlow && (
           <div style={{ marginTop: 18 }}>
             <div style={{ fontSize: 12, color: 'rgba(139,163,190,0.6)', marginBottom: 10 }}>Taking longer than usual…</div>
@@ -127,7 +127,7 @@ function ProtectedRoute({ children }) {
   // Logged in, but the profile fetch failed after all retries — show a real
   // retry screen instead of falling through to pages with profile={null}.
   if (profileError) return (
-    <div style={{ minHeight: '100vh', background: '#07111F', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow', sans-serif", color: '#8BA3BE', fontSize: 15, padding: 24 }}>
+    <div style={{ minHeight: '100vh', background: '#0B1F3A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow', sans-serif", color: '#8BA3BE', fontSize: 15, padding: 24 }}>
       <div style={{ textAlign: 'center', maxWidth: 340 }}>
         <div style={{ fontSize: 30, marginBottom: 12 }}>📡</div>
         <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 20, color: '#F4F7FA', marginBottom: 8 }}>Couldn't load your profile</div>
@@ -140,12 +140,16 @@ function ProtectedRoute({ children }) {
 }
 
 // Shown while a lazy route chunk loads (pre-pilot P1-11 code-splitting).
+// Manifesto "show nothing under 300ms": the mark is held invisible for the
+// first ~320ms (36% of the 900ms ease-in) so a fast chunk swap is pure navy
+// with no flash, then it fades in and holds — a branded beat, not a spinner.
+// Navy matches the iOS splash + first paint so the whole launch is seamless.
 function RouteFallback() {
   return (
-    <div style={{ minHeight: '100vh', background: '#07111F', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <img src="/icon-192.png" alt="Rinkd" width={64} height={64}
-        style={{ borderRadius: 16, animation: 'rinkd-pulse 1.6s ease-in-out infinite' }} />
-      <style>{`@keyframes rinkd-pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.65; transform: scale(0.96); } }`}</style>
+    <div style={{ minHeight: '100vh', background: '#0B1F3A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <img className="rinkd-route-mark" src="/icon-192.png" alt="Rinkd" width={64} height={64}
+        style={{ borderRadius: 16, opacity: 0, animation: 'rinkd-fallback-in 900ms ease-out forwards' }} />
+      <style>{`@keyframes rinkd-fallback-in { 0%,36% { opacity: 0; transform: scale(0.94); } 100% { opacity: 1; transform: scale(1); } } @media (prefers-reduced-motion: reduce) { .rinkd-route-mark { animation: none !important; opacity: 1 !important; } }`}</style>
     </div>
   );
 }

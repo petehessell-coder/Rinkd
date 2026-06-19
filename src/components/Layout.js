@@ -245,7 +245,7 @@ export default function Layout({ children, profile }) {
       </main>
 
       {/* ─── MOBILE TOP BAR ─── */}
-      <div style={{ display: 'none', position: 'fixed', top: 0, left: 0, right: 0, height: 52, background: B.navy, borderBottom: `1px solid ${B.border}`, zIndex: 200, alignItems: 'center', justifyContent: 'space-between', padding: '0 12px' }} className="mobile-topbar">
+      <div style={{ display: 'none', position: 'fixed', top: 0, left: 0, right: 0, height: 'calc(52px + env(safe-area-inset-top, 0px))', background: B.navy, borderBottom: `1px solid ${B.border}`, zIndex: 200, alignItems: 'center', justifyContent: 'space-between', padding: '0 12px', paddingTop: 'env(safe-area-inset-top, 0px)' }} className="mobile-topbar">
         {showBack ? (
           <BackButton />
         ) : (
@@ -287,7 +287,9 @@ export default function Layout({ children, profile }) {
              on iOS still clears. */
           .main-content {
             margin-left: 0 !important;
-            padding-top: 52px;
+            /* Clear the fixed top bar, which now grows by the notch inset so its
+               own content (logo, bell, messages) sits below the status bar. */
+            padding-top: calc(52px + env(safe-area-inset-top, 0px));
             padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
           }
           .mobile-topbar { display: flex !important; }
