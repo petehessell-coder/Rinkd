@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Layout, { BRAND_COLORS as C } from '../components/Layout';
+import Layout from '../components/Layout';
+import { C } from '../lib/tokens';
 import TapeText from '../components/TapeText';
 import { Avatar, TierBadge } from '../components/Logos';
 import { getPosts, getFollowingPosts, createPost, toggleLike, getLikedPosts, getComments, createComment, uploadMedia, timeAgo } from '../lib/posts';

@@ -6,11 +6,7 @@ import SEO from '../components/SEO';
 import { RinkdLogo } from '../components/Logos';
 import TapeText from '../components/TapeText';
 import { track } from '../lib/analytics';
-
-const C = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
-  steel: '#8BA3BE', dark: '#07111F', border: 'rgba(46,91,140,0.4)',
-};
+import { C } from '../lib/tokens';
 
 /**
  * Landing — the front door for rinkd.app.

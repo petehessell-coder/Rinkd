@@ -4,6 +4,8 @@ import { AuthContext, useAuth } from './lib/authContext';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import { getProfile, ensureProfileForUser, touchLastSeen } from './lib/auth';
+import { motion } from './lib/tokens';
+import { prefersReducedMotion } from './lib/motion';
 // Eager — genuinely first-paint-critical (auth gate + authenticated home).
 // Everything else is lazy so the main bundle stays lean.
 import Auth from './pages/Auth';
@@ -157,8 +159,14 @@ function AppRoutes() {
   // clears so it can never replay on a later route change.
   const [iceRise, setIceRise] = useState(false);
   const triggerIceReveal = () => {
+    // Reduced motion: skip the rise entirely. The routed content (the feed) is
+    // already mounted underneath the tunnel, so it simply appears — manifesto
+    // rule "disable all animation at prefers-reduced-motion". Otherwise add the
+    // keyframe class and auto-clear after the reveal finishes (+ buffer) so it
+    // can never replay on a later route change.
+    if (prefersReducedMotion()) return;
     setIceRise(true);
-    setTimeout(() => setIceRise(false), 900);
+    setTimeout(() => setIceRise(false), motion.duration.reveal + 340);
   };
 
   // Fire the onboarding modal the first time a fresh signup lands logged in.
@@ -194,7 +202,11 @@ function AppRoutes() {
         onClose={() => setProfile((p) => ({ ...(p || {}), welcome_seen: true }))}
       />
     )}
-    <style>{'@keyframes rinkdIceRise{from{opacity:0;transform:translateY(48px)}to{opacity:1;transform:translateY(0)}}.rinkd-ice-rise{animation:rinkdIceRise 560ms cubic-bezier(0.22,0.61,0.36,1) both}@media (prefers-reduced-motion: reduce){.rinkd-ice-rise{animation:none}}'}</style>
+    {/* Ice-rise keyframe sourced from the motion tokens (duration + easing) so
+        the onboarding reveal speaks the same motion vocabulary as everything
+        else. The media query is belt-and-suspenders alongside the JS guard in
+        triggerIceReveal — either path alone disables the animation. */}
+    <style>{`@keyframes rinkdIceRise{from{opacity:0;transform:translateY(48px)}to{opacity:1;transform:translateY(0)}}.rinkd-ice-rise{animation:rinkdIceRise ${motion.duration.reveal}ms ${motion.easing.out} both}@media (prefers-reduced-motion: reduce){.rinkd-ice-rise{animation:none}}`}</style>
     <div className={iceRise ? 'rinkd-ice-rise' : undefined}>
     <Suspense fallback={<RouteFallback />}>
     <Routes>

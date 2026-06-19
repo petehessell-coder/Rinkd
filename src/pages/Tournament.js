@@ -26,6 +26,7 @@ import ShareButton from '../components/ShareButton';
 import RecapCard from '../components/RecapCard';
 import { recapSourceFromPost, getRecapCardWithSponsor } from '../lib/recapCard';
 import { loadGameCardData } from '../lib/gameCardData';
+import { C } from '../lib/tokens';
 
 
 const TABS = ['Standings','Schedule','Bracket','Stats','Feed','Gallery','Info'];
@@ -95,8 +96,8 @@ function dayKey(iso) {
 // content padding is 16px) with a red accent slab. Optional muted `sub`.
 function LowerThird({ label, sub }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, background: '#0f2847', borderLeft: '4px solid #D72638', marginLeft: -16, marginBottom: 12, padding: '8px 14px 8px 16px', borderTopRightRadius: 4, borderBottomRightRadius: 4 }}>
-      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 18, lineHeight: 1, letterSpacing: '0.05em', color: '#F4F7FA', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{label}</span>
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, background: C.card, borderLeft: '4px solid #D72638', marginLeft: -16, marginBottom: 12, padding: '8px 14px 8px 16px', borderTopRightRadius: 4, borderBottomRightRadius: 4 }}>
+      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 18, lineHeight: 1, letterSpacing: '0.05em', color: C.ice, textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{label}</span>
       {sub && <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 11, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.45)', textTransform: 'uppercase', whiteSpace: 'nowrap', flexShrink: 0 }}>{sub}</span>}
     </div>
   );
@@ -107,7 +108,7 @@ function TabEmptyState({ icon = '🏒', title, body }) {
   return (
     <div style={{ textAlign: 'center', padding: '48px 24px' }}>
       <div style={{ fontSize: 40, marginBottom: 12, lineHeight: 1 }}>{icon}</div>
-      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 20, color: '#F4F7FA', textTransform: 'uppercase', marginBottom: 6 }}>{title}</div>
+      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 20, color: C.ice, textTransform: 'uppercase', marginBottom: 6 }}>{title}</div>
       {body && <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.5)', lineHeight: 1.5, maxWidth: 320, margin: '0 auto' }}>{body}</div>}
     </div>
   );
@@ -382,7 +383,7 @@ export default function TournamentPage({ currentUser }) {
   }, [standingsRaw, selectedDivisionId]);
 
   if (loading) return (
-    <div style={{background:'#07111F',minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:'#F4F7FA',fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:900,fontSize:18,textTransform:'uppercase',letterSpacing:'0.02em'}}>
+    <div style={{background:C.dark,minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:C.ice,fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:900,fontSize:18,textTransform:'uppercase',letterSpacing:'0.02em'}}>
       Getting the ice ready.
     </div>
   );
@@ -393,10 +394,10 @@ export default function TournamentPage({ currentUser }) {
     // friendly framing is "sign in to view", not "retry."
     const isAnon = !currentUser;
     return (
-      <div style={{background:'#07111F',minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:'#F4F7FA',fontFamily:'Barlow,sans-serif',fontSize:14,padding:20,textAlign:'center'}}>
+      <div style={{background:C.dark,minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:C.ice,fontFamily:'Barlow,sans-serif',fontSize:14,padding:20,textAlign:'center'}}>
         <div style={{maxWidth:380}}>
           <div style={{fontSize:32,marginBottom:10}}>{isAnon ? '🔒' : '⚠️'}</div>
-          <div style={{color:isAnon ? '#F4F7FA' : '#D72638',marginBottom:4,fontWeight:600}}>
+          <div style={{color:isAnon ? C.ice : C.red,marginBottom:4,fontWeight:600}}>
             {isAnon ? 'This tournament is private' : "Couldn't load this tournament"}
           </div>
           <div style={{color:'rgba(244,247,250,0.5)',fontSize:12,marginBottom:16,lineHeight:1.5}}>
@@ -407,12 +408,12 @@ export default function TournamentPage({ currentUser }) {
           <div style={{display:'flex',gap:10,justifyContent:'center',flexWrap:'wrap'}}>
             {isAnon
               ? <>
-                  <button onClick={() => navigate('/login')} style={{background:'#D72638',color:'#fff',border:'none',borderRadius:8,padding:'9px 20px',cursor:'pointer',fontFamily:'Barlow,sans-serif',fontWeight:700}}>Sign in / Sign up</button>
-                  <button onClick={() => navigate('/tournaments')} style={{background:'#2E5B8C',color:'#fff',border:'none',borderRadius:8,padding:'9px 16px',cursor:'pointer',fontFamily:'Barlow,sans-serif'}}>Browse tournaments</button>
+                  <button onClick={() => navigate('/login')} style={{background:C.red,color:'#fff',border:'none',borderRadius:8,padding:'9px 20px',cursor:'pointer',fontFamily:'Barlow,sans-serif',fontWeight:700}}>Sign in / Sign up</button>
+                  <button onClick={() => navigate('/tournaments')} style={{background:C.blue,color:'#fff',border:'none',borderRadius:8,padding:'9px 16px',cursor:'pointer',fontFamily:'Barlow,sans-serif'}}>Browse tournaments</button>
                 </>
               : <>
-                  <button onClick={load} style={{background:'#D72638',color:'#fff',border:'none',borderRadius:8,padding:'8px 18px',cursor:'pointer',fontFamily:'Barlow,sans-serif',fontWeight:700}}>Retry</button>
-                  <button onClick={() => navigate('/feed')} style={{background:'#2E5B8C',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontFamily:'Barlow,sans-serif'}}>Back to Feed</button>
+                  <button onClick={load} style={{background:C.red,color:'#fff',border:'none',borderRadius:8,padding:'8px 18px',cursor:'pointer',fontFamily:'Barlow,sans-serif',fontWeight:700}}>Retry</button>
+                  <button onClick={() => navigate('/feed')} style={{background:C.blue,color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontFamily:'Barlow,sans-serif'}}>Back to Feed</button>
                 </>}
           </div>
         </div>
@@ -471,7 +472,7 @@ export default function TournamentPage({ currentUser }) {
     return homeWon ? finalRound.home_team : finalRound.away_team;
   })();
   // Organizer branding — falls back to Rinkd red when the tournament isn't branded.
-  const accent = tournament?.accent_color || '#D72638';
+  const accent = tournament?.accent_color || C.red;
   // Hero status chip: a red pill when something's live right now, otherwise
   // muted text (completed / upcoming).
   const statusActive = liveGames.length > 0;
@@ -488,13 +489,13 @@ export default function TournamentPage({ currentUser }) {
   const canScore = !!(currentUser && tournament && (isDirector || isAssignedScorer));
 
   return (
-    <div style={{background:'#07111F',minHeight:'100vh',fontFamily:'Barlow,sans-serif',color:'#F4F7FA'}}>
+    <div style={{background:C.dark,minHeight:'100vh',fontFamily:'Barlow,sans-serif',color:C.ice}}>
 
       {/* ADS-1 event banner — renders only when this tournament has an active sponsor */}
       <AdSlot slot="event_banner" targetType="tournament" targetId={tournament.id} style={{ margin: '12px 16px 0' }} />
 
       {/* HEADER */}
-      <div style={{background:'#0B1F3A',padding:'14px 16px 0',borderTop:`3px solid ${accent}`,borderBottom:'0.5px solid rgba(46,91,140,0.4)'}}>
+      <div style={{background:C.navy,padding:'14px 16px 0',borderTop:`3px solid ${accent}`,borderBottom:'0.5px solid rgba(46,91,140,0.4)'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,gap:8,flexWrap:'wrap'}}>
           <button onClick={() => navigate(-1)} style={{color:'rgba(244,247,250,0.6)',fontSize:13,background:'none',border:'none',cursor:'pointer',fontFamily:'Barlow,sans-serif'}}>← Events</button>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
@@ -513,7 +514,7 @@ export default function TournamentPage({ currentUser }) {
               <button onClick={handleFollowToggle} disabled={followBusy}
                 style={{
                   background: isFollowing ? 'rgba(46,91,140,0.25)' : accent,
-                  color: isFollowing ? '#F4F7FA' : '#fff',
+                  color: isFollowing ? C.ice : '#fff',
                   border: isFollowing ? '1px solid rgba(46,91,140,0.5)' : 'none',
                   borderRadius: 999, padding: '5px 12px', fontSize: 11, fontWeight: 700,
                   cursor: followBusy ? 'wait' : 'pointer',
@@ -537,12 +538,12 @@ export default function TournamentPage({ currentUser }) {
           <img src={tournament.logo_url} alt="" onError={(e)=>{e.currentTarget.style.display='none';}}
             style={{height:38,width:'auto',display:'block',marginBottom:8,borderRadius:6}} />
         )}
-        <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:40,lineHeight:1.02,color:'#F4F7FA',textTransform:'uppercase',letterSpacing:'0.01em',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+        <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:40,lineHeight:1.02,color:C.ice,textTransform:'uppercase',letterSpacing:'0.01em',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
           {(tournament?.name || '').toUpperCase()}
         </div>
         <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',margin:'7px 0 12px'}}>
           {statusActive
-            ? <span style={{display:'inline-flex',alignItems:'center',gap:6,background:'#D72638',color:'#fff',fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:700,fontSize:12,letterSpacing:'0.06em',textTransform:'uppercase',padding:'4px 12px',borderRadius:999}}>● {statusLabel}</span>
+            ? <span style={{display:'inline-flex',alignItems:'center',gap:6,background:C.red,color:'#fff',fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:700,fontSize:12,letterSpacing:'0.06em',textTransform:'uppercase',padding:'4px 12px',borderRadius:999}}>● {statusLabel}</span>
             : <span style={{fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:700,fontSize:12,letterSpacing:'0.08em',textTransform:'uppercase',color:'rgba(244,247,250,0.45)'}}>{statusLabel}</span>}
           <span style={{fontSize:12,color:'rgba(244,247,250,0.5)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>
             {[tournament?.division, [tournament?.start_date, tournament?.end_date].filter(Boolean).join(' – ')].filter(Boolean).join(' · ')}
@@ -579,7 +580,7 @@ export default function TournamentPage({ currentUser }) {
                   padding:'10px 14px',background:'transparent',border:'none',
                   borderBottom: on ? '3px solid #D72638' : '3px solid transparent',
                   marginBottom:-1,cursor:'pointer',whiteSpace:'nowrap',
-                  color: on ? '#F4F7FA' : '#8BA3BE',transition:'color 0.15s'}}>
+                  color: on ? C.ice : C.steel,transition:'color 0.15s'}}>
                 {tab}
               </button>
             );
@@ -621,7 +622,7 @@ export default function TournamentPage({ currentUser }) {
               if (showPIM)       tbCols.push({ key: 'pim', label: 'PIM',  render: (r) => r.pim ?? 0 });
               // Always show DIFF as the final fallback column when no GQ is
               // shown — otherwise the GQ column carries the same signal.
-              if (!showGQ)       tbCols.push({ key: 'd',   label: 'DIFF', render: (r) => (r.goal_diff > 0 ? `+${r.goal_diff}` : r.goal_diff), color: (r) => r.goal_diff > 0 ? '#22C55E' : r.goal_diff < 0 ? '#D72638' : 'rgba(244,247,250,0.5)' });
+              if (!showGQ)       tbCols.push({ key: 'd',   label: 'DIFF', render: (r) => (r.goal_diff > 0 ? `+${r.goal_diff}` : r.goal_diff), color: (r) => r.goal_diff > 0 ? '#22C55E' : r.goal_diff < 0 ? C.red : 'rgba(244,247,250,0.5)' });
               // Middle (scrollable) columns: GP, W, L, T, GF, GA, then any
               // tiebreaker cols. TEAM and PTS are sticky and not in this list.
               const midCols = [
@@ -642,7 +643,7 @@ export default function TournamentPage({ currentUser }) {
               // Sticky column visuals: solid bg color matching the card so
               // scrolled middle content doesn't bleed through. Subtle shadow
               // hints at horizontal scrollability without being intrusive.
-              const stickyBg = '#0f2847';
+              const stickyBg = C.card;
               const stickyHdrBg = '#152e54'; // header tint of stickyBg
               const stickyLeft = { position: 'sticky', left: 0, zIndex: 2, background: stickyBg, boxShadow: '4px 0 6px -4px rgba(0,0,0,0.4)' };
               const stickyRight = { position: 'sticky', right: 0, zIndex: 2, background: stickyBg, boxShadow: '-4px 0 6px -4px rgba(0,0,0,0.4)' };
@@ -680,7 +681,7 @@ export default function TournamentPage({ currentUser }) {
                             <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
                               {/* Rank as a large muted number (gold for 1st), not a column or a badge. */}
                               <span style={{fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:900,fontSize:22,lineHeight:1,minWidth:20,textAlign:'center',color:row.pool_rank===1?'#C9A84C':'rgba(244,247,250,0.35)',flexShrink:0}}>{row.pool_rank}</span>
-                              <span style={{fontSize:14,fontWeight:600,color:'#F4F7FA',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{row.team_name}</span>
+                              <span style={{fontSize:14,fontWeight:600,color:C.ice,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{row.team_name}</span>
                               {/* GS-2 — TEAM-LEVEL suspension flag only. Opponents
                                   learn the lineup may differ; no player is ever
                                   named on this public surface. */}
@@ -698,7 +699,7 @@ export default function TournamentPage({ currentUser }) {
                             </td>
                           ))}
                           {/* Gold PTS on the 1st-place row only — the one earned highlight. */}
-                          <td style={{...stickyRight,fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:900,fontSize:18,textAlign:'center',color:row.pool_rank===1?'#C9A84C':'#F4F7FA',padding:'9px 10px',minWidth:48}}>{row.pts}</td>
+                          <td style={{...stickyRight,fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:900,fontSize:18,textAlign:'center',color:row.pool_rank===1?'#C9A84C':C.ice,padding:'9px 10px',minWidth:48}}>{row.pts}</td>
                         </tr>
                       </React.Fragment>
                     ))}
@@ -728,7 +729,7 @@ export default function TournamentPage({ currentUser }) {
                 {champion && (
                   <div style={{background:'linear-gradient(135deg,#1a1208 0%,#3d2a0c 50%,#1a1208 100%)',border:'1px solid rgba(245,158,11,0.5)',borderRadius:14,padding:'22px 18px',marginBottom:18,textAlign:'center'}}>
                     <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.2em',color:'#F59E0B',textTransform:'uppercase',marginBottom:8}}>🏆 Tournament Champion</div>
-                    <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:28,color:'#F4F7FA',textTransform:'uppercase',letterSpacing:'0.02em'}}>{champion.team_name}</div>
+                    <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:28,color:C.ice,textTransform:'uppercase',letterSpacing:'0.02em'}}>{champion.team_name}</div>
                     {tournament?.name && <div style={{fontSize:11,color:'rgba(244,247,250,0.5)',marginTop:6}}>{tournament.name}</div>}
                   </div>
                 )}
@@ -800,8 +801,8 @@ function periodLabelShort(p) {
 function LiveScoreRow({ name, score, lead }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '2px 0' }}>
-      <span style={{ fontSize: 14, fontWeight: lead ? 800 : 600, color: '#F4F7FA', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name || 'TBD'}</span>
-      <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, lineHeight: 1, color: lead ? '#F4F7FA' : 'rgba(244,247,250,0.7)' }}>{score}</span>
+      <span style={{ fontSize: 14, fontWeight: lead ? 800 : 600, color: C.ice, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name || 'TBD'}</span>
+      <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, lineHeight: 1, color: lead ? C.ice : 'rgba(244,247,250,0.7)' }}>{score}</span>
     </div>
   );
 }
@@ -827,8 +828,8 @@ function LiveGameStrip({ games, accent, navigate }) {
               onClick={() => navigate(`/game/${g.id}`)}
               style={{
                 flex: many ? '0 0 auto' : '1 1 auto', minWidth: many ? 200 : 'auto', textAlign: 'left',
-                cursor: 'pointer', background: '#0B1F3A', border: `1px solid ${accent}55`, borderRadius: 10,
-                padding: '10px 12px', fontFamily: 'Barlow, sans-serif', color: '#F4F7FA',
+                cursor: 'pointer', background: C.navy, border: `1px solid ${accent}55`, borderRadius: 10,
+                padding: '10px 12px', fontFamily: 'Barlow, sans-serif', color: C.ice,
               }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, fontSize: 11 }}>
                 <span style={{ color: accent, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 5, letterSpacing: '0.04em' }}>
@@ -852,7 +853,7 @@ function LiveGameStrip({ games, accent, navigate }) {
 // shared PostCard later when there's enough reuse to justify the refactor.
 // User posts do NOT trigger pushes (only recaps do) to keep notification
 // volume sane.
-function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId, liveGames = [], accent = '#D72638', canModerate = false }) {
+function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId, liveGames = [], accent = C.red, canModerate = false }) {
   const [draft, setDraft] = useState('');
   const [postMentionIds, setPostMentionIds] = useState([]);
   const [mediaFile, setMediaFile] = useState(null);
@@ -982,7 +983,7 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
             placeholder="Post to the tournament feed…"
             rows={2}
             maxLength={500}
-            textareaStyle={{background:'#07111F',color:'#F4F7FA',border:'1px solid #1F3553',borderRadius:6,padding:'8px 10px',fontFamily:'Barlow,sans-serif',fontSize:13}}
+            textareaStyle={{background:C.dark,color:C.ice,border:'1px solid #1F3553',borderRadius:6,padding:'8px 10px',fontFamily:'Barlow,sans-serif',fontSize:13}}
           />
           {mediaFile && (
             <div style={{display:'flex',alignItems:'center',gap:8,fontSize:11,color:'#9BB5D6',marginTop:6}}>
@@ -1003,7 +1004,7 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
             <button
               onClick={handleSubmit}
               disabled={submitting || (!draft.trim() && !mediaFile)}
-              style={{background:submitting||(!draft.trim()&&!mediaFile)?'#1F3553':'#5B9FE2',color:'#F4F7FA',border:'none',borderRadius:6,padding:'6px 14px',fontFamily:'Barlow,sans-serif',fontSize:12,fontWeight:700,cursor:submitting?'wait':'pointer'}}
+              style={{background:submitting||(!draft.trim()&&!mediaFile)?'#1F3553':'#5B9FE2',color:C.ice,border:'none',borderRadius:6,padding:'6px 14px',fontFamily:'Barlow,sans-serif',fontSize:12,fontWeight:700,cursor:submitting?'wait':'pointer'}}
             >
               {submitting ? 'Posting…' : 'Post'}
             </button>
@@ -1029,11 +1030,11 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
           const author = p.profiles?.name || p.profiles?.handle || '';
           const mentionMap = mentionMapFromRows(p.post_mentions);
           return (
-            <div key={p.id} style={{background:'#11253E',borderRadius:10,padding:'12px 14px',color:'#F4F7FA',fontFamily:'Barlow,sans-serif'}}>
+            <div key={p.id} style={{background:'#11253E',borderRadius:10,padding:'12px 14px',color:C.ice,fontFamily:'Barlow,sans-serif'}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
                 <div style={{flex:1,minWidth:0}}>
                   {p.tag && (
-                    <div style={{display:'inline-block',background:(p.tag_color||'#2E5B8C')+'40',color:p.tag_color||'#9BB5D6',fontSize:10,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',padding:'2px 8px',borderRadius:4,marginBottom:6}}>
+                    <div style={{display:'inline-block',background:(p.tag_color||C.blue)+'40',color:p.tag_color||'#9BB5D6',fontSize:10,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',padding:'2px 8px',borderRadius:4,marginBottom:6}}>
                       {p.tag}
                     </div>
                   )}
@@ -1077,7 +1078,7 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
                   <button
                     onClick={() => onLike(p.id)}
                     disabled={!currentUser}
-                    style={{display:'flex',alignItems:'center',gap:4,background:'none',border:'none',padding:0,cursor:currentUser?'pointer':'default',color:likedPosts.includes(p.id)?'#D72638':'#7C8B9F',fontFamily:'Barlow,sans-serif',fontSize:12}}
+                    style={{display:'flex',alignItems:'center',gap:4,background:'none',border:'none',padding:0,cursor:currentUser?'pointer':'default',color:likedPosts.includes(p.id)?C.red:'#7C8B9F',fontFamily:'Barlow,sans-serif',fontSize:12}}
                   >
                     <span style={{fontSize:14}}>{likedPosts.includes(p.id)?'❤️':'🤍'}</span>
                     <span style={{fontWeight:likedPosts.includes(p.id)?700:400}}>{p.likes || 0}</span>
@@ -1098,7 +1099,7 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
                 )}
                 {p.gamepuck_reveal_game_id && (
                   <button onClick={() => navigate(`/game/${p.gamepuck_reveal_game_id}`)}
-                    style={{display:'inline-flex',alignItems:'center',gap:6,background:'rgba(215,38,56,0.15)',border:'1px solid #D72638',color:'#F4F7FA',fontSize:12,fontWeight:700,cursor:'pointer',padding:'6px 12px',borderRadius:999}}>
+                    style={{display:'inline-flex',alignItems:'center',gap:6,background:'rgba(215,38,56,0.15)',border:'1px solid #D72638',color:C.ice,fontSize:12,fontWeight:700,cursor:'pointer',padding:'6px 12px',borderRadius:999}}>
                     🏒 Peel to reveal →
                   </button>
                 )}
@@ -1117,7 +1118,7 @@ function FeedTab({ posts, setPosts, loading, navigate, currentUser, tournamentId
 // Tournament details (name/dates/venue/division/logo) are intentionally
 // public to make the URL shareable + Google-indexable.
 function PublicTournamentLanding({ tournament, games, navigate }) {
-  const accent = tournament?.accent_color || '#D72638';
+  const accent = tournament?.accent_color || C.red;
   const s = tournament?.settings ?? {};
   const venueLine = [s.venue_name, s.venue_address].filter(Boolean).join(' · ');
   // Derive team list from the games join — saves a second query and keeps
@@ -1142,10 +1143,10 @@ function PublicTournamentLanding({ tournament, games, navigate }) {
   const totalGames = games.length;
   const returnTo = encodeURIComponent(`/tournament/${tournament.id}`);
   return (
-    <div style={{background:'#07111F',minHeight:'100vh',fontFamily:'Barlow,sans-serif',color:'#F4F7FA'}}>
+    <div style={{background:C.dark,minHeight:'100vh',fontFamily:'Barlow,sans-serif',color:C.ice}}>
       {/* ADS-1 M5 — sponsor banner also shows to anon spectators (null when no sponsor) */}
       <AdSlot slot="event_banner" targetType="tournament" targetId={tournament.id} style={{ margin: '12px 16px 0' }} />
-      <div style={{background:'#0B1F3A',padding:'16px 18px 0',borderTop:`3px solid ${accent}`,borderBottom:'0.5px solid rgba(46,91,140,0.4)'}}>
+      <div style={{background:C.navy,padding:'16px 18px 0',borderTop:`3px solid ${accent}`,borderBottom:'0.5px solid rgba(46,91,140,0.4)'}}>
         <button onClick={() => navigate('/tournaments')} style={{color:'rgba(244,247,250,0.6)',fontSize:13,background:'none',border:'none',cursor:'pointer',fontFamily:'Barlow,sans-serif',marginBottom:8}}>← All tournaments</button>
         {tournament?.logo_url && (
           <img src={tournament.logo_url} alt="" onError={(e)=>{e.currentTarget.style.display='none';}}
@@ -1182,11 +1183,11 @@ function PublicTournamentLanding({ tournament, games, navigate }) {
 
         {/* At-a-glance stats — safe data, builds anticipation */}
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:18}}>
-          <div style={{background:'#0f2847',border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,padding:'14px 16px',textAlign:'center'}}>
+          <div style={{background:C.card,border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,padding:'14px 16px',textAlign:'center'}}>
             <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:30,color:accent,lineHeight:1}}>{totalTeams}</div>
             <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.08em',color:'rgba(244,247,250,0.5)',textTransform:'uppercase',marginTop:4}}>Teams</div>
           </div>
-          <div style={{background:'#0f2847',border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,padding:'14px 16px',textAlign:'center'}}>
+          <div style={{background:C.card,border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,padding:'14px 16px',textAlign:'center'}}>
             <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:30,color:accent,lineHeight:1}}>{totalGames}</div>
             <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.08em',color:'rgba(244,247,250,0.5)',textTransform:'uppercase',marginTop:4}}>Games</div>
           </div>
@@ -1201,13 +1202,13 @@ function PublicTournamentLanding({ tournament, games, navigate }) {
             {teamsByPool.map(([pool, list]) => (
               <div key={pool} style={{marginBottom:12}}>
                 <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.1em',color:'rgba(244,247,250,0.4)',textTransform:'uppercase',marginBottom:8}}>{pool}</div>
-                <div style={{background:'#0f2847',border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,overflow:'hidden'}}>
+                <div style={{background:C.card,border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,overflow:'hidden'}}>
                   {list.map((t, i) => (
                     <div key={t.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderTop:i ? '0.5px solid rgba(244,247,250,0.06)' : 'none'}}>
                       <div style={{width:30,height:30,borderRadius:'50%',background:'#1a4a7a',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:11,color:'#fff',flexShrink:0}}>
                         {teamInitials(t.team_name)}
                       </div>
-                      <span style={{fontSize:14,fontWeight:600,color:'#F4F7FA',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.team_name}</span>
+                      <span style={{fontSize:14,fontWeight:600,color:C.ice,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.team_name}</span>
                     </div>
                   ))}
                 </div>
@@ -1217,7 +1218,7 @@ function PublicTournamentLanding({ tournament, games, navigate }) {
         )}
 
         {/* Secondary CTA at the bottom for scrollers */}
-        <div style={{background:'#0f2847',border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,padding:'18px 16px',textAlign:'center'}}>
+        <div style={{background:C.card,border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,padding:'18px 16px',textAlign:'center'}}>
           <div style={{fontSize:13,color:'rgba(244,247,250,0.65)',marginBottom:12,lineHeight:1.5}}>
             Live scores, standings, the full bracket, and a recap of every game — as it happens. Free to follow.
           </div>
@@ -1271,7 +1272,7 @@ function GameCard({ game, navigate, canScore }) {
   // a warm gold border. Everything else stays on the standard navy treatment.
   const cardBorder = isLive ? '1px solid rgba(215,38,56,0.6)' : isChampionship ? '1px solid rgba(245,158,11,0.55)' : '0.5px solid rgba(46,91,140,0.4)';
   const cardHoverBorder = isLive ? '1px solid rgba(215,38,56,0.85)' : isChampionship ? '1px solid rgba(245,158,11,0.9)' : '0.5px solid rgba(46,91,140,0.8)';
-  const cardBackground = isLive ? '#162f55' : isChampionship ? 'linear-gradient(135deg,#0f2847 0%,#1a1605 100%)' : '#0f2847';
+  const cardBackground = isLive ? '#162f55' : isChampionship ? 'linear-gradient(135deg,#0f2847 0%,#1a1605 100%)' : C.card;
   const cardShadow = isLive ? '0 8px 32px rgba(215,38,56,0.2)' : 'none';
   // Bold the winner's row when the game is final. Shootout winners (tied
   // regulation, SO decided it) get the bold too — game.shootout_winner is
@@ -1287,17 +1288,17 @@ function GameCard({ game, navigate, canScore }) {
           a finalized game happened without opening the detail page. */}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,gap:8,flexWrap:'wrap'}}>
         <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
-          {isLive && <span style={{background:'#D72638',color:'#fff',fontSize:11,fontWeight:700,padding:'4px 11px',borderRadius:20}}>● LIVE</span>}
+          {isLive && <span style={{background:C.red,color:'#fff',fontSize:11,fontWeight:700,padding:'4px 11px',borderRadius:20}}>● LIVE</span>}
           {isFinal && <span style={{background:'rgba(244,247,250,0.08)',color:'rgba(244,247,250,0.4)',fontSize:11,fontWeight:700,padding:'4px 11px',borderRadius:20}}>FINAL{isShootoutDecided ? ' / SO' : ''}</span>}
-          {!isLive && !isFinal && <span style={{background:'#2E5B8C',color:'#F4F7FA',fontSize:11,fontWeight:700,padding:'4px 11px',borderRadius:20}}>{fmtGameTime(game.start_time)}</span>}
+          {!isLive && !isFinal && <span style={{background:C.blue,color:C.ice,fontSize:11,fontWeight:700,padding:'4px 11px',borderRadius:20}}>{fmtGameTime(game.start_time)}</span>}
           {(isLive || isFinal) && game.start_time && <span style={{fontSize:11,color:'rgba(244,247,250,0.45)'}}>{fmtGameTime(game.start_time)}</span>}
           <span style={{background:isChampionship?'rgba(245,158,11,0.18)':'rgba(46,91,140,0.25)',color:isChampionship?'#F59E0B':'rgba(244,247,250,0.65)',fontSize:10,fontWeight:700,padding:'3px 9px',borderRadius:20,letterSpacing:'0.06em',textTransform:'uppercase'}}>
             {isChampionship ? '🏆 ' : ''}{roundLabel}
           </span>
         </div>
         {hasStream && !isFinal && (
-          <button onClick={(e) => { e.stopPropagation(); window.open(url, '_blank'); }} style={{display:'inline-flex',alignItems:'center',gap:7,background:'#FFFFFF',color:'#0B1F3A',border:'none',borderRadius:999,padding:'8px 14px 8px 8px',fontFamily:'Barlow,sans-serif',fontSize:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
-            <span style={{width:24,height:24,background:'#07111F',borderRadius:5,border:'1px solid rgba(215,38,56,0.5)',display:'flex',alignItems:'center',justifyContent:'center'}}><LedR size={16}/></span>
+          <button onClick={(e) => { e.stopPropagation(); window.open(url, '_blank'); }} style={{display:'inline-flex',alignItems:'center',gap:7,background:'#FFFFFF',color:C.navy,border:'none',borderRadius:999,padding:'8px 14px 8px 8px',fontFamily:'Barlow,sans-serif',fontSize:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
+            <span style={{width:24,height:24,background:C.dark,borderRadius:5,border:'1px solid rgba(215,38,56,0.5)',display:'flex',alignItems:'center',justifyContent:'center'}}><LedR size={16}/></span>
             Watch with LiveBarn
           </button>
         )}
@@ -1305,25 +1306,25 @@ function GameCard({ game, navigate, canScore }) {
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:10,opacity:isFinal && !homeWon ? 0.65 : 1}}>
         <div style={{display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0}}>
           <div style={{width:32,height:32,borderRadius:'50%',background:'#1a4a7a',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:11,color:'#fff',flexShrink:0}}>{teamInitials(game.home_team?.team_name)}</div>
-          <span style={{fontSize:14,fontWeight:homeWon?800:600,color:'#F4F7FA',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{game.home_team?.team_name}</span>
+          <span style={{fontSize:14,fontWeight:homeWon?800:600,color:C.ice,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{game.home_team?.team_name}</span>
         </div>
-        {(isLive||isFinal) && <span style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:26,color:'#F4F7FA',flexShrink:0}}>{game.home_score}</span>}
+        {(isLive||isFinal) && <span style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:26,color:C.ice,flexShrink:0}}>{game.home_score}</span>}
       </div>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:10,opacity:isFinal && !awayWon ? 0.65 : 1}}>
         <div style={{display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0}}>
           <div style={{width:32,height:32,borderRadius:'50%',background:'#6b1520',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:11,color:'#fff',flexShrink:0}}>{teamInitials(game.away_team?.team_name)}</div>
-          <span style={{fontSize:14,fontWeight:awayWon?800:600,color:'#F4F7FA',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{game.away_team?.team_name}</span>
+          <span style={{fontSize:14,fontWeight:awayWon?800:600,color:C.ice,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{game.away_team?.team_name}</span>
         </div>
-        {(isLive||isFinal) ? <span style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:26,color:'#F4F7FA',flexShrink:0}}>{game.away_score}</span> : <span style={{fontSize:11,fontWeight:600,color:'rgba(244,247,250,0.3)',flexShrink:0}}>VS</span>}
+        {(isLive||isFinal) ? <span style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:26,color:C.ice,flexShrink:0}}>{game.away_score}</span> : <span style={{fontSize:11,fontWeight:600,color:'rgba(244,247,250,0.3)',flexShrink:0}}>VS</span>}
       </div>
       <div style={{fontSize:11,color:'rgba(244,247,250,0.4)'}}>📍 {[game.rink?.sub_rink, game.rink?.name].filter(Boolean).join(' · ') || 'Rink TBD'}</div>
       {canScore && (
-        <button onClick={(e) => { e.stopPropagation(); navigate("/scorer/" + game.id); }} style={{marginTop:8,width:"100%",padding:"9px",background:"rgba(46,91,140,0.2)",border:"0.5px solid rgba(46,91,140,0.5)",borderRadius:8,color:"#F4F7FA",fontFamily:"Barlow,sans-serif",fontSize:12,fontWeight:600,cursor:"pointer"}} onMouseEnter={e=>{e.currentTarget.style.background="#F4F7FA";e.currentTarget.style.color="#0B1F3A";}} onMouseLeave={e=>{e.currentTarget.style.background="rgba(46,91,140,0.2)";e.currentTarget.style.color="#F4F7FA";}}>✏️ Open Scorer View</button>
+        <button onClick={(e) => { e.stopPropagation(); navigate("/scorer/" + game.id); }} style={{marginTop:8,width:"100%",padding:"9px",background:"rgba(46,91,140,0.2)",border:"0.5px solid rgba(46,91,140,0.5)",borderRadius:8,color:C.ice,fontFamily:"Barlow,sans-serif",fontSize:12,fontWeight:600,cursor:"pointer"}} onMouseEnter={e=>{e.currentTarget.style.background=C.ice;e.currentTarget.style.color=C.navy;}} onMouseLeave={e=>{e.currentTarget.style.background="rgba(46,91,140,0.2)";e.currentTarget.style.color=C.ice;}}>✏️ Open Scorer View</button>
       )}
       {hasStream && !isFinal && (
         <div style={{background:'rgba(215,38,56,0.08)',border:'0.5px solid rgba(215,38,56,0.3)',borderRadius:7,padding:'7px 11px',marginTop:9,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-          <div style={{fontSize:10,color:'rgba(244,247,250,0.5)',lineHeight:1.6}}>Rinkd members save · ✓ Code <strong style={{color:'#D72638'}}>RINKD10</strong> auto-applied</div>
-          <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:14,color:'#D72638',marginLeft:10}}>10% off</div>
+          <div style={{fontSize:10,color:'rgba(244,247,250,0.5)',lineHeight:1.6}}>Rinkd members save · ✓ Code <strong style={{color:C.red}}>RINKD10</strong> auto-applied</div>
+          <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:14,color:C.red,marginLeft:10}}>10% off</div>
         </div>
       )}
     </div>
@@ -1355,20 +1356,20 @@ function InfoTab({ tournament }) {
         <div style={{background:'linear-gradient(135deg,#0f2847 0%,#0B1F3A 100%)',border:'1px solid rgba(46,91,140,0.6)',borderRadius:14,padding:'22px 18px',marginBottom:16,textAlign:'center'}}>
           <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:22,textTransform:'uppercase',marginBottom:8}}>Run your tournament on Rinkd</div>
           <div style={{fontSize:14,color:'rgba(244,247,250,0.7)',lineHeight:1.5,maxWidth:340,margin:'0 auto 18px'}}>Live standings and scoring your whole rink can follow from their phone.</div>
-          <a href="mailto:hello@rinkd.app?subject=Tournament Hosting Inquiry" style={{display:'inline-block',background:'#D72638',color:'#fff',borderRadius:999,padding:'13px 30px',fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:900,fontSize:15,letterSpacing:'0.04em',textTransform:'uppercase',textDecoration:'none'}}>Get pricing →</a>
+          <a href="mailto:hello@rinkd.app?subject=Tournament Hosting Inquiry" style={{display:'inline-block',background:C.red,color:'#fff',borderRadius:999,padding:'13px 30px',fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:900,fontSize:15,letterSpacing:'0.04em',textTransform:'uppercase',textDecoration:'none'}}>Get pricing →</a>
         </div>
       )}
 
       {venueLine && (
         <div style={{marginBottom:18}}>
-          <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:15,color:'#F4F7FA',marginBottom:8}}>Venue</div>
-          <div style={{background:'#0f2847',border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,padding:'12px 14px',fontSize:13,color:'#F4F7FA',lineHeight:1.5}}>{venueLine}</div>
+          <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:15,color:C.ice,marginBottom:8}}>Venue</div>
+          <div style={{background:C.card,border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,padding:'12px 14px',fontSize:13,color:C.ice,lineHeight:1.5}}>{venueLine}</div>
         </div>
       )}
 
       <div style={{marginBottom:18}}>
-        <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:15,color:'#F4F7FA',marginBottom:8}}>Format</div>
-        <div style={{background:'#0f2847',border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,overflow:'hidden'}}>
+        <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:15,color:C.ice,marginBottom:8}}>Format</div>
+        <div style={{background:C.card,border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,overflow:'hidden'}}>
           {[
             ['Division', tournament?.division || '—'],
             ['Period length', `${s.period_length_minutes??15} min ${s.period_type==='running'?'running':'stop-time'}`],
@@ -1380,17 +1381,17 @@ function InfoTab({ tournament }) {
           ].filter(Boolean).map(([k,v]) => (
             <div key={k} style={{display:'flex',justifyContent:'space-between',padding:'11px 14px',borderBottom:'0.5px solid rgba(244,247,250,0.06)'}}>
               <span style={{fontSize:13,color:'rgba(244,247,250,0.5)'}}>{k}</span>
-              <span style={{fontSize:13,fontWeight:600,color:'#F4F7FA'}}>{v}</span>
+              <span style={{fontSize:13,fontWeight:600,color:C.ice}}>{v}</span>
             </div>
           ))}
         </div>
       </div>
       <div style={{marginBottom:18}}>
-        <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:15,color:'#F4F7FA',marginBottom:8}}>Point System</div>
-        <div style={{background:'#0f2847',border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,overflow:'hidden'}}>
+        <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:15,color:C.ice,marginBottom:8}}>Point System</div>
+        <div style={{background:C.card,border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,overflow:'hidden'}}>
           {[
-            ['Win',`${s.points_win??2} pts`,'#D72638'],
-            ['Tie',`${s.points_tie??1} pt`,'#F4F7FA'],
+            ['Win',`${s.points_win??2} pts`,C.red],
+            ['Tie',`${s.points_tie??1} pt`,C.ice],
             ['Loss',`${s.points_loss??0} pts`,'rgba(244,247,250,0.3)'],
             s.shootout_win_points != null ? ['OT/SO win',`${s.shootout_win_points} pts`,'#F59E0B'] : null,
           ].filter(Boolean).map(([k,v,c]) => (
@@ -1404,8 +1405,8 @@ function InfoTab({ tournament }) {
 
       {tiebreakers && (
         <div style={{marginBottom:18}}>
-          <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:15,color:'#F4F7FA',marginBottom:8}}>Tiebreakers</div>
-          <div style={{background:'#0f2847',border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,padding:'12px 14px',fontSize:12,color:'rgba(244,247,250,0.75)',lineHeight:1.6}}>{tiebreakers}</div>
+          <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:15,color:C.ice,marginBottom:8}}>Tiebreakers</div>
+          <div style={{background:C.card,border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,padding:'12px 14px',fontSize:12,color:'rgba(244,247,250,0.75)',lineHeight:1.6}}>{tiebreakers}</div>
         </div>
       )}
     </div>

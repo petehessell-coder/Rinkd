@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { subscribeToPush, isPushSubscribed, unsubscribeFromPush } from '../lib/push';
-import Layout, { BRAND_COLORS as C } from '../components/Layout';
+import Layout from '../components/Layout';
+import { C } from '../lib/tokens';
 import { TierBadge } from '../components/Logos';
 import { updateProfile } from '../lib/auth';
 import { getTier, getTierProgress, getNextTier, TIERS } from '../lib/tiers';

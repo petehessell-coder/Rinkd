@@ -1,0 +1,72 @@
+import React from 'react';
+import { colors, C, radii, shadows } from '../../lib/tokens';
+
+// =============================================================================
+// Card — the three-tier hierarchy. Manifesto "Design Tokens › Card Hierarchy".
+//
+//   hero     — live games / featured. Elevated surface (#162f55), 1px red
+//              border glow, blue shadow underneath. You notice it before you
+//              read it. Pass `live` for the red-ring + red-glow treatment.
+//   standard — regular feed content. Flat navy, 1px border, no shadow. The
+//              rink wall — just content.
+//   quiet    — metadata / secondary. More transparent, lower-opacity border.
+//              Fades back; never competes.
+//
+// Defensive by default: `min-width: 0` so it can shrink inside flex/grid and
+// `overflow: hidden` so nothing inside bleeds past the rounded corners.
+// =============================================================================
+const VARIANTS = {
+  hero: {
+    background: colors.surfaceElevated,
+    border: '1px solid rgba(215,38,56,0.5)',
+    boxShadow: shadows.heroBlue,
+  },
+  standard: {
+    background: colors.surface,
+    border: `1px solid ${C.border}`,
+    boxShadow: shadows.resting,
+  },
+  quiet: {
+    background: 'rgba(15,40,71,0.5)',
+    border: '1px solid rgba(46,91,140,0.22)',
+    boxShadow: shadows.resting,
+  },
+};
+
+export default function Card({
+  variant = 'standard',
+  live = false,
+  as: Tag = 'div',
+  padding = 16,
+  onClick,
+  style,
+  children,
+  ...rest
+}) {
+  const v = VARIANTS[variant] || VARIANTS.standard;
+  // Live games override the hero shadow with the red-ring treatment — manifesto
+  // "Live game cards: 0 0 0 1px rgba(215,38,56,0.6), 0 8px 32px ...".
+  const liveStyle = live
+    ? { border: '1px solid rgba(215,38,56,0.6)', boxShadow: shadows.live }
+    : null;
+
+  return (
+    <Tag
+      onClick={onClick}
+      style={{
+        position: 'relative',
+        borderRadius: radii.card,
+        padding,
+        minWidth: 0,
+        overflow: 'hidden',
+        cursor: onClick ? 'pointer' : undefined,
+        ...v,
+        ...liveStyle,
+        ...style,
+      }}
+      {...rest}
+    >
+      {children}
+    </Tag>
+  );
+}

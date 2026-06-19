@@ -31,8 +31,7 @@ import ShareButton from '../components/ShareButton';
 import RecapCard from '../components/RecapCard';
 import { recapSourceFromPost, getRecapCardWithSponsor } from '../lib/recapCard';
 import { loadGameCardData } from '../lib/gameCardData';
-
-const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
+import { C } from '../lib/tokens';
 const TABS = ['Schedule', 'Standings', 'Stats', 'Teams', 'Feed', 'Gallery', 'Info'];
 
 // Broadcast lower-third section header — white Barlow Condensed 700 italic caps

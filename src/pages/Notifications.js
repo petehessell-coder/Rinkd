@@ -7,11 +7,7 @@ import { Avatar } from '../components/Logos';
 import { EmptyState, ListRowSkeleton } from '../components/Skeletons';
 import { listNotifications, markRead, markAllRead, deleteNotification, KIND_META } from '../lib/notifications';
 import { timeAgo } from '../lib/posts';
-
-const C = {
-  navy: '#0B1F3A', red: '#D72638', ice: '#F4F7FA',
-  steel: '#8BA3BE', dark: '#07111F', card: '#0f2847', border: 'rgba(46,91,140,0.4)',
-};
+import { C } from '../lib/tokens';
 
 export default function NotificationsPage({ currentUser, profile }) {
   const navigate = useNavigate();
