@@ -97,50 +97,117 @@ export default function NotificationsPage({ currentUser, profile }) {
           ) : items.length === 0 ? (
             <EmptyState
               icon="🔔"
-              title={filter === 'unread' ? 'All caught up' : 'No notifications yet'}
-              body={filter === 'unread' ? 'You\'ve read everything. Go drop a goal.' : 'When teammates like your posts, comment, follow you, or your team has a game coming up, you\'ll see it here.'}
-              cta={{ label: 'Back to Chirps', onClick: () => navigate('/feed') }}
+              title={filter === 'unread' ? 'All caught up' : 'The ice is quiet'}
+              body={filter === 'unread' ? 'You\'ve read everything. Go drop a goal.' : 'Follow some teams and players to change that — likes, mentions, and game alerts all land right here.'}
+              cta={filter === 'unread' ? { label: 'Back to Chirps', onClick: () => navigate('/feed') } : { label: 'Discover Teams', onClick: () => navigate('/discover') }}
             />
-          ) : (
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
-              {items.map((n, i) => {
-                const meta = KIND_META[n.kind] || { icon: '🔔', label: 'Notification' };
-                const isUnread = !n.read_at;
-                return (
-                  <div key={n.id} onClick={() => openOne(n)}
-                    style={{
-                      display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px',
-                      borderTop: i ? '1px solid rgba(46,91,140,0.2)' : 'none',
-                      cursor: 'pointer', position: 'relative',
-                      background: isUnread ? 'rgba(215,38,56,0.05)' : 'transparent',
-                      transition: 'background 0.15s',
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(46,91,140,0.12)'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = isUnread ? 'rgba(215,38,56,0.05)' : 'transparent'}>
-                    {isUnread && <div style={{ position: 'absolute', left: 4, top: '50%', transform: 'translateY(-50%)', width: 6, height: 6, borderRadius: '50%', background: C.red }} />}
-                    {n.actor ? (
-                      <div style={{ position: 'relative' }}>
-                        <Avatar profile={n.actor} size={36} />
-                        <div style={{ position: 'absolute', right: -4, bottom: -4, width: 18, height: 18, borderRadius: '50%', background: C.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, border: `1px solid ${C.border}` }}>{meta.icon}</div>
-                      </div>
-                    ) : (
-                      <div style={{ width: 36, height: 36, borderRadius: '50%', background: C.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>{meta.icon}</div>
-                    )}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, color: C.ice, lineHeight: 1.45 }}>{n.body || meta.label}</div>
-                      <div style={{ fontSize: 11, color: C.steel, marginTop: 4 }}>{timeAgo(n.created_at)}</div>
+          ) : (() => {
+            // Group into Today / Earlier with broadcast lower-third dividers.
+            const startToday = new Date(); startToday.setHours(0, 0, 0, 0);
+            const today = items.filter((n) => new Date(n.created_at) >= startToday);
+            const earlier = items.filter((n) => new Date(n.created_at) < startToday);
+            const sectionCard = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 16 };
+            return (
+              <>
+                {today.length > 0 && (
+                  <>
+                    <LowerThird label="Today" />
+                    <div style={sectionCard}>
+                      {today.map((n, i) => <NotifRow key={n.id} n={n} first={i === 0} onOpen={openOne} onDelete={handleDelete} />)}
                     </div>
-                    <button onClick={(e) => handleDelete(n.id, e)} title="Dismiss"
-                      style={{ background: 'transparent', color: C.steel, border: 'none', padding: 4, fontSize: 16, cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>
-                      ×
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  </>
+                )}
+                {earlier.length > 0 && (
+                  <>
+                    <LowerThird label="Earlier" />
+                    <div style={sectionCard}>
+                      {earlier.map((n, i) => <NotifRow key={n.id} n={n} first={i === 0} onOpen={openOne} onDelete={handleDelete} />)}
+                    </div>
+                  </>
+                )}
+              </>
+            );
+          })()}
         </div>
       </div>
     </Layout>
+  );
+}
+
+// Tone of a notification — drives the icon color + text emphasis so a goal-horn
+// moment never reads like a quiet follow.
+//  · gold  → POTG / milestones (scarce, earned)
+//  · red   → urgency (suspension, sub needed, game reminder)
+//  · white → everyday social (follow, like, comment, mention, …)
+const RED_KINDS = new Set(['suspension', 'sub_alert', 'game_reminder']);
+const GOLD_KINDS = new Set(['game_puck_won']);
+function toneFor(kind) {
+  if (GOLD_KINDS.has(kind)) return 'gold';
+  if (RED_KINDS.has(kind)) return 'red';
+  return 'white';
+}
+
+// Broadcast lower-third date divider — white Barlow Condensed 700 italic caps on
+// navy with a red accent slab, bleeding to the content column's left edge.
+function LowerThird({ label }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', background: '#0f2847', borderLeft: '4px solid #D72638', marginLeft: -16, marginBottom: 12, padding: '8px 14px 8px 16px', borderTopRightRadius: 4, borderBottomRightRadius: 4 }}>
+      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 18, lineHeight: 1, letterSpacing: '0.05em', color: '#F4F7FA', textTransform: 'uppercase' }}>{label}</span>
+    </div>
+  );
+}
+
+function NotifRow({ n, first, onOpen, onDelete }) {
+  const meta = KIND_META[n.kind] || { icon: '🔔', label: 'Notification' };
+  const isUnread = !n.read_at;
+  const tone = toneFor(n.kind);
+  const accent = tone === 'red' ? '#D72638' : tone === 'gold' ? '#C9A84C' : '#F4F7FA';
+  const hot = tone !== 'white'; // goal/urgency/POTG → bolder type + accent
+  // Split the leading actor name (bold) from the action text (muted). Falls
+  // back to the whole body when it isn't name-prefixed (system notifications).
+  const actorName = n.actor?.name || '';
+  const body = n.body || meta.label;
+  const hasName = actorName && body.toLowerCase().startsWith(actorName.toLowerCase());
+  const action = hasName ? body.slice(actorName.length).replace(/^\s+/, '') : null;
+  return (
+    <div onClick={() => onOpen(n)}
+      style={{
+        display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px',
+        borderTop: first ? 'none' : '1px solid rgba(46,91,140,0.18)',
+        borderLeft: isUnread ? '4px solid #D72638' : '4px solid transparent',
+        background: isUnread ? '#162f55' : 'transparent',
+        cursor: 'pointer', transition: 'background 0.15s',
+      }}
+      onMouseEnter={(e) => { if (!isUnread) e.currentTarget.style.background = 'rgba(46,91,140,0.12)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = isUnread ? '#162f55' : 'transparent'; }}>
+      {/* Type icon — tone-colored container (red urgency / gold POTG / neutral). */}
+      {n.actor ? (
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <Avatar profile={n.actor} size={38} />
+          <div style={{ position: 'absolute', right: -4, bottom: -4, minWidth: 20, height: 20, padding: '0 3px', borderRadius: 999, background: hot ? accent : C.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, border: `1px solid ${hot ? accent : C.border}` }}>{meta.icon}</div>
+        </div>
+      ) : (
+        <div style={{ width: 40, height: 40, borderRadius: '50%', flexShrink: 0, background: tone === 'red' ? 'rgba(215,38,56,0.18)' : tone === 'gold' ? 'rgba(201,168,76,0.18)' : C.navy, border: `1px solid ${hot ? accent : C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>{meta.icon}</div>
+      )}
+      {/* Name (bold) + action (muted). Goal/POTG get bolder type + accent. */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, lineHeight: 1.45, color: C.ice }}>
+          {hasName ? (
+            <>
+              <span style={{ fontFamily: "'Barlow', sans-serif", fontWeight: hot ? 800 : 700, color: hot ? accent : C.ice }}>{actorName}</span>
+              {action ? <span style={{ color: C.steel, fontWeight: hot ? 600 : 400 }}> {action}</span> : null}
+            </>
+          ) : (
+            <span style={{ fontWeight: hot ? 700 : 500, color: hot ? accent : C.ice }}>{body}</span>
+          )}
+        </div>
+      </div>
+      {/* Timestamp (small, right-aligned, muted) + dismiss. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        <span style={{ fontSize: 11, color: C.steel, whiteSpace: 'nowrap' }}>{timeAgo(n.created_at)}</span>
+        <button onClick={(e) => onDelete(n.id, e)} title="Dismiss"
+          style={{ background: 'transparent', color: C.steel, border: 'none', padding: 2, fontSize: 16, cursor: 'pointer', lineHeight: 1 }}>×</button>
+      </div>
+    </div>
   );
 }
