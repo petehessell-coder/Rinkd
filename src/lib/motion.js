@@ -72,8 +72,14 @@ export function ensureMotionKeyframes() {
   injected = true;
   const el = document.createElement('style');
   el.textContent =
-    // Route entrance — directional fade-up (manifesto: "No bounce on nav — directional only").
-    `@keyframes rinkdRouteIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}` +
+    // Route entrance — OPACITY ONLY (no transform). Critical: this class wraps
+    // <Routes>, which contains the app's position:fixed nav (sidebar + mobile
+    // bars). Any non-none transform here — including the identity matrix that
+    // `animation-fill-mode:both` holds from a `transform:none` keyframe — makes
+    // this element a containing block for fixed descendants, which pins the
+    // bottom nav to the bottom of the scrolled content (off-screen) and breaks
+    // the sidebar. A fade can't create a containing block, so the nav is safe.
+    `@keyframes rinkdRouteIn{from{opacity:0}to{opacity:1}}` +
     `.rinkd-route-in{animation:rinkdRouteIn ${motion.duration.entrance}ms ${motion.easing.out} both}` +
     // Staggered list entrance — fade + small rise (per-item delay set inline).
     `@keyframes rinkdStaggerIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}` +
