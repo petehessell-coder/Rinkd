@@ -547,7 +547,6 @@ export default function Feed({ currentUser, profile }) {
     const onReveal = () => { if (!reduceMotion) setIceRise(true); };
     window.addEventListener('rinkd:ice-reveal', onReveal);
     return () => window.removeEventListener('rinkd:ice-reveal', onReveal);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Cycle the composer prompt while it's collapsed so the feed feels alive.
