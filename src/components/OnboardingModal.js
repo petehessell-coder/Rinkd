@@ -17,8 +17,12 @@ const C = {
 const LOCKER_IMG = '/onboarding-locker-room.jpg';
 const TUNNEL_IMG = '/onboarding-tunnel.jpg';
 const TUNNEL_SEEN_KEY = 'rinkd_tunnel_seen';
-// Feed listens for this and rises up from below as the white flash clears.
+// Feed rises up from below as the white flash clears. We signal it TWO ways so
+// the reveal can't be dropped to a mount-timing race: a durable sessionStorage
+// flag (caught if Feed mounts AFTER the tunnel) AND a live event (caught if Feed
+// is already mounted under the modal). Feed consumes whichever lands first.
 const ICE_REVEAL_EVENT = 'rinkd:ice-reveal';
+const ICE_REVEAL_FLAG = 'rinkd_ice_reveal';
 
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia
@@ -206,6 +210,9 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
       return;
     }
     try { localStorage.setItem(TUNNEL_SEEN_KEY, '1'); } catch (_) {}
+    // Arm the ice reveal BEFORE the tunnel renders, so a freshly-mounting Feed
+    // sees the flag and starts hidden (no flash of the fully-laid-out feed).
+    try { sessionStorage.setItem(ICE_REVEAL_FLAG, '1'); } catch (_) {}
     track('onboarding_tunnel_played');
     setOutro(true);
   };

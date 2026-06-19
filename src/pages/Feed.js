@@ -522,21 +522,36 @@ export default function Feed({ currentUser, profile }) {
   const [starterIdx, setStarterIdx] = useState(0);
 
   // ICE reveal — the third beat of the Locker Room → Tunnel → Ice onboarding.
-  // OnboardingModal's tunnel dispatches `rinkd:ice-reveal` from behind the white
-  // flash; the feed snaps to hidden (still covered), then rises up from below as
-  // the white clears. `null` = no reveal (normal load). Skipped under
-  // prefers-reduced-motion so the feed is simply present.
-  const [iceReveal, setIceReveal] = useState(null);
+  // The tunnel arms a durable sessionStorage flag (`rinkd_ice_reveal`) AND fires
+  // a `rinkd:ice-reveal` event. Either one triggers the rise; the flag survives a
+  // mount-timing race (Feed mounting after the tunnel closes), the event covers
+  // the case where Feed is already mounted under the modal. We init 'hidden' when
+  // the flag is already present so the feed's very first paint is hidden — no
+  // flash of the fully-laid-out feed before it rises. `null` = normal load.
+  const [iceReveal, setIceReveal] = useState(() => {
+    try { return sessionStorage.getItem('rinkd_ice_reveal') === '1' ? 'hidden' : null; }
+    catch (_) { return null; }
+  });
+  const iceRevealedRef = useRef(false);
   useEffect(() => {
     const reduce = typeof window !== 'undefined' && window.matchMedia
       && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const onReveal = () => {
-      if (reduce) return;
+    // Idempotent — runs exactly once whether triggered by the flag or the event.
+    const runReveal = () => {
+      if (iceRevealedRef.current) return;
+      iceRevealedRef.current = true;
+      try { sessionStorage.removeItem('rinkd_ice_reveal'); } catch (_) {}
+      if (reduce) { setIceReveal(null); return; }
       setIceReveal('hidden');
-      // Double rAF guarantees the hidden frame paints before we transition to
-      // shown — otherwise the browser may collapse both into one frame (no anim).
-      requestAnimationFrame(() => requestAnimationFrame(() => setIceReveal('shown')));
+      // A real timeout (not rAF) guarantees the hidden frame is painted before we
+      // flip to shown — rAF callbacks can coalesce right after the heavy tunnel
+      // animation, collapsing both states into one frame and killing the rise.
+      setTimeout(() => setIceReveal('shown'), 60);
     };
+    let pending = false;
+    try { pending = sessionStorage.getItem('rinkd_ice_reveal') === '1'; } catch (_) {}
+    if (pending) runReveal();
+    const onReveal = () => runReveal();
     window.addEventListener('rinkd:ice-reveal', onReveal);
     return () => window.removeEventListener('rinkd:ice-reveal', onReveal);
   }, []);
