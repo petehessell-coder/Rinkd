@@ -173,6 +173,10 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
   const loadProfile = useCallback(async () => {
     try {
     setLoadError(null);
+    // Clear prior/own-profile data so the loading + error states are actually
+    // reachable when viewing someone else (profile seeds from myProfile, so
+    // without this a failed other-user fetch would keep showing stale data).
+    if (!isOwnProfile) setProfile(null);
     if (isOwnProfile) {
       setProfile(myProfile);
     } else {

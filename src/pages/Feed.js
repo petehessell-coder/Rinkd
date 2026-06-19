@@ -834,7 +834,7 @@ export default function Feed({ currentUser, profile }) {
                       ? <video src={mediaPreview.url} style={{ width: '100%', maxHeight: 200, borderRadius: 10 }} controls/>
                       : <img src={mediaPreview.url} alt="preview" style={{ width: '100%', maxHeight: 200, objectFit: 'cover', borderRadius: 10 }}/>
                     }
-                    <button type="button" onClick={removeMedia} style={{ position: 'absolute', top: 8, right: 8, width: 28, height: 28, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', border: 'none', color: 'white', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                    <button type="button" onClick={removeMedia} aria-label="Remove media" style={{ position: 'absolute', top: 8, right: 8, width: 44, height: 44, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', border: 'none', color: 'white', cursor: 'pointer', fontSize: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
                   </div>
                 )}
                 {uploadProgress > 0 && uploadProgress < 100 && (
