@@ -59,7 +59,14 @@ if (typeof document !== 'undefined' && !document.getElementById('rinkd-feed-anim
     '@keyframes rinkdStarterFade{0%{opacity:0;transform:translateY(3px)}100%{opacity:1;transform:translateY(0)}}'
     + '@keyframes rinkdLivePulse{0%{box-shadow:0 0 0 0 rgba(215,38,56,0.55)}70%{box-shadow:0 0 0 7px rgba(215,38,56,0)}100%{box-shadow:0 0 0 0 rgba(215,38,56,0)}}'
     + '.rinkd-live-dot{animation:rinkdLivePulse 1.5s ease-out infinite}'
-    + '@media (prefers-reduced-motion: reduce){.rinkd-live-dot{animation:none}}';
+    // ICE reveal — the feed rises from below as the tunnel's white flash clears.
+    // A keyframe (not a transition) so it ALWAYS plays start→end and can't be
+    // coalesced away by the browser right after the heavy tunnel animation.
+    // `both` fill keeps the start frame applied immediately (no flash of the
+    // fully-laid-out feed before the rise begins) and the end frame after.
+    + '@keyframes rinkdIceRise{from{opacity:0;transform:translateY(48px)}to{opacity:1;transform:translateY(0)}}'
+    + '.rinkd-ice-rise{animation:rinkdIceRise 520ms cubic-bezier(0.22,0.61,0.36,1) both}'
+    + '@media (prefers-reduced-motion: reduce){.rinkd-live-dot{animation:none}.rinkd-ice-rise{animation:none}}';
   document.head.appendChild(el);
 }
 
@@ -523,37 +530,24 @@ export default function Feed({ currentUser, profile }) {
 
   // ICE reveal — the third beat of the Locker Room → Tunnel → Ice onboarding.
   // The tunnel arms a durable sessionStorage flag (`rinkd_ice_reveal`) AND fires
-  // a `rinkd:ice-reveal` event. Either one triggers the rise; the flag survives a
-  // mount-timing race (Feed mounting after the tunnel closes), the event covers
-  // the case where Feed is already mounted under the modal. We init 'hidden' when
-  // the flag is already present so the feed's very first paint is hidden — no
-  // flash of the fully-laid-out feed before it rises. `null` = normal load.
-  const [iceReveal, setIceReveal] = useState(() => {
-    try { return sessionStorage.getItem('rinkd_ice_reveal') === '1' ? 'hidden' : null; }
-    catch (_) { return null; }
+  // a `rinkd:ice-reveal` event. Either triggers the keyframe rise: the flag
+  // survives a mount-timing race (Feed mounting AFTER the tunnel closes), the
+  // event covers Feed already mounted under the modal. We seed `true` from the
+  // flag in the initializer so the very first paint already carries the
+  // animation (its `both` fill applies the start frame immediately — no flash).
+  const reduceMotion = typeof window !== 'undefined' && window.matchMedia
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const [iceRise, setIceRise] = useState(() => {
+    try { return sessionStorage.getItem('rinkd_ice_reveal') === '1' && !reduceMotion; }
+    catch (_) { return false; }
   });
-  const iceRevealedRef = useRef(false);
   useEffect(() => {
-    const reduce = typeof window !== 'undefined' && window.matchMedia
-      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    // Idempotent — runs exactly once whether triggered by the flag or the event.
-    const runReveal = () => {
-      if (iceRevealedRef.current) return;
-      iceRevealedRef.current = true;
-      try { sessionStorage.removeItem('rinkd_ice_reveal'); } catch (_) {}
-      if (reduce) { setIceReveal(null); return; }
-      setIceReveal('hidden');
-      // A real timeout (not rAF) guarantees the hidden frame is painted before we
-      // flip to shown — rAF callbacks can coalesce right after the heavy tunnel
-      // animation, collapsing both states into one frame and killing the rise.
-      setTimeout(() => setIceReveal('shown'), 60);
-    };
-    let pending = false;
-    try { pending = sessionStorage.getItem('rinkd_ice_reveal') === '1'; } catch (_) {}
-    if (pending) runReveal();
-    const onReveal = () => runReveal();
+    // Consume the flag so the rise plays exactly once, never on a later visit.
+    try { sessionStorage.removeItem('rinkd_ice_reveal'); } catch (_) {}
+    const onReveal = () => { if (!reduceMotion) setIceRise(true); };
     window.addEventListener('rinkd:ice-reveal', onReveal);
     return () => window.removeEventListener('rinkd:ice-reveal', onReveal);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Cycle the composer prompt while it's collapsed so the feed feels alive.
@@ -772,15 +766,9 @@ export default function Feed({ currentUser, profile }) {
   // keyset pagination cursor that reads its last element) is left untouched.
   const liveFirst = [...posts.filter(p => !!p.livebarn_venue_id), ...posts.filter(p => !p.livebarn_venue_id)];
 
-  const iceRevealStyle = iceReveal === 'hidden'
-    ? { transform: 'translateY(40px)', opacity: 0 }
-    : iceReveal === 'shown'
-    ? { transform: 'translateY(0)', opacity: 1, transition: 'transform 400ms ease-out, opacity 400ms ease-out' }
-    : null;
-
   return (
     <Layout profile={profile}>
-      <div style={{ maxWidth: 640, margin: '0 auto', padding: '24px 16px', ...(iceRevealStyle || {}) }}>
+      <div className={iceRise ? 'rinkd-ice-rise' : undefined} style={{ maxWidth: 640, margin: '0 auto', padding: '24px 16px' }}>
         <h1 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 32, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.02em', marginBottom: 20 }}><TapeText height={32}>Chirps</TapeText></h1>
 
         {/* ONBOARD-1 progressive-disclosure nudge — only renders for users who
