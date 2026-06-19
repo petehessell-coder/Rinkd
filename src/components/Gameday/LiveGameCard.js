@@ -2,6 +2,7 @@ import React from 'react';
 import { C, colors, radii, shadows, type, font } from '../../lib/tokens';
 import { Icon, BounceNumber, useExpand } from '../ui';
 import { useGoalMoment, GoalSweep } from '../../lib/goalMoment';
+import { prefetchGamePage, prefetchHandlers } from '../../lib/prefetch';
 import SoundToggle from '../SoundToggle';
 
 // =============================================================================
@@ -58,6 +59,7 @@ export default function LiveGameCard({ game, navigate }) {
 
   return (
     <div
+      {...prefetchHandlers(prefetchGamePage)}
       onClick={(e) => expand(e, () => navigate(game.gameUrl), { bg: colors.surfaceElevated })}
       className={`rinkd-pressable${goal ? ' rinkd-goal-glow' : ''}`}
       style={{

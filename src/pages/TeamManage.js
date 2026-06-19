@@ -342,7 +342,7 @@ function ManageTeam({ id, profile, navigate }) {
                 </Field>
               </Row2>
               <Row2>
-                <Field label="Jersey #"><input style={inputStyle} type="number" value={memberForm.jersey_number} onChange={e => setMemberForm(p => ({ ...p, jersey_number: e.target.value }))} placeholder="#" /></Field>
+                <Field label="Jersey #"><input style={inputStyle} type="text" inputMode="numeric" pattern="[0-9]*" autoComplete="off" value={memberForm.jersey_number} onChange={e => setMemberForm(p => ({ ...p, jersey_number: e.target.value.replace(/[^\d]/g, '').slice(0, 3) }))} placeholder="#" /></Field>
                 <Field label="Position">
                   <select style={selectStyle} value={memberForm.position} onChange={e => setMemberForm(p => ({ ...p, position: e.target.value }))}>
                     {POSITIONS.map(pos => <option key={pos} value={pos}>{pos}</option>)}

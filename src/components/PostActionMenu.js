@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Icon } from './ui';
+import { Icon, useUndoable } from './ui';
 import { reportPost, reportComment, REPORT_REASONS, hidePost, hideComment } from '../lib/moderation';
 import { blockUser } from '../lib/blocks';
 import { deletePost, deleteComment } from '../lib/posts';
@@ -31,7 +31,13 @@ const C = {
 export default function PostActionMenu({
   kind, targetId, authorId, authorHandle,
   currentUserId, canModerate = false, onReported, onBlocked, onDeleted, onModerated,
+  // RESILIENCE: optional optimistic-delete. When provided, it must remove the
+  // row from the parent's state NOW and RETURN a restore fn — Delete then runs
+  // instantly with a 5-second Undo toast (no confirm dialog), committing the
+  // irreversible server delete only after those 5s. Absent → legacy confirm.
+  onDelete,
 }) {
+  const runUndoable = useUndoable();
   const [open, setOpen] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [pickedReason, setPickedReason] = useState('spam');
@@ -71,6 +77,23 @@ export default function PostActionMenu({
 
   const doDelete = async () => {
     if (deleting) return;
+    const fn = kind === 'comment' ? deleteComment : deletePost;
+
+    // Preferred path: optimistic remove + 5s Undo toast, no confirm dialog.
+    if (onDelete) {
+      setOpen(false);
+      runUndoable({
+        message: kind === 'comment' ? 'Comment deleted' : 'Post deleted',
+        apply: onDelete, // parent removes the row now, returns a restore fn
+        commit: async () => { const { error: e } = await fn(targetId); if (e) throw e; },
+        errorMessage: kind === 'comment'
+          ? "That comment didn't delete — it's back. Try again."
+          : "That post didn't delete — it's back. Try again.",
+      });
+      return;
+    }
+
+    // Legacy fallback (callers that don't own restorable list state).
     const ok = window.confirm(
       kind === 'comment'
         ? "Delete this comment? This can't be undone."
@@ -78,7 +101,6 @@ export default function PostActionMenu({
     );
     if (!ok) return;
     setDeleting(true);
-    const fn = kind === 'comment' ? deleteComment : deletePost;
     const { error: e } = await fn(targetId);
     setDeleting(false);
     if (e) {

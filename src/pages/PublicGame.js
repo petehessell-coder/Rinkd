@@ -6,6 +6,8 @@ import { teamInitials } from '../lib/teamInitials';
 import SEO from '../components/SEO';
 import ShareButton from '../components/ShareButton';
 import SoundToggle from '../components/SoundToggle';
+import { ErrorState } from '../components/ui';
+import { useOnline } from '../lib/useOnline';
 import { useGoalMoment, GoalSweep } from '../lib/goalMoment';
 import { loadGameCardData } from '../lib/gameCardData';
 import {
@@ -72,7 +74,7 @@ export default function PublicGame({ league }) {
   const { gameId } = useParams();
   const isLeague = !!league;
 
-  const [state, setState] = useState({ loading: true, game: null, parent: null, blocked: false });
+  const [state, setState] = useState({ loading: true, game: null, parent: null, blocked: false, error: false });
   const [goals, setGoals] = useState([]);
   const [penalties, setPenalties] = useState([]);
   const [lineupByTeam, setLineupByTeam] = useState({});
@@ -114,8 +116,10 @@ export default function PublicGame({ league }) {
       setState({ loading: false, game: g, parent, blocked: false });
       track('public_game_viewed', { game_id: gameId, kind: isLeague ? 'league' : 'tournament' });
     } catch (e) {
+      // A thrown error is a network / server failure (distinct from a game that
+      // genuinely isn't found) — surface a retry, not the dead-end "not found".
       console.error('[PublicGame] load failed', e);
-      setState({ loading: false, game: null, parent: null, blocked: false });
+      setState({ loading: false, game: null, parent: null, blocked: false, error: true });
     }
   }, [gameId, isLeague]);
 
@@ -142,7 +146,8 @@ export default function PublicGame({ league }) {
     return () => { if (t) clearTimeout(t); try { if (channel) supabase.removeChannel(channel); } catch { /* swallow */ } };
   }, [gameId, isLeague, state.blocked, load]);
 
-  const { loading, game, parent, blocked } = state;
+  const { loading, game, parent, blocked, error } = state;
+  const online = useOnline();
 
   // SHARE-GOAL-1 — the goal moment for spectators who opened a shared live link.
   // `ready` gates out the loading→hydrate jump; `enabled` keeps a final game from
@@ -157,6 +162,14 @@ export default function PublicGame({ league }) {
       <Center>
         <div style={{ fontSize: 34, marginBottom: 12 }}>🏒</div>
         <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 20, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.02em' }}>Getting the ice ready.</div>
+      </Center>
+    </Shell>
+  );
+  if (error) return (
+    <Shell>
+      <SEO title="Rinkd" noIndex />
+      <Center>
+        <ErrorState offline={!online} onRetry={load} title="Couldn’t load this game" style={{ maxWidth: 400, background: 'transparent', border: 'none' }} />
       </Center>
     </Shell>
   );

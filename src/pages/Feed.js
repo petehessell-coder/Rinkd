@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { C } from '../lib/tokens';
-import { Icon, useExpand } from '../components/ui';
+import { Icon, useExpand, Img, ErrorState } from '../components/ui';
+import { useOnline } from '../lib/useOnline';
 import { staggerStyle, useDelayedFlag } from '../lib/motion';
 import TapeText from '../components/TapeText';
 import { Avatar, TierBadge } from '../components/Logos';
@@ -26,6 +27,7 @@ import RecapCard from '../components/RecapCard';
 import { recapSourceFromPost, getRecapCardWithSponsor } from '../lib/recapCard';
 import { haptics } from '../lib/haptics';
 import PullToRefresh from '../components/PullToRefresh';
+import { prefetchGamePage, prefetchHandlers } from '../lib/prefetch';
 
 // Feed page size — keyset pagination pulls this many chirps per request.
 const PAGE_SIZE = 20;
@@ -99,10 +101,11 @@ function MediaDisplay({ url, type }) {
   if (!url) return null;
   if (type === 'video') return (
     <>
-      <div style={{ borderRadius: 10, overflow: 'hidden', marginBottom: 10, background: '#000', position: 'relative' }}>
-        <video src={url} controls playsInline preload="metadata" style={{ width: '100%', maxHeight: 400, display: 'block' }}/>
+      {/* Reserved 16:9 box — no layout shift while the poster frame loads. */}
+      <div style={{ position: 'relative', aspectRatio: '16 / 9', borderRadius: 10, overflow: 'hidden', marginBottom: 10, background: '#000' }}>
+        <video src={url} controls playsInline preload="metadata" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}/>
         <button onClick={() => setOpen(true)} title="Open fullscreen"
-          style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer' }}>
+          style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer', zIndex: 1 }}>
           ⤢
         </button>
       </div>
@@ -111,9 +114,10 @@ function MediaDisplay({ url, type }) {
   );
   return (
     <>
-      <div onClick={() => setOpen(true)} style={{ borderRadius: 10, overflow: 'hidden', marginBottom: 10, cursor: 'zoom-in' }}>
-        <img src={url} alt="Post" style={{ width: '100%', maxHeight: 500, objectFit: 'cover', display: 'block' }} loading="lazy"/>
-      </div>
+      {/* Reserved 5:4 box + blur-up — the page never jumps when the photo
+          decodes, and a slow rink connection gets a designed shimmer. */}
+      <Img src={url} alt="Post" ratio={5 / 4} radius={10} loading="lazy"
+        onClick={() => setOpen(true)} style={{ marginBottom: 10, cursor: 'zoom-in' }} />
       {open && <MediaLightbox url={url} type="image" onClose={() => setOpen(false)} />}
     </>
   );
@@ -178,7 +182,7 @@ function BroadcastHeader({ label, live }) {
   );
 }
 
-function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, reactions, onLike, onComment, onCommentRemoved, onPostHidden, onUserBlocked, index = 0 }) {
+function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, reactions, onLike, onComment, onCommentRemoved, onPostHidden, onPostDelete, onUserBlocked, index = 0 }) {
   const navigate = useNavigate();
   const expand = useExpand();
   const [showComments, setShowComments] = useState(false);
@@ -302,6 +306,7 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
             onReported={() => onPostHidden?.(post.id)}
             onBlocked={() => onUserBlocked?.(post.author_id)}
             onDeleted={() => onPostHidden?.(post.id)}
+            onDelete={onPostDelete ? () => onPostDelete(post) : undefined}
           />
         </div>
         {post.content && <p style={{ fontSize: 15, color: C.ice, lineHeight: 1.55, marginBottom: 10, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}><MentionText text={post.content} mentions={postMentionMap} /></p>}
@@ -315,7 +320,7 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
         )}
         {post.recap_for_game_id && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-            <button type="button" onClick={(e) => expand(e, () => navigate(`/game/${post.recap_for_game_id}`))}
+            <button type="button" {...prefetchHandlers(prefetchGamePage)} onClick={(e) => expand(e, () => navigate(`/game/${post.recap_for_game_id}`))}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: 'rgba(46,91,140,0.2)', border: '1px solid #2E5B8C', color: '#F4F7FA', fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer' }}>
               <span style={{ fontSize: 16 }}>🏒</span> View game →
             </button>
@@ -327,7 +332,7 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
             card to peel the tape (the reveal lives there). No Share (would spoil). */}
         {post.gamepuck_reveal_game_id && (
           <div style={{ marginBottom: 10 }}>
-            <button type="button" onClick={(e) => expand(e, () => navigate(`/game/${post.gamepuck_reveal_game_id}${post.league_id ? '?type=league' : ''}`))}
+            <button type="button" {...prefetchHandlers(prefetchGamePage)} onClick={(e) => expand(e, () => navigate(`/game/${post.gamepuck_reveal_game_id}${post.league_id ? '?type=league' : ''}`))}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: 'rgba(215,38,56,0.15)', border: '1px solid #D72638', color: '#F4F7FA', fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer' }}>
               <span style={{ fontSize: 16 }}>🏒</span> Peel to reveal →
             </button>
@@ -377,6 +382,18 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
                         onDeleted={() => {
                           setComments(prev => prev.filter(x => x.id !== c.id));
                           onCommentRemoved?.(post.id);
+                        }}
+                        onDelete={() => {
+                          // Optimistic remove + restore (the menu wraps this in a 5s Undo).
+                          const idx = comments.findIndex(x => x.id === c.id);
+                          setComments(prev => prev.filter(x => x.id !== c.id));
+                          onCommentRemoved?.(post.id);
+                          return () => {
+                            setComments(prev => prev.some(x => x.id === c.id)
+                              ? prev
+                              : (() => { const n = [...prev]; n.splice(idx < 0 ? n.length : Math.min(idx, n.length), 0, c); return n; })());
+                            onComment?.(post.id);
+                          };
                         }}
                       />
                     )}
@@ -510,7 +527,9 @@ export default function Feed({ currentUser, profile }) {
   const [likedPosts, setLikedPosts] = useState([]);
   const [reactionMap, setReactionMap] = useState({});
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const online = useOnline();
   // Skeleton only appears once a load passes 1s (manifesto: under 300ms show
   // nothing, over 1s show the skeleton) so fast feeds never flash placeholders.
   const showSkeleton = useDelayedFlag(loading);
@@ -547,6 +566,8 @@ export default function Feed({ currentUser, profile }) {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(false);
+    try {
     let data;
     let fellBack = false;
     if (tab === 'following' && currentUser) {
@@ -570,7 +591,14 @@ export default function Feed({ currentUser, profile }) {
     }
     // Reaction counts are public — load them whether or not we're signed in.
     setReactionMap(await getReactions(currentUser?.id, page.map(p => p.id)));
-    setLoading(false);
+    } catch (e) {
+      // A network drop / server hiccup must surface a retry, never hang the
+      // skeleton forever.
+      console.error('[Feed] load failed', e);
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
   }, [currentUser, tab]);
 
   useEffect(() => { load(); }, [load]);
@@ -741,6 +769,17 @@ export default function Feed({ currentUser, profile }) {
     })();
   };
 
+  // RESILIENCE — optimistic post delete. Removes the row now and returns a
+  // restore fn; PostActionMenu wraps both in a 5-second Undo toast and only
+  // fires the irreversible server delete once it expires.
+  const removePostOptimistic = (post) => {
+    const idx = posts.findIndex(p => p.id === post.id);
+    setPosts(prev => prev.filter(p => p.id !== post.id));
+    return () => setPosts(prev => prev.some(p => p.id === post.id)
+      ? prev
+      : (() => { const next = [...prev]; next.splice(idx < 0 ? next.length : Math.min(idx, next.length), 0, post); return next; })());
+  };
+
   // Broadcast lower-third label for the current view + whether any visible post
   // is live (lights the header's LIVE marker).
   const headerLabel = followingFallback ? 'Popular Now' : tab === 'following' ? 'Following' : 'For You';
@@ -842,6 +881,13 @@ export default function Feed({ currentUser, profile }) {
               <FeedSkeleton count={4} />
             </>
           ) : null
+        ) : error ? (
+          <ErrorState
+            title="Couldn’t load your feed"
+            offline={!online}
+            onRetry={load}
+            retrying={loading}
+          />
         ) : posts.length === 0 ? (
           <EmptyState
             icon="🏒"
@@ -872,6 +918,7 @@ export default function Feed({ currentUser, profile }) {
                 onComment={handleCommentAdded}
                 onCommentRemoved={handleCommentRemoved}
                 onPostHidden={(id) => setPosts(prev => prev.filter(p => p.id !== id))}
+                onPostDelete={removePostOptimistic}
                 onUserBlocked={(uid) => setPosts(prev => prev.filter(p => p.author_id !== uid))}
               />
             ))}

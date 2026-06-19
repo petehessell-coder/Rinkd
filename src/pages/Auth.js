@@ -354,7 +354,7 @@ export default function Auth({ defaultMode = 'login' }) {
             </p>
             {!forgotSent ? (
               <form onSubmit={handleForgot}>
-                <Input label="Email" type="email" value={forgotEmail}
+                <Input label="Email" type="email" value={forgotEmail} autoComplete="email" inputMode="email" autoFocus
                   onChange={e => setForgotEmail(e.target.value)} placeholder="you@example.com" required />
                 {/* Same Turnstile gate as login + signup. /auth/v1/recover
                     also requires a token under the global CAPTCHA Protection
@@ -411,9 +411,9 @@ export default function Auth({ defaultMode = 'login' }) {
             </div>
             <div style={{ marginBottom: 24 }} />
             <form onSubmit={handleLogin}>
-              <Input label="Email" type="email" value={form.email}
+              <Input label="Email" type="email" value={form.email} autoComplete="email" inputMode="email" autoFocus
                 onChange={e => set('email', e.target.value)} placeholder="you@example.com" required />
-              <Input label="Password" type="password" value={form.password}
+              <Input label="Password" type="password" value={form.password} autoComplete="current-password"
                 onChange={e => set('password', e.target.value)} placeholder="••••••••" required />
               {/* Turnstile bot-protection challenge. Renders nothing when
                   REACT_APP_TURNSTILE_SITE_KEY isn't set (dev / preview).
@@ -492,9 +492,9 @@ export default function Auth({ defaultMode = 'login' }) {
             <div style={{ marginBottom: 24 }} />
 
             <form onSubmit={handleSignup}>
-              <Input label="Email" type="email" value={form.email}
+              <Input label="Email" type="email" value={form.email} autoComplete="email" inputMode="email" autoFocus
                 onChange={e => set('email', e.target.value)} required placeholder="you@example.com" />
-              <Input label="Password" type="password" value={form.password}
+              <Input label="Password" type="password" value={form.password} autoComplete="new-password"
                 onChange={e => set('password', e.target.value)} required placeholder="Min 8 characters" minLength={8} />
               <Input label="Date of Birth" type="date" value={form.dob}
                 onChange={e => set('dob', e.target.value)} required

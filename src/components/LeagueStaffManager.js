@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   listLeagueStaff, assignLeagueManagerByInput, removeLeagueManager, revokeLeagueManagerInvite,
 } from '../lib/leagueManagers';
+import { useUndoable } from './ui';
 
 // LEAGUE-MGR-1 — the commissioner-only "Staff" tab. Add/remove league managers
 // (operational staff: teams/schedule/divisions/playoffs/feed + join-requests;
@@ -24,6 +25,7 @@ export default function LeagueStaffManager({ leagueId, leagueName, invitedBy }) 
   const [needsEmailFor, setNeedsEmailFor] = useState(null); // handle that didn't resolve
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
+  const runUndoable = useUndoable();
   const flash = (kind, text) => { setMsg({ kind, text }); setTimeout(() => setMsg(null), 5000); };
 
   const load = useCallback(async () => {
@@ -57,17 +59,21 @@ export default function LeagueStaffManager({ leagueId, leagueName, invitedBy }) 
     }
   };
 
-  const remove = async (m) => {
-    if (!window.confirm(`Remove ${m.name || '@' + m.handle} as a league manager? They lose manager access — you can add them back anytime.`)) return;
-    try { await removeLeagueManager(leagueId, m.user_id); flash('ok', 'Manager removed.'); await load(); }
-    catch (e) { flash('err', e.message || "That didn't go through — try again."); }
-  };
+  // Optimistic remove + 5s Undo (no confirm) — the delete is deferred, so Undo
+  // just cancels it; restore re-fetches the still-present row.
+  const remove = (m) => runUndoable({
+    message: `${m.name || '@' + m.handle} removed`,
+    apply: () => { setStaff((prev) => prev ? { ...prev, managers: (prev.managers || []).filter((x) => x.user_id !== m.user_id) } : prev); return load; },
+    commit: async () => { const r = await removeLeagueManager(leagueId, m.user_id); if (r && r.error) throw r.error; await load(); },
+    errorMessage: "That didn't go through — they're back. Try again.",
+  });
 
-  const revoke = async (inv) => {
-    if (!window.confirm(`Revoke the invite to ${inv.email}? Their magic link stops working — you can re-invite them later.`)) return;
-    try { await revokeLeagueManagerInvite(inv.id); flash('ok', 'Invite revoked.'); await load(); }
-    catch (e) { flash('err', e.message || "That didn't go through — try again."); }
-  };
+  const revoke = (inv) => runUndoable({
+    message: `Invite to ${inv.email} revoked`,
+    apply: () => { setStaff((prev) => prev ? { ...prev, pending_invites: (prev.pending_invites || []).filter((x) => x.id !== inv.id) } : prev); return load; },
+    commit: async () => { const r = await revokeLeagueManagerInvite(inv.id); if (r && r.error) throw r.error; await load(); },
+    errorMessage: "That didn't go through — the invite's back. Try again.",
+  });
 
   const managers = staff?.managers || [];
   const invites = staff?.pending_invites || [];

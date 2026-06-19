@@ -7,6 +7,7 @@ import {
 import { classifyImage } from '../lib/imageModeration';
 import { supabase } from '../lib/supabase';
 import AdSlot from './AdSlot';
+import { useUndoable } from './ui';
 
 // ADS-1 · M2 — the Sponsors tab. One home for an event's on-page sponsor
 // inventory. Phase 1 = the event banner (top of the league/tournament page).
@@ -28,6 +29,7 @@ export default function SponsorsManager({ ownerType, ownerId, isYouth = false, s
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   const [nonce, setNonce] = useState(0); // bumps each load → remounts the live preview
+  const runUndoable = useUndoable();
   const setF = (k, v) => setForm((p) => ({ ...p, [k]: v }));
   const flash = (kind, text) => { setMsg({ kind, text }); setTimeout(() => setMsg(null), 4000); };
 
@@ -86,11 +88,14 @@ export default function SponsorsManager({ ownerType, ownerId, isYouth = false, s
     try { await updatePlacement(p.id, { weight: Math.max(1, parseInt(w, 10) || 1) }, ownerType, ownerId); await load(); }
     catch (e) { flash('err', e.message || "That change didn't save — check your connection and try again."); }
   };
-  const remove = async (s) => {
-    if (!window.confirm(`Remove ${s.sponsor_name}? This deletes the creative and its placement — this can't be undone.`)) return;
-    try { await deleteSponsor(s.id, ownerType, ownerId); await load(); flash('ok', 'Sponsor removed.'); }
-    catch (e) { flash('err', e.message || "That didn't delete — check your connection and try again."); }
-  };
+  // Optimistic remove + 5s Undo — the delete is deferred until the toast
+  // expires, so Undo simply cancels it; restore re-fetches the still-present row.
+  const remove = (s) => runUndoable({
+    message: `${s.sponsor_name} removed`,
+    apply: () => { setSponsors((prev) => Array.isArray(prev) ? prev.filter((x) => x.id !== s.id) : prev); return load; },
+    commit: async () => { await deleteSponsor(s.id, ownerType, ownerId); await load(); },
+    errorMessage: "That didn't delete — it's back. Try again.",
+  });
 
   return (
     <div style={{ fontFamily: 'Barlow, sans-serif' }}>

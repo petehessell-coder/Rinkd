@@ -97,6 +97,45 @@ export function useToast() {
 const NOOP = { toast: () => -1, dismiss: () => {} };
 
 // -----------------------------------------------------------------------------
+// useUndoable — the manifesto's "optimistic action + Undo, never a confirm
+// dialog." Returns a runner you call instead of window.confirm:
+//
+//   const runUndoable = useUndoable();
+//   runUndoable({
+//     message: 'Post deleted',
+//     apply:  () => { removeFromUI(); return () => putItBack(); }, // optimistic; returns restore
+//     commit: () => deletePost(id),                               // the real (often irreversible) write
+//   });
+//
+// The UI updates instantly; a 5-second Undo toast appears; the irreversible
+// commit fires ONLY after those 5s elapse. Tapping Undo cancels the commit and
+// restores the UI. If the commit fails, we restore the UI and surface it — the
+// user never silently loses their thing.
+// -----------------------------------------------------------------------------
+const UNDO_MS = 5000;
+export function useUndoable() {
+  const { toast } = useToast();
+  return useCallback(({ message, apply, commit, errorMessage, actionLabel = 'Undo', tone = 'alert', icon }) => {
+    let restore = null;
+    try { restore = typeof apply === 'function' ? apply() : null; } catch { return; }
+    const undo = () => { if (typeof restore === 'function') { try { restore(); } catch { /* noop */ } } };
+    let undone = false;
+    const timer = setTimeout(async () => {
+      if (undone) return;
+      try { await (typeof commit === 'function' ? commit() : null); }
+      catch {
+        undo();
+        toast({ message: errorMessage || "That didn’t go through — it’s back where it was. Try again.", tone: 'alert' });
+      }
+    }, UNDO_MS);
+    toast({
+      message, tone, icon, actionLabel, duration: UNDO_MS,
+      undo: () => { undone = true; clearTimeout(timer); undo(); },
+    });
+  }, [toast]);
+}
+
+// -----------------------------------------------------------------------------
 // Viewport — fixed, bottom-center, stacked. Sits above everything; passes
 // pointer events through the gaps so it never blocks the UI underneath.
 // -----------------------------------------------------------------------------

@@ -18,9 +18,10 @@ const Tournaments = lazyWithRetry(() => import('./pages/Tournaments'));
 import { setSentryUser, captureException } from './lib/sentry';
 import { track } from './lib/analytics';
 import OnboardingModal from './components/OnboardingModal';
-import { MotionProvider, RouteTransition } from './components/ui';
+import { MotionProvider, RouteTransition, ToastProvider } from './components/ui';
 import RouteAnalytics from './components/RouteAnalytics';
 import ErrorBoundary from './components/ErrorBoundary';
+import OfflineBanner from './components/OfflineBanner';
 import { DuesTrackerPage } from './pages/ComingSoon';
 
 // Lazy — code-split the heavier / less-frequent routes out of the main bundle
@@ -463,7 +464,13 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AuthContext.Provider value={{ user, profile, setProfile, loading, profileError }}>
-        <BrowserRouter><AppRoutes /></BrowserRouter>
+        {/* ToastProvider powers optimistic-action Undo toasts app-wide; the
+            OfflineBanner pins a global connectivity state. Both sit above the
+            router so every route can reach them. */}
+        <ToastProvider>
+          <OfflineBanner />
+          <BrowserRouter><AppRoutes /></BrowserRouter>
+        </ToastProvider>
       </AuthContext.Provider>
     </ErrorBoundary>
   );
