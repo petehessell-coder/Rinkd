@@ -9,8 +9,11 @@ import { ImageResponse } from '@vercel/og';
 // leak anything the unfurl layer didn't already decide to expose.
 //
 // Built with Satori's plain-object element form (NOT JSX) so there's no JSX
-// transpile / React-pragma dependency in the edge bundle. ANY failure falls back
-// to the static brand image — a link must never unfurl broken.
+// transpile / React-pragma dependency in the edge bundle. Satori REQUIRES a font
+// to draw any text, so we fetch Barlow Condensed first and bail to the static
+// brand card if it (or the render) fails — the render is AWAITED here (not
+// streamed) precisely so a failure becomes a clean fallback, never a broken
+// 200-with-empty-body image.
 
 export const config = { runtime: 'edge' };
 
@@ -20,17 +23,24 @@ const RED = '#D72638';
 const ICE = '#F4F7FA';
 const STEEL = '#8BA3BE';
 
-// Barlow Condensed Black for the broadcast numerals — best-effort, cached for
-// the life of the isolate. If it can't be fetched we render in the default sans
-// (still bold + legible); the unfurl never blocks on a font.
-let fontPromise = null;
-function loadFont() {
-  if (!fontPromise) {
-    fontPromise = fetch('https://cdn.jsdelivr.net/gh/google/fonts/ofl/barlowcondensed/BarlowCondensed-Black.ttf')
-      .then((r) => (r.ok ? r.arrayBuffer() : null))
-      .catch(() => null);
+// Barlow Condensed (700 + 900), latin subset — small, fast, reliably hosted.
+// Cached for the life of the isolate.
+const FONT_URLS = [
+  { weight: 700, url: 'https://cdn.jsdelivr.net/npm/@fontsource/barlow-condensed/files/barlow-condensed-latin-700-normal.woff' },
+  { weight: 900, url: 'https://cdn.jsdelivr.net/npm/@fontsource/barlow-condensed/files/barlow-condensed-latin-900-normal.woff' },
+];
+let fontsPromise = null;
+function loadFonts() {
+  if (!fontsPromise) {
+    fontsPromise = Promise.all(FONT_URLS.map(async (f) => {
+      try {
+        const r = await fetch(f.url);
+        if (!r.ok) return null;
+        return { name: 'Barlow Condensed', data: await r.arrayBuffer(), weight: f.weight, style: 'normal' };
+      } catch { return null; }
+    })).then((list) => list.filter(Boolean));
   }
-  return fontPromise;
+  return fontsPromise;
 }
 
 // Tiny hyperscript for Satori — { type, props:{ style, children } }.
@@ -40,14 +50,13 @@ function teamBlock(name, score, align) {
   return el('div', { display: 'flex', flexDirection: 'column', alignItems: 'center', maxWidth: 460 }, [
     el('div', {
       display: 'flex', fontSize: 200, fontWeight: 900, fontStyle: 'italic', color: ICE,
-      lineHeight: 1, fontFamily: 'Barlow Condensed', textShadow: '0 6px 18px rgba(0,0,0,0.5)',
+      lineHeight: 1, textShadow: '0 6px 18px rgba(0,0,0,0.5)',
     }, [String(score)]),
     el('div', {
-      display: 'flex', marginTop: 14, fontSize: 40, fontWeight: 800, color: STEEL,
-      textTransform: 'uppercase', letterSpacing: 1, maxWidth: 440, overflow: 'hidden',
-      textAlign: 'center', justifyContent: 'center',
+      display: 'flex', marginTop: 14, fontSize: 40, fontWeight: 700, color: STEEL,
+      textTransform: 'uppercase', maxWidth: 440, overflow: 'hidden',
     }, [String(name).toUpperCase()]),
-    el('div', { display: 'flex', fontSize: 22, color: STEEL, marginTop: 2, letterSpacing: 2 }, [align]),
+    el('div', { display: 'flex', fontSize: 22, fontWeight: 700, color: STEEL, marginTop: 2 }, [align]),
   ]);
 }
 
@@ -55,6 +64,10 @@ export default async function handler(req) {
   const url = new URL(req.url);
   const p = url.searchParams;
   const origin = url.origin;
+  const fallback = () => Response.redirect(`${origin}/og-fallback-rinkd.png`, 302);
+
+  const fonts = await loadFonts();
+  if (!fonts.length) return fallback(); // no font → Satori can't draw text → static card
 
   try {
     const home = p.get('home') || 'Home';
@@ -66,27 +79,23 @@ export default async function handler(req) {
     const sub = p.get('sub') || 'Every game lives on Rinkd';
     const hasScore = hs !== null && as !== null && hs !== '' && as !== '';
 
-    const font = await loadFont();
-    const fonts = font ? [{ name: 'Barlow Condensed', data: font, weight: 900, style: 'normal' }] : [];
-
-    // The pill (FINAL / LIVE) — red for live, light for final.
     const pill = status
       ? el('div', {
-        display: 'flex', alignItems: 'center', gap: 12, padding: '8px 22px', borderRadius: 999,
-        background: status === 'LIVE' ? RED : 'rgba(244,247,250,0.12)', color: ICE,
-        fontSize: 26, fontWeight: 900, fontStyle: 'italic', fontFamily: 'Barlow Condensed', letterSpacing: 2,
+        display: 'flex', alignItems: 'center', padding: '8px 22px', borderRadius: 999,
+        backgroundColor: status === 'LIVE' ? RED : 'rgba(244,247,250,0.12)', color: ICE,
+        fontSize: 26, fontWeight: 900, fontStyle: 'italic',
       }, [status])
       : null;
 
     const center = hasScore
-      ? el('div', { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 36 }, [
+      ? el('div', { display: 'flex', alignItems: 'center', justifyContent: 'center' }, [
         teamBlock(away, as, 'AWAY'),
-        el('div', { display: 'flex', fontSize: 110, color: STEEL, fontWeight: 800, fontFamily: 'Barlow Condensed' }, ['–']),
+        el('div', { display: 'flex', fontSize: 110, fontWeight: 700, color: STEEL, marginLeft: 28, marginRight: 28 }, ['–']),
         teamBlock(home, hs, 'HOME'),
       ])
       : el('div', {
-        display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', maxWidth: 1000,
-        fontSize: 88, fontWeight: 900, fontStyle: 'italic', color: ICE, fontFamily: 'Barlow Condensed',
+        display: 'flex', textAlign: 'center', maxWidth: 1000,
+        fontSize: 88, fontWeight: 900, fontStyle: 'italic', color: ICE,
         lineHeight: 1.04, textTransform: 'uppercase',
       }, [title]);
 
@@ -94,35 +103,39 @@ export default async function handler(req) {
       display: 'flex', flexDirection: 'column', width: '100%', height: '100%',
       backgroundColor: NAVY,
       backgroundImage: `linear-gradient(160deg, #13335c 0%, ${NAVY} 55%, ${NAVY2} 100%)`,
-      color: ICE, fontFamily: 'Barlow, sans-serif', position: 'relative',
+      color: ICE, fontFamily: 'Barlow Condensed',
     }, [
-      // top accent bar
       el('div', { display: 'flex', height: 10, width: '100%', backgroundColor: RED }, []),
-      // top strip
       el('div', {
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '30px 56px 0',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '30px 56px 0',
       }, [
-        el('div', { display: 'flex', alignItems: 'center', gap: 14 }, [
-          el('div', { display: 'flex', fontSize: 48, fontWeight: 900, fontStyle: 'italic', fontFamily: 'Barlow Condensed', color: ICE, letterSpacing: 1 }, ['RINKD']),
-          el('div', { display: 'flex', width: 16, height: 16, borderRadius: 999, backgroundColor: RED }, []),
+        el('div', { display: 'flex', alignItems: 'center' }, [
+          el('div', { display: 'flex', fontSize: 48, fontWeight: 900, fontStyle: 'italic', color: ICE }, ['RINKD']),
+          el('div', { display: 'flex', width: 16, height: 16, borderRadius: 999, backgroundColor: RED, marginLeft: 14 }, []),
         ]),
-        el('div', { display: 'flex', fontSize: 28, fontWeight: 700, color: STEEL, textTransform: 'uppercase', letterSpacing: 2, maxWidth: 620, overflow: 'hidden' }, [String(sub).toUpperCase()]),
+        el('div', { display: 'flex', fontSize: 28, fontWeight: 700, color: STEEL, textTransform: 'uppercase', maxWidth: 620, overflow: 'hidden' }, [String(sub).toUpperCase()]),
       ]),
-      // center stage
-      el('div', { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 26, padding: '0 56px' }, [
-        pill, center,
-      ].filter(Boolean)),
-      // footer
+      el('div', { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexGrow: 1, padding: '0 56px' }, [
+        ...(pill ? [pill, el('div', { display: 'flex', height: 26 }, [])] : []),
+        center,
+      ]),
       el('div', { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 56px 34px' }, [
-        el('div', { display: 'flex', fontSize: 26, color: STEEL, fontWeight: 700 }, ['rinkd.app']),
-        el('div', { display: 'flex', fontSize: 24, color: ICE, fontWeight: 700, fontStyle: 'italic', fontFamily: 'Barlow Condensed', letterSpacing: 1 }, ['FOLLOW LIVE ON RINKD →']),
+        el('div', { display: 'flex', fontSize: 26, fontWeight: 700, color: STEEL }, ['rinkd.app']),
+        el('div', { display: 'flex', fontSize: 24, fontWeight: 700, fontStyle: 'italic', color: ICE }, ['FOLLOW LIVE ON RINKD →']),
       ]),
     ]);
 
-    return new ImageResponse(tree, { width: 1200, height: 630, fonts });
-  } catch (e) {
-    // Never break the unfurl — fall back to the static brand card.
-    return Response.redirect(`${origin}/og-fallback-rinkd.png`, 302);
+    // AWAIT the render so a Satori error is catchable here (a streamed
+    // ImageResponse would 200 with an empty body on failure).
+    const image = new ImageResponse(tree, { width: 1200, height: 630, fonts });
+    const buf = await image.arrayBuffer();
+    return new Response(buf, {
+      headers: {
+        'content-type': 'image/png',
+        'cache-control': 'public, max-age=300, s-maxage=86400, stale-while-revalidate=604800',
+      },
+    });
+  } catch {
+    return fallback();
   }
 }
