@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Icon } from './ui';
 import { reportPost, reportComment, REPORT_REASONS, hidePost, hideComment } from '../lib/moderation';
 import { blockUser } from '../lib/blocks';
 import { deletePost, deleteComment } from '../lib/posts';
@@ -161,19 +162,19 @@ export default function PostActionMenu({
           boxShadow: '0 6px 18px rgba(0,0,0,0.35)',
         }}>
           {isOwn ? (
-            <button onClick={doDelete} disabled={deleting} style={{ ...menuItemStyle, color: C.red, opacity: deleting ? 0.6 : 1 }}>
-              🗑 {deleting ? 'Deleting…' : `Delete ${kind === 'comment' ? 'comment' : 'post'}`}
+            <button onClick={doDelete} disabled={deleting} style={{ ...menuItemStyle, display: 'flex', alignItems: 'center', gap: 8, color: C.red, opacity: deleting ? 0.6 : 1 }}>
+              <Icon name="delete" size={16} /> {deleting ? 'Deleting…' : `Delete ${kind === 'comment' ? 'comment' : 'post'}`}
             </button>
           ) : (
             <>
               {canModerate && (
-                <button onClick={doHide} disabled={hiding} style={{ ...menuItemStyle, opacity: hiding ? 0.6 : 1 }}>
-                  🙈 {hiding ? 'Hiding…' : `Hide ${kind === 'comment' ? 'comment' : 'post'}`}
+                <button onClick={doHide} disabled={hiding} style={{ ...menuItemStyle, display: 'flex', alignItems: 'center', gap: 8, opacity: hiding ? 0.6 : 1 }}>
+                  <Icon name="hide" size={16} /> {hiding ? 'Hiding…' : `Hide ${kind === 'comment' ? 'comment' : 'post'}`}
                 </button>
               )}
-              <button onClick={openReport} style={menuItemStyle}>🚩 Report</button>
-              <button onClick={doBlock} style={menuItemStyle}>
-                🚫 Block {authorHandle ? `@${authorHandle}` : 'user'}
+              <button onClick={openReport} style={{ ...menuItemStyle, display: 'flex', alignItems: 'center', gap: 8 }}><Icon name="report" size={16} /> Report</button>
+              <button onClick={doBlock} style={{ ...menuItemStyle, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Icon name="block" size={16} /> Block {authorHandle ? `@${authorHandle}` : 'user'}
               </button>
             </>
           )}

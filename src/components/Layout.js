@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { RinkdLogo, Avatar, ProfileNavIcon, ChirpNavIcon } from './Logos';
+import { Users, Bell, MoreHorizontal } from 'lucide-react';
 import { signOut } from '../lib/auth';
 import NotificationBell from './NotificationBell';
 import MessagesIcon from './MessagesIcon';
@@ -28,10 +29,10 @@ const B = {
 
 const NAV = [
   { path: '/feed',          IconNode: ChirpNavIcon, iconProps: { inline: false }, label: 'Chirps' },
-  { path: '/teams',         icon: '👥',  label: 'Teams' },
-  { path: '/notifications', icon: '🔔',  label: 'Notifications', showBadge: true },
+  { path: '/teams',         IconNode: Users,          label: 'Teams' },
+  { path: '/notifications', IconNode: Bell,           label: 'Notifications', showBadge: true },
   { path: '/profile',       IconNode: ProfileNavIcon, label: 'Profile' },
-  { path: '__more',         icon: '⋯',  label: 'More', isMore: true },
+  { path: '__more',         IconNode: MoreHorizontal, label: 'More', isMore: true },
 ];
 
 // Mobile bottom bar drops Notifications — on mobile it already lives in the

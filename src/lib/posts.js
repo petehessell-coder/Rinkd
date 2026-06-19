@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { getBlockedIds, excludeBlocked, filterBlockedIds } from './blocks';
 import { POST_MENTIONS_EMBED, COMMENT_MENTIONS_EMBED } from './mentions';
+import { relativeTime } from './format';
 
 export async function getPosts(limit = 30, before = null) {
   let query = supabase
@@ -368,12 +369,8 @@ export async function getFollowCounts(userId) {
   return { followers: followers || 0, following: following || 0 };
 }
 
+// Kept as a named export for the many existing import sites; the implementation
+// now lives in lib/format.js (relativeTime) so there's one formatter app-wide.
 export function timeAgo(dateStr) {
-  const now = new Date();
-  const date = new Date(dateStr);
-  const seconds = Math.floor((now - date) / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
-  return `${Math.floor(seconds / 86400)}d`;
+  return relativeTime(dateStr);
 }

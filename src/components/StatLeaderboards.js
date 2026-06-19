@@ -65,7 +65,7 @@ function StatTable({ rows, accent, idLabel, renderId, cols, rowKey, showRank = t
                   </div>
                 </td>
                 {cols.map(c => (
-                  <td key={c.key} style={{ fontSize: 11, textAlign: 'center', color: c.strong ? C.text : C.dim2, fontWeight: c.strong ? 700 : 400, padding: '9px 4px', width: midCellW, minWidth: midCellW }}>
+                  <td key={c.key} style={{ fontSize: 11, textAlign: 'center', color: c.strong ? C.text : C.dim2, fontWeight: c.strong ? 700 : 400, padding: '9px 4px', width: midCellW, minWidth: midCellW, fontVariantNumeric: 'tabular-nums' }}>
                     {c.render(row)}
                   </td>
                 ))}

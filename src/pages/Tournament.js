@@ -27,6 +27,7 @@ import RecapCard from '../components/RecapCard';
 import { recapSourceFromPost, getRecapCardWithSponsor } from '../lib/recapCard';
 import { loadGameCardData } from '../lib/gameCardData';
 import { C } from '../lib/tokens';
+import { Icon } from '../components/ui';
 
 
 const TABS = ['Standings','Schedule','Bracket','Stats','Feed','Gallery','Info'];
@@ -522,14 +523,14 @@ export default function TournamentPage({ currentUser }) {
                   letterSpacing: '0.05em', textTransform: 'uppercase',
                   opacity: followBusy ? 0.6 : 1,
                 }}>
-                {followBusy ? '...' : isFollowing ? '🔕 Following' : '🔔 Follow'}
+                {followBusy ? '...' : <span style={{display:'inline-flex',alignItems:'center',gap:6}}><Icon name={isFollowing ? 'following' : 'bell'} size={13} />{isFollowing ? 'Following' : 'Follow'}</span>}
               </button>
             )}
             {tournament && currentUser && <PinToNavButton userId={currentUser.id} pinType="tournament" targetId={id} />}
             {tournament && currentUser && isDirector && (
               <button onClick={() => navigate(`/tournament/${id}/manage`)}
-                style={{background:accent,color:'#fff',border:'none',borderRadius:999,padding:'5px 12px',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',letterSpacing:'0.05em',textTransform:'uppercase'}}>
-                ⚙ Manage
+                style={{background:accent,color:'#fff',border:'none',borderRadius:999,padding:'5px 12px',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',letterSpacing:'0.05em',textTransform:'uppercase',display:'inline-flex',alignItems:'center',gap:6}}>
+                <Icon name="manage" size={13} color="#fff" />Manage
               </button>
             )}
           </div>
@@ -680,26 +681,26 @@ export default function TournamentPage({ currentUser }) {
                           <td style={{...stickyLeft,padding:'10px',minWidth:130,maxWidth:160}}>
                             <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
                               {/* Rank as a large muted number (gold for 1st), not a column or a badge. */}
-                              <span style={{fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:900,fontSize:22,lineHeight:1,minWidth:20,textAlign:'center',color:row.pool_rank===1?'#C9A84C':'rgba(244,247,250,0.35)',flexShrink:0}}>{row.pool_rank}</span>
+                              <span style={{fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:900,fontSize:22,lineHeight:1,minWidth:20,textAlign:'center',fontVariantNumeric:'tabular-nums',color:row.pool_rank===1?'#C9A84C':'rgba(244,247,250,0.35)',flexShrink:0}}>{row.pool_rank}</span>
                               <span style={{fontSize:14,fontWeight:600,color:C.ice,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{row.team_name}</span>
                               {/* GS-2 — TEAM-LEVEL suspension flag only. Opponents
                                   learn the lineup may differ; no player is ever
                                   named on this public surface. */}
                               {suspendedTeams[row.team_id] > 0 && (
                                 <span title="Suspended player(s) — lineup may differ" aria-label="Team has suspended players"
-                                  style={{fontSize:10,fontWeight:700,color:'#F59E0B',background:'rgba(245,158,11,0.14)',border:'0.5px solid rgba(245,158,11,0.45)',borderRadius:6,padding:'1px 5px',flexShrink:0,whiteSpace:'nowrap'}}>
-                                  ⚠️ Susp.
+                                  style={{fontSize:10,fontWeight:700,color:'#F59E0B',background:'rgba(245,158,11,0.14)',border:'0.5px solid rgba(245,158,11,0.45)',borderRadius:6,padding:'1px 5px',flexShrink:0,whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',gap:3}}>
+                                  <Icon name="alert" size={11} color="#F59E0B" /> Susp.
                                 </span>
                               )}
                             </div>
                           </td>
                           {midCols.map(c => (
-                            <td key={c.key} style={{fontFamily:"'Barlow Condensed', sans-serif",fontWeight:700,fontSize:16,textAlign:'center',color:c.color ? (typeof c.color === 'function' ? c.color(row) : c.color) : 'rgba(244,247,250,0.75)',padding:'9px 4px',width:midCellW,minWidth:midCellW}}>
+                            <td key={c.key} style={{fontFamily:"'Barlow Condensed', sans-serif",fontWeight:700,fontSize:16,textAlign:'center',fontVariantNumeric:'tabular-nums',color:c.color ? (typeof c.color === 'function' ? c.color(row) : c.color) : 'rgba(244,247,250,0.75)',padding:'9px 4px',width:midCellW,minWidth:midCellW}}>
                               {c.render(row)}
                             </td>
                           ))}
                           {/* Gold PTS on the 1st-place row only — the one earned highlight. */}
-                          <td style={{...stickyRight,fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:900,fontSize:18,textAlign:'center',color:row.pool_rank===1?'#C9A84C':C.ice,padding:'9px 10px',minWidth:48}}>{row.pts}</td>
+                          <td style={{...stickyRight,fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:900,fontSize:18,textAlign:'center',fontVariantNumeric:'tabular-nums',color:row.pool_rank===1?'#C9A84C':C.ice,padding:'9px 10px',minWidth:48}}>{row.pts}</td>
                         </tr>
                       </React.Fragment>
                     ))}
@@ -802,7 +803,7 @@ function LiveScoreRow({ name, score, lead }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '2px 0' }}>
       <span style={{ fontSize: 14, fontWeight: lead ? 800 : 600, color: C.ice, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name || 'TBD'}</span>
-      <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, lineHeight: 1, color: lead ? C.ice : 'rgba(244,247,250,0.7)' }}>{score}</span>
+      <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: lead ? C.ice : 'rgba(244,247,250,0.7)' }}>{score}</span>
     </div>
   );
 }
@@ -1308,14 +1309,14 @@ function GameCard({ game, navigate, canScore }) {
           <div style={{width:32,height:32,borderRadius:'50%',background:'#1a4a7a',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:11,color:'#fff',flexShrink:0}}>{teamInitials(game.home_team?.team_name)}</div>
           <span style={{fontSize:14,fontWeight:homeWon?800:600,color:C.ice,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{game.home_team?.team_name}</span>
         </div>
-        {(isLive||isFinal) && <span style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:26,color:C.ice,flexShrink:0}}>{game.home_score}</span>}
+        {(isLive||isFinal) && <span style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:26,color:C.ice,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{game.home_score}</span>}
       </div>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:10,opacity:isFinal && !awayWon ? 0.65 : 1}}>
         <div style={{display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0}}>
           <div style={{width:32,height:32,borderRadius:'50%',background:'#6b1520',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:11,color:'#fff',flexShrink:0}}>{teamInitials(game.away_team?.team_name)}</div>
           <span style={{fontSize:14,fontWeight:awayWon?800:600,color:C.ice,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{game.away_team?.team_name}</span>
         </div>
-        {(isLive||isFinal) ? <span style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:26,color:C.ice,flexShrink:0}}>{game.away_score}</span> : <span style={{fontSize:11,fontWeight:600,color:'rgba(244,247,250,0.3)',flexShrink:0}}>VS</span>}
+        {(isLive||isFinal) ? <span style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:26,color:C.ice,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{game.away_score}</span> : <span style={{fontSize:11,fontWeight:600,color:'rgba(244,247,250,0.3)',flexShrink:0}}>VS</span>}
       </div>
       <div style={{fontSize:11,color:'rgba(244,247,250,0.4)'}}>📍 {[game.rink?.sub_rink, game.rink?.name].filter(Boolean).join(' · ') || 'Rink TBD'}</div>
       {canScore && (

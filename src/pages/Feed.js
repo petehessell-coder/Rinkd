@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { C } from '../lib/tokens';
+import { Icon } from '../components/ui';
 import TapeText from '../components/TapeText';
 import { Avatar, TierBadge } from '../components/Logos';
 import { getPosts, getFollowingPosts, createPost, toggleLike, getLikedPosts, getComments, createComment, uploadMedia, timeAgo } from '../lib/posts';
@@ -327,16 +328,16 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
         )}
         {post.livebarn_venue_id && (
           <a href={"https://watch.livebarn.com/en/videoplayer?venueid=" + post.livebarn_venue_id + "&referrer=rinkd"} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, marginBottom: 10, background: 'rgba(46,91,140,0.2)', border: '1px solid #2E5B8C', color: '#F4F7FA', fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', textDecoration: 'none' }}>
-            <span style={{ fontSize: 16 }}>📺</span> Watch Live on LiveBarn
+            <Icon name="live" size={16} /> Watch Live on LiveBarn
           </a>
         )}
         <div style={{ display: 'flex', gap: 16, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
           <button onClick={() => onLike(post.id)} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: isLiked ? C.red : C.steel, fontSize: 13, fontFamily: "'Barlow', sans-serif", padding: 0 }}>
-            <span style={{ fontSize: 16 }}>{isLiked ? '❤️' : '🤍'}</span>
+            <Icon name="like" size={16} fill={isLiked ? C.red : 'none'} />
             <span style={{ fontWeight: isLiked ? 600 : 400 }}>{post.likes || 0}</span>
           </button>
           <button onClick={loadComments} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: showComments ? C.ice : C.steel, fontSize: 13, fontFamily: "'Barlow', sans-serif", padding: 0 }}>
-            <span style={{ fontSize: 16 }}>💬</span><span>{post.comment_count || 0}</span>
+            <Icon name="comment" size={16} /><span>{post.comment_count || 0}</span>
           </button>
           <PostReactions postId={post.id} currentUserId={currentUser?.id} initial={reactions} />
         </div>
@@ -403,12 +404,12 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
 // Hidden when: profile_complete=true, no profile yet, OR the user has
 // already dismissed it this session (sessionStorage flag).
 const PERSONAS = [
-  { id: 'player',       icon: '🏒', label: 'Player' },
-  { id: 'coach',        icon: '🎯', label: 'Coach' },
-  { id: 'parent',       icon: '👨‍👧', label: 'Parent' },
-  { id: 'commissioner', icon: '🏆', label: 'Commissioner' },
-  { id: 'official',     icon: '🦓', label: 'Official' },
-  { id: 'fan',          icon: '📺', label: 'Fan' },
+  { id: 'player',       icon: 'player',       label: 'Player' },
+  { id: 'coach',        icon: 'coach',        label: 'Coach' },
+  { id: 'parent',       icon: 'parent',       label: 'Parent' },
+  { id: 'commissioner', icon: 'commissioner', label: 'Commissioner' },
+  { id: 'official',     icon: 'official',     label: 'Official' },
+  { id: 'fan',          icon: 'fan',          label: 'Fan' },
 ];
 
 function ProfileNudgeBanner() {
@@ -488,7 +489,7 @@ function ProfileNudgeBanner() {
               opacity: busy ? 0.5 : 1,
               display: 'inline-flex', alignItems: 'center', gap: 6,
             }}>
-            <span aria-hidden="true">{p.icon}</span>{p.label}
+            <Icon name={p.icon} size={14} />{p.label}
           </button>
         ))}
       </div>

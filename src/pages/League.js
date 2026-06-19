@@ -32,6 +32,7 @@ import RecapCard from '../components/RecapCard';
 import { recapSourceFromPost, getRecapCardWithSponsor } from '../lib/recapCard';
 import { loadGameCardData } from '../lib/gameCardData';
 import { C } from '../lib/tokens';
+import { Icon } from '../components/ui';
 const TABS = ['Schedule', 'Standings', 'Stats', 'Teams', 'Feed', 'Gallery', 'Info'];
 
 // Broadcast lower-third section header — white Barlow Condensed 700 italic caps
@@ -112,11 +113,11 @@ function GameRow({ game, isCommissioner, navigate }) {
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           {isLive && <>
             <span style={{ background: C.red, color: '#fff', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, display: 'block', marginBottom: 4 }}>● LIVE</span>
-            <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice }}>{game.home_score} – {game.away_score}</span>
+            <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice, fontVariantNumeric: 'tabular-nums' }}>{game.home_score} – {game.away_score}</span>
           </>}
           {isFinal && <>
             <span style={{ background: 'rgba(244,247,250,0.08)', color: 'rgba(244,247,250,0.4)', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, display: 'block', marginBottom: 4 }}>FINAL</span>
-            <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice }}>{game.home_score} – {game.away_score}</span>
+            <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice, fontVariantNumeric: 'tabular-nums' }}>{game.home_score} – {game.away_score}</span>
           </>}
           {!isLive && !isFinal && (
             <span style={{ background: 'rgba(46,91,140,0.4)', color: C.steel, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>
@@ -163,10 +164,10 @@ function GameRow({ game, isCommissioner, navigate }) {
       {/* Scorer View */}
       {isCommissioner && !isFinal && (
         <button onClick={() => navigate('/league-scorer/' + game.id + '?type=league')}
-          style={{ marginTop: 8, width: '100%', padding: '8px', background: 'rgba(46,91,140,0.2)', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 8, color: '#F4F7FA', fontFamily: 'Barlow,sans-serif', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' }}
+          style={{ marginTop: 8, width: '100%', padding: '8px', background: 'rgba(46,91,140,0.2)', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 8, color: '#F4F7FA', fontFamily: 'Barlow,sans-serif', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}
           onMouseEnter={e => { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; }}
           onMouseLeave={e => { e.currentTarget.style.background = 'rgba(46,91,140,0.2)'; e.currentTarget.style.color = '#F4F7FA'; }}>
-          ✏️ Open Scorer View
+          <Icon name="scorer" size={14} /> Open Scorer View
         </button>
       )}
     </div>
@@ -521,17 +522,18 @@ export default function LeaguePage({ currentUser, profile }) {
                   fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic',
                   letterSpacing: '0.05em', textTransform: 'uppercase',
                   opacity: followBusy ? 0.6 : 1, whiteSpace: 'nowrap',
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
                 }}>
-                {isFollowing ? '🔔 Following' : '🔔 Follow'}
+                <Icon name={isFollowing ? 'following' : 'bell'} size={13} />{isFollowing ? 'Following' : 'Follow'}
               </button>
             )}
             {currentUser && <PinToNavButton userId={currentUser.id} pinType="league" targetId={id} />}
             {isManager && (
               <button onClick={() => navigate(`/league/${id}/manage`)}
-                style={{ background: 'rgba(46,91,140,0.25)', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 20, padding: '5px 12px', fontSize: 12, fontWeight: 600, color: C.ice, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap', transition: 'all 0.15s' }}
+                style={{ background: 'rgba(46,91,140,0.25)', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 20, padding: '5px 12px', fontSize: 12, fontWeight: 600, color: C.ice, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap', transition: 'all 0.15s', display: 'inline-flex', alignItems: 'center', gap: 6 }}
                 onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
                 onMouseLeave={e => { e.currentTarget.style.background = 'rgba(46,91,140,0.25)'; e.currentTarget.style.color = C.ice; }}>
-                ⚙️ Manage
+                <Icon name="manage" size={14} />Manage
               </button>
             )}
           </div>
@@ -600,7 +602,7 @@ export default function LeaguePage({ currentUser, profile }) {
                     }}
                     onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
                     onMouseLeave={e => { e.currentTarget.style.background = C.red; e.currentTarget.style.color = '#fff'; }}>
-                    📡 Subscribe to League Calendar
+                    <Icon name="subscribe" size={15} /> Subscribe to League Calendar
                   </button>
                 </div>
               )}
@@ -667,12 +669,12 @@ export default function LeaguePage({ currentUser, profile }) {
                   {scopedStandings.map((row, i) => {
                     const rank = row.rank ?? i + 1;
                     // Number first, no cell borders. PTS gold on the 1st-place row only.
-                    const stat = { fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 16, textAlign: 'center', color: 'rgba(244,247,250,0.75)' };
+                    const stat = { fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 16, textAlign: 'center', fontVariantNumeric: 'tabular-nums', color: 'rgba(244,247,250,0.75)' };
                     return (
                     <div key={row.lt_id} style={{ display: 'grid', gridTemplateColumns: standingsCols, padding: '9px 12px', alignItems: 'center' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
                         {/* Rank as a large muted number (gold for 1st), not a column. */}
-                        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, lineHeight: 1, minWidth: 16, textAlign: 'center', color: rank === 1 ? '#C9A84C' : 'rgba(244,247,250,0.35)', flexShrink: 0 }}>{rank}</span>
+                        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, lineHeight: 1, minWidth: 16, textAlign: 'center', fontVariantNumeric: 'tabular-nums', color: rank === 1 ? '#C9A84C' : 'rgba(244,247,250,0.35)', flexShrink: 0 }}>{rank}</span>
                         <div style={{ width: 24, height: 24, borderRadius: 5, background: row.logo_url ? `url(${row.logo_url}) center/cover, ${row.logo_color || C.blue}` : (row.logo_color || C.blue), display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 10, color: '#fff', flexShrink: 0 }}>
                           {!row.logo_url && (row.logo_initials || row.team_name.slice(0, 2).toUpperCase())}
                         </div>
@@ -684,7 +686,7 @@ export default function LeaguePage({ currentUser, profile }) {
                       {showOtl && <span style={stat}>{row.otl || 0}</span>}
                       <span style={stat}>{row.ties}</span>
                       <span style={stat}>{row.gf}</span>
-                      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, textAlign: 'center', color: rank === 1 ? '#C9A84C' : row.pts === 0 ? 'rgba(244,247,250,0.4)' : C.ice }}>{row.pts}</span>
+                      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, textAlign: 'center', fontVariantNumeric: 'tabular-nums', color: rank === 1 ? '#C9A84C' : row.pts === 0 ? 'rgba(244,247,250,0.4)' : C.ice }}>{row.pts}</span>
                     </div>
                     );
                   })}
@@ -944,8 +946,8 @@ function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, league
             </div>
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-            <label style={{ cursor: 'pointer', fontSize: 12, color: '#9BB5D6' }}>
-              📷 Photo
+            <label style={{ cursor: 'pointer', fontSize: 12, color: '#9BB5D6', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <Icon name="camera" size={14} /> Photo
               <input type="file" accept="image/*,video/*" style={{ display: 'none' }}
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) setMediaFile(f); }} />
             </label>
@@ -1023,7 +1025,7 @@ function LeagueFeedTab({ posts, setPosts, loading, navigate, currentUser, league
                     disabled={!currentUser}
                     style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', padding: 0, cursor: currentUser ? 'pointer' : 'default', color: likedPosts.includes(p.id) ? '#D72638' : '#7C8B9F', fontFamily: 'Barlow, sans-serif', fontSize: 12 }}
                   >
-                    <span style={{ fontSize: 14 }}>{likedPosts.includes(p.id) ? '❤️' : '🤍'}</span>
+                    <Icon name="like" size={14} fill={likedPosts.includes(p.id) ? '#D72638' : 'none'} />
                     <span style={{ fontWeight: likedPosts.includes(p.id) ? 700 : 400 }}>{p.likes || 0}</span>
                   </button>
                   <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{author ? `${author} · ` : ''}{timeAgo(p.created_at)} ago</span>

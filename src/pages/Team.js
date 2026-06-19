@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { Icon } from '../components/ui';
 import Layout from '../components/Layout';
 import { getTeam, getTeamMembers, getTeamGames, getUserRoleOnTeam, isLeagueStaffOfTeam, requestToJoin } from '../lib/teams';
 import { captureDataError } from '../lib/sentry';
@@ -220,7 +221,7 @@ export default function TeamPage({ currentUser, profile }) {
                   display: 'inline-flex', alignItems: 'center', gap: 4,
                   fontFamily: "'Barlow', sans-serif",
                 }}>
-                📍 Directions
+                <Icon name="directions" size={12} /> Directions
               </MapLink>
               {g.status === 'scheduled' && (
                 <CalendarButton game={g} teamLabel={`${team.name} ${g.is_home ? 'vs.' : '@'} ${g.opponent || ''}`.trim()} />
@@ -279,7 +280,7 @@ export default function TeamPage({ currentUser, profile }) {
                     display: 'inline-flex', alignItems: 'center', gap: 4,
                     fontFamily: "'Barlow', sans-serif",
                   }}>
-                  📍 Directions
+                  <Icon name="directions" size={12} /> Directions
                 </MapLink>
               </div>
             )}
@@ -289,7 +290,7 @@ export default function TeamPage({ currentUser, profile }) {
               style={{ background: 'rgba(46,91,140,0.25)', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 20, padding: '5px 12px', fontSize: 12, fontWeight: 600, color: C.ice, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', transition: 'all 0.15s', whiteSpace: 'nowrap' }}
               onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
               onMouseLeave={e => { e.currentTarget.style.background = 'rgba(46,91,140,0.25)'; e.currentTarget.style.color = C.ice; }}>
-              ⚙️ Manage
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="manage" size={16} /> Manage</span>
             </button>
           )}
           {currentUser && <PinToNavButton userId={currentUser.id} pinType="team" targetId={id} />}
@@ -414,7 +415,7 @@ export default function TeamPage({ currentUser, profile }) {
                     }}
                     onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
                     onMouseLeave={e => { e.currentTarget.style.background = C.red; e.currentTarget.style.color = '#fff'; }}>
-                    📡 Subscribe (Live)
+                    <Icon name="subscribe" size={16} /> Subscribe (Live)
                   </button>
                   <button
                     onClick={() => {
@@ -458,7 +459,7 @@ export default function TeamPage({ currentUser, profile }) {
                     }}
                     onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
                     onMouseLeave={e => { e.currentTarget.style.background = 'rgba(46,91,140,0.25)'; e.currentTarget.style.color = C.ice; }}>
-                    📅 Add Full Schedule
+                    <Icon name="calendar" size={16} /> Add Full Schedule
                   </button>
                 </div>
               )}

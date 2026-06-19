@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { subscribeToPush, isPushSubscribed, unsubscribeFromPush } from '../lib/push';
 import Layout from '../components/Layout';
 import { C } from '../lib/tokens';
+import { Icon, StatNumber } from '../components/ui';
+import { number, plural } from '../lib/format';
 import { TierBadge } from '../components/Logos';
 import { updateProfile } from '../lib/auth';
 import { getTier, getTierProgress, getNextTier, TIERS } from '../lib/tiers';
@@ -390,7 +392,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                     padding: '5px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
                     fontFamily: 'Barlow, sans-serif', display: 'inline-flex', alignItems: 'center', gap: 6,
                   }}>
-                  {coverUploading ? 'Uploading…' : profile.cover_image_url ? '📷 Change cover' : '📷 Add cover'}
+                  {coverUploading ? 'Uploading…' : <><Icon name="camera" size={13} />{profile.cover_image_url ? 'Change cover' : 'Add cover'}</>}
                 </label>
               </>
             )}
@@ -408,7 +410,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                       border: '2px solid #07111F',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: 12, lineHeight: 1,
-                    }}>{avatarUploading ? '…' : '📷'}</span>
+                    }}>{avatarUploading ? '…' : <Icon name="camera" size={12} color="#fff" />}</span>
                   </label>
                 </>
               ) : (
@@ -470,14 +472,14 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                   <button onClick={openEdit} style={{ padding: '8px 16px', borderRadius: 8, background: 'transparent', border: `1.5px solid ${C.border}`, color: C.ice, fontFamily: "'Barlow', sans-serif", fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>Edit</button>
                   {!pushEnabled && (
                     <button onClick={handleEnableNotifications} disabled={pushLoading} style={{ padding: '8px 16px', borderRadius: 8, background: 'transparent', border: `1.5px solid #2E5B8C`, color: '#8BA3BE', fontFamily: "'Barlow', sans-serif", fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
-                      {pushLoading ? '...' : '🔔 Notify'}
+                      {pushLoading ? '...' : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="bell" size={14} />Notify</span>}
                     </button>
                   )}
                   {pushEnabled && (
                     <button onClick={handleDisableNotifications} disabled={pushLoading}
                       title="Click to turn off"
                       style={{ padding: '8px 16px', borderRadius: 8, background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.5)', color: '#22C55E', fontSize: 13, fontFamily: "'Barlow', sans-serif", cursor: pushLoading ? 'not-allowed' : 'pointer', fontWeight: 600 }}>
-                      {pushLoading ? '...' : '🔔 On'}
+                      {pushLoading ? '...' : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="following" size={14} />On</span>}
                     </button>
                   )}
                   </div>
@@ -490,7 +492,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                         background: 'transparent', border: `1.5px solid ${C.border}`, color: C.ice,
                         fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 14,
                         letterSpacing: '0.05em',
-                      }}>{dmLoading ? '...' : '💬 Message'}</button>
+                      }}>{dmLoading ? '...' : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="message" size={14} />Message</span>}</button>
                     )}
                     {!blocked && (
                       <button onClick={handleFollow} disabled={followLoading} style={{
@@ -577,8 +579,8 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
             pim: acc.pim + (s.pim || 0),
           }), { gp: 0, goals: 0, assists: 0, points: 0, pim: 0 });
           const kicker = fromLeague
-            ? `League Season · ${leagueStats.length} League${leagueStats.length === 1 ? '' : 's'}`
-            : `Tournament Play · ${tournamentStats.length} Event${tournamentStats.length === 1 ? '' : 's'}`;
+            ? `League Season · ${plural(leagueStats.length, 'League')}`
+            : `Tournament Play · ${plural(tournamentStats.length, 'Event')}`;
           const sub = [profile.position, profile.level].filter(Boolean).join(' · ');
           return (
             <div style={{ position: 'relative', overflow: 'hidden', background: 'linear-gradient(135deg, #162f55 0%, #0B1F3A 100%)', border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px 18px', marginBottom: 16 }}>
@@ -588,16 +590,12 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
               </div>
               <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 32, lineHeight: 1, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.name}</div>
               {sub && <div style={{ fontSize: 12, color: C.steel, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</div>}
-              <div style={{ textAlign: 'center', margin: '16px 0 4px' }}>
-                <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 64, color: C.ice, lineHeight: 0.9, whiteSpace: 'nowrap' }}>{tot.points}</div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: C.steel, letterSpacing: '0.12em', textTransform: 'uppercase', marginTop: 2 }}>Points</div>
+              <div style={{ display: 'flex', justifyContent: 'center', margin: '16px 0 4px' }}>
+                <StatNumber value={number(tot.points)} label="Points" size="xl" align="center" />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8, marginTop: 10 }}>
                 {[['GP', tot.gp], ['G', tot.goals], ['A', tot.assists], ['PIM', tot.pim]].map(([label, val]) => (
-                  <div key={label} style={{ textAlign: 'center', minWidth: 0 }}>
-                    <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 36, color: C.ice, lineHeight: 1, whiteSpace: 'nowrap' }}>{val}</div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: C.steel, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 4 }}>{label}</div>
-                  </div>
+                  <StatNumber key={label} value={number(val)} label={label} size="md" align="center" />
                 ))}
               </div>
             </div>
@@ -606,10 +604,9 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
 
         {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
-          {[['Posts', posts.length], ['Points', (profile.points || 0).toLocaleString()], ['Tier', tier.name]].map(([label, value]) => (
-            <div key={label} style={{ background: C.card, borderRadius: 10, padding: '14px 16px', border: `1px solid ${C.border}`, textAlign: 'center' }}>
-              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 26, color: C.ice, lineHeight: 1 }}>{value}</div>
-              <div style={{ fontSize: 11, color: C.steel, marginTop: 2 }}>{label}</div>
+          {[['Posts', number(posts.length)], ['Points', number(profile.points || 0)], ['Tier', tier.name]].map(([label, value]) => (
+            <div key={label} style={{ background: C.card, borderRadius: 10, padding: '14px 16px', border: `1px solid ${C.border}` }}>
+              <StatNumber value={value} label={label} size="md" align="center" />
             </div>
           ))}
         </div>
@@ -618,7 +615,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
         <div style={{ background: C.card, borderRadius: 14, padding: '16px', border: `1px solid ${C.border}`, marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 14, color: C.ice, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Tier Progress</span>
-            <span style={{ fontSize: 12, color: C.steel }}>{nextTier ? `${(nextTier.min - (profile.points || 0)).toLocaleString()} pts to ${nextTier.name}` : 'Max Tier'}</span>
+            <span style={{ fontSize: 12, color: C.steel }}>{nextTier ? `${number(nextTier.min - (profile.points || 0))} pts to ${nextTier.name}` : 'Max Tier'}</span>
           </div>
           <div style={{ height: 8, background: C.border, borderRadius: 4, overflow: 'hidden' }}>
             <div style={{ height: '100%', width: `${progress}%`, background: `linear-gradient(90deg, ${tier.color}99, ${tier.color})`, borderRadius: 4, transition: 'width 0.5s ease' }}/>
@@ -651,9 +648,9 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                   ? <video src={post.media_url} controls style={{ width: '100%', maxHeight: 200, borderRadius: 8, marginBottom: 8 }}/>
                   : <img src={post.media_url} alt="" style={{ width: '100%', maxHeight: 200, objectFit: 'cover', borderRadius: 8, marginBottom: 8 }}/>
               )}
-              <div style={{ display: 'flex', gap: 16, fontSize: 12, color: C.steel }}>
-                <span>❤️ {post.likes || 0}</span>
-                <span>💬 {post.comment_count || 0}</span>
+              <div style={{ display: 'flex', gap: 16, fontSize: 12, color: C.steel, alignItems: 'center' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon name="like" size={14} /> {post.likes || 0}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon name="comment" size={14} /> {post.comment_count || 0}</span>
                 <span style={{ marginLeft: 'auto' }}>{timeAgo(post.created_at)}</span>
               </div>
             </div>
@@ -718,7 +715,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
               {activity.map((a, i) => (
                 <div key={`${a.kind}-${a.id}`} style={{ display: 'flex', gap: 10, padding: '12px 14px', borderTop: i ? '1px solid rgba(46,91,140,0.2)' : 'none', alignItems: 'flex-start' }}>
-                  <div style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>{a.kind === 'post' ? '📣' : '💬'}</div>
+                  <div style={{ flexShrink: 0, marginTop: 1, color: C.steel }}><Icon name={a.kind === 'post' ? 'subAlert' : 'comment'} size={18} /></div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 11, color: C.steel, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 3 }}>
                       {a.kind === 'post' ? 'Posted' : 'Commented'} · {timeAgo(a.at)}

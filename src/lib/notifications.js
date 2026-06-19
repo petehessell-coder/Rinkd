@@ -100,20 +100,22 @@ export function subscribe(userId, onChange) {
   };
 }
 
+// `icon` is a semantic Icon name (see components/ui/Icon.js), not an emoji —
+// Notifications.js renders it as <Icon name={meta.icon} />.
 export const KIND_META = {
-  comment:             { icon: '💬', label: 'Comment' },
-  mention:             { icon: '@', label: 'Mention' },
-  reaction:            { icon: '🔥', label: 'Reaction' },
-  like:                { icon: '❤️', label: 'Like' },
-  follow:              { icon: '👀', label: 'New follower' },
-  team_join_request:   { icon: '🏒', label: 'Roster request' },
-  team_join_approved:  { icon: '✅', label: 'Roster approved' },
-  team_join_denied:    { icon: '🚫', label: 'Roster request not accepted' },
-  game_reminder:       { icon: '⏰', label: 'Game reminder' },
-  suspension:          { icon: '🚨', label: 'Suspension filed' },
-  sub_alert:           { icon: '🏒', label: 'Sub needed' },
-  lineup_alert:        { icon: '📋', label: "Tonight's lines" },
-  team_invite:         { icon: '✉️', label: 'Team invite' },
-  league_invite:       { icon: '🏆', label: 'League invite' },
-  game_puck_won:       { icon: '🏒', label: 'Game Puck' },
+  comment:             { icon: 'comment', label: 'Comment' },
+  mention:             { icon: 'mention', label: 'Mention' },
+  reaction:            { icon: 'reaction', label: 'Reaction' },
+  like:                { icon: 'like', label: 'Like' },
+  follow:              { icon: 'follow', label: 'New follower' },
+  team_join_request:   { icon: 'rosterRequest', label: 'Roster request' },
+  team_join_approved:  { icon: 'approved', label: 'Roster approved' },
+  team_join_denied:    { icon: 'denied', label: 'Roster request not accepted' },
+  game_reminder:       { icon: 'gameReminder', label: 'Game reminder' },
+  suspension:          { icon: 'suspension', label: 'Suspension filed' },
+  sub_alert:           { icon: 'subAlert', label: 'Sub needed' },
+  lineup_alert:        { icon: 'lineup', label: "Tonight's lines" },
+  team_invite:         { icon: 'teamInvite', label: 'Team invite' },
+  league_invite:       { icon: 'leagueInvite', label: 'League invite' },
+  game_puck_won:       { icon: 'gamePuck', label: 'Game Puck' },
 };

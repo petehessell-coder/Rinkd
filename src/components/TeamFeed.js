@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Icon } from './ui';
 import { Avatar, TierBadge } from './Logos';
 import {
   getTeamPosts, createPost, toggleLike, getLikedPosts,
@@ -147,11 +148,11 @@ function PostCard({ post, currentUser, isLiked, reactions, onLike, onCommentChan
         )}
         <div style={{ display: 'flex', gap: 16, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
           <button onClick={() => onLike(post.id)} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: isLiked ? C.red : C.steel, fontSize: 13, fontFamily: "'Barlow', sans-serif", padding: 0 }}>
-            <span style={{ fontSize: 16 }}>{isLiked ? '❤️' : '🤍'}</span>
+            {isLiked ? <Icon name="like" size={16} color="#D72638" /> : <Icon name="like" size={16} />}
             <span style={{ fontWeight: isLiked ? 600 : 400 }}>{post.likes || 0}</span>
           </button>
           <button onClick={loadAndToggle} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: showComments ? C.ice : C.steel, fontSize: 13, fontFamily: "'Barlow', sans-serif", padding: 0 }}>
-            <span style={{ fontSize: 16 }}>💬</span><span>{post.comment_count || 0}</span>
+            <Icon name="comment" size={16} /><span>{post.comment_count || 0}</span>
           </button>
           <PostReactions postId={post.id} currentUserId={currentUser?.id} initial={reactions} />
         </div>
@@ -370,7 +371,7 @@ export default function TeamFeed({ teamId, currentUser, isMember }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <input ref={fileInputRef} type="file" accept="image/*,video/*" onChange={onMediaSelect} style={{ display: 'none' }} id={`team-media-${teamId}`}/>
-                  <label htmlFor={`team-media-${teamId}`} style={{ padding: '7px 12px', borderRadius: 8, cursor: 'pointer', background: C.navy, border: `1px solid ${C.border}`, color: C.steel, fontSize: 18, display: 'flex', alignItems: 'center' }}>📷</label>
+                  <label htmlFor={`team-media-${teamId}`} style={{ padding: '7px 12px', borderRadius: 8, cursor: 'pointer', background: C.navy, border: `1px solid ${C.border}`, color: C.steel, fontSize: 18, display: 'flex', alignItems: 'center' }}><Icon name="camera" size={18} /></label>
                   <span style={{ fontSize: 12, color: C.steel }}>{content.length}/500</span>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>

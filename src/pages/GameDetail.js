@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
 import { captureDataError } from '../lib/sentry';
 import { isExtraCommissioner } from '../lib/leagueCommissioners';
+import { Icon } from '../components/ui';
 import Layout from '../components/Layout';
 import RsvpBlock from '../components/RsvpBlock';
 import MapLink from '../components/MapLink';
@@ -283,7 +284,7 @@ export default function GameDetail({ profile }) {
                   whiteSpace: 'nowrap',
                   fontFamily: "'Barlow', sans-serif",
                 }}>
-                📍 Directions
+                <Icon name="directions" size={12} /> Directions
               </MapLink>
             )}
             {!isFinal && (
@@ -328,9 +329,9 @@ export default function GameDetail({ profile }) {
             {/* Score */}
             <div style={{ textAlign: 'center', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 56, color: C.ice, lineHeight: 1 }}>{game.home_score ?? 0}</span>
+                <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 56, color: C.ice, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{game.home_score ?? 0}</span>
                 <span style={{ fontSize: 24, color: 'rgba(244,247,250,0.3)', fontWeight: 300 }}>–</span>
-                <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 56, color: C.ice, lineHeight: 1 }}>{game.away_score ?? 0}</span>
+                <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 56, color: C.ice, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{game.away_score ?? 0}</span>
               </div>
               <div style={{ textAlign: 'center', marginTop: 6 }}>
                 {isLive && <span style={{ background: C.red, color: '#fff', fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20, letterSpacing: '0.06em' }}>● LIVE · {periodLabel(game.period)}</span>}
@@ -441,7 +442,7 @@ export default function GameDetail({ profile }) {
               style={{ width: '100%', padding: '11px', background: 'rgba(46,91,140,0.2)', border: `0.5px solid ${C.border}`, borderRadius: 10, color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
               onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
               onMouseLeave={e => { e.currentTarget.style.background = 'rgba(46,91,140,0.2)'; e.currentTarget.style.color = C.ice; }}>
-              ✏️ Open Scorer View
+              <Icon name="scorer" size={16} /> Open Scorer View
             </button>
           )}
 

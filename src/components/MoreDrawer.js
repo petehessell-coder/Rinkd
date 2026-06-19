@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useUserRole, useIsRinkdAdmin, roleMenuSections } from '../lib/userRole';
+import { Icon } from './ui';
 
 const B = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
@@ -38,14 +39,14 @@ export default function MoreDrawer({ open, onClose, userId, onSignOut }) {
   if (!open) return null;
 
   const exploreItems = [
-    { path: '/messages',    icon: '💬',  label: 'Messages',    sub: 'Direct messages with players' },
-    { path: '/discover',    icon: '🔍',  label: 'Discover',    sub: 'Search players, teams, leagues, articles' },
+    { path: '/messages',    icon: 'messages',  label: 'Messages',    sub: 'Direct messages with players' },
+    { path: '/discover',    icon: 'discover',  label: 'Discover',    sub: 'Search players, teams, leagues, articles' },
     { path: '/rinkside',    iconImg: '/rinkside-logo.png', label: 'Rinkside', sub: 'Daily hockey reporting' },
     { path: '/crease',      iconImg: '/crease-logo.png',   label: 'Crease',   sub: 'Original premium shows', badge: 'Early Access' },
     { path: '/store',       IconNode: 'duffle', label: 'Store',       sub: 'Hockey gear + Rinkd merch' },
     { path: '/leagues',     IconNode: 'leagues', label: 'Leagues',     sub: 'Find or create a league' },
     { path: '/tournaments', IconNode: 'bracket', label: 'Tournaments', sub: 'Browse + manage events' },
-    { path: '/pricing',     icon: '💲', label: 'Pricing',     sub: 'Plans for leagues + tournaments' },
+    { path: '/pricing',     icon: 'pricing', label: 'Pricing',     sub: 'Plans for leagues + tournaments' },
   ];
 
   return (
@@ -99,22 +100,22 @@ export default function MoreDrawer({ open, onClose, userId, onSignOut }) {
             staff-only. */}
         {isRinkdAdmin && (
           <DrawerSection title="Rinkd Admin">
-            <DrawerRow item={{ path: '/admin/analytics', icon: '📈', label: 'Analytics', sub: 'DAU + events firehose' }} onClose={onClose} />
-            <DrawerRow item={{ path: '/admin/activations', icon: '🔓', label: 'Activations', sub: 'Flip tournaments + leagues on' }} onClose={onClose} />
-            <DrawerRow item={{ path: '/admin/feedback', icon: '📬', label: 'Bug reports', sub: 'Triage user reports' }} onClose={onClose} />
-            <DrawerRow item={{ path: '/admin/moderation', icon: '🛡️', label: 'Moderation', sub: 'Flagged content + blocklist' }} onClose={onClose} />
+            <DrawerRow item={{ path: '/admin/analytics', icon: 'analytics', label: 'Analytics', sub: 'DAU + events firehose' }} onClose={onClose} />
+            <DrawerRow item={{ path: '/admin/activations', icon: 'activations', label: 'Activations', sub: 'Flip tournaments + leagues on' }} onClose={onClose} />
+            <DrawerRow item={{ path: '/admin/feedback', icon: 'bugReports', label: 'Bug reports', sub: 'Triage user reports' }} onClose={onClose} />
+            <DrawerRow item={{ path: '/admin/moderation', icon: 'moderation', label: 'Moderation', sub: 'Flagged content + blocklist' }} onClose={onClose} />
           </DrawerSection>
         )}
 
         {/* ACCOUNT */}
         <DrawerSection title="Account">
-          <DrawerRow item={{ path: '/settings', icon: '⚙️', label: 'Settings', sub: 'Data export, delete account' }} onClose={onClose} />
-          <DrawerRow item={{ path: '/privacy', icon: '🔒', label: 'Privacy', sub: '' }} onClose={onClose} />
-          <DrawerRow item={{ path: '/terms', icon: '📄', label: 'Terms of Service', sub: '' }} onClose={onClose} />
+          <DrawerRow item={{ path: '/settings', icon: 'settings', label: 'Settings', sub: 'Data export, delete account' }} onClose={onClose} />
+          <DrawerRow item={{ path: '/privacy', icon: 'privacy', label: 'Privacy', sub: '' }} onClose={onClose} />
+          <DrawerRow item={{ path: '/terms', icon: 'terms', label: 'Terms of Service', sub: '' }} onClose={onClose} />
           {onSignOut && (
             <button onClick={() => { onClose(); onSignOut(); }}
               style={{ width: '100%', padding: '13px 18px', textAlign: 'left', background: 'transparent', border: 'none', color: B.red, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 12, borderTop: `1px solid rgba(46,91,140,0.15)` }}>
-              <span style={{ fontSize: 18, width: 24 }}>⎋</span>
+              <span style={{ width: 24, display: 'inline-flex', justifyContent: 'center' }}><Icon name="signout" size={20} color={B.red} /></span>
               <span>Sign Out</span>
             </button>
           )}
@@ -155,7 +156,7 @@ function DrawerRow({ item, onClose }) {
       ) : item.iconImg ? (
         <img src={item.iconImg} alt="" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />
       ) : (
-        <span style={{ fontSize: 22, width: 28, textAlign: 'center', flexShrink: 0 }}>{item.icon}</span>
+        <span style={{ width: 28, display: 'inline-flex', justifyContent: 'center', flexShrink: 0 }}><Icon name={item.icon} size={22} color={B.ice} /></span>
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

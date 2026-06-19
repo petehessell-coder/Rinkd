@@ -101,8 +101,8 @@ export function roleMenuSections(role) {
   const player = {
     label: 'Player',
     items: [
-      { path: '/profile', icon: '📊', label: 'My Stats' },
-      { path: '/teams',   icon: '👥', label: 'My Teams' },
+      { path: '/profile', icon: 'myStats', label: 'My Stats' },
+      { path: '/teams',   icon: 'teams', label: 'My Teams' },
     ],
   };
   const manager = {
@@ -111,13 +111,13 @@ export function roleMenuSections(role) {
       // Volunteer Coordinator was moved to a top-tab on /teams (May 19 2026) —
       // see src/components/TeamsHeaderTabs.js. Kept out of the More drawer
       // to avoid duplicate entry points.
-      { path: '/dues-tracker',          icon: '💸', label: 'Dues Tracker' },
+      { path: '/dues-tracker',          icon: 'dues', label: 'Dues Tracker' },
     ],
   };
   const commissioner = {
     label: 'Commissioner',
     items: [
-      { path: '/admin', icon: '🛠️', label: 'Admin Panel' },
+      { path: '/admin', icon: 'admin', label: 'Admin Panel' },
     ],
   };
 

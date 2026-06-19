@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import SEO from '../components/SEO';
+import { Icon } from '../components/ui';
 import { Avatar, TierBadge } from '../components/Logos';
 import TapeText from '../components/TapeText';
 import { CardGridSkeleton, ListRowSkeleton, EmptyState } from '../components/Skeletons';
@@ -163,8 +164,8 @@ function TrendingRail({ navigate }) {
           )}
           {p.content && <div style={{ fontSize: 13, color: C.ice, lineHeight: 1.45, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>{p.content}</div>}
           <div style={{ display: 'flex', gap: 12, fontSize: 11, color: C.steel, marginTop: 'auto' }}>
-            <span>❤️ {p.likes || 0}</span>
-            <span>💬 {p.comment_count || 0}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="like" size={14} /> {p.likes || 0}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="comment" size={14} /> {p.comment_count || 0}</span>
           </div>
         </div>
       ))}
@@ -366,7 +367,7 @@ export default function Discover({ currentUser, profile }) {
                 padding: '12px 14px 12px 38px', borderRadius: 999, fontSize: 14,
                 fontFamily: 'Barlow, sans-serif', outline: 'none',
               }}/>
-            <div style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: C.steel, fontSize: 16, pointerEvents: 'none' }}>🔍</div>
+            <div style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: C.steel, fontSize: 16, pointerEvents: 'none' }}><Icon name="discover" size={16} /></div>
           </div>
 
           {/* Tabs */}

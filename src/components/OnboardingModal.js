@@ -4,6 +4,7 @@ import { Avatar } from './Logos';
 import { followUser } from '../lib/posts';
 import { subscribeToPush } from '../lib/push';
 import { track } from '../lib/analytics';
+import { Icon } from './ui';
 
 const C = {
   navy: '#0B1F3A', red: '#D72638', ice: '#F4F7FA',
@@ -27,12 +28,12 @@ const prefersReducedMotion = () =>
 // persona CHECK constraint: ('player','parent','coach','commissioner',
 // 'official','fan'). Order matters — most-common picks first.
 const ROLES = [
-  { id: 'player',       icon: '🏒', label: 'Player',          body: 'I play in a league or pickup' },
-  { id: 'coach',        icon: '🎯', label: 'Coach / Manager',  body: 'I run a team or bench' },
-  { id: 'parent',       icon: '👨‍👧', label: 'Hockey Parent', body: "I follow my kid's team" },
-  { id: 'commissioner', icon: '🏆', label: 'Commissioner',     body: 'I run a league or tournament' },
-  { id: 'official',     icon: '🦓', label: 'Official',         body: 'I officiate games' },
-  { id: 'fan',          icon: '📺', label: 'Fan',              body: 'I follow the game' },
+  { id: 'player',       icon: 'player',       label: 'Player',          body: 'I play in a league or pickup' },
+  { id: 'coach',        icon: 'coach',        label: 'Coach / Manager',  body: 'I run a team or bench' },
+  { id: 'parent',       icon: 'parent',       label: 'Hockey Parent', body: "I follow my kid's team" },
+  { id: 'commissioner', icon: 'commissioner', label: 'Commissioner',     body: 'I run a league or tournament' },
+  { id: 'official',     icon: 'official',     label: 'Official',         body: 'I officiate games' },
+  { id: 'fan',          icon: 'fan',          label: 'Fan',              body: 'I follow the game' },
 ];
 
 const btnPrimary = {
@@ -314,7 +315,7 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
                       textAlign: 'left', fontFamily: 'Barlow, sans-serif', transition: 'all 0.15s',
                       backdropFilter: 'blur(2px)',
                     }}>
-                    <div style={{ fontSize: 24, marginBottom: 6 }}>{r.icon}</div>
+                    <div style={{ marginBottom: 6 }}><Icon name={r.icon} size={24} color={chosenRole === r.id ? C.red : C.ice} /></div>
                     <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 2 }}>{r.label}</div>
                     <div style={{ fontSize: 11, color: C.steel, lineHeight: 1.4 }}>{r.body}</div>
                   </button>
@@ -368,11 +369,13 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
               </div>
               <div style={{ background: 'rgba(11,31,58,0.82)', border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 18, backdropFilter: 'blur(2px)' }}>
                 {[
-                  '⏰ Game reminders 24 hours out',
-                  '💬 Comments and replies',
-                  '🏒 Roster + RSVP requests',
+                  { icon: 'gameReminder', text: 'Game reminders 24 hours out' },
+                  { icon: 'comment', text: 'Comments and replies' },
+                  { icon: 'rosterRequest', text: 'Roster + RSVP requests' },
                 ].map((line) => (
-                  <div key={line} style={{ fontSize: 13, color: C.ice, padding: '5px 0' }}>{line}</div>
+                  <div key={line.text} style={{ fontSize: 13, color: C.ice, padding: '5px 0', display: 'flex', alignItems: 'center', gap: 9 }}>
+                    <Icon name={line.icon} size={16} color={C.steel} />{line.text}
+                  </div>
                 ))}
               </div>
               <div style={{ fontSize: 11, color: C.ice, opacity: 0.8, lineHeight: 1.5 }}>
@@ -402,8 +405,8 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
             {step === 2 && (
               <>
                 <button onClick={finish} style={btnGhost}>Not now</button>
-                <button onClick={handleEnablePush} disabled={pushBusy} style={btnPrimary}>
-                  {pushBusy ? 'Enabling…' : '🔔 Enable & Finish'}
+                <button onClick={handleEnablePush} disabled={pushBusy} style={{ ...btnPrimary, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  {pushBusy ? 'Enabling…' : <><Icon name="bell" size={15} color="#fff" />Enable &amp; Finish</>}
                 </button>
               </>
             )}

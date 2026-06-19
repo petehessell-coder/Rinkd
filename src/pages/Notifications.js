@@ -8,6 +8,7 @@ import { EmptyState, ListRowSkeleton } from '../components/Skeletons';
 import { listNotifications, markRead, markAllRead, deleteNotification, KIND_META } from '../lib/notifications';
 import { timeAgo } from '../lib/posts';
 import { C } from '../lib/tokens';
+import { Icon } from '../components/ui';
 
 export default function NotificationsPage({ currentUser, profile }) {
   const navigate = useNavigate();
@@ -154,7 +155,7 @@ function LowerThird({ label }) {
 }
 
 function NotifRow({ n, first, onOpen, onDelete }) {
-  const meta = KIND_META[n.kind] || { icon: '🔔', label: 'Notification' };
+  const meta = KIND_META[n.kind] || { icon: 'notifications', label: 'Notification' };
   const isUnread = !n.read_at;
   const tone = toneFor(n.kind);
   const accent = tone === 'red' ? '#D72638' : tone === 'gold' ? '#C9A84C' : '#F4F7FA';
@@ -180,10 +181,10 @@ function NotifRow({ n, first, onOpen, onDelete }) {
       {n.actor ? (
         <div style={{ position: 'relative', flexShrink: 0 }}>
           <Avatar profile={n.actor} size={38} />
-          <div style={{ position: 'absolute', right: -4, bottom: -4, minWidth: 20, height: 20, padding: '0 3px', borderRadius: 999, background: hot ? accent : C.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, border: `1px solid ${hot ? accent : C.border}` }}>{meta.icon}</div>
+          <div style={{ position: 'absolute', right: -4, bottom: -4, minWidth: 20, height: 20, padding: '0 3px', borderRadius: 999, background: hot ? accent : C.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${hot ? accent : C.border}` }}><Icon name={meta.icon} size={12} color={hot ? '#fff' : C.ice} /></div>
         </div>
       ) : (
-        <div style={{ width: 40, height: 40, borderRadius: '50%', flexShrink: 0, background: tone === 'red' ? 'rgba(215,38,56,0.18)' : tone === 'gold' ? 'rgba(201,168,76,0.18)' : C.navy, border: `1px solid ${hot ? accent : C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>{meta.icon}</div>
+        <div style={{ width: 40, height: 40, borderRadius: '50%', flexShrink: 0, background: tone === 'red' ? 'rgba(215,38,56,0.18)' : tone === 'gold' ? 'rgba(201,168,76,0.18)' : C.navy, border: `1px solid ${hot ? accent : C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name={meta.icon} size={20} color={hot ? accent : C.ice} /></div>
       )}
       {/* Name (bold) + action (muted). Goal/POTG get bolder type + accent. */}
       <div style={{ flex: 1, minWidth: 0 }}>
