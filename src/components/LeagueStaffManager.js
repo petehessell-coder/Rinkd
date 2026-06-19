@@ -60,18 +60,27 @@ export default function LeagueStaffManager({ leagueId, leagueName, invitedBy }) 
   };
 
   // Optimistic remove + 5s Undo (no confirm) — the delete is deferred, so Undo
-  // just cancels it; restore re-fetches the still-present row.
+  // just cancels it; restore re-inserts the still-present row instantly (no
+  // network, so it can't fail on flaky rink wifi).
   const remove = (m) => runUndoable({
     message: `${m.name || '@' + m.handle} removed`,
-    apply: () => { setStaff((prev) => prev ? { ...prev, managers: (prev.managers || []).filter((x) => x.user_id !== m.user_id) } : prev); return load; },
-    commit: async () => { const r = await removeLeagueManager(leagueId, m.user_id); if (r && r.error) throw r.error; await load(); },
+    apply: () => {
+      let prev;
+      setStaff((s) => { prev = s; return s ? { ...s, managers: (s.managers || []).filter((x) => x.user_id !== m.user_id) } : s; });
+      return () => { if (prev !== undefined) setStaff(prev); };
+    },
+    commit: async () => { const r = await removeLeagueManager(leagueId, m.user_id); if (r && r.error) throw r.error; load().catch(() => {}); },
     errorMessage: "That didn't go through — they're back. Try again.",
   });
 
   const revoke = (inv) => runUndoable({
     message: `Invite to ${inv.email} revoked`,
-    apply: () => { setStaff((prev) => prev ? { ...prev, pending_invites: (prev.pending_invites || []).filter((x) => x.id !== inv.id) } : prev); return load; },
-    commit: async () => { const r = await revokeLeagueManagerInvite(inv.id); if (r && r.error) throw r.error; await load(); },
+    apply: () => {
+      let prev;
+      setStaff((s) => { prev = s; return s ? { ...s, pending_invites: (s.pending_invites || []).filter((x) => x.id !== inv.id) } : s; });
+      return () => { if (prev !== undefined) setStaff(prev); };
+    },
+    commit: async () => { const r = await revokeLeagueManagerInvite(inv.id); if (r && r.error) throw r.error; load().catch(() => {}); },
     errorMessage: "That didn't go through — the invite's back. Try again.",
   });
 

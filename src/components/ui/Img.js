@@ -21,6 +21,7 @@ export default function Img({
   src,
   alt = '',
   ratio,                 // e.g. 4/5, 16/9, or '4 / 5'
+  height,                // explicit reserved height for when an aspect ratio doesn't fit
   cover = true,          // object-fit cover (default) vs contain
   radius = radii.card,
   background = 'rgba(46,91,140,0.14)',
@@ -35,14 +36,24 @@ export default function Img({
   const [failed, setFailed] = useState(false);
   const reduced = prefersReducedMotion();
   const hasRatio = ratio != null;
+  const reserved = hasRatio || height != null; // space pre-reserved → no shift on decode
   const showImg = !!src && !failed;
+  warnIfUnreserved(src, reserved);
+
+  // When it's clickable (e.g. tap-to-zoom) it must be reachable by keyboard too.
+  const interactive = typeof onClick === 'function';
 
   return (
     <div
       onClick={onClick}
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onKeyDown={interactive ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(e); } } : undefined}
       style={{
         position: 'relative', overflow: 'hidden', borderRadius: radius, width: '100%',
         aspectRatio: hasRatio ? String(ratio) : undefined,
+        height: !hasRatio && height != null ? height : undefined,
+        cursor: interactive ? 'pointer' : undefined,
         background,
         ...style,
       }}
@@ -63,10 +74,10 @@ export default function Img({
           onLoad={() => setLoaded(true)}
           onError={() => setFailed(true)}
           style={{
-            position: hasRatio ? 'absolute' : 'relative',
-            inset: hasRatio ? 0 : undefined,
+            position: reserved ? 'absolute' : 'relative',
+            inset: reserved ? 0 : undefined,
             width: '100%',
-            height: hasRatio ? '100%' : 'auto',
+            height: reserved ? '100%' : 'auto',
             display: 'block',
             objectFit: cover ? 'cover' : 'contain',
             opacity: loaded ? 1 : 0,
@@ -78,10 +89,21 @@ export default function Img({
         />
       ) : (
         // No src or it failed — the designed fallback fills the reserved box.
-        <div style={{ position: hasRatio ? 'absolute' : 'relative', inset: hasRatio ? 0 : undefined, width: '100%', height: hasRatio ? '100%' : undefined, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ position: reserved ? 'absolute' : 'relative', inset: reserved ? 0 : undefined, width: '100%', height: reserved ? '100%' : undefined, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {fallback}
         </div>
       )}
     </div>
   );
+}
+
+// Dev-only nudge: an <Img> with neither `ratio` nor `height` can't pre-reserve
+// space, so it shifts layout when the image decodes — the exact thing this
+// primitive exists to prevent. Warn once so it's caught in development.
+let _warnedUnreserved = false;
+function warnIfUnreserved(src, reserved) {
+  if (process.env.NODE_ENV === 'production' || reserved || !src || _warnedUnreserved) return;
+  _warnedUnreserved = true;
+  // eslint-disable-next-line no-console
+  console.warn('[Img] no `ratio` or `height` — image may shift layout on load. Pass one to reserve space.');
 }

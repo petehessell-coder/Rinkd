@@ -77,6 +77,20 @@ export function ToastProvider({ children }) {
   // Clear every pending timer if the provider ever unmounts.
   useEffect(() => () => { Object.keys(timers.current).forEach((k) => clearTimeout(timers.current[k])); }, []);
 
+  // If the page is torn down (reload / close / hard nav) while an undoable
+  // commit is still in its 5-second window, fire it best-effort instead of
+  // silently dropping it — the optimistic UI already showed it as done, so a
+  // dropped commit would make the "deleted" thing reappear on next load.
+  // `pagehide` fires on mobile bfcache navigations where `beforeunload` won't.
+  useEffect(() => {
+    const onPageHide = () => {
+      pendingCommits.forEach((f) => { try { f(); } catch { /* noop */ } });
+      pendingCommits.clear();
+    };
+    window.addEventListener('pagehide', onPageHide);
+    return () => window.removeEventListener('pagehide', onPageHide);
+  }, []);
+
   const ctx = useMemo(() => ({ toast, dismiss }), [toast, dismiss]);
 
   return (
@@ -113,6 +127,13 @@ const NOOP = { toast: () => -1, dismiss: () => {} };
 // user never silently loses their thing.
 // -----------------------------------------------------------------------------
 const UNDO_MS = 5000;
+
+// Commits still inside their 5-second Undo window, keyed by a flush fn. The
+// provider drains this on `pagehide` so a reload mid-window doesn't drop the
+// (already-shown-as-done) irreversible write. Module scope so it's shared by
+// every useUndoable caller and survives re-renders.
+const pendingCommits = new Set();
+
 export function useUndoable() {
   const { toast, dismiss } = useToast();
   return useCallback(({ message, apply, commit, errorMessage, actionLabel = 'Undo', tone = 'alert', icon }) => {
@@ -120,28 +141,43 @@ export function useUndoable() {
     try { restore = typeof apply === 'function' ? apply() : null; } catch { return; }
     const doRestore = () => { if (typeof restore === 'function') { try { restore(); } catch { /* noop */ } } };
 
-    // `settled` makes Undo-vs-commit a clean check-and-set. JS is single-threaded,
-    // so whichever path runs first wins and the other is a no-op — the irreversible
-    // commit can NEVER race a late Undo tap during the toast's fade-out. useUndoable
-    // owns the toast lifecycle (manual dismiss + commit), so the auto-dismiss timer
-    // can't fire the commit as the button is still disappearing (the old bug).
+    // `settled` makes Undo-vs-commit-vs-pagehide a clean check-and-set. JS is
+    // single-threaded, so whichever path runs first wins and the rest no-op —
+    // the irreversible commit can NEVER race a late Undo tap during the toast's
+    // fade-out, and it fires at most once. useUndoable owns the toast lifecycle
+    // (manual dismiss + commit), so the auto-dismiss timer can't fire the commit
+    // as the button is still disappearing (the old bug).
     let settled = false;
     let timer = null;
+    let flush = null;
+    const settle = (run) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (flush) pendingCommits.delete(flush);
+      run();
+    };
+
     const id = toast({
       message, tone, icon, actionLabel,
       duration: 0, // we dismiss it ourselves, in lock-step with the commit
-      undo: () => { if (settled) return; settled = true; clearTimeout(timer); dismiss(id); doRestore(); },
+      undo: () => settle(() => { dismiss(id); doRestore(); }),
     });
-    timer = setTimeout(async () => {
-      if (settled) return;
-      settled = true;
+
+    const runCommit = async () => {
       dismiss(id); // pull the (now non-undoable) toast before the irreversible write
       try { await (typeof commit === 'function' ? commit() : null); }
       catch {
         doRestore();
         toast({ message: errorMessage || "That didn’t go through — it’s back where it was. Try again.", tone: 'alert' });
       }
-    }, UNDO_MS);
+    };
+
+    timer = setTimeout(() => settle(runCommit), UNDO_MS);
+
+    // Best-effort fire on page teardown — no toast/dismiss, the page is leaving.
+    flush = () => settle(() => { if (typeof commit === 'function') commit(); });
+    pendingCommits.add(flush);
   }, [toast, dismiss]);
 }
 

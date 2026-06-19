@@ -81,7 +81,12 @@ export default function DataSyncAuthorization({
     setError('');
     runUndoable({
       message: `${label} data sync authorization revoked`,
-      apply: () => { setAuth(null); notify(false); return load; },
+      apply: () => {
+        let prev;
+        setAuth((a) => { prev = a; return null; });
+        notify(false);
+        return () => { setAuth(prev); notify(true); }; // synchronous restore — the row was never revoked yet
+      },
       commit: async () => { const { error: e } = await revokeIntegrationAuthorization(id); if (e) throw e; },
       errorMessage: "That didn't go through — it's back. Try again.",
     });

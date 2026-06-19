@@ -169,9 +169,12 @@ export default function PostActionMenu({
         aria-label="More actions"
         onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
         style={{
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          width: 44, height: 44, margin: '-10px -8px', // 44px tap target without growing the row
           background: 'none', border: 'none', cursor: 'pointer',
-          color: C.steel, padding: '2px 6px', borderRadius: 4,
+          color: C.steel, borderRadius: 8,
           fontSize: 18, lineHeight: 1, fontWeight: 700,
+          WebkitTapHighlightColor: 'transparent',
         }}>
         ⋯
       </button>

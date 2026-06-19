@@ -39,9 +39,12 @@ export default function TeamVolunteer({ teamId, isManager, currentUser }) {
     } catch (e) { setError(e.message); }
   }, [teamId]);
 
-  // Optimistically drop a slot from the list (used by the deferred delete + Undo).
+  // Optimistically drop a slot from the list and return a synchronous restore
+  // (re-inserts it at its original spot) for the deferred delete's Undo.
   const removeSlotFromList = useCallback((id) => {
-    setSlots(prev => Array.isArray(prev) ? prev.filter(s => s.id !== id) : prev);
+    let prev;
+    setSlots(cur => { prev = cur; return Array.isArray(cur) ? cur.filter(s => s.id !== id) : cur; });
+    return () => { if (prev !== undefined) setSlots(prev); };
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -149,11 +152,12 @@ function SlotRow({ slot, isManager, currentUser, onChange, onOptimisticRemove, i
   };
 
   // Optimistic delete + 5s Undo (no confirm) — the real delete is deferred, so
-  // Undo just cancels it; restore re-fetches the still-present slot.
+  // Undo just cancels it; restore re-inserts the still-present slot instantly
+  // (no network, so it can't fail on flaky rink wifi).
   const remove = () => runUndoable({
     message: `"${slot.role}" slot removed`,
-    apply: () => { onOptimisticRemove?.(slot.id); return onChange; },
-    commit: async () => { await deleteSlot(slot.id); await onChange(); },
+    apply: () => onOptimisticRemove?.(slot.id),
+    commit: async () => { await deleteSlot(slot.id); try { await onChange(); } catch { /* reconcile only */ } },
     errorMessage: "That didn't go through — it's back. Try again.",
   });
 

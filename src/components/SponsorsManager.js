@@ -89,11 +89,16 @@ export default function SponsorsManager({ ownerType, ownerId, isYouth = false, s
     catch (e) { flash('err', e.message || "That change didn't save — check your connection and try again."); }
   };
   // Optimistic remove + 5s Undo — the delete is deferred until the toast
-  // expires, so Undo simply cancels it; restore re-fetches the still-present row.
+  // expires, so Undo simply cancels it; restore re-inserts the still-present row
+  // instantly (no network, so it can't fail on flaky rink wifi).
   const remove = (s) => runUndoable({
     message: `${s.sponsor_name} removed`,
-    apply: () => { setSponsors((prev) => Array.isArray(prev) ? prev.filter((x) => x.id !== s.id) : prev); return load; },
-    commit: async () => { await deleteSponsor(s.id, ownerType, ownerId); await load(); },
+    apply: () => {
+      let prev;
+      setSponsors((arr) => { prev = arr; return Array.isArray(arr) ? arr.filter((x) => x.id !== s.id) : arr; });
+      return () => { if (prev !== undefined) setSponsors(prev); };
+    },
+    commit: async () => { await deleteSponsor(s.id, ownerType, ownerId); load().catch(() => {}); },
     errorMessage: "That didn't delete — it's back. Try again.",
   });
 

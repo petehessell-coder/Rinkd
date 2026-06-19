@@ -42,8 +42,9 @@ export function PostSkeleton() {
       <Shimmer width="100%" height={14} />
       <div style={{ height: 6 }} />
       <Shimmer width="80%" height={14} />
-      <div style={{ height: 12 }} />
-      <Shimmer width="100%" height={180} radius={10} />
+      {/* No media block: most posts are text-only, and a fixed-height stand-in
+          never matches the real 5:4 / 16:9 media — either way it shifts on load.
+          A text-shaped skeleton matches the common case and under-promises. */}
     </div>
   );
 }

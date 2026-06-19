@@ -17,6 +17,7 @@ import PostActionMenu from '../components/PostActionMenu';
 import PostReactions from '../components/PostReactions';
 import { getReactions } from '../lib/reactions';
 import { haptics } from '../lib/haptics';
+import { FeedSkeleton } from '../components/Skeletons';
 import Gallery from '../components/Gallery';
 import { LedR } from '../components/Logos';
 import { getLiveBarnUrl } from '../lib/livebarn';
@@ -1007,7 +1008,7 @@ function LeagueFeedTab({ posts, setPosts, loading, error = false, online = true,
       {error && !loading ? (
         <ErrorState title="Couldn’t load the feed" offline={!online} onRetry={onRetry} retrying={loading} />
       ) : loading || posts === null ? (
-        <div style={{ textAlign: 'center', color: '#7C8B9F', fontSize: 13, padding: '24px 16px' }}>Warming up.</div>
+        <FeedSkeleton count={2} />
       ) : posts.length === 0 ? (
         <div style={{ textAlign: 'center', color: '#7C8B9F', fontSize: 13, padding: '40px 16px', lineHeight: 1.6 }}>
           <div style={{ fontSize: 32, marginBottom: 8 }}>📰</div>
