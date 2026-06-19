@@ -90,6 +90,29 @@ function dayKey(iso) {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
+// Broadcast lower-third section header — white Barlow Condensed 700 italic caps
+// on solid navy (#0f2847), bleeding to the content column's left edge (the
+// content padding is 16px) with a red accent slab. Optional muted `sub`.
+function LowerThird({ label, sub }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, background: '#0f2847', borderLeft: '4px solid #D72638', marginLeft: -16, marginBottom: 12, padding: '8px 14px 8px 16px', borderTopRightRadius: 4, borderBottomRightRadius: 4 }}>
+      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 18, lineHeight: 1, letterSpacing: '0.05em', color: '#F4F7FA', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{label}</span>
+      {sub && <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 11, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.45)', textTransform: 'uppercase', whiteSpace: 'nowrap', flexShrink: 0 }}>{sub}</span>}
+    </div>
+  );
+}
+
+// Designed empty state for tab content — an invitation, not a blank space.
+function TabEmptyState({ icon = '🏒', title, body }) {
+  return (
+    <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+      <div style={{ fontSize: 40, marginBottom: 12, lineHeight: 1 }}>{icon}</div>
+      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 20, color: '#F4F7FA', textTransform: 'uppercase', marginBottom: 6 }}>{title}</div>
+      {body && <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.5)', lineHeight: 1.5, maxWidth: 320, margin: '0 auto' }}>{body}</div>}
+    </div>
+  );
+}
+
 export default function TournamentPage({ currentUser }) {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -359,8 +382,8 @@ export default function TournamentPage({ currentUser }) {
   }, [standingsRaw, selectedDivisionId]);
 
   if (loading) return (
-    <div style={{background:'#07111F',minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:'#F4F7FA',fontFamily:'Barlow,sans-serif',fontSize:14}}>
-      Loading tournament...
+    <div style={{background:'#07111F',minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:'#F4F7FA',fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:900,fontSize:18,textTransform:'uppercase',letterSpacing:'0.02em'}}>
+      Getting the ice ready.
     </div>
   );
 
@@ -449,6 +472,11 @@ export default function TournamentPage({ currentUser }) {
   })();
   // Organizer branding — falls back to Rinkd red when the tournament isn't branded.
   const accent = tournament?.accent_color || '#D72638';
+  // Hero status chip: a red pill when something's live right now, otherwise
+  // muted text (completed / upcoming).
+  const statusActive = liveGames.length > 0;
+  const isComplete = tournament?.status === 'complete' || tournament?.status === 'completed';
+  const statusLabel = statusActive ? 'LIVE' : isComplete ? 'COMPLETED' : 'UPCOMING';
   // Directors AND assigned scorers see the in-card "Open Scorer View"
   // shortcut. ScorerView itself enforces the actual access check, so this is
   // purely about which users see the button — spectators don't.
@@ -470,7 +498,6 @@ export default function TournamentPage({ currentUser }) {
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,gap:8,flexWrap:'wrap'}}>
           <button onClick={() => navigate(-1)} style={{color:'rgba(244,247,250,0.6)',fontSize:13,background:'none',border:'none',cursor:'pointer',fontFamily:'Barlow,sans-serif'}}>← Events</button>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
-            {liveGames.length > 0 && <span style={{background:accent+'26',color:accent,fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:20}}>● Live now</span>}
             {tournament && tournament.is_activated === false && (
               <span title="Live scoring + push notifications are locked until a Rinkd admin activates this tournament."
                 style={{background:'rgba(245,158,11,0.18)',color:'#F59E0B',fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:20,letterSpacing:'0.04em'}}>
@@ -510,11 +537,16 @@ export default function TournamentPage({ currentUser }) {
           <img src={tournament.logo_url} alt="" onError={(e)=>{e.currentTarget.style.display='none';}}
             style={{height:38,width:'auto',display:'block',marginBottom:8,borderRadius:6}} />
         )}
-        <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:22}}>
-          {(tournament?.name || '').toUpperCase()} · {tournament?.division}
+        <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:40,lineHeight:1.02,color:'#F4F7FA',textTransform:'uppercase',letterSpacing:'0.01em',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+          {(tournament?.name || '').toUpperCase()}
         </div>
-        <div style={{fontSize:12,color:'rgba(244,247,250,0.4)',margin:'3px 0 12px'}}>
-          {tournament?.start_date} – {tournament?.end_date}
+        <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',margin:'7px 0 12px'}}>
+          {statusActive
+            ? <span style={{display:'inline-flex',alignItems:'center',gap:6,background:'#D72638',color:'#fff',fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:700,fontSize:12,letterSpacing:'0.06em',textTransform:'uppercase',padding:'4px 12px',borderRadius:999}}>● {statusLabel}</span>
+            : <span style={{fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:700,fontSize:12,letterSpacing:'0.08em',textTransform:'uppercase',color:'rgba(244,247,250,0.45)'}}>{statusLabel}</span>}
+          <span style={{fontSize:12,color:'rgba(244,247,250,0.5)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>
+            {[tournament?.division, [tournament?.start_date, tournament?.end_date].filter(Boolean).join(' – ')].filter(Boolean).join(' · ')}
+          </span>
         </div>
         {/* MULTIDIV-1: division switcher — only when the event has >1 division.
             Single-division events (incl. BLPA) render nothing here, unchanged. */}
@@ -536,18 +568,22 @@ export default function TournamentPage({ currentUser }) {
             ))}
           </div>
         )}
-        <div style={{display:'flex',overflowX:'auto',borderBottom:'2px solid rgba(46,91,140,0.3)'}}>
-          {TABS.map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)}
-              style={{fontSize:13,fontWeight:700,padding:'10px 16px',background:'transparent',border:'none',
-                borderBottom: activeTab===tab ? `3px solid ${accent}` : '3px solid transparent',
-                marginBottom:-2,cursor:'pointer',fontFamily:'Barlow,sans-serif',whiteSpace:'nowrap',
-                color:'#FFFFFF', opacity: activeTab===tab ? 1 : 0.5}}
-              onMouseEnter={e=>{e.currentTarget.style.background='#FFFFFF';e.currentTarget.style.color='#0B1F3A';e.currentTarget.style.opacity='1';}}
-              onMouseLeave={e=>{e.currentTarget.style.background='transparent';e.currentTarget.style.color='#FFFFFF';e.currentTarget.style.opacity=activeTab===tab?'1':'0.5';}}>
-              {tab}
-            </button>
-          ))}
+        {/* Scoreboard tab strip — red underline on the active tab, muted steel
+            when inactive. No box shadow, no Material hover. */}
+        <div style={{display:'flex',overflowX:'auto',borderBottom:'1px solid rgba(46,91,140,0.3)'}}>
+          {TABS.map(tab => {
+            const on = activeTab === tab;
+            return (
+              <button key={tab} onClick={() => setActiveTab(tab)}
+                style={{fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:700,fontSize:15,letterSpacing:'0.04em',textTransform:'uppercase',
+                  padding:'10px 14px',background:'transparent',border:'none',
+                  borderBottom: on ? '3px solid #D72638' : '3px solid transparent',
+                  marginBottom:-1,cursor:'pointer',whiteSpace:'nowrap',
+                  color: on ? '#F4F7FA' : '#8BA3BE',transition:'color 0.15s'}}>
+                {tab}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -558,7 +594,7 @@ export default function TournamentPage({ currentUser }) {
           <>
             <AdSlot slot="standings_presented" targetType="tournament" targetId={tournament.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
             {Object.keys(standings).length === 0
-            ? <div style={{textAlign:'center',color:'rgba(244,247,250,0.3)',fontSize:13,paddingTop:40}}>No games played yet</div>
+            ? <TabEmptyState title="No standings yet" body="The table fills in the moment the first game goes final. Check back after the puck drops." />
             : Object.entries(standings).map(([pool, rawRows]) => {
               // Re-sort and re-rank client-side per the format's tiebreaker order.
               // The view ships a default sort that matches BLPA Bash exactly;
@@ -612,10 +648,10 @@ export default function TournamentPage({ currentUser }) {
               const stickyRight = { position: 'sticky', right: 0, zIndex: 2, background: stickyBg, boxShadow: '-4px 0 6px -4px rgba(0,0,0,0.4)' };
               const stickyLeftHdr = { ...stickyLeft, background: stickyHdrBg };
               const stickyRightHdr = { ...stickyRight, background: stickyHdrBg };
-              const midCellW = 36; // px per scrollable column
+              const midCellW = 40; // px per scrollable column
               return (
               <div key={pool} style={{marginBottom:16}}>
-                <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.1em',color:'rgba(244,247,250,0.3)',textTransform:'uppercase',marginBottom:8}}>{pool}</div>
+                <LowerThird label={pool} />
                 <div style={{background:stickyBg,border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,overflow:'hidden'}}>
                   <div style={{overflowX:'auto', WebkitOverflowScrolling:'touch'}}>
                   <table style={{borderCollapse:'collapse', width:'100%', minWidth: 'max-content', tableLayout:'auto'}}>
@@ -625,7 +661,7 @@ export default function TournamentPage({ currentUser }) {
                         {midCols.map(c => (
                           <th key={c.key} style={{textAlign:'center',padding:'8px 4px',width:midCellW,minWidth:midCellW}}>{c.label}</th>
                         ))}
-                        <th style={{...stickyRightHdr,textAlign:'center',padding:'8px 10px',minWidth:44}}>PTS</th>
+                        <th style={{...stickyRightHdr,textAlign:'center',padding:'8px 10px',minWidth:48}}>PTS</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -639,11 +675,12 @@ export default function TournamentPage({ currentUser }) {
                             </td>
                           </tr>
                         )}
-                        <tr style={{borderTop:'0.5px solid rgba(244,247,250,0.06)'}}>
+                        <tr>
                           <td style={{...stickyLeft,padding:'10px',minWidth:130,maxWidth:160}}>
-                            <div style={{display:'flex',alignItems:'center',gap:6,minWidth:0}}>
-                              <span style={{width:18,height:18,borderRadius:'50%',background:row.pool_rank===1?'#D72638':row.pool_rank===2?'#2E5B8C':'rgba(244,247,250,0.1)',color:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,flexShrink:0}}>{row.pool_rank}</span>
-                              <span style={{fontSize:12,fontWeight:600,color:'#F4F7FA',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{row.team_name}</span>
+                            <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
+                              {/* Rank as a large muted number (gold for 1st), not a column or a badge. */}
+                              <span style={{fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:900,fontSize:22,lineHeight:1,minWidth:20,textAlign:'center',color:row.pool_rank===1?'#C9A84C':'rgba(244,247,250,0.35)',flexShrink:0}}>{row.pool_rank}</span>
+                              <span style={{fontSize:14,fontWeight:600,color:'#F4F7FA',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{row.team_name}</span>
                               {/* GS-2 — TEAM-LEVEL suspension flag only. Opponents
                                   learn the lineup may differ; no player is ever
                                   named on this public surface. */}
@@ -656,11 +693,12 @@ export default function TournamentPage({ currentUser }) {
                             </div>
                           </td>
                           {midCols.map(c => (
-                            <td key={c.key} style={{fontSize:11,textAlign:'center',color:c.color ? (typeof c.color === 'function' ? c.color(row) : c.color) : 'rgba(244,247,250,0.65)',padding:'10px 4px',width:midCellW,minWidth:midCellW}}>
+                            <td key={c.key} style={{fontFamily:"'Barlow Condensed', sans-serif",fontWeight:700,fontSize:16,textAlign:'center',color:c.color ? (typeof c.color === 'function' ? c.color(row) : c.color) : 'rgba(244,247,250,0.75)',padding:'9px 4px',width:midCellW,minWidth:midCellW}}>
                               {c.render(row)}
                             </td>
                           ))}
-                          <td style={{...stickyRight,fontSize:13,fontWeight:700,textAlign:'center',color:row.pool_rank===1?'#D72638':'#F4F7FA',padding:'10px',minWidth:44}}>{row.pts}</td>
+                          {/* Gold PTS on the 1st-place row only — the one earned highlight. */}
+                          <td style={{...stickyRight,fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:900,fontSize:18,textAlign:'center',color:row.pool_rank===1?'#C9A84C':'#F4F7FA',padding:'9px 10px',minWidth:48}}>{row.pts}</td>
                         </tr>
                       </React.Fragment>
                     ))}
@@ -678,14 +716,14 @@ export default function TournamentPage({ currentUser }) {
           <>
             <AdSlot slot="schedule_presented" targetType="tournament" targetId={tournament.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
             {divisionGames.length === 0
-            ? <div style={{textAlign:'center',color:'rgba(244,247,250,0.3)',fontSize:13,paddingTop:40}}>No games scheduled yet</div>
+            ? <TabEmptyState icon="🗓️" title="Schedule drops soon" body="No games on the board yet. The matchups land here as soon as the organizer posts them." />
             : <ScheduleByDay games={divisionGames} navigate={navigate} canScore={canScore} />}
           </>
         )}
 
         {activeTab === 'Bracket' && (
           bracketGames.length === 0
-            ? <div style={{textAlign:'center',color:'rgba(244,247,250,0.3)',fontSize:13,paddingTop:40}}>Bracket seeds lock when pool play ends</div>
+            ? <TabEmptyState icon="🏆" title="Bracket locks after pools" body="Once pool play wraps, the seeds drop in and the road to the championship lights up here." />
             : <>
                 {champion && (
                   <div style={{background:'linear-gradient(135deg,#1a1208 0%,#3d2a0c 50%,#1a1208 100%)',border:'1px solid rgba(245,158,11,0.5)',borderRadius:14,padding:'22px 18px',marginBottom:18,textAlign:'center'}}>
@@ -707,7 +745,7 @@ export default function TournamentPage({ currentUser }) {
                   }
                   return groups.map(grp => (
                     <div key={grp.label}>
-                      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', color: 'rgba(244,247,250,0.45)', textTransform: 'uppercase', margin: '14px 0 6px' }}>{grp.label}</div>
+                      <LowerThird label={grp.label} />
                       {grp.games.map(g => <GameCard key={g.id} game={g} navigate={navigate} canScore={canScore} />)}
                     </div>
                   ));
@@ -1127,17 +1165,17 @@ function PublicTournamentLanding({ tournament, games, navigate }) {
 
       <div style={{padding:'20px 18px',maxWidth:560,margin:'0 auto'}}>
         {/* Sign-up hero — the main conversion surface */}
-        <div style={{background:`linear-gradient(135deg,${accent}33 0%,#0f2847 100%)`,border:`1px solid ${accent}66`,borderRadius:14,padding:'20px 18px',marginBottom:18,textAlign:'center'}}>
-          <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:20,marginBottom:6,textTransform:'uppercase'}}>Follow every game</div>
-          <div style={{fontSize:13,color:'rgba(244,247,250,0.75)',marginBottom:16,lineHeight:1.55}}>
-            Live scores, standings, and the bracket — plus a recap the moment each game ends. Sign up free to follow along all weekend.
+        <div style={{background:`linear-gradient(135deg,${accent}33 0%,#0f2847 100%)`,border:`1px solid ${accent}66`,borderRadius:14,padding:'24px 18px',marginBottom:18,textAlign:'center'}}>
+          <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:24,marginBottom:8,textTransform:'uppercase'}}>Follow every game live</div>
+          <div style={{fontSize:14,color:'rgba(244,247,250,0.75)',lineHeight:1.5,maxWidth:360,margin:'0 auto 20px'}}>
+            Live scores and standings, free — the second each game ends.
           </div>
-          <div style={{display:'flex',gap:10,justifyContent:'center',flexWrap:'wrap'}}>
-            <button onClick={() => navigate(`/login?returnTo=${returnTo}`)} style={{background:accent,color:'#fff',border:'none',borderRadius:999,padding:'12px 28px',fontFamily:'Barlow,sans-serif',fontSize:14,fontWeight:700,cursor:'pointer'}}>
-              Sign up free →
-            </button>
-            <button onClick={() => navigate(`/login?returnTo=${returnTo}`)} style={{background:'transparent',color:'#F4F7FA',border:'1px solid rgba(244,247,250,0.3)',borderRadius:999,padding:'12px 22px',fontFamily:'Barlow,sans-serif',fontSize:13,cursor:'pointer'}}>
-              Sign in
+          <button onClick={() => navigate(`/login?returnTo=${returnTo}`)} style={{background:accent,color:'#fff',border:'none',borderRadius:999,padding:'14px 34px',fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:900,fontSize:16,letterSpacing:'0.04em',textTransform:'uppercase',cursor:'pointer'}}>
+            Sign up free →
+          </button>
+          <div style={{marginTop:14}}>
+            <button onClick={() => navigate(`/login?returnTo=${returnTo}`)} style={{background:'transparent',color:'rgba(244,247,250,0.7)',border:'none',fontFamily:'Barlow,sans-serif',fontSize:13,cursor:'pointer',textDecoration:'underline'}}>
+              Already have an account? Sign in
             </button>
           </div>
         </div>
@@ -1169,7 +1207,7 @@ function PublicTournamentLanding({ tournament, games, navigate }) {
                       <div style={{width:30,height:30,borderRadius:'50%',background:'#1a4a7a',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:11,color:'#fff',flexShrink:0}}>
                         {teamInitials(t.team_name)}
                       </div>
-                      <span style={{fontSize:14,fontWeight:600,color:'#F4F7FA'}}>{t.team_name}</span>
+                      <span style={{fontSize:14,fontWeight:600,color:'#F4F7FA',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.team_name}</span>
                     </div>
                   ))}
                 </div>
@@ -1212,10 +1250,7 @@ function ScheduleByDay({ games, navigate, canScore }) {
   }, [games]);
   return grouped.map(day => (
     <div key={day.key} style={{ marginBottom: 18 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10 }}>
-        <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 15, color: '#F4F7FA', textTransform: 'uppercase' }}>{fmtDayHeading(day.iso)}</div>
-        <div style={{ fontSize: 10, color: 'rgba(244,247,250,0.4)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>· {day.subtitle}</div>
-      </div>
+      <LowerThird label={fmtDayHeading(day.iso)} sub={day.subtitle} />
       {day.games.map(g => <GameCard key={g.id} game={g} navigate={navigate} canScore={canScore} />)}
     </div>
   ));
@@ -1231,11 +1266,13 @@ function GameCard({ game, navigate, canScore }) {
   const isChampionship = game.round === 'final' || game.round === 'championship';
   const isBracketRound = !!game.round && game.round !== 'pool';
   const roundLabel = isBracketRound ? (ROUND_LABEL[game.round] || game.round) : (game.home_team?.pool || 'Pool');
-  // Championship cards get a warm gold border + 🏆 chip so they pop on the
-  // schedule and bracket lists. Pool/QF/SF stay on the standard navy treatment.
-  const cardBorder = isChampionship ? '1px solid rgba(245,158,11,0.55)' : '0.5px solid rgba(46,91,140,0.4)';
-  const cardHoverBorder = isChampionship ? '1px solid rgba(245,158,11,0.9)' : '0.5px solid rgba(46,91,140,0.8)';
-  const cardBackground = isChampionship ? 'linear-gradient(135deg,#0f2847 0%,#1a1605 100%)' : '#0f2847';
+  // Live games get the card-hero treatment (elevated surface + red border glow
+  // + red drop-shadow) so they float above the schedule. Championship cards get
+  // a warm gold border. Everything else stays on the standard navy treatment.
+  const cardBorder = isLive ? '1px solid rgba(215,38,56,0.6)' : isChampionship ? '1px solid rgba(245,158,11,0.55)' : '0.5px solid rgba(46,91,140,0.4)';
+  const cardHoverBorder = isLive ? '1px solid rgba(215,38,56,0.85)' : isChampionship ? '1px solid rgba(245,158,11,0.9)' : '0.5px solid rgba(46,91,140,0.8)';
+  const cardBackground = isLive ? '#162f55' : isChampionship ? 'linear-gradient(135deg,#0f2847 0%,#1a1605 100%)' : '#0f2847';
+  const cardShadow = isLive ? '0 8px 32px rgba(215,38,56,0.2)' : 'none';
   // Bold the winner's row when the game is final. Shootout winners (tied
   // regulation, SO decided it) get the bold too — game.shootout_winner is
   // the source of truth for bracket-round SO outcomes.
@@ -1244,7 +1281,7 @@ function GameCard({ game, navigate, canScore }) {
   const awayWon = isFinal && ((game.away_score ?? 0) > (game.home_score ?? 0) || game.shootout_winner === 'away');
 
   return (
-    <div onClick={() => navigate('/game/' + game.id)} style={{background:cardBackground,border:cardBorder,borderRadius:12,padding:'14px 16px',marginBottom:10,cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.border=cardHoverBorder} onMouseLeave={e=>e.currentTarget.style.border=cardBorder}>
+    <div onClick={() => navigate('/game/' + game.id)} style={{background:cardBackground,border:cardBorder,boxShadow:cardShadow,borderRadius:12,padding:'14px 16px',marginBottom:10,cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.border=cardHoverBorder} onMouseLeave={e=>e.currentTarget.style.border=cardBorder}>
       {/* Status row + round badge + start time. Date/time is now shown for
           every game state — not just scheduled — so spectators can find when
           a finalized game happened without opening the detail page. */}
@@ -1265,19 +1302,19 @@ function GameCard({ game, navigate, canScore }) {
           </button>
         )}
       </div>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,opacity:isFinal && !homeWon ? 0.65 : 1}}>
-        <div style={{display:'flex',alignItems:'center',gap:8}}>
-          <div style={{width:32,height:32,borderRadius:'50%',background:'#1a4a7a',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:11,color:'#fff'}}>{teamInitials(game.home_team?.team_name)}</div>
-          <span style={{fontSize:14,fontWeight:homeWon?800:600,color:'#F4F7FA'}}>{game.home_team?.team_name}</span>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:10,opacity:isFinal && !homeWon ? 0.65 : 1}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0}}>
+          <div style={{width:32,height:32,borderRadius:'50%',background:'#1a4a7a',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:11,color:'#fff',flexShrink:0}}>{teamInitials(game.home_team?.team_name)}</div>
+          <span style={{fontSize:14,fontWeight:homeWon?800:600,color:'#F4F7FA',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{game.home_team?.team_name}</span>
         </div>
-        {(isLive||isFinal) && <span style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:26,color:'#F4F7FA'}}>{game.home_score}</span>}
+        {(isLive||isFinal) && <span style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:26,color:'#F4F7FA',flexShrink:0}}>{game.home_score}</span>}
       </div>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,opacity:isFinal && !awayWon ? 0.65 : 1}}>
-        <div style={{display:'flex',alignItems:'center',gap:8}}>
-          <div style={{width:32,height:32,borderRadius:'50%',background:'#6b1520',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:11,color:'#fff'}}>{teamInitials(game.away_team?.team_name)}</div>
-          <span style={{fontSize:14,fontWeight:awayWon?800:600,color:'#F4F7FA'}}>{game.away_team?.team_name}</span>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:10,opacity:isFinal && !awayWon ? 0.65 : 1}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0}}>
+          <div style={{width:32,height:32,borderRadius:'50%',background:'#6b1520',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:11,color:'#fff',flexShrink:0}}>{teamInitials(game.away_team?.team_name)}</div>
+          <span style={{fontSize:14,fontWeight:awayWon?800:600,color:'#F4F7FA',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{game.away_team?.team_name}</span>
         </div>
-        {(isLive||isFinal) ? <span style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:26,color:'#F4F7FA'}}>{game.away_score}</span> : <span style={{fontSize:11,fontWeight:600,color:'rgba(244,247,250,0.3)'}}>VS</span>}
+        {(isLive||isFinal) ? <span style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:26,color:'#F4F7FA',flexShrink:0}}>{game.away_score}</span> : <span style={{fontSize:11,fontWeight:600,color:'rgba(244,247,250,0.3)',flexShrink:0}}>VS</span>}
       </div>
       <div style={{fontSize:11,color:'rgba(244,247,250,0.4)'}}>📍 {[game.rink?.sub_rink, game.rink?.name].filter(Boolean).join(' · ') || 'Rink TBD'}</div>
       {canScore && (
@@ -1315,12 +1352,10 @@ function InfoTab({ tournament }) {
           this is a real paying customer's page; the lead-gen CTA belongs
           on demos + draft tournaments only. */}
       {tournament.is_activated === false && (
-        <div style={{background:'linear-gradient(135deg,#0f2847 0%,#0B1F3A 100%)',border:'1px solid rgba(46,91,140,0.6)',borderRadius:14,padding:'20px 18px',marginBottom:16,textAlign:'center'}}>
-          <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:20,marginBottom:6}}>Host your tournament on Rinkd</div>
-          <div style={{fontSize:12,color:'rgba(244,247,250,0.5)',marginBottom:14,lineHeight:1.6}}>Live standings · real-time scoring · LiveBarn integration · bracket automation.<br/>Email us for pricing and availability.</div>
-          <a href="mailto:hello@rinkd.app?subject=Tournament Hosting Inquiry" style={{display:'inline-flex',alignItems:'center',gap:8,background:'#D72638',color:'#fff',border:'none',borderRadius:999,padding:'11px 22px',fontFamily:'Barlow,sans-serif',fontSize:13,fontWeight:700,textDecoration:'none'}}>✉️ hello@rinkd.app</a>
-          <div style={{fontSize:11,color:'rgba(244,247,250,0.3)',marginTop:10}}>We'll respond within 24 hours</div>
-          <div style={{marginTop:8}}><a href="/pricing" style={{color:'rgba(244,247,250,0.6)',fontSize:12,textDecoration:'underline'}}>See pricing →</a></div>
+        <div style={{background:'linear-gradient(135deg,#0f2847 0%,#0B1F3A 100%)',border:'1px solid rgba(46,91,140,0.6)',borderRadius:14,padding:'22px 18px',marginBottom:16,textAlign:'center'}}>
+          <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:22,textTransform:'uppercase',marginBottom:8}}>Run your tournament on Rinkd</div>
+          <div style={{fontSize:14,color:'rgba(244,247,250,0.7)',lineHeight:1.5,maxWidth:340,margin:'0 auto 18px'}}>Live standings and scoring your whole rink can follow from their phone.</div>
+          <a href="mailto:hello@rinkd.app?subject=Tournament Hosting Inquiry" style={{display:'inline-block',background:'#D72638',color:'#fff',borderRadius:999,padding:'13px 30px',fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:900,fontSize:15,letterSpacing:'0.04em',textTransform:'uppercase',textDecoration:'none'}}>Get pricing →</a>
         </div>
       )}
 
