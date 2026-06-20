@@ -216,5 +216,11 @@ $$;
 -- real movement, and the snapshot diff throttles it — a malicious caller can at
 -- most surface a pending climb a few seconds early, then every further call
 -- no-ops. service_role covers the poller's server-side calls.
-revoke all on function public.post_standings_movement(uuid, uuid) from public;
+--
+-- Revoke anon too: Supabase's ALTER DEFAULT PRIVILEGES auto-grants new
+-- public-schema functions to anon/authenticated/service_role at CREATE time, so
+-- a plain `revoke from public` leaves anon's DIRECT grant intact. We don't want
+-- an UNauthenticated caller able to invoke a writing SECURITY DEFINER function;
+-- neither real caller is anon (scorer is authenticated, poller is service_role).
+revoke all on function public.post_standings_movement(uuid, uuid) from public, anon;
 grant execute on function public.post_standings_movement(uuid, uuid) to authenticated, service_role;
