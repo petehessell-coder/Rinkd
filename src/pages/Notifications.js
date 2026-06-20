@@ -78,7 +78,7 @@ export default function NotificationsPage({ currentUser, profile }) {
             </div>
             {unreadCount > 0 && (
               <button onClick={handleMarkAll}
-                style={{ background: 'transparent', color: C.ice, border: `1px solid ${C.border}`, padding: '7px 14px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>
+                style={{ background: 'transparent', color: C.ice, border: `1px solid ${C.border}`, padding: '7px 14px', minHeight: 44, display: 'inline-flex', alignItems: 'center', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>
                 Mark all read
               </button>
             )}
@@ -88,7 +88,7 @@ export default function NotificationsPage({ currentUser, profile }) {
           <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
             {[['all', 'All'], ['unread', 'Unread']].map(([id, label]) => (
               <button key={id} onClick={() => setFilter(id)}
-                style={{ background: filter === id ? C.red : 'transparent', color: filter === id ? '#fff' : C.steel, border: `1px solid ${filter === id ? C.red : C.border}`, padding: '6px 14px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Barlow, sans-serif' }}>
+                style={{ background: filter === id ? C.red : 'transparent', color: filter === id ? '#fff' : C.steel, border: `1px solid ${filter === id ? C.red : C.border}`, padding: '6px 14px', minHeight: 44, display: 'inline-flex', alignItems: 'center', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Barlow, sans-serif' }}>
                 {label}
               </button>
             ))}
@@ -187,11 +187,11 @@ function NotifRow({ n, first, onOpen, onDelete }) {
         display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px',
         borderTop: first ? 'none' : '1px solid rgba(46,91,140,0.18)',
         borderLeft: isUnread ? '4px solid #D72638' : '4px solid transparent',
-        background: isUnread ? '#162f55' : 'transparent',
+        background: isUnread ? '#162f55' : C.card,
         cursor: 'pointer', transition: 'background 0.15s',
       }}
       onMouseEnter={(e) => { if (!isUnread) e.currentTarget.style.background = 'rgba(46,91,140,0.12)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = isUnread ? '#162f55' : 'transparent'; }}>
+      onMouseLeave={(e) => { e.currentTarget.style.background = isUnread ? '#162f55' : C.card; }}>
       {/* Type icon — tone-colored container (red urgency / gold POTG / neutral). */}
       {n.actor ? (
         <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -217,8 +217,8 @@ function NotifRow({ n, first, onOpen, onDelete }) {
       {/* Timestamp (small, right-aligned, muted) + dismiss. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         <span style={{ fontSize: 11, color: C.steel, whiteSpace: 'nowrap' }}>{timeAgo(n.created_at)}</span>
-        <button onClick={(e) => onDelete(n.id, e)} title="Dismiss"
-          style={{ background: 'transparent', color: C.steel, border: 'none', padding: 2, fontSize: 16, cursor: 'pointer', lineHeight: 1 }}>×</button>
+        <button onClick={(e) => onDelete(n.id, e)} title="Dismiss" aria-label="Dismiss notification"
+          style={{ background: 'transparent', color: C.steel, border: 'none', fontSize: 16, cursor: 'pointer', lineHeight: 1, minWidth: 44, minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', margin: '-12px -8px -12px 0' }}>×</button>
       </div>
     </div>
   );
