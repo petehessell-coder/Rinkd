@@ -242,6 +242,20 @@ export default function LeaguePage({ currentUser, profile }) {
     } finally { setLoading(false); }
   }, [id, currentUser]);
 
+  // perf(scale): the realtime tick must NOT re-run the full load() (league row +
+  // teams + divisions + role) on every goal for every spectator — only games and
+  // standings change when a scorer finalizes. Re-fetch just those; the static
+  // config is fetched once on mount and left alone.
+  const loadLive = useCallback(async () => {
+    try {
+      const [g, s] = await Promise.all([getLeagueGames(id), getLeagueStandings(id)]);
+      setGames(g); setStandings(s);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[League] live reload failed; spectators hold last data:', e?.message || e);
+    }
+  }, [id]);
+
   useEffect(() => { load(); }, [load]);
 
   // One view event per page load for EVERY visitor (not just logged-out),
@@ -326,12 +340,13 @@ export default function LeaguePage({ currentUser, profile }) {
     if (!id) return;
     let channel = null;
     // Debounce: coalesce bursts of league_games changes into one reload per
-    // ~1.5s window so a scorer entering several goals doesn't re-run the full
-    // load() (standings view included) for every spectator on every tap.
+    // ~1.5s window so a scorer entering several goals doesn't reload for every
+    // spectator on every tap. loadLive re-fetches only games + standings — never
+    // the static league/teams/divisions config (fetched once on mount).
     let reloadTimer = null;
     const scheduleReload = () => {
       if (reloadTimer) clearTimeout(reloadTimer);
-      reloadTimer = setTimeout(() => { try { load(); } catch { /* swallow */ } }, 1500);
+      reloadTimer = setTimeout(() => { loadLive(); }, 1500);
     };
     try {
       const name = `league:${id}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
@@ -348,7 +363,7 @@ export default function LeaguePage({ currentUser, profile }) {
       if (reloadTimer) clearTimeout(reloadTimer);
       try { if (channel) supabase.removeChannel(channel); } catch { /* swallow */ }
     };
-  }, [id, load]);
+  }, [id, loadLive]);
 
   const handleFollowToggle = async () => {
     if (!currentUser?.id || !id || followBusy) return;

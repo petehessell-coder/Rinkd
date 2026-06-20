@@ -230,6 +230,39 @@ export default function TournamentPage({ currentUser }) {
     }
   }, [id]);
 
+  // perf(scale): the realtime tick must NOT re-run the full load() (tournament
+  // row + divisions) on every goal for every spectator — only games, standings,
+  // and the suspension flags change when a game finalizes. Re-fetch just those.
+  // (Select shapes mirror the live subset of load() above.)
+  const loadLive = useCallback(async () => {
+    try {
+      const [{ data: g }, { data: s }] = await Promise.all([
+        supabase.from('games')
+          .select('*, home_team:tournament_teams!home_team_id(id,team_name,pool), away_team:tournament_teams!away_team_id(id,team_name,pool), rink:rinks(id,name,sub_rink,live_barn_venue_id)')
+          .eq('tournament_id', id)
+          .order('start_time', { ascending: true })
+          .limit(1000),
+        supabase.from(STANDINGS_VIEW)
+          .select('*')
+          .eq('tournament_id', id)
+          .order('pool', { ascending: true })
+          .order('pool_rank', { ascending: true })
+          .limit(500),
+      ]);
+      if (g) setGames(g);
+      if (s) setStandingsRaw(s);
+      try {
+        const { data: flags } = await supabase.rpc('get_tournament_suspension_flags', { p_tournament_id: id });
+        const flagMap = {};
+        (flags || []).forEach(f => { flagMap[f.team_id] = f.pending_count; });
+        setSuspendedTeams(flagMap);
+      } catch { /* best-effort suspension flags */ }
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[Tournament] live reload failed; spectators hold last data:', e?.message || e);
+    }
+  }, [id]);
+
   useEffect(() => { load(); }, [load]);
 
   // One view event per page load for EVERY visitor (not just logged-out),
@@ -266,7 +299,7 @@ export default function TournamentPage({ currentUser }) {
     let reloadTimer = null;
     const scheduleReload = () => {
       if (reloadTimer) clearTimeout(reloadTimer);
-      reloadTimer = setTimeout(() => { try { load(); } catch { /* swallow */ } }, 1500);
+      reloadTimer = setTimeout(() => { loadLive(); }, 1500);
     };
     try {
       const name = `tournament:${id}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
@@ -283,7 +316,7 @@ export default function TournamentPage({ currentUser }) {
       if (reloadTimer) clearTimeout(reloadTimer);
       try { if (channel) supabase.removeChannel(channel); } catch { /* swallow */ }
     };
-  }, [id, load]);
+  }, [id, loadLive]);
 
   // Resolve whether the signed-in user has a scorer role on THIS tournament.
   // RLS on tournament_roles allows users to read their own rows, so this is

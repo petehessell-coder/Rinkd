@@ -1,19 +1,28 @@
 import { supabase } from './supabase';
+import { cached, invalidatePrefix } from './cache';
 
 // LEAGUE-DIV-1 — read helpers for M2 (public division nav).
 // CRUD (create / update / delete / reorder) lands in M3 and will live here too.
 
+// perf(scale): divisions are near-immutable during a session and read on every
+// League-page mount; cache them so a spectator opening/closing the page (and the
+// post-5a realtime split) never re-pulls them. Writers below invalidate, so a
+// commissioner never sees their own stale edit; the 60s TTL bounds it elsewhere.
+const DIVISIONS_NS = 'league-divisions:';
+
 /** All divisions for a league, in commissioner-defined order. Public read. */
 export async function listLeagueDivisions(leagueId) {
   if (!leagueId) return [];
-  const { data, error } = await supabase
-    .from('league_divisions')
-    .select('id, league_id, name, sort_order, settings')
-    .eq('league_id', leagueId)
-    .order('sort_order', { ascending: true })
-    .order('name', { ascending: true });
-  if (error) throw error;
-  return data || [];
+  return cached(`${DIVISIONS_NS}${leagueId}`, 60_000, async () => {
+    const { data, error } = await supabase
+      .from('league_divisions')
+      .select('id, league_id, name, sort_order, settings')
+      .eq('league_id', leagueId)
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true });
+    if (error) throw error;
+    return data || [];
+  });
 }
 
 // ── M3 commissioner CRUD (writes go through league_divisions RLS, which is
@@ -34,6 +43,7 @@ export async function createLeagueDivision(leagueId, name) {
     .select()
     .single();
   if (error) throw error;
+  invalidatePrefix(DIVISIONS_NS);
   return data;
 }
 
@@ -46,6 +56,7 @@ export async function updateLeagueDivision(id, updates) {
     .select()
     .single();
   if (error) throw error;
+  invalidatePrefix(DIVISIONS_NS);
   return data;
 }
 
@@ -57,6 +68,7 @@ export async function updateLeagueDivision(id, updates) {
 export async function deleteLeagueDivision(id) {
   const { error } = await supabase.from('league_divisions').delete().eq('id', id);
   if (error) throw error;
+  invalidatePrefix(DIVISIONS_NS);
 }
 
 /** Persist a new order — sets sort_order = array index for each id. */
@@ -69,6 +81,7 @@ export async function reorderLeagueDivisions(orderedIds) {
       .eq('id', orderedIds[i]);
     if (error) throw error;
   }
+  invalidatePrefix(DIVISIONS_NS);
 }
 
 /** Assign (or clear) a league team's division. Uses the M1 league_teams_update policy. */
