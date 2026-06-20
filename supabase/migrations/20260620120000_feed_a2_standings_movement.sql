@@ -108,11 +108,22 @@ begin
   -- 1) Post POSITIVE moves only, diffed against the PRIOR snapshot. INNER JOIN
   --    to the snapshot means a team with no prior baseline (first run / newly
   --    added team) is seeded silently below and never posts a phantom "climb".
+  --
+  --    Known v1 semantics (accepted, rank-only diff): we compare the integer
+  --    rank only. So (a) taking SOLE possession of a rank a team was tied for
+  --    does not post (rank number is unchanged), and (b) a rank that improves
+  --    purely because another team's games were voided would post — but the RPC
+  --    only runs on a real finalize, so that needs a void + a finalize between
+  --    two snapshots. Both are fine for "the standings moved"; richer detection
+  --    would need a tiebreaker signature in the snapshot (future).
   with ins as (
     insert into public.posts (author_id, content, tag, tag_color, league_id, league_team_id)
     select
       v_commissioner,
       case
+        -- rank() ties share a rank, so don't claim sole 1st when it's shared.
+        when c.cur_rank = 1 and c.tied_at_rank > 1
+          then '📈 ' || c.team_name || ' climbed into a tie for 1st place!'
         when c.cur_rank = 1
           then '📈 ' || c.team_name || ' moved into 1st place in the standings!'
         when ps.spots is not null and ps.spots > 0
@@ -124,7 +135,9 @@ begin
       end,
       'Standings', '#2E5B8C', p_league_id, c.lt_id
     from (
-      select s.lt_id, s.division_id, s.rank::int as cur_rank, s.team_name
+      select s.lt_id, s.division_id, s.rank::int as cur_rank, s.team_name,
+             -- how many teams share this rank in the partition (tie detection)
+             count(*) over (partition by s.league_id, s.division_id, s.rank) as tied_at_rank
       from public.league_standings s
       where s.league_id = p_league_id
         and (p_division_id is null or s.division_id is not distinct from p_division_id)
@@ -140,9 +153,19 @@ begin
       on p.league_team_id = c.lt_id
      and p.division_id is not distinct from c.division_id
     left join lateral (
+      -- Defensive parse: a settings form could write playoff_spots as a JSON
+      -- string, a decimal, a bool, etc. A bare ::int on a non-integer text would
+      -- THROW and abort the whole RPC (killing every movement post for the
+      -- league, silently — the callers swallow it). The live view dodges this
+      -- with ::numeric; we guard with an integer-only regex so a bad value
+      -- degrades to "no cutoff" (NULL) instead. Division overrides league.
       select coalesce(
-        (select (d.settings ->> 'playoff_spots')::int from public.league_divisions d where d.id = c.division_id),
-        (select (l.settings ->> 'playoff_spots')::int from public.leagues l where l.id = p_league_id)
+        (select case when (d.settings ->> 'playoff_spots') ~ '^\s*\d+\s*$'
+                     then (trim(d.settings ->> 'playoff_spots'))::int end
+           from public.league_divisions d where d.id = c.division_id),
+        (select case when (l.settings ->> 'playoff_spots') ~ '^\s*\d+\s*$'
+                     then (trim(l.settings ->> 'playoff_spots'))::int end
+           from public.leagues l where l.id = p_league_id)
       ) as spots
     ) ps on true
     where c.cur_rank < p.prev_rank          -- improved (lower number = better)

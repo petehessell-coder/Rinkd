@@ -357,5 +357,58 @@ const postsOf = (leagueId) => q(`select content, tag, tag_color, author_id, leag
     JSON.stringify(posts.map(p => p.content)));
 }
 
+// ─── malformed playoff_spots must DEGRADE, not throw (P1 fix) ─────────────────
+// A bad settings value (string "four", decimal, bool) must not abort the RPC —
+// it should fall back to "no cutoff" and still post the generic climb. A valid
+// integer-as-string "4" must still ACTIVATE (a settings form may store strings).
+async function playoffCopyFor(name, settingsJson) {
+  const { leagueId } = await ladderLeague(name, 6);
+  await db.query(`update public.leagues set settings = $2::jsonb where id=$1`, [leagueId, settingsJson]);
+  const cur = await ranksOf(leagueId);
+  for (const r of cur) await seedPrev(leagueId, null, r.lt_id, r.rank === 4 ? 6 : r.rank); // team 4 crosses 6→4
+  let threw = false, n = 0;
+  try { n = (await one(`select public.post_standings_movement($1, null) as n`, [leagueId])).n; }
+  catch { threw = true; }
+  const posts = await postsOf(leagueId);
+  return { threw, n, content: posts[0]?.content || '' };
+}
+{
+  for (const [label, json] of [['string "four"', '{"playoff_spots":"four"}'], ['decimal 2.5', '{"playoff_spots":2.5}'], ['bool true', '{"playoff_spots":true}']]) {
+    const r = await playoffCopyFor(`L5-${label}`, json);
+    check(`malformed playoff_spots (${label}): no throw, degrades to generic climb`,
+      !r.threw && r.n === 1 && /climbed to 4th in the standings/.test(r.content) && !/playoff spot/.test(r.content),
+      JSON.stringify(r));
+  }
+  const okStr = await playoffCopyFor('L5-str4', '{"playoff_spots":"4"}');
+  check('valid playoff_spots as STRING "4" still activates the playoff copy',
+    !okStr.threw && okStr.n === 1 && /jumped into a playoff spot — now 4th/.test(okStr.content), JSON.stringify(okStr));
+}
+
+// ─── tie for 1st uses the tie copy, not "moved into 1st place" (P2 fix) ───────
+{
+  const commish = await mkCommish('L6');
+  const lg = (await one(`insert into public.leagues (name, commissioner_id) values ('L6', $1) returning id`, [commish])).id;
+  const mk = async (lbl) => {
+    const tm = (await one(`insert into public.teams (name) values ($1) returning id`, [lbl])).id;
+    return (await one(`insert into public.league_teams (league_id, team_id, team_name) values ($1,$2,$3) returning id`, [lg, tm, lbl])).id;
+  };
+  const P = await mk('P'), Q = await mk('Q'), R = await mk('R');
+  // P and Q never play each other; each beats R 5-0 → identical record → co-rank 1.
+  await db.query(`insert into public.league_games (league_id, home_team_id, away_team_id, home_score, away_score, status, decided_in) values ($1,$2,$3,5,0,'final','regulation')`, [lg, P, R]);
+  await db.query(`insert into public.league_games (league_id, home_team_id, away_team_id, home_score, away_score, status, decided_in) values ($1,$2,$3,5,0,'final','regulation')`, [lg, Q, R]);
+  const cur = await ranksOf(lg);
+  const tiedAt1 = cur.filter(r => r.rank === 1).map(r => r.lt_id);
+  check('tie setup: P and Q share rank 1', tiedAt1.length === 2 && tiedAt1.includes(P) && tiedAt1.includes(Q), JSON.stringify(cur.map(r => [r.team_name, r.rank])));
+  await seedPrev(lg, null, P, 2); // both climb INTO the shared 1st
+  await seedPrev(lg, null, Q, 3);
+  await seedPrev(lg, null, R, 1); // R drops out of 1st
+  const n = await one(`select public.post_standings_movement($1, null) as n`, [lg]);
+  const posts = await postsOf(lg);
+  check('tie for 1st: both movers say "tie for 1st", none claim sole "moved into 1st place"',
+    n.n === 2 && posts.length === 2 && posts.every(p => /climbed into a tie for 1st place/.test(p.content))
+      && !posts.some(p => /moved into 1st place/.test(p.content)),
+    JSON.stringify(posts.map(p => p.content)));
+}
+
 console.log(`\n${failed === 0 ? '✅ ALL A2 CHECKS PASSED' : `❌ ${failed} CHECK(S) FAILED`}`);
 process.exit(failed === 0 ? 0 : 1);
