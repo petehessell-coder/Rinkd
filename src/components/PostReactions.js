@@ -132,7 +132,7 @@ export default function PostReactions({ postId, currentUserId, initial }) {
           onClick={(e) => { e.stopPropagation(); setPickerOpen((v) => !v); }}
           style={{
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            width: 26, height: 24, borderRadius: 999,
+            width: 44, height: 44, borderRadius: 999,
             background: 'rgba(11,31,58,0.6)', border: `1px solid ${C.border}`,
             color: C.steel, fontSize: 15, cursor: 'pointer', padding: 0, fontWeight: 700,
           }}>

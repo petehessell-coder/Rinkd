@@ -222,9 +222,9 @@ export default function Layout({ children, profile }) {
                 <div style={{ fontSize: 11, color: B.steel }}>@{profile.handle}</div>
               </div>
             </Link>
-            <div style={{ marginTop: 10, display: 'flex', gap: 10, fontSize: 10, color: B.border }}>
-              <Link to="/privacy" style={{ color: B.border, textDecoration: 'none' }}>Privacy</Link>
-              <Link to="/terms" style={{ color: B.border, textDecoration: 'none' }}>Terms</Link>
+            <div style={{ marginTop: 10, display: 'flex', gap: 10, fontSize: 10, color: B.steel }}>
+              <Link to="/privacy" style={{ color: B.steel, textDecoration: 'none' }}>Privacy</Link>
+              <Link to="/terms" style={{ color: B.steel, textDecoration: 'none' }}>Terms</Link>
               <span style={{ marginLeft: 'auto' }}>© 2026</span>
             </div>
           </div>
