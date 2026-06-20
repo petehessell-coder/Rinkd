@@ -68,7 +68,8 @@ if (typeof document !== 'undefined' && !document.getElementById('rinkd-feed-anim
     '@keyframes rinkdStarterFade{0%{opacity:0;transform:translateY(3px)}100%{opacity:1;transform:translateY(0)}}'
     + '@keyframes rinkdLivePulse{0%{box-shadow:0 0 0 0 rgba(215,38,56,0.55)}70%{box-shadow:0 0 0 7px rgba(215,38,56,0)}100%{box-shadow:0 0 0 0 rgba(215,38,56,0)}}'
     + '.rinkd-live-dot{animation:rinkdLivePulse 1.5s ease-out infinite}'
-    + '@media (prefers-reduced-motion: reduce){.rinkd-live-dot{animation:none}}';
+    + '.rinkd-starter-fade{animation:rinkdStarterFade .5s ease}'
+    + '@media (prefers-reduced-motion: reduce){.rinkd-live-dot,.rinkd-starter-fade{animation:none}}';
   document.head.appendChild(el);
 }
 
@@ -85,7 +86,7 @@ function MediaLightbox({ url, type, onClose }) {
   return (
     <div onClick={onClose}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <button onClick={onClose}
+      <button onClick={onClose} aria-label="Close"
         style={{ position: 'absolute', top: 14, right: 14, background: 'rgba(255,255,255,0.1)', color: '#fff', border: 'none', borderRadius: 999, width: 44, height: 44, fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>
         ×
       </button>
@@ -344,11 +345,11 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
           </a>
         )}
         <div style={{ display: 'flex', gap: 16, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
-          <button onClick={() => onLike(post.id)} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: isLiked ? C.red : C.steel, fontSize: 13, fontFamily: "'Barlow', sans-serif", padding: 0 }}>
+          <button onClick={() => onLike(post.id)} aria-label="Like" style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: isLiked ? C.red : C.steel, fontSize: 13, fontFamily: "'Barlow', sans-serif", padding: '0 4px', minHeight: 44 }}>
             <Icon name="like" size={16} fill={isLiked ? C.red : 'none'} />
             <span style={{ fontWeight: isLiked ? 600 : 400 }}>{post.likes || 0}</span>
           </button>
-          <button onClick={loadComments} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: showComments ? C.ice : C.steel, fontSize: 13, fontFamily: "'Barlow', sans-serif", padding: 0 }}>
+          <button onClick={loadComments} aria-label="Comments" style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: showComments ? C.ice : C.steel, fontSize: 13, fontFamily: "'Barlow', sans-serif", padding: '0 4px', minHeight: 44 }}>
             <Icon name="comment" size={16} /><span>{post.comment_count || 0}</span>
           </button>
           <PostReactions postId={post.id} currentUserId={currentUser?.id} initial={reactions} />
@@ -493,7 +494,7 @@ function ProfileNudgeBanner() {
           Quick — who are you? <span style={{ color: '#D72638', fontWeight: 700 }}>+50 pts</span> for one tap.
         </span>
         <button onClick={dismiss} aria-label="Dismiss"
-          style={{ background: 'transparent', color: C.steel, border: 'none', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: '0 4px' }}>
+          style={{ background: 'transparent', color: C.steel, border: 'none', cursor: 'pointer', fontSize: 20, lineHeight: 1, minWidth: 44, minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
           ×
         </button>
       </div>
@@ -816,7 +817,7 @@ export default function Feed({ currentUser, profile }) {
             {!composerOpen ? (
               <button onClick={() => setComposerOpen(true)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer' }}>
                 <Avatar profile={profile} size={36} />
-                <span key={starterIdx} style={{ flex: 1, color: C.steel, fontSize: 15, fontFamily: "'Barlow', sans-serif", textAlign: 'left', animation: 'rinkdStarterFade .5s ease' }}>{CHIRP_STARTERS[starterIdx]}</span>
+                <span key={starterIdx} className="rinkd-starter-fade" style={{ flex: 1, color: C.steel, fontSize: 15, fontFamily: "'Barlow', sans-serif", textAlign: 'left' }}>{CHIRP_STARTERS[starterIdx]}</span>
                 <span style={{ padding: '6px 14px', borderRadius: 8, background: C.red, color: 'white', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 13 }}>CHIRP</span>
               </button>
             ) : (
@@ -851,7 +852,7 @@ export default function Feed({ currentUser, profile }) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <input ref={fileInputRef} type="file" accept="image/*,video/*" onChange={handleMediaSelect} style={{ display: 'none' }} id="media-upload"/>
-                    <label htmlFor="media-upload" style={{ padding: '7px 12px', borderRadius: 8, cursor: 'pointer', background: C.navy, border: `1px solid ${C.border}`, color: C.steel, fontSize: 18, display: 'flex', alignItems: 'center' }}>📷</label>
+                    <label htmlFor="media-upload" aria-label="Add photo or video" style={{ padding: '7px 12px', minHeight: 44, borderRadius: 8, cursor: 'pointer', background: C.navy, border: `1px solid ${C.border}`, color: C.steel, fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>📷</label>
                     <span style={{ fontSize: 12, color: C.steel }}>{content.length}/500</span>
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
