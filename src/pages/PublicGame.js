@@ -8,6 +8,7 @@ import ShareButton from '../components/ShareButton';
 import SoundToggle from '../components/SoundToggle';
 import { ErrorState } from '../components/ui';
 import { useOnline } from '../lib/useOnline';
+import { subscribeGame } from '../lib/gameRealtime';
 import { useGoalMoment, GoalSweep } from '../lib/goalMoment';
 import { loadGameCardData } from '../lib/gameCardData';
 import {
@@ -126,24 +127,17 @@ export default function PublicGame({ league }) {
   useEffect(() => { load(); }, [load]);
 
   // Keep a spectator's view fresh for live games — this is the page fans open
-  // from a shared link. Read-only, so a debounced full reload is fine.
+  // from a shared link. Read-only, so a debounced full reload is fine. The
+  // subscription goes through lib/gameRealtime so the whole app shares ONE
+  // implementation and flips to the scaled per-game broadcast topic with a single
+  // env flag once that migration is live. (Today's postgres_changes path is
+  // O(viewers) — the previous "one socket per game" comment here was wrong.)
   useEffect(() => {
-    if (!gameId || state.blocked) return;
-    const rowTable = isLeague ? 'league_games' : 'games';
+    if (!gameId || state.blocked) return undefined;
     let t = null;
     const bump = () => { if (t) clearTimeout(t); t = setTimeout(load, 400); };
-    let channel = null;
-    try {
-      // All spectators for a given game share one named channel so Supabase
-      // Realtime only opens a single WebSocket subscription per game, not one
-      // per viewer. At scale (hundreds of fans sharing a link to the same game)
-      // this keeps connection count O(games) instead of O(viewers).
-      channel = supabase.channel(`publicgame:${gameId}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table: rowTable, filter: `id=eq.${gameId}` }, bump)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'game_goals', filter: `game_id=eq.${gameId}` }, bump)
-        .subscribe();
-    } catch { /* realtime best-effort */ }
-    return () => { if (t) clearTimeout(t); try { if (channel) supabase.removeChannel(channel); } catch { /* swallow */ } };
+    const unsub = subscribeGame({ kind: isLeague ? 'league' : 'tournament', gameId, onChange: bump });
+    return () => { if (t) clearTimeout(t); unsub(); };
   }, [gameId, isLeague, state.blocked, load]);
 
   const { loading, game, parent, blocked, error } = state;
