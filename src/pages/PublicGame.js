@@ -284,7 +284,7 @@ export default function PublicGame({ league }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '-22px -18px 18px', padding: '7px 8px 7px 18px', background: C.navy, borderLeft: `4px solid ${C.red}` }}>
               <span className="pg-live-ring" style={{ width: 10, height: 10, borderRadius: 999, background: C.red, flex: '0 0 auto' }} />
               <span style={{ flex: 1, minWidth: 0, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', textTransform: 'uppercase', letterSpacing: '0.05em', color: C.ice, fontSize: 17, lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {periodDisplay(game.period)} - Live
+                {periodDisplay(game.period)} · Live
               </span>
               <SoundToggle />
             </div>
