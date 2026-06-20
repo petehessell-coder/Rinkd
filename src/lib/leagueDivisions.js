@@ -13,7 +13,7 @@ const DIVISIONS_NS = 'league-divisions:';
 /** All divisions for a league, in commissioner-defined order. Public read. */
 export async function listLeagueDivisions(leagueId) {
   if (!leagueId) return [];
-  return cached(`${DIVISIONS_NS}${leagueId}`, 60_000, async () => {
+  const rows = await cached(`${DIVISIONS_NS}${leagueId}`, 60_000, async () => {
     const { data, error } = await supabase
       .from('league_divisions')
       .select('id, league_id, name, sort_order, settings')
@@ -23,6 +23,7 @@ export async function listLeagueDivisions(leagueId) {
     if (error) throw error;
     return data || [];
   });
+  return rows.slice(); // copy so a caller can't mutate the cached array in place
 }
 
 // ── M3 commissioner CRUD (writes go through league_divisions RLS, which is

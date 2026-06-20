@@ -20,7 +20,8 @@ export async function listTeamSlots(teamId) {
     .from('volunteer_slots')
     .select(SLOT_SELECT_TEAM)
     .eq('team_id', teamId)
-    .order('slot_time', { ascending: true, nullsFirst: false });
+    .order('slot_time', { ascending: true, nullsFirst: false })
+    .limit(500); // perf(scale): cap — a slot list grows across seasons; never unbounded
   if (error) throw error;
   return data || [];
 }
@@ -32,7 +33,8 @@ export async function listSlotsForTeams(teamIds) {
     .from('volunteer_slots')
     .select(SLOT_SELECT_MULTI)
     .in('team_id', teamIds)
-    .order('slot_time', { ascending: true, nullsFirst: false });
+    .order('slot_time', { ascending: true, nullsFirst: false })
+    .limit(500); // perf(scale): cap — a slot list grows across seasons; never unbounded
   if (error) throw error;
   return data || [];
 }
@@ -43,7 +45,8 @@ export async function listMyAssignedSlots(userId) {
     .from('volunteer_slots')
     .select('*, team:teams(id, name, logo_color, logo_initials)')
     .eq('assigned_user_id', userId)
-    .order('slot_time', { ascending: true, nullsFirst: false });
+    .order('slot_time', { ascending: true, nullsFirst: false })
+    .limit(500); // perf(scale): cap — a slot list grows across seasons; never unbounded
   if (error) throw error;
   return data || [];
 }

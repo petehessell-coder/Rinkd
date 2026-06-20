@@ -179,10 +179,12 @@ export default function TournamentPage({ currentUser }) {
         .from('games')
         .select('*, home_team:tournament_teams!home_team_id(id,team_name,pool), away_team:tournament_teams!away_team_id(id,team_name,pool), rink:rinks(id,name,sub_rink,live_barn_venue_id)')
         .eq('tournament_id', id)
-        .order('start_time', { ascending: true })
-        .limit(1000); // perf(scale): ceiling vs an unbounded full-event games fetch on every spectator load
+        // perf(scale): most-recent 1000 by start_time (all upcoming + recent past),
+        // returned ascending — a mega-event drops only ancient history, not live games.
+        .order('start_time', { ascending: false })
+        .limit(1000);
       if (ge) { captureDataError(ge, { where: 'Tournament.load.games', tournamentId: id }); setError(ge.message); setLoading(false); return; }
-      setGames(g || []);
+      setGames((g || []).reverse());
 
       // Load divisions (MULTIDIV-1). Single-division events have exactly one
       // ("Main", from the backfill/create); multi-division events drive the switcher.
@@ -240,7 +242,7 @@ export default function TournamentPage({ currentUser }) {
         supabase.from('games')
           .select('*, home_team:tournament_teams!home_team_id(id,team_name,pool), away_team:tournament_teams!away_team_id(id,team_name,pool), rink:rinks(id,name,sub_rink,live_barn_venue_id)')
           .eq('tournament_id', id)
-          .order('start_time', { ascending: true })
+          .order('start_time', { ascending: false }) // perf(scale): most-recent window, reversed to asc below
           .limit(1000),
         supabase.from(STANDINGS_VIEW)
           .select('*')
@@ -249,7 +251,7 @@ export default function TournamentPage({ currentUser }) {
           .order('pool_rank', { ascending: true })
           .limit(500),
       ]);
-      if (g) setGames(g);
+      if (g) setGames(g.reverse());
       if (s) setStandingsRaw(s);
       try {
         const { data: flags } = await supabase.rpc('get_tournament_suspension_flags', { p_tournament_id: id });

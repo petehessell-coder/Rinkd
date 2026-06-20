@@ -27,6 +27,10 @@
 --      the row alone, broadcast to BOTH topics (cheap) or add a kind column.
 --   3. RLS on realtime.messages for anon read of public game topics (PublicGame
 --      is anonymous). Tighten the topic LIKE if any game should be private.
+--   4. This trigger fires on EVERY games/league_games/team_games/game_goals write
+--      platform-wide — incl. the GameSheet/HockeyShift poller's bulk syncs and
+--      every scorer tap, not just hot spectator games. It scales O(games), but
+--      load-check the poller's batch path before flipping the flag.
 -- =============================================================================
 
 -- 1) One function, bound to every table whose change means "this game updated".
@@ -47,11 +51,17 @@ begin
   elsif tg_table_name = 'games' then
     v_kind := 'tournament'; v_id := coalesce(new.id, old.id)::text;
   elsif tg_table_name = 'game_goals' then
-    -- goals belong to a games/league_games row; the client subscribes per kind,
-    -- so emit to both kinds' topics for this game_id (uuids don't collide).
+    -- game_goals carries game_source ('tournament' | 'league'), reliably
+    -- populated, so target the exact topic. (Earlier draft emitted to both for
+    -- lack of an attribution column; the live schema HAS one — confirmed.)
     v_id := coalesce(new.game_id, old.game_id)::text;
-    perform realtime.send(jsonb_build_object('id', v_id, 'at', now()), 'update', 'game:tournament:' || v_id, false);
-    perform realtime.send(jsonb_build_object('id', v_id, 'at', now()), 'update', 'game:league:' || v_id, false);
+    v_kind := coalesce(new.game_source, old.game_source);
+    if v_kind is null then  -- defensive: a row without it reaches both topics
+      perform realtime.send(jsonb_build_object('id', v_id, 'at', now()), 'update', 'game:tournament:' || v_id, false);
+      perform realtime.send(jsonb_build_object('id', v_id, 'at', now()), 'update', 'game:league:' || v_id, false);
+    else
+      perform realtime.send(jsonb_build_object('id', v_id, 'at', now()), 'update', 'game:' || v_kind || ':' || v_id, false);
+    end if;
     return null;
   else
     return null;

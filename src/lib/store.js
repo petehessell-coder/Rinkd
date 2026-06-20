@@ -16,7 +16,8 @@ export async function getMerchProducts() {
     .eq('source', 'rinkd_merch')
     .eq('is_active', true)
     .order('sort_order', { ascending: true })
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(500); // perf(scale): cap the merch catalog read (twin of getProducts)
   if (error) {
     // eslint-disable-next-line no-console
     console.error('[store] merch load failed:', error.message);

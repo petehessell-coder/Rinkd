@@ -56,9 +56,15 @@ export async function compressImage(file, opts = {}) {
     ctx.drawImage(bitmap, 0, 0, tw, th);
     bitmap.close?.();
 
-    // Prefer WebP (smaller); fall back to JPEG if the browser can't encode it.
-    const blob = (await canvasToBlob(canvas, 'image/webp', quality))
-      || (await canvasToBlob(canvas, 'image/jpeg', quality));
+    // Prefer WebP (smaller, and it preserves alpha). Fall back to JPEG ONLY when
+    // the browser can't encode WebP — and never for a source that may be
+    // transparent (PNG/WebP logos), since JPEG flattens alpha to black; return
+    // the original untouched in that case.
+    let blob = await canvasToBlob(canvas, 'image/webp', quality);
+    if (!blob) {
+      if (file.type === 'image/png' || file.type === 'image/webp') return file;
+      blob = await canvasToBlob(canvas, 'image/jpeg', quality);
+    }
     if (!blob) return file;
 
     // If compression somehow produced a bigger file (already-tiny optimized

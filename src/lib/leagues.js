@@ -110,13 +110,14 @@ export async function getLeagueGames(leagueId) {
       rink:rinks(id, name, sub_rink, live_barn_venue_id, youtube_url)
     `)
     .eq('league_id', leagueId)
-    .order('start_time', { ascending: true })
-    // perf(scale): hard ceiling so a pathological/mega season can never pull an
-    // unbounded list. Real leagues sit well under this; true windowing (recent +
-    // upcoming) lands with the realtime-load split.
+    // perf(scale): take the most-recent 1000 by start_time (covers ALL upcoming +
+    // recent past — the window a spectator/scorer actually needs) and return them
+    // ascending. A mega-season (>1000 games) drops only ancient history, never the
+    // live/upcoming games — the bug a plain ASC + limit would cause.
+    .order('start_time', { ascending: false })
     .limit(1000);
   if (error) throw error;
-  return data || [];
+  return (data || []).reverse();
 }
 
 export async function addLeagueGame({ league_id, home_team_id, away_team_id, rink_id, location, start_time, live_barn_venue_id, youtube_url, division_id = null }) {
