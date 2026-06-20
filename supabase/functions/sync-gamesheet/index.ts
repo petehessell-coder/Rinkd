@@ -406,6 +406,21 @@ async function postLeagueRecapAndPush(supabase: Sb, opts: {
   }
 }
 
+// Feed A2 — after the poller writes any league game final this run, diff the
+// standings and auto-post positive movement ("climbed to 2nd" / "into 1st").
+// One call per sync run (not per game): the snapshot diff yields each team's NET
+// move after the batch, which is both cheaper and less spammy than per-game. The
+// RPC is idempotent + advisory-locked, so it's safe alongside the native scorer.
+// Service-role JWT; fail-soft — never blocks the score writes that already landed.
+async function postLeagueStandingsMovement(supabase: Sb, leagueId: string, divisionId: string | null) {
+  try {
+    const { error } = await supabase.rpc('post_standings_movement', {
+      p_league_id: leagueId, p_division_id: divisionId,
+    });
+    if (error) console.error('[gamesheet] standings movement fail', error);
+  } catch (e) { console.error('[gamesheet] standings movement threw', e); }
+}
+
 type LeagueGame = {
   id: string; division_id: string | null; status: string;
   home_score: number | null; away_score: number | null; start_time: string | null;
@@ -557,6 +572,14 @@ async function syncLeagueLink(supabase: Sb, link: any): Promise<Record<string, n
       gs_date: g.date ?? null, gs_time: g.time ?? null,
       gs_home_goals: gHomeGoals, gs_visitor_goals: gAwayGoals,
     });
+  }
+
+  // Feed A2 — fire once if this run wrote any final that could move the table
+  // (a fresh final OR a score correction on a confirmed game → stats.updated;
+  // an auto-import → stats.imported). Scoped to the link's division (null = whole
+  // league). Fail-soft inside the helper.
+  if (stats.updated > 0 || stats.imported > 0) {
+    await postLeagueStandingsMovement(supabase, link.league_id, link.league_division_id ?? null);
   }
 
   const note = `scored=${stats.scored} updated=${stats.updated} imported=${stats.imported} recaps=${stats.recaps} pending=${stats.pending} unmatched=${stats.unmatched}`;
