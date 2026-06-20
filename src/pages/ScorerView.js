@@ -22,6 +22,7 @@ import { createGameRecapPost } from '../lib/posts';
 import { resolveBracketSlotsFromSemis } from '../lib/tournamentManage';
 import { triggerTournamentRecapPush, triggerLeagueRecapPush } from '../lib/push';
 import { recordGameMilestones } from '../lib/milestones';
+import { postStandingsMovement } from '../lib/standings';
 import { isExtraCommissioner } from '../lib/leagueCommissioners';
 import { numericInputProps } from '../lib/forms';
 // GS-2 — suspension filing prompt, raised after a Game Misconduct / Match
@@ -907,6 +908,12 @@ export default function ScorerView() {
     // it runs independent of the recap and never blocks finalize.
     if (!error && newStatus === 'final') {
       recordGameMilestones(gameId, isLeague ? 'league' : 'tournament');
+      // Feed A2: a finalized league result may move a team up the standings —
+      // post a short, positive movement note. Leagues only; scoped to the game's
+      // division (rank is per-division). Fail-soft, never blocks finalize.
+      if (isLeague && game?.league_id) {
+        postStandingsMovement(game.league_id, game.division_id || null);
+      }
     }
   };
 
