@@ -493,9 +493,10 @@ export default function LeaguePage({ currentUser, profile }) {
 
   const now = new Date();
   const liveGames = scopedGames.filter(g => g.status === 'live');
-  // Hero status chip: a red pill when the league is active (a game live now, or
-  // in season), muted text otherwise (season complete / draft).
-  const statusActive = liveGames.length > 0 || league.status === 'active';
+  // Hero status chip: a red pill ONLY when a game is live right now (manifesto:
+  // "red means something is alive" — never decoration). "In Season" / "Season
+  // Complete" / "Draft" still show, as muted text via the same statusLabel.
+  const statusActive = liveGames.length > 0;
   const statusLabel = liveGames.length > 0 ? 'LIVE' : league.status === 'active' ? 'In Season' : league.status === 'complete' ? 'Season Complete' : 'Draft';
   const upcomingGames = scopedGames.filter(g => g.status === 'scheduled' && new Date(g.start_time) >= now);
   const recentGames = scopedGames.filter(g => g.status === 'final').slice(-5).reverse();
@@ -553,7 +554,7 @@ export default function LeaguePage({ currentUser, profile }) {
                   background: isFollowing ? 'rgba(46,91,140,0.25)' : C.red,
                   color: isFollowing ? C.ice : '#fff',
                   border: isFollowing ? '1px solid rgba(46,91,140,0.5)' : 'none',
-                  borderRadius: 999, padding: '5px 12px', fontSize: 11, fontWeight: 700,
+                  borderRadius: 999, padding: '5px 12px', minHeight: 44, fontSize: 11, fontWeight: 700,
                   cursor: followBusy ? 'wait' : 'pointer',
                   fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic',
                   letterSpacing: '0.05em', textTransform: 'uppercase',
@@ -597,7 +598,7 @@ export default function LeaguePage({ currentUser, profile }) {
               const on = activeTab === tab;
               return (
                 <button key={tab} onClick={() => setActiveTab(tab)}
-                  style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 700, fontSize: 15, letterSpacing: '0.04em', textTransform: 'uppercase', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: on ? '3px solid #D72638' : '3px solid transparent', marginBottom: -1, cursor: 'pointer', whiteSpace: 'nowrap', color: on ? '#F4F7FA' : '#8BA3BE', transition: 'color 0.15s' }}>
+                  style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 700, fontSize: 15, letterSpacing: '0.04em', textTransform: 'uppercase', padding: '10px 14px', minHeight: 44, display: 'inline-flex', alignItems: 'center', background: 'transparent', border: 'none', borderBottom: on ? '3px solid #D72638' : '3px solid transparent', marginBottom: -1, cursor: 'pointer', whiteSpace: 'nowrap', color: on ? '#F4F7FA' : '#8BA3BE', transition: 'color 0.15s' }}>
                   {tab}
                 </button>
               );

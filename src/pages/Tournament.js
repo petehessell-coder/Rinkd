@@ -556,7 +556,7 @@ export default function TournamentPage({ currentUser }) {
       {/* HEADER */}
       <div style={{background:C.navy,padding:'14px 16px 0',borderTop:`3px solid ${accent}`,borderBottom:'0.5px solid rgba(46,91,140,0.4)'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,gap:8,flexWrap:'wrap'}}>
-          <button onClick={() => navigate(-1)} style={{color:'rgba(244,247,250,0.6)',fontSize:13,background:'none',border:'none',cursor:'pointer',fontFamily:'Barlow,sans-serif'}}>← Events</button>
+          <button onClick={() => navigate(-1)} style={{color:'rgba(244,247,250,0.6)',fontSize:13,background:'none',border:'none',cursor:'pointer',fontFamily:'Barlow,sans-serif',minHeight:44,display:'inline-flex',alignItems:'center',padding:'0 6px',marginLeft:-6}}>← Events</button>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             {tournament && tournament.is_activated === false && (
               <span title="Live scoring + push notifications are locked until a Rinkd admin activates this tournament."
@@ -575,7 +575,7 @@ export default function TournamentPage({ currentUser }) {
                   background: isFollowing ? 'rgba(46,91,140,0.25)' : accent,
                   color: isFollowing ? C.ice : '#fff',
                   border: isFollowing ? '1px solid rgba(46,91,140,0.5)' : 'none',
-                  borderRadius: 999, padding: '5px 12px', fontSize: 11, fontWeight: 700,
+                  borderRadius: 999, padding: '5px 12px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700,
                   cursor: followBusy ? 'wait' : 'pointer',
                   fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic',
                   letterSpacing: '0.05em', textTransform: 'uppercase',
@@ -587,7 +587,7 @@ export default function TournamentPage({ currentUser }) {
             {tournament && currentUser && <PinToNavButton userId={currentUser.id} pinType="tournament" targetId={id} />}
             {tournament && currentUser && isDirector && (
               <button onClick={() => navigate(`/tournament/${id}/manage`)}
-                style={{background:accent,color:'#fff',border:'none',borderRadius:999,padding:'5px 12px',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',letterSpacing:'0.05em',textTransform:'uppercase',display:'inline-flex',alignItems:'center',gap:6}}>
+                style={{background:accent,color:'#fff',border:'none',borderRadius:999,padding:'5px 12px',minHeight:44,fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',letterSpacing:'0.05em',textTransform:'uppercase',display:'inline-flex',alignItems:'center',gap:6}}>
                 <Icon name="manage" size={13} color="#fff" />Manage
               </button>
             )}
@@ -636,7 +636,7 @@ export default function TournamentPage({ currentUser }) {
             return (
               <button key={tab} onClick={() => setActiveTab(tab)}
                 style={{fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:700,fontSize:15,letterSpacing:'0.04em',textTransform:'uppercase',
-                  padding:'10px 14px',background:'transparent',border:'none',
+                  padding:'10px 14px',minHeight:44,display:'inline-flex',alignItems:'center',background:'transparent',border:'none',
                   borderBottom: on ? '3px solid #D72638' : '3px solid transparent',
                   marginBottom:-1,cursor:'pointer',whiteSpace:'nowrap',
                   color: on ? C.ice : C.steel,transition:'color 0.15s'}}>
