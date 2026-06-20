@@ -79,6 +79,14 @@
       button { font-family: inherit; cursor: pointer; border: none; background: none; }
       a { text-decoration: none; color: inherit; }
       input, textarea, select { font-family: inherit; }
+      /* a11y: a visible KEYBOARD focus ring on every interactive control. The app
+         strips native outlines (button{border:none} + inline outline:none all over),
+         so keyboard/switch users currently get no focus indicator anywhere. This
+         restores one for :focus-visible only — mouse/touch taps get NO ring, so
+         zero visual change on the common path. !important beats the inline
+         outline:none many controls set. */
+      :focus-visible { outline: 2px solid #5B9FE2 !important; outline-offset: 2px; border-radius: 4px; }
+      :focus:not(:focus-visible) { outline: none; }
     </style>
   </head>
   <body>
