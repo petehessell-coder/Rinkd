@@ -29,6 +29,8 @@ export default function Gallery({ tournamentId = null, leagueId = null, currentU
   const [teams, setTeams] = useState([]);            // [{ id, name }]
   const [teamFilter, setTeamFilter] = useState(null); // team id, or null = all
   const [posts, setPosts] = useState(null);          // null = loading
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [reactionMap, setReactionMap] = useState({});
   const [addOpen, setAddOpen] = useState(false);
   const [lightbox, setLightbox] = useState(null);    // post object, or null
@@ -54,14 +56,37 @@ export default function Gallery({ tournamentId = null, leagueId = null, currentU
 
   // Load the grid. Re-runs when the team filter flips; we map the generic filter
   // id onto the scope-correct column inside getGalleryPosts.
+  const GALLERY_PAGE = 60;
+  const galleryParams = useCallback((before) => {
+    const params = { tournamentId, leagueId, limit: GALLERY_PAGE, before };
+    if (teamFilter) params[isTournament ? 'tournamentTeamId' : 'leagueTeamId'] = teamFilter;
+    return params;
+  }, [tournamentId, leagueId, teamFilter, isTournament]);
+
   const load = useCallback(async () => {
     setPosts(null);
-    const params = { tournamentId, leagueId, limit: 60 };
-    if (teamFilter) params[isTournament ? 'tournamentTeamId' : 'leagueTeamId'] = teamFilter;
-    const { data } = await getGalleryPosts(params);
-    setPosts(data || []);
-  }, [tournamentId, leagueId, teamFilter, isTournament]);
+    const { data } = await getGalleryPosts(galleryParams(null));
+    const page = data || [];
+    setPosts(page);
+    setHasMore(page.length === GALLERY_PAGE);
+  }, [galleryParams]);
   useEffect(() => { load(); }, [load]);
+
+  // perf(scale): keyset "load more" instead of a one-shot 60-cap that silently
+  // hid older shots once a popular event's gallery grew.
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !Array.isArray(posts) || posts.length === 0) return;
+    setLoadingMore(true);
+    try {
+      const before = posts[posts.length - 1].created_at;
+      const { data } = await getGalleryPosts(galleryParams(before));
+      const page = data || [];
+      setPosts((prev) => [...(prev || []), ...page]);
+      setHasMore(page.length === GALLERY_PAGE);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, posts, galleryParams]);
 
   // Reaction counts are public — load whenever the visible set changes (keyed on
   // the id SET so optimistic toggles don't trigger a refetch). Mirrors the feed.
@@ -121,6 +146,7 @@ export default function Gallery({ tournamentId = null, leagueId = null, currentU
           {currentUser ? 'Drop the first shot — tap Add Photo.' : `Sign in to share shots from the ${scopeLabel}.`}
         </div>
       ) : (
+        <>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(108px, 1fr))', gap: 6 }}>
           {posts.map((p) => (
             <button
@@ -141,6 +167,15 @@ export default function Gallery({ tournamentId = null, leagueId = null, currentU
             </button>
           ))}
         </div>
+        {hasMore && (
+          <div style={{ textAlign: 'center', marginTop: 14 }}>
+            <button onClick={loadMore} disabled={loadingMore}
+              style={{ background: 'transparent', color: C.ice, border: '1px solid rgba(46,91,140,0.4)', borderRadius: 999, padding: '9px 20px', fontSize: 13, fontWeight: 700, cursor: loadingMore ? 'default' : 'pointer', fontFamily: 'inherit', opacity: loadingMore ? 0.6 : 1 }}>
+              {loadingMore ? 'Loading…' : 'Load more photos'}
+            </button>
+          </div>
+        )}
+        </>
       )}
 
       {addOpen && (

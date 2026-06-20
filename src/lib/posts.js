@@ -70,7 +70,7 @@ export async function getFollowingPosts(userId, limit = 30, before = null) {
 // Tournament page's Feed tab. Mirrors getTeamPosts but keyed on tournament_id.
 // Blocked-user filtering applied; the tournament feed isn't immune to the
 // block model just because the post landed via auto-recap.
-export async function getTournamentPosts(tournamentId, limit = 50) {
+export async function getTournamentPosts(tournamentId, limit = 50, before = null) {
   if (!tournamentId) return { data: [], error: null };
   let query = supabase
     .from('posts')
@@ -79,6 +79,7 @@ export async function getTournamentPosts(tournamentId, limit = 50) {
     .eq('is_hidden', false)
     .order('created_at', { ascending: false })
     .limit(limit);
+  if (before) query = query.lt('created_at', before); // keyset: page older than what we hold
   query = await excludeBlocked(query, 'author_id');
   const { data, error } = await query;
   return { data, error };
@@ -88,7 +89,7 @@ export async function getTournamentPosts(tournamentId, limit = 50) {
 // page's Feed tab. Phase 2 of the league-parity build (May 19, 2026).
 // Direct mirror of getTournamentPosts; partial index
 // posts_league_id_created_at_idx covers the read.
-export async function getLeaguePosts(leagueId, limit = 50) {
+export async function getLeaguePosts(leagueId, limit = 50, before = null) {
   if (!leagueId) return { data: [], error: null };
   let query = supabase
     .from('posts')
@@ -97,6 +98,7 @@ export async function getLeaguePosts(leagueId, limit = 50) {
     .eq('is_hidden', false)
     .order('created_at', { ascending: false })
     .limit(limit);
+  if (before) query = query.lt('created_at', before); // keyset: page older than what we hold
   query = await excludeBlocked(query, 'author_id');
   const { data, error } = await query;
   return { data, error };
@@ -206,7 +208,7 @@ export async function deletePost(postId) {
   return { error };
 }
 
-export async function getTeamPosts(teamId, limit = 50) {
+export async function getTeamPosts(teamId, limit = 50, before = null) {
   let query = supabase
     .from('posts')
     .select(`*, profiles!posts_author_id_fkey(id, name, handle, avatar_url, avatar_color, avatar_initials, tier, position), ${POST_MENTIONS_EMBED}`)
@@ -214,6 +216,7 @@ export async function getTeamPosts(teamId, limit = 50) {
     .eq('is_hidden', false)
     .order('created_at', { ascending: false })
     .limit(limit);
+  if (before) query = query.lt('created_at', before); // keyset: page older than what we hold
   query = await excludeBlocked(query, 'author_id');
   const { data, error } = await query;
   return { data, error };
