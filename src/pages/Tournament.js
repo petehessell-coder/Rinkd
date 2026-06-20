@@ -179,7 +179,8 @@ export default function TournamentPage({ currentUser }) {
         .from('games')
         .select('*, home_team:tournament_teams!home_team_id(id,team_name,pool), away_team:tournament_teams!away_team_id(id,team_name,pool), rink:rinks(id,name,sub_rink,live_barn_venue_id)')
         .eq('tournament_id', id)
-        .order('start_time', { ascending: true });
+        .order('start_time', { ascending: true })
+        .limit(1000); // perf(scale): ceiling vs an unbounded full-event games fetch on every spectator load
       if (ge) { captureDataError(ge, { where: 'Tournament.load.games', tournamentId: id }); setError(ge.message); setLoading(false); return; }
       setGames(g || []);
 
@@ -206,7 +207,8 @@ export default function TournamentPage({ currentUser }) {
         .select('*')
         .eq('tournament_id', id)
         .order('pool', { ascending: true })
-        .order('pool_rank', { ascending: true });
+        .order('pool_rank', { ascending: true })
+        .limit(500); // perf(scale): bounded by team count, capped for safety
       if (se) { captureDataError(se, { where: 'Tournament.load.standings', tournamentId: id }); setError(se.message); setLoading(false); return; }
       setStandingsRaw(s || []);
 

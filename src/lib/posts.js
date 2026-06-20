@@ -310,7 +310,8 @@ export async function getComments(postId) {
     .select(`*, profiles!comments_author_id_fkey(id, name, handle, avatar_url, avatar_color, avatar_initials, tier), ${COMMENT_MENTIONS_EMBED}`)
     .eq('post_id', postId)
     .eq('is_hidden', false)
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: true })
+    .limit(200); // perf(scale): cap a viral thread; "load earlier" pagination is a follow-up
   // Filter blocked users out of the result. Doing it client-side avoids a
   // separate IN-list URL fragment per thread fetch; comment threads are small.
   const blocked = await getBlockedIds();

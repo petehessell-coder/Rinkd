@@ -49,7 +49,8 @@ export async function getTeamMembers(teamId) {
     .eq('team_id', teamId)
     .in('status', ['active', 'pending'])
     .order('role')
-    .order('jersey_number');
+    .order('jersey_number')
+    .limit(200); // perf(scale): roster ceiling — a corrupted/import-ballooned roster can't pull thousands
   if (error) throw error;
   return data || [];
 }

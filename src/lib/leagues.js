@@ -73,7 +73,8 @@ export async function getLeagueTeams(leagueId) {
       team:teams(id, name, logo_color, logo_initials, logo_url, home_rink, location, manager_id,
         manager:profiles!teams_manager_id_fkey(id, name, handle, avatar_color, avatar_initials))`)
     .eq('league_id', leagueId)
-    .order('joined_at');
+    .order('joined_at')
+    .limit(500); // perf(scale): ceiling — no real league approaches 500 teams
   if (error) throw error;
   return data || [];
 }
@@ -109,7 +110,11 @@ export async function getLeagueGames(leagueId) {
       rink:rinks(id, name, sub_rink, live_barn_venue_id, youtube_url)
     `)
     .eq('league_id', leagueId)
-    .order('start_time', { ascending: true });
+    .order('start_time', { ascending: true })
+    // perf(scale): hard ceiling so a pathological/mega season can never pull an
+    // unbounded list. Real leagues sit well under this; true windowing (recent +
+    // upcoming) lands with the realtime-load split.
+    .limit(1000);
   if (error) throw error;
   return data || [];
 }
@@ -142,7 +147,7 @@ export async function getLeagueStandings(leagueId, divisionId = null) {
   // Optional division scope (M2+ passes the selected division; null = whole
   // league, which for single-division leagues is the one "Main" division).
   if (divisionId) q = q.eq('division_id', divisionId);
-  const { data, error } = await q.order('rank', { ascending: true });
+  const { data, error } = await q.order('rank', { ascending: true }).limit(500); // perf(scale): bounded by team count, capped for safety
   if (error) throw error;
   return data || [];
 }

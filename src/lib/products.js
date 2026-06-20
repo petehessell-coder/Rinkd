@@ -9,7 +9,8 @@ export async function getProducts() {
     .select('*')
     .eq('is_active', true)
     .order('sort_order', { ascending: true })
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(200); // perf(scale): cap the catalog read; paginate when the store grows past this
   if (error) {
     // eslint-disable-next-line no-console
     console.error('[products] load failed:', error.message);
