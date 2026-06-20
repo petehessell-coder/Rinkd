@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import { getBlockedIds, excludeBlocked, filterBlockedIds } from './blocks';
 import { POST_MENTIONS_EMBED, COMMENT_MENTIONS_EMBED } from './mentions';
 import { relativeTime } from './format';
+import { compressImage } from './image';
 
 export async function getPosts(limit = 30, before = null) {
   let query = supabase
@@ -247,15 +248,23 @@ export async function getGalleryPosts({ tournamentId = null, leagueId = null, to
   return { data, error };
 }
 
-export async function uploadMedia(file, userId) {
-  const ext = file.name.split('.').pop();
+export async function uploadMedia(file, userId, opts = {}) {
+  // perf(scale): downscale + re-encode images before they ever hit Storage or
+  // the feed (videos / unsupported formats pass through untouched). One shared
+  // chokepoint, so every upload call site (feed, team feed, avatars, covers,
+  // team/league/tournament logos, gallery) is covered at once. Pass
+  // { maxEdge: 512 } from avatar/logo call sites for an even smaller asset.
+  const slim = await compressImage(file, opts);
+  const ext = slim.name.split('.').pop();
   const fileName = `${userId}/${Date.now()}.${ext}`;
   const { data, error } = await supabase.storage
     .from('media')
-    .upload(fileName, file, { cacheControl: '3600', upsert: false });
+    // Unique filename per upload → the bytes are immutable, so cache them for a
+    // year. Cuts repeat egress for an image that's served to thousands of feeds.
+    .upload(fileName, slim, { cacheControl: '31536000', upsert: false });
   if (error) return { url: null, error };
   const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(fileName);
-  const mediaType = file.type.startsWith('video') ? 'video' : 'image';
+  const mediaType = slim.type.startsWith('video') ? 'video' : 'image';
   return { url: publicUrl, mediaType, error: null };
 }
 
