@@ -335,7 +335,10 @@ function BellBadge({ userId }) {
           } catch { /* swallow — badge holds its last known count */ }
         };
         refresh();
-        interval = setInterval(refresh, 45_000);
+        // perf(scale): realtime `subscribe()` below is the live path; this is
+        // only a reconciliation fallback for a missed event / dropped socket.
+        // 45s × 10k clients ≈ 220 count-qps of pure fallback; 5min cuts that ~7×.
+        interval = setInterval(refresh, 300_000);
         unsub = subscribe(userId, refresh);
       } catch { /* swallow */ }
     })();

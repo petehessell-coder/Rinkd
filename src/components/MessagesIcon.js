@@ -25,7 +25,10 @@ export default function MessagesIcon({ userId, size = 22, color }) {
     };
     refresh();
 
-    const interval = setInterval(refresh, 45_000);
+    // perf(scale): realtime (subscribeInbox) + the visibility refresh below are
+    // the live paths; this interval is just a sparse reconciliation fallback.
+    // 45s × 10k ≈ 220 qps → 5min cuts it ~7×.
+    const interval = setInterval(refresh, 300_000);
     const onVis = () => { if (document.visibilityState === 'visible') refresh(); };
     document.addEventListener('visibilitychange', onVis);
 

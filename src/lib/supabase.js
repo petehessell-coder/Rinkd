@@ -35,4 +35,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     detectSessionInUrl: true,
   },
+  // perf(scale): make the Realtime rate explicit instead of relying on the
+  // default. Spectator channels receive sparse game events (goals/penalties), so
+  // 10 ev/s is ample headroom; pinning it documents intent ahead of the shared
+  // per-game broadcast and bounds any runaway client.
+  realtime: { params: { eventsPerSecond: 10 } },
 });

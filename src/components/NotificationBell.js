@@ -24,8 +24,10 @@ export default function NotificationBell({ userId, size = 22, color }) {
     };
     refresh();
 
-    // Poll every 45s as a fallback for users on flaky connections
-    const interval = setInterval(refresh, 45_000);
+    // perf(scale): realtime + the visibility refresh below are the live paths;
+    // this is only a reconciliation fallback for a missed event / dropped socket.
+    // 45s × 10k ≈ 220 qps → 5min cuts it ~7×.
+    const interval = setInterval(refresh, 300_000);
     // Refresh whenever the tab becomes visible again
     const onVis = () => { if (document.visibilityState === 'visible') refresh(); };
     document.addEventListener('visibilitychange', onVis);
