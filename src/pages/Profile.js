@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { subscribeToPush, isPushSubscribed, unsubscribeFromPush } from '../lib/push';
 import Layout from '../components/Layout';
 import { C } from '../lib/tokens';
-import { Icon, StatNumber, ErrorState } from '../components/ui';
+import { Icon, StatNumber, ErrorState, Img } from '../components/ui';
 import { number, plural } from '../lib/format';
 import { TierBadge } from '../components/Logos';
 import { updateProfile } from '../lib/auth';
@@ -498,16 +498,16 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                 <TierBadge tier={tier.name} size="md" />
                 {isOwnProfile && !editing && (
                   <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={openEdit} style={{ padding: '8px 16px', borderRadius: 8, background: 'transparent', border: `1.5px solid ${C.border}`, color: C.ice, fontFamily: "'Barlow', sans-serif", fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>Edit</button>
+                  <button onClick={openEdit} style={{ padding: '8px 16px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'transparent', border: `1.5px solid ${C.border}`, color: C.ice, fontFamily: "'Barlow', sans-serif", fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>Edit</button>
                   {!pushEnabled && (
-                    <button onClick={handleEnableNotifications} disabled={pushLoading} style={{ padding: '8px 16px', borderRadius: 8, background: 'transparent', border: `1.5px solid #2E5B8C`, color: '#8BA3BE', fontFamily: "'Barlow', sans-serif", fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
+                    <button onClick={handleEnableNotifications} disabled={pushLoading} style={{ padding: '8px 16px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'transparent', border: `1.5px solid #2E5B8C`, color: '#8BA3BE', fontFamily: "'Barlow', sans-serif", fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
                       {pushLoading ? '...' : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="bell" size={14} />Notify</span>}
                     </button>
                   )}
                   {pushEnabled && (
                     <button onClick={handleDisableNotifications} disabled={pushLoading}
                       title="Click to turn off"
-                      style={{ padding: '8px 16px', borderRadius: 8, background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.5)', color: '#22C55E', fontSize: 13, fontFamily: "'Barlow', sans-serif", cursor: pushLoading ? 'not-allowed' : 'pointer', fontWeight: 600 }}>
+                      style={{ padding: '8px 16px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.5)', color: '#22C55E', fontSize: 13, fontFamily: "'Barlow', sans-serif", cursor: pushLoading ? 'not-allowed' : 'pointer', fontWeight: 600 }}>
                       {pushLoading ? '...' : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="following" size={14} />On</span>}
                     </button>
                   )}
@@ -517,7 +517,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                     {!blocked && (
                       <button onClick={handleMessage} disabled={dmLoading} title="Send a direct message" style={{
-                        padding: '8px 16px', borderRadius: 8, cursor: 'pointer',
+                        padding: '8px 16px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, cursor: 'pointer',
                         background: 'transparent', border: `1.5px solid ${C.border}`, color: C.ice,
                         fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 14,
                         letterSpacing: '0.05em',
@@ -525,14 +525,14 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                     )}
                     {!blocked && (
                       <button onClick={handleFollow} disabled={followLoading} style={{
-                        padding: '8px 20px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                        padding: '8px 20px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: 'none', cursor: 'pointer',
                         background: following ? C.border : C.red, color: 'white',
                         fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 14,
                         letterSpacing: '0.05em',
                       }}>{followLoading ? '...' : following ? 'Following' : 'Follow'}</button>
                     )}
                     <button onClick={handleBlock} disabled={blockLoading} title={blocked ? 'Unblock this user' : 'Block this user'} style={{
-                      padding: '8px 14px', borderRadius: 8, cursor: 'pointer',
+                      padding: '8px 14px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, cursor: 'pointer',
                       background: 'transparent',
                       border: `1.5px solid ${blocked ? C.red : C.border}`,
                       color: blocked ? C.red : C.steel,
@@ -571,7 +571,10 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
               const hot = topStreak(milestones) >= 3;
               return (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 10, flexWrap: 'wrap' }}>
-                  <Icon name={hot ? 'reaction' : 'milestone'} size={14} color={C.gold} />
+                  {/* Gold stays scarce: the Game Puck pill above already owns the
+                      one gold mark when present, so the milestone icon only goes
+                      gold when there's no puck — never two golds on one screen. */}
+                  <Icon name={hot ? 'reaction' : 'milestone'} size={14} color={puckCount > 0 ? C.steel : C.gold} />
                   <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 700, fontSize: 13, letterSpacing: '0.02em', color: C.ice, textTransform: 'uppercase' }}>{story}</span>
                 </div>
               );
@@ -689,8 +692,10 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
               {post.content && <p style={{ fontSize: 14, color: C.ice, lineHeight: 1.5, marginBottom: 8 }}>{post.content}</p>}
               {post.media_url && (
                 post.media_type === 'video'
-                  ? <video src={post.media_url} controls style={{ width: '100%', maxHeight: 200, borderRadius: 8, marginBottom: 8 }}/>
-                  : <img src={post.media_url} alt="" style={{ width: '100%', maxHeight: 200, objectFit: 'cover', borderRadius: 8, marginBottom: 8 }}/>
+                  // perf: reserve a fixed-height box so media doesn't shift the
+                  // post list when it decodes (CLS). Mirrors Feed's <Img> media.
+                  ? <video src={post.media_url} controls style={{ width: '100%', height: 200, objectFit: 'cover', borderRadius: 8, marginBottom: 8, background: '#000' }}/>
+                  : <Img src={post.media_url} height={200} radius={8} style={{ marginBottom: 8 }} />
               )}
               <div style={{ display: 'flex', gap: 16, fontSize: 12, color: C.steel, alignItems: 'center' }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon name="like" size={14} /> {post.likes || 0}</span>
