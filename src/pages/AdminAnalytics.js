@@ -85,7 +85,13 @@ export default function AdminAnalytics({ currentUser, profile }) {
         supabase
           .from('profiles')
           .select('id, handle, name, persona, last_seen_at')
-          .order('last_seen_at', { ascending: false, nullsFirst: false }),
+          .order('last_seen_at', { ascending: false, nullsFirst: false })
+          // perf(scale): safety ceiling so this admin view can't full-scan the
+          // whole profiles table. Exact at today's scale; the correct fix is a
+          // SECURITY-DEFINER cohort RPC that buckets server-side (spec'd
+          // follow-up) — a flat limit biases the deep-dormant cohort once users
+          // exceed it, so flip to the RPC before that.
+          .limit(20000),
         loadTopPages(40),
         loadGrowthFunnel(30).catch(() => null),
       ]);

@@ -6,7 +6,28 @@ export async function listRinks() {
     .from('rinks')
     .select('*')
     .order('name')
-    .order('sub_rink');
+    .order('sub_rink')
+    .limit(2000); // perf(scale): ceiling — even a 50-rink operator is well under this
+  if (error) throw error;
+  return data || [];
+}
+
+// perf(scale): bulk rink onboarding — stand up an operator's 50 rinks in ONE
+// round-trip instead of 50 single-row createRink calls (the importer enabler;
+// LeagueImportModal explicitly refuses to create rinks today). Normalizes each
+// row, drops blank-name rows, returns the inserted rows.
+export async function bulkInsertRinks(rows) {
+  const clean = (rows || [])
+    .map((r) => ({
+      name: (r.name || '').trim(),
+      sub_rink: (r.sub_rink || '').trim() || null,
+      address: (r.address || '').trim() || null,
+      live_barn_venue_id: (r.live_barn_venue_id || '').trim() || null,
+      maps_url: (r.maps_url || '').trim() || null,
+    }))
+    .filter((r) => r.name);
+  if (!clean.length) return [];
+  const { data, error } = await supabase.from('rinks').insert(clean).select();
   if (error) throw error;
   return data || [];
 }

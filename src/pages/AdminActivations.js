@@ -177,15 +177,15 @@ export default function AdminActivations({ currentUser, profile }) {
         supabase.from('tournaments')
           .select('id, name, division, start_date, end_date, is_activated, accent_color, logo_url, created_at')
           .order('created_at', { ascending: false })
-          .limit(200),
+          .limit(1000), // perf(scale): 200 hid teams 201+ from staff (search filtered the truncated set); server-side search is the spec'd follow-up
         supabase.from('leagues')
           .select('id, name, division, season, start_date, end_date, is_activated, logo_color, logo_initials, logo_url, created_at')
           .order('created_at', { ascending: false })
-          .limit(200),
+          .limit(1000), // perf(scale): 200 hid teams 201+ from staff (search filtered the truncated set); server-side search is the spec'd follow-up
         supabase.from('teams')
           .select('id, name, level, location, logo_color, logo_initials, logo_url, created_at')
           .order('created_at', { ascending: false })
-          .limit(200),
+          .limit(1000), // perf(scale): 200 hid teams 201+ from staff (search filtered the truncated set); server-side search is the spec'd follow-up
       ]);
       if (t.error) throw t.error;
       if (l.error) throw l.error;
