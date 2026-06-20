@@ -18,6 +18,7 @@ function ensureShimmerKeyframes() {
   style.textContent = `
     @keyframes rinkdShimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
     .rinkd-shimmer { background: linear-gradient(90deg, ${C.shimmer1} 0%, ${C.shimmer2} 50%, ${C.shimmer1} 100%); background-size: 800px 100%; animation: rinkdShimmer 1.4s linear infinite; }
+    @media (prefers-reduced-motion: reduce) { .rinkd-shimmer { animation: none; } }
   `;
   document.head.appendChild(style);
 }

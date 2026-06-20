@@ -72,11 +72,11 @@ export default function SubscribeCalendarSheet({ open, onClose, httpsUrl, webcal
   return (
     <div
       onClick={onClose}
+      className="rinkd-cal-fade"
       style={{
         position: 'fixed', inset: 0, background: 'rgba(7, 17, 31, 0.78)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         zIndex: 9999, padding: 16,
-        animation: 'rinkd-fade-in 0.15s ease-out',
       }}>
       <div
         onClick={(e) => e.stopPropagation()}
@@ -171,7 +171,7 @@ export default function SubscribeCalendarSheet({ open, onClose, httpsUrl, webcal
         </div>
       </div>
 
-      <style>{`@keyframes rinkd-fade-in { from { opacity: 0; } to { opacity: 1; } }`}</style>
+      <style>{`@keyframes rinkd-fade-in { from { opacity: 0; } to { opacity: 1; } } .rinkd-cal-fade{animation:rinkd-fade-in 0.15s ease-out} @media (prefers-reduced-motion: reduce){.rinkd-cal-fade{animation:none}}`}</style>
     </div>
   );
 }

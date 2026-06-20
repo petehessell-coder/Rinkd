@@ -92,14 +92,13 @@ export default function IOSInstallBanner() {
   };
 
   return (
-    <div role="dialog" aria-label="Install Rinkd"
+    <div role="dialog" aria-label="Install Rinkd" className="rinkd-install-slide"
       style={{
         position: 'fixed', left: 0, right: 0,
         // Sit just above the mobile bottom nav (which reserves ~88px + the
         // iOS home-indicator safe area).
         bottom: 'calc(92px + env(safe-area-inset-bottom, 0px))',
         zIndex: 150, padding: '0 12px',
-        animation: 'rinkdInstallSlideUp 0.28s ease',
       }}>
       <div style={{
         maxWidth: 480, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 12,
@@ -117,10 +116,11 @@ export default function IOSInstallBanner() {
         <button onClick={dismiss} aria-label="Dismiss"
           style={{
             flexShrink: 0, alignSelf: 'flex-start', background: 'transparent', border: 'none',
-            color: B.steel, fontSize: 20, lineHeight: 1, cursor: 'pointer', padding: '2px 4px',
+            color: B.steel, fontSize: 20, lineHeight: 1, cursor: 'pointer',
+            minWidth: 44, minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           }}>×</button>
       </div>
-      <style>{`@keyframes rinkdInstallSlideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+      <style>{`@keyframes rinkdInstallSlideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } } .rinkd-install-slide{animation:rinkdInstallSlideUp 0.28s ease} @media (prefers-reduced-motion: reduce){.rinkd-install-slide{animation:none}}`}</style>
     </div>
   );
 }
