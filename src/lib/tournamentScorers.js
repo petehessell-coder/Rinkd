@@ -24,13 +24,18 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export async function resolveProfile(rawInput) {
   const s = (rawInput || '').trim();
   if (!s) return null;
-  const isEmail = EMAIL_RE.test(s);
-  const column = isEmail ? 'email' : 'handle';
-  const value = isEmail ? s.toLowerCase() : s.replace(/^@/, '');
+  // YOUTH-PRIVACY: profiles.email is column-revoked from the client. Resolve an
+  // email via the SECURITY DEFINER RPC (identity only); handles via a granted
+  // column select. Both return { id, name, handle }.
+  if (EMAIL_RE.test(s)) {
+    const { data, error } = await supabase.rpc('find_account_by_email', { p_email: s.toLowerCase() });
+    if (error) return null;
+    return (data && data[0]) || null;
+  }
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, name, handle, email')
-    .ilike(column, value) // exact value, no wildcards → case-insensitive exact match
+    .select('id, name, handle')
+    .ilike('handle', s.replace(/^@/, '')) // exact value, no wildcards → case-insensitive exact match
     .limit(1);
   if (error) return null;
   return (data && data[0]) || null;
