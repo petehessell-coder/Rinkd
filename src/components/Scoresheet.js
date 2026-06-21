@@ -305,36 +305,19 @@ export default function Scoresheet({ game, goals, penalties, shots, goalieChange
         catch (e) { console.error(e); setSignoffStatus("error"); }
       }
 
-      let managerEmails = [];
-      try {
-        if (isLeague) {
-          const ids = [game.home_team?.team?.id, game.away_team?.team?.id, game.home_lt?.team?.id, game.away_lt?.team?.id].filter(Boolean);
-          if (ids.length > 0) {
-            const { data: teams } = await supabase.from("teams").select("manager_id").in("id", ids);
-            const managerIds = (teams||[]).map(t => t.manager_id).filter(Boolean);
-            if (managerIds.length > 0) {
-              const { data: profiles } = await supabase.from("profiles").select("email").in("id", managerIds);
-              managerEmails = (profiles||[]).map(p => p.email).filter(Boolean);
-            }
-          }
-        } else {
-          const ids = [homeId, awayId].filter(Boolean);
-          if (ids.length > 0) {
-            const { data: tteams } = await supabase.from("tournament_teams").select("contact_email").in("id", ids);
-            managerEmails = (tteams||[]).map(t => t.contact_email).filter(Boolean);
-          }
-        }
-      } catch(e) { console.error("Manager lookup failed:", e); }
-
-      setStatus(s => ({ ...s, storage:"loading", email: managerEmails.length === 0 ? "skipped" : "loading" }));
+      // submit-scoresheet resolves recipients + emails managers SERVER-SIDE
+      // (service_role) and ignores any addresses in the body — and with
+      // YOUTH-PRIVACY profiles.email is column-revoked on the client anyway.
+      // So we just submit and trust the function's reported outcome.
+      setStatus(s => ({ ...s, storage:"loading", email:"loading" }));
       const { data, error } = await supabase.functions.invoke("submit-scoresheet", {
-        body: { pdf_base64: pdfBase64, filename, game_id: game.id, is_league: isLeague, home_team: homeTeam, away_team: awayTeam, context_name: contextName, manager_emails: managerEmails }
+        body: { pdf_base64: pdfBase64, filename, game_id: game.id, is_league: isLeague, home_team: homeTeam, away_team: awayTeam, context_name: contextName }
       });
       if (error) throw error;
       const storageOk = data.results?.storage === "uploaded";
-      const emailOutcome = managerEmails.length === 0
-        ? "skipped"
-        : data.results?.email === "sent" ? "success" : "error";
+      const emailOutcome = data.results?.email === "sent" ? "success"
+        : data.results?.email === "skipped" ? "skipped"
+        : "error";
       setStatus({ pdf:"success", storage: storageOk ? "success" : "error", email: emailOutcome });
     } catch(e) {
       console.error("Submission error:", e);

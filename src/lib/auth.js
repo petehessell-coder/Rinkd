@@ -3,6 +3,18 @@ import { linkPendingInvitesForUser } from './roster';
 
 const AVATAR_COLORS = ['#D72638','#2E5B8C','#22C55E','#F59E0B','#8B5CF6','#0EA5E9'];
 
+// YOUTH-PRIVACY: profiles.email + date_of_birth are column-revoked from the
+// authenticated role (personal contact info is never client-scrapeable). So
+// `select('*')` on profiles now ERRORS — read this explicit non-contact column
+// list instead. Own email/DOB come from the auth session or get_my_contact().
+// If a future migration adds a profiles column the client needs, add it here.
+export const PROFILE_SELECT =
+  'id, name, handle, avatar_color, avatar_initials, bio, position, level, home_rink, ' +
+  'points, tier, created_at, updated_at, is_premium, premium_until, stripe_customer_id, ' +
+  'cover_image_url, onboarding_completed_at, welcome_seen, avatar_url, is_admin, persona, ' +
+  'gender, last_seen_at, notification_email_transactional, notification_email_marketing, ' +
+  'notification_push, profile_complete, auth_user_id, account_type';
+
 function pickInitials(name) {
   return (name || '').split(/\s+/).filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?';
 }
@@ -183,7 +195,7 @@ export async function signOut() {
 export async function getProfile(userId) {
   const { data, error } = await supabase
     .from('profiles')
-    .select('*')
+    .select(PROFILE_SELECT)
     .eq('id', userId)
     .single();
   return { data, error };

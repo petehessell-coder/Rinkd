@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Icon, ErrorState } from '../components/ui';
 import Layout from '../components/Layout';
-import { getTeam, getTeamMembers, getTeamGames, getUserRoleOnTeam, isLeagueStaffOfTeam, requestToJoin } from '../lib/teams';
+import { getTeam, getTeamMembers, getTeamGames, getUserRoleOnTeam, isLeagueStaffOfTeam, requestToJoin, getPublicTeamSummary } from '../lib/teams';
 import { captureDataError } from '../lib/sentry';
 import { supabase } from '../lib/supabase';
 import { useOnline } from '../lib/useOnline';
@@ -49,30 +49,45 @@ export default function TeamPage({ currentUser, profile }) {
   // expands to every game past + future. Persists per-team via state, resets
   // on page change. Keeps the team page light by default but never hides data.
   const [showAllGames, setShowAllGames] = useState(false);
+  // YOUTH-PRIVACY: when a youth team is RLS-invisible to this viewer, we still
+  // show a results-only "locked" view (team-level record) + how to get access,
+  // instead of a dead-end "not found".
+  const [lockedSummary, setLockedSummary] = useState(null);
 
   const load = useCallback(async () => {
     try {
       setError(null);
-      const [t, m, g, r, ls] = await Promise.all([
-        getTeam(id), getTeamMembers(id), getTeamGames(id), getUserRoleOnTeam(id), isLeagueStaffOfTeam(id)
-      ]);
-      setTeam(t); setMembers(m); setGames(g); setUserRole(r); setIsLeagueStaff(ls);
+      setLockedSummary(null);
 
-      // Hydrate joinRequested from the DB so a reload after requesting
-      // doesn't show the button as fresh-and-active. RLS lets a user
-      // SELECT their own pending requests; the row may have any status —
-      // we only suppress the button when there's an unresolved 'pending'.
+      // Hydrate the viewer's own pending join-request (RLS-readable in both the
+      // full and the locked paths). The row may have any status — we only
+      // suppress the button on an unresolved 'pending'.
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
+      const hydrateJoin = async () => {
+        if (!user) return;
         const { data: existing } = await supabase
-          .from('team_join_requests')
-          .select('status')
-          .eq('team_id', id)
-          .eq('user_id', user.id)
-          .eq('status', 'pending')
-          .maybeSingle();
+          .from('team_join_requests').select('status')
+          .eq('team_id', id).eq('user_id', user.id).eq('status', 'pending').maybeSingle();
         if (existing) setJoinRequested(true);
+      };
+
+      // getTeam throws under RLS for a youth team a non-insider can't see.
+      let t = null;
+      try { t = await getTeam(id); } catch (_) { t = null; }
+      if (!t) {
+        // Results-only public summary drives the locked state; null = truly gone.
+        const summary = await getPublicTeamSummary(id).catch(() => null);
+        if (summary) { setLockedSummary(summary); await hydrateJoin(); }
+        else { setError(new Error('not_found')); }
+        return;
       }
+
+      setTeam(t);
+      const [m, g, r, ls] = await Promise.all([
+        getTeamMembers(id), getTeamGames(id), getUserRoleOnTeam(id), isLeagueStaffOfTeam(id)
+      ]);
+      setMembers(m); setGames(g); setUserRole(r); setIsLeagueStaff(ls);
+      await hydrateJoin();
     } catch(e) { console.error(e); captureDataError(e, { where: 'Team.load', teamId: id }); setError(e); }
     finally { setLoading(false); }
   }, [id]);
@@ -117,6 +132,69 @@ export default function TeamPage({ currentUser, profile }) {
       </div>
     </Layout>
   );
+
+  // YOUTH-PRIVACY locked state — a youth team the viewer isn't an insider of.
+  // Results-only (team-level record + recent FINAL scores, no times/locations)
+  // plus a clear, non-dead-end path to access.
+  if (lockedSummary) {
+    const s = lockedSummary;
+    const lockInitials = s.logo_initials || (s.name || '?').slice(0, 2).toUpperCase();
+    const record = `${s.wins}-${s.losses}${s.ties ? '-' + s.ties : ''}`;
+    const recent = Array.isArray(s.recent) ? s.recent : [];
+    return (
+      <Layout profile={profile}>
+        <SEO title={`${s.name} · Rinkd`} description={`${s.name} — team record on Rinkd.`} />
+        <div style={{ background: C.dark, minHeight: '100vh', fontFamily: 'Barlow, sans-serif', color: C.ice }}>
+          <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.5)', fontSize: 13, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', padding: '16px 16px 0' }}>← Back</button>
+          <div style={{ padding: '12px 16px 0', display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ width: 60, height: 60, borderRadius: 12, background: s.logo_url ? `url(${s.logo_url}) center/cover` : (s.logo_color || C.blue), display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 24, color: '#fff', flexShrink: 0 }}>
+              {!s.logo_url && lockInitials}
+            </div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 24, lineHeight: 1.05, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 5, flexWrap: 'wrap' }}>
+                {s.division && <span style={{ fontSize: 12, color: C.steel }}>{s.division}</span>}
+                <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', padding: '2px 8px', borderRadius: 6, background: 'rgba(201,168,76,0.16)', color: '#C9A84C', textTransform: 'uppercase' }}>Private · Youth</span>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ margin: '16px 16px 0', padding: '14px 16px', background: C.card, borderRadius: 12, border: `1px solid ${C.border}` }}>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.08em', color: C.steel, textTransform: 'uppercase', marginBottom: 10 }}>Team Record</div>
+            <div style={{ display: 'flex', gap: 24 }}>
+              <div><div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 30, fontVariantNumeric: 'tabular-nums' }}>{record}</div><div style={{ fontSize: 11, color: C.steel }}>W-L{s.ties ? '-T' : ''}</div></div>
+              <div><div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 30, fontVariantNumeric: 'tabular-nums' }}>{s.games_played}</div><div style={{ fontSize: 11, color: C.steel }}>GP</div></div>
+            </div>
+            {recent.length > 0 && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.08em', color: C.steel, textTransform: 'uppercase', marginBottom: 8 }}>Recent Results</div>
+                {recent.map((r, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: i < recent.length - 1 ? '0.5px solid rgba(244,247,250,0.06)' : 'none' }}>
+                    <span style={{ fontSize: 12, fontWeight: 800, width: 16, color: r.result === 'W' ? '#22C55E' : r.result === 'L' ? C.red : C.steel }}>{r.result}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>vs {r.opponent}</span>
+                    <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 15, fontVariantNumeric: 'tabular-nums' }}>{r.gf}-{r.ga}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{ margin: 16, padding: '20px 16px', background: 'rgba(46,91,140,0.10)', borderRadius: 12, border: `1px dashed ${C.border}`, textAlign: 'center' }}>
+            <div style={{ fontSize: 26, marginBottom: 6 }} aria-hidden>🔒</div>
+            <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, textTransform: 'uppercase' }}>Roster, schedule &amp; feed are private</div>
+            <div style={{ fontSize: 13, color: C.steel, lineHeight: 1.5, margin: '8px auto 0', maxWidth: 340 }}>
+              This is a youth team — its players, game times, and locations are visible only to rostered members, their parents/guardians, and coaches.
+            </div>
+            <button onClick={handleJoin} disabled={joinLoading || joinRequested}
+              style={{ marginTop: 18, minHeight: 44, padding: '0 24px', borderRadius: 999, border: 'none', background: joinRequested ? 'rgba(46,91,140,0.35)' : C.red, color: '#fff', fontWeight: 700, fontSize: 15, cursor: (joinLoading || joinRequested) ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif' }}>
+              {joinRequested ? '✓ Request sent' : joinLoading ? 'Sending…' : 'Request to join'}
+            </button>
+            <div style={{ fontSize: 11, color: C.steel, marginTop: 8 }}>A coach or team manager approves requests.</div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   if (!team) return (
     <Layout profile={profile}>
