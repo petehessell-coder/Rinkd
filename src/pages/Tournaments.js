@@ -24,17 +24,27 @@ export default function Tournaments({ profile, currentUser }) {
     // Sort by end_date desc so just-finished events surface before older archives,
     // and active events (whose end_date is in the future) lead the list. Falls
     // back to start_date for rows missing an end_date.
-    const { data, error: qErr } = await supabase
+    // YOUTH-PRIVACY: youth events are excluded from the public directory (parity
+    // with youth teams). A signed-in user still sees youth events they DIRECT, so a
+    // youth-event director can find + manage theirs from here; anon + everyone else
+    // sees adult events only. The youth landing page itself stays reachable by
+    // direct link with minor names shielded — this is discovery exclusion, not full
+    // row-privacy.
+    let q = supabase
       .from('tournaments')
       .select('*')
-      .in('status', ['active', 'complete'])
+      .in('status', ['active', 'complete']);
+    q = currentUser?.id
+      ? q.or(`is_youth.eq.false,director_id.eq.${currentUser.id}`)
+      : q.eq('is_youth', false);
+    const { data, error: qErr } = await q
       .order('end_date', { ascending: false, nullsFirst: false })
       .order('start_date', { ascending: false })
       .limit(50);
     if (qErr) { setError(qErr.message); setLoading(false); return; }
     setTournaments(data || []);
     setLoading(false);
-  }, []);
+  }, [currentUser?.id]);
 
   useEffect(() => { load(); }, [load]);
 
