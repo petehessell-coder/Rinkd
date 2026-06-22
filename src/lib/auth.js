@@ -114,7 +114,17 @@ export async function ensureProfileForUser(user) {
   const color = meta.avatar_color || AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
   const initials = meta.avatar_initials || pickInitials(name);
 
-  const { error: profileError } = await supabase.from('profiles').upsert({
+  // INSERT, not upsert. The youth-privacy column gate REVOKEs SELECT on
+  // `email`/`date_of_birth` from `authenticated`. supabase-js `.upsert()`
+  // compiles to `INSERT ... ON CONFLICT DO UPDATE`, and Postgres requires
+  // SELECT privilege on every column that statement touches — so the upsert
+  // started failing with "permission denied for table profiles" the moment
+  // the gate went live. A plain INSERT (return=minimal, no RETURNING) needs
+  // only INSERT privilege, which `authenticated` still has on these columns.
+  // The `if (existing) return` check above already makes this idempotent for
+  // the common case; the 23505 handler below covers the SELECT-then-INSERT
+  // race (e.g. onAuthStateChange double-firing).
+  const { error: profileError } = await supabase.from('profiles').insert({
     id: user.id,
     // REG INSERT policy ("Users can insert their own profile") checks
     // auth.uid() = auth_user_id. Without this line the new row fails RLS and
@@ -145,8 +155,14 @@ export async function ensureProfileForUser(user) {
   });
 
   if (profileError) {
+    // 23505 = unique_violation: the row already exists (race between the
+    // existence check and this INSERT). That's a success for an idempotent
+    // "ensure" — the profile is there, just not created by this call.
+    if (profileError.code === '23505') {
+      return { data: { id: user.id }, error: null };
+    }
     // eslint-disable-next-line no-console
-    console.error('[ensureProfileForUser] profile upsert failed:', profileError);
+    console.error('[ensureProfileForUser] profile insert failed:', profileError);
     return { error: profileError };
   }
 
