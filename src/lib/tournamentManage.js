@@ -669,3 +669,18 @@ export async function updateTournament(tournamentId, fields) {
     .single();
   return { data, error };
 }
+
+// YOUTH-PRIVACY: correct a mis-derived tournaments.is_youth from the UI via the
+// guarded set_tournament_youth RPC. Director/admin only (enforced server-side).
+// youth -> adult is rejected when the event has minor participants — the RPC
+// raises errcode 'P0001' with hint 'has_minor_participants'; a non-director/admin
+// gets '42501'. Setting youth (more restrictive) is always allowed. The
+// auto-derive-on-insert default is untouched — this is purely a correction tool.
+// Returns { data: <new is_youth boolean>, error }.
+export async function setTournamentYouth(tournamentId, isYouth) {
+  const { data, error } = await supabase.rpc('set_tournament_youth', {
+    p_tournament_id: tournamentId,
+    p_is_youth: isYouth,
+  });
+  return { data, error };
+}

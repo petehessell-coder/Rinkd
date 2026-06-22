@@ -7,7 +7,7 @@ import {
   listGames, updateGame, deleteGame,
   generatePoolSchedule,
   loadPoolQualifiers, createBracketGame,
-  updateTournament,
+  updateTournament, setTournamentYouth,
   listStandingsSummary,
   generateBracketV2, loadBracketSeedCandidates, BRACKET_SIZES,
   recordForfeit,
@@ -1489,6 +1489,125 @@ function RegistrationsTab({ tournamentId, tournament, reload, flash }) {
   );
 }
 
+// YOUTH-PRIVACY: director correction for a mis-derived youth/adult classification.
+// Saves immediately via the guarded set_tournament_youth RPC (separate from the
+// form's "Save Settings"). The page already gates this whole screen to the
+// director, so non-directors never see it; the RPC re-checks director/admin
+// server-side. youth->adult is server-rejected when the event has minor
+// participants — surfaced here as a friendly inline error. No skeleton: the
+// tournament is already loaded by the page before this tab renders.
+function AudienceControl({ tournament, reload, flash }) {
+  const reduceMotion = typeof window !== 'undefined'
+    && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Optimistic local copy, reconciled against the server after each change.
+  const [value, setValue] = useState(!!tournament.is_youth);
+  const [status, setStatus] = useState('idle'); // idle | saving | success | error
+  const [errorMsg, setErrorMsg] = useState('');
+  const [confirmYouth, setConfirmYouth] = useState(false);
+
+  useEffect(() => { setValue(!!tournament.is_youth); }, [tournament.is_youth]);
+
+  const saving = status === 'saving';
+
+  const apply = async (nextYouth) => {
+    setConfirmYouth(false);
+    setErrorMsg('');
+    setStatus('saving');
+    const prev = value;
+    setValue(nextYouth); // optimistic
+    const { error } = await setTournamentYouth(tournament.id, nextYouth);
+    if (error) {
+      setValue(prev); // reconcile: roll back the optimistic flip
+      setStatus('error');
+      const isMinorBlock = error.hint === 'has_minor_participants'
+        || /minor participants/i.test(error.message || '');
+      setErrorMsg(
+        isMinorBlock
+          ? 'This event has minor participants, so it can’t be set to Adult. Keep it Youth, or remove the minors first.'
+          : error.code === '42501'
+            ? 'Only the tournament director or an admin can change this.'
+            : (error.message || 'That didn’t save — check your connection and try again.')
+      );
+      return;
+    }
+    setStatus('success');
+    flash?.('success', nextYouth
+      ? 'Set to Youth — rosters, schedules and player names are now private.'
+      : 'Set to Adult — rosters and player names are now public.');
+    reload(); // reconcile + propagate: re-reads is_youth (gating/leaderboards read it fresh server-side)
+  };
+
+  const onSelect = (nextYouth) => {
+    if (saving) return;
+    if (nextYouth === value && status !== 'error') return; // no-op on the current value
+    if (nextYouth === true) {
+      setConfirmYouth(true); // youth = more private: confirm so the consequence is explicit
+      setErrorMsg('');
+    } else {
+      apply(false); // adult = the guarded direction: server rejects if minors are present
+    }
+  };
+
+  const seg = (segIsYouth) => {
+    const active = value === segIsYouth;
+    return {
+      flex: 1, minHeight: 44, padding: '10px 12px', border: 'none', borderRadius: 8,
+      cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.7 : 1,
+      background: active ? (segIsYouth ? 'rgba(46,91,140,0.55)' : 'rgba(139,163,190,0.18)') : 'transparent',
+      color: active ? C.ice : C.steel,
+      fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic',
+      fontSize: 15, letterSpacing: '0.04em', textTransform: 'uppercase',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      transition: reduceMotion ? 'none' : 'background 160ms ease, color 160ms ease',
+    };
+  };
+
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 4 }}>Audience</div>
+      <div style={{ fontSize: 12, color: C.steel, marginBottom: 12, lineHeight: 1.4 }}>
+        Auto-detected from your division. Change it only if it’s wrong — it saves right away.
+      </div>
+
+      <div role="group" aria-label="Tournament audience" style={{ display: 'flex', gap: 6, background: C.navy, border: `1px solid ${C.border}`, borderRadius: 10, padding: 4 }}>
+        <button type="button" aria-pressed={value === true} disabled={saving} onClick={() => onSelect(true)} style={seg(true)}>
+          {value === true && saving ? 'Updating…' : 'Youth'}
+        </button>
+        <button type="button" aria-pressed={value === false} disabled={saving} onClick={() => onSelect(false)} style={seg(false)}>
+          {value === false && saving ? 'Updating…' : 'Adult'}
+        </button>
+      </div>
+
+      {/* Plain-language consequence of the CURRENT selection (color is never the only cue). */}
+      <div style={{ fontSize: 12, color: C.steel, marginTop: 10, lineHeight: 1.45 }}>
+        {value
+          ? '🔒 Youth events keep rosters, schedules and player names private — only insiders (the team, the scorekeeper, the director) can see them.'
+          : 'Adult events are public — rosters, schedules and player names are visible to anyone.'}
+      </div>
+
+      {confirmYouth && (
+        <div style={{ marginTop: 12, background: 'rgba(46,91,140,0.14)', border: `1px solid ${C.border}`, borderRadius: 10, padding: 12 }}>
+          <div style={{ fontSize: 13, color: C.ice, marginBottom: 10, lineHeight: 1.45 }}>
+            Make this a <strong>Youth</strong> event? Rosters, schedules and player names become private immediately.
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" onClick={() => apply(true)} disabled={saving} style={{ ...btnPrimary, minHeight: 44 }}>
+              {saving ? 'Updating…' : 'Make it Youth'}
+            </button>
+            <button type="button" onClick={() => setConfirmYouth(false)} disabled={saving} style={{ ...btnGhost, minHeight: 44 }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {status === 'error' && errorMsg && (
+        <div role="alert" style={{ marginTop: 12, background: 'rgba(215,38,56,0.12)', border: '1px solid rgba(215,38,56,0.45)', borderRadius: 10, padding: '10px 12px', color: C.ice, fontSize: 13, lineHeight: 1.45 }}>
+          {errorMsg}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SettingsTab({ tournament, currentUser, reload, flash }) {
   const [name, setName] = useState(tournament.name || '');
   const [division, setDivision] = useState(tournament.division || '');
@@ -1616,6 +1735,7 @@ function SettingsTab({ tournament, currentUser, reload, flash }) {
 
   return (
     <div>
+      <AudienceControl tournament={tournament} reload={reload} flash={flash} />
       {/* Tournament Info */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 12 }}>Tournament Info</div>
