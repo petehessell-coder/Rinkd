@@ -15,10 +15,6 @@ export const PROFILE_SELECT =
   'gender, last_seen_at, notification_email_transactional, notification_email_marketing, ' +
   'notification_push, profile_complete, auth_user_id, account_type';
 
-function pickInitials(name) {
-  return (name || '').split(/\s+/).filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?';
-}
-
 export async function signUp({ email, password, dateOfBirth, marketingOptIn = false, captchaToken }) {
   // ONBOARD-1 (May 28, 2026): single-step signup. The auth gate collects only
   // email + password + DOB (+ Turnstile + marketing opt-in checkbox). Name,
@@ -90,7 +86,9 @@ export async function signUp({ email, password, dateOfBirth, marketingOptIn = fa
  * AND from App.js's onAuthStateChange handler (post-email-confirmation path
  * for new users, no-op for returning users).
  *
- * Reads profile fields from auth.users.user_metadata (set by signUp).
+ * Profile fields are derived server-side by the ensure_profile_for_current_user
+ * SECURITY DEFINER RPC from auth.users.user_metadata (set by signUp) — the
+ * client no longer needs table grants on profiles to provision its own row.
  */
 export async function ensureProfileForUser(user) {
   if (!user?.id) return { data: null, error: { message: 'No user' } };
@@ -102,73 +100,32 @@ export async function ensureProfileForUser(user) {
     .maybeSingle();
   if (existing) return { data: existing, error: null };
 
-  const meta = user.user_metadata || {};
-  const emailLocal = (user.email || '').split('@')[0] || 'player';
-  const name = meta.name || emailLocal;
-  // ONBOARD-1: auto-generated placeholder handle — uniqueness guaranteed by
-  // the UUID prefix. The user picks a real handle later from the Profile
-  // page (no friction at the auth gate). The visible "user-..." prefix
-  // signals "this is a default" so people are nudged to change it.
-  const handle = meta.handle
-    || `user-${user.id.slice(0, 8)}`.replace(/[^a-zA-Z0-9_-]/g, '');
-  const color = meta.avatar_color || AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
-  const initials = meta.avatar_initials || pickInitials(name);
-
-  // INSERT, not upsert. The youth-privacy column gate REVOKEs SELECT on
-  // `email`/`date_of_birth` from `authenticated`. supabase-js `.upsert()`
-  // compiles to `INSERT ... ON CONFLICT DO UPDATE`, and Postgres requires
-  // SELECT privilege on every column that statement touches — so the upsert
-  // started failing with "permission denied for table profiles" the moment
-  // the gate went live. A plain INSERT (return=minimal, no RETURNING) needs
-  // only INSERT privilege, which `authenticated` still has on these columns.
-  // The `if (existing) return` check above already makes this idempotent for
-  // the common case; the 23505 handler below covers the SELECT-then-INSERT
-  // race (e.g. onAuthStateChange double-firing).
-  const { error: profileError } = await supabase.from('profiles').insert({
-    id: user.id,
-    // REG INSERT policy ("Users can insert their own profile") checks
-    // auth.uid() = auth_user_id. Without this line the new row fails RLS and
-    // the signup boots profile-less (App.js swallows the error). MUST be set.
-    auth_user_id: user.id,
-    email: (user.email || '').toLowerCase(),
-    name,
-    handle,
-    avatar_color: color,
-    avatar_initials: initials,
-    // ENRICH-1 fields piped from user_metadata (set in signUp). Persona,
-    // gender, and profile_complete intentionally left at their column defaults
-    // (NULL / NULL / FALSE) so the OnboardingModal + dismissible Feed banner
-    // surface as the progressive-disclosure nudge.
-    date_of_birth: meta.date_of_birth || null,
-    notification_email_marketing: !!meta.marketing_opt_in,
-    // Legacy position/level: cleared so they don't render as defaulted values
-    // (the old code wrote "Fan" / "Beer League" — making it look like the
-    // user self-identified that way). Persona is the new segmentation field
-    // and stays NULL until they pick one in the OnboardingModal.
-    position: '',
-    level: '',
-    points: 0,
-    tier: 'Mite',
-    bio: '',
-    home_rink: '',
-    created_at: new Date().toISOString(),
-  });
-
+  // Profile creation runs server-side via the ensure_profile_for_current_user
+  // SECURITY DEFINER RPC. The function derives every field from the caller's
+  // auth.users row + user_metadata (set in signUp), mirroring the old client
+  // derivation exactly, and is immune to the YOUTH-PRIVACY column gate — which
+  // REVOKEs SELECT on profiles.email + date_of_birth from `authenticated` and so
+  // breaks any client-side upsert / ON CONFLICT / RETURNING on those columns.
+  // (That gate bit signup before — Sentry 09883627, prior bandaid b10155c2.)
+  // The RPC keys solely off auth.uid(), so a caller can only ever create its OWN
+  // row, and it's idempotent — safe even if the existence check above raced a
+  // concurrent onAuthStateChange. We no longer need table grants on profiles to
+  // provision, so future grant changes can't break signup.
+  const { error: profileError } = await supabase.rpc('ensure_profile_for_current_user');
   if (profileError) {
-    // 23505 = unique_violation: the row already exists (race between the
-    // existence check and this INSERT). That's a success for an idempotent
-    // "ensure" — the profile is there, just not created by this call.
-    if (profileError.code === '23505') {
-      return { data: { id: user.id }, error: null };
-    }
     // eslint-disable-next-line no-console
-    console.error('[ensureProfileForUser] profile insert failed:', profileError);
+    console.error('[ensureProfileForUser] ensure_profile RPC failed:', profileError);
     return { error: profileError };
   }
 
-  // Side effects — quiet failure for each. The profile creation succeeded,
-  // and these are nice-to-have on first sign-in. They're also idempotent: a
-  // returning user already has the linked invite or the follow row.
+  // Authoritative side effects fire inside the RPC's INSERT via AFTER-INSERT
+  // triggers — one source of truth, runs regardless of onboarding:
+  //   • tr_auto_follow_seed_accounts  — seeds Pete + The BLPA + Howie follows
+  //   • tr_link_invited_player_on_profile — links pending team invites by email
+  // The call below re-runs the invite match defensively (the trigger normally
+  // already did it, so it links 0). Idempotent belt-and-suspenders, kept until
+  // the trigger is confirmed byte-equivalent and this client call is retired.
+  // Quiet failure — invite-linking is nice-to-have on first sign-in.
   try {
     const { linked } = await linkPendingInvitesForUser(user.id, user.email);
     if (linked > 0) {
@@ -179,12 +136,6 @@ export async function ensureProfileForUser(user) {
     // eslint-disable-next-line no-console
     console.warn('[ensureProfileForUser] linkPendingInvitesForUser threw:', e?.message || e);
   }
-
-  // Seed follows (Pete + The BLPA + Howie Miller) are handled server-side by
-  // the `tr_auto_follow_seed_accounts` trigger on profiles INSERT — one source
-  // of truth, fires regardless of onboarding. The old client-side
-  // "follow top 3 by points" block was removed (May 23) because it seeded
-  // whatever demo accounts ranked highest, not the intended real accounts.
 
   return { data: { id: user.id }, error: null };
 }
