@@ -48,14 +48,18 @@ begin
   --   handle   = (meta.handle || 'user-<uuid8>') with non [A-Za-z0-9_-] stripped
   --   initials = pickInitials(name): first char of EACH whitespace-split word,
   --              uppercased, first 2 chars (NOT first-2-letters-of-name — that
-  --              would silently change the avatar for the common email-local case)
+  --              would silently change the avatar for the common email-local case).
+  --              Leading/trailing whitespace is stripped with a regex (not trim(),
+  --              which only strips U+0020) so JS /\s+/ word-splitting is matched
+  --              exactly for tab/newline-prefixed names.
   --   color    = meta.avatar_color || random AVATAR_COLORS entry
   v_name   := coalesce(nullif(v_meta->>'name',''), nullif(split_part(v_user.email,'@',1),''), 'player');
   v_handle := regexp_replace(coalesce(nullif(v_meta->>'handle',''), 'user-' || left(v_uid::text, 8)),
                              '[^a-zA-Z0-9_-]', '', 'g');
   v_init   := coalesce(
                 nullif(v_meta->>'avatar_initials',''),
-                nullif(upper(left(regexp_replace(trim(v_name), '(\S)\S*\s*', '\1', 'g'), 2)), ''),
+                nullif(upper(left(regexp_replace(regexp_replace(v_name, '^\s+|\s+$', '', 'g'),
+                                                 '(\S)\S*\s*', '\1', 'g'), 2)), ''),
                 '?');
   v_color  := coalesce(nullif(v_meta->>'avatar_color',''),
                        (array['#D72638','#2E5B8C','#22C55E','#F59E0B','#8B5CF6','#0EA5E9'])[1 + floor(random()*6)::int]);

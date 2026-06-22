@@ -324,13 +324,13 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [profileError, setProfileError] = useState(false);
 
-  // Retry-on-null helper. Brand-new signups fire SIGNED_IN immediately, but
-  // the profile row in lib/auth.js is inserted via a separate `.upsert()` call
-  // that runs AFTER auth creation. If we hit `getProfile()` before the upsert
-  // commits, we get null. Without retry, the React profile state stays null
-  // forever even though the DB row exists a moment later — locking pages like
-  // /profile in "Loading..." purgatory and silently breaking onboarding for
-  // users who navigate before the modal fires.
+  // Retry-on-null helper. Brand-new signups fire SIGNED_IN immediately, but the
+  // profile row is provisioned by lib/auth.js's ensureProfileForUser AFTER auth
+  // creation (server-side via the ensure_profile_for_current_user SECURITY DEFINER
+  // RPC). If we hit `getProfile()` before that row commits, we get null. Without
+  // retry, the React profile state stays null forever even though the DB row
+  // exists a moment later — locking pages like /profile in "Loading..." purgatory
+  // and silently breaking onboarding for users who navigate before the modal fires.
   //
   // After the email-confirmation path landed, this helper ALSO triggers
   // `ensureProfileForUser` on the first attempt if no profile exists — that's
