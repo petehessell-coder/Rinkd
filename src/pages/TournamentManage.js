@@ -1515,7 +1515,15 @@ function AudienceControl({ tournament, reload, flash }) {
     setStatus('saving');
     const prev = value;
     setValue(nextYouth); // optimistic
-    const { error } = await setTournamentYouth(tournament.id, nextYouth);
+    let error = null;
+    try {
+      ({ error } = await setTournamentYouth(tournament.id, nextYouth));
+    } catch (e) {
+      // supabase-js resolves { data, error } for RPC-level errors, but a
+      // network-level failure (offline/DNS) rejects — catch it so the control
+      // can never get stuck in the 'saving' state with both segments disabled.
+      error = e || { message: 'network' };
+    }
     if (error) {
       setValue(prev); // reconcile: roll back the optimistic flip
       setStatus('error');
@@ -1586,7 +1594,7 @@ function AudienceControl({ tournament, reload, flash }) {
       </div>
 
       {confirmYouth && (
-        <div style={{ marginTop: 12, background: 'rgba(46,91,140,0.14)', border: `1px solid ${C.border}`, borderRadius: 10, padding: 12 }}>
+        <div aria-live="polite" style={{ marginTop: 12, background: 'rgba(46,91,140,0.14)', border: `1px solid ${C.border}`, borderRadius: 10, padding: 12 }}>
           <div style={{ fontSize: 13, color: C.ice, marginBottom: 10, lineHeight: 1.45 }}>
             Make this a <strong>Youth</strong> event? Rosters, schedules and player names become private immediately.
           </div>

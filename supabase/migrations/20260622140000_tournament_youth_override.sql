@@ -90,8 +90,10 @@ returns trigger
 language plpgsql set search_path to 'public'
 as $$
 begin
+  -- Check minors against old.id (the row's stable identity for an UPDATE), not
+  -- new.id, so a hypothetical id-rekey can't point the check at an empty tournament.
   if coalesce(old.is_youth, false) and not coalesce(new.is_youth, false)
-     and public.tournament_has_minor_participants(new.id) then
+     and public.tournament_has_minor_participants(old.id) then
     raise exception 'This event has minor participants and can''t be set to Adult.'
       using errcode = 'P0001', hint = 'has_minor_participants';
   end if;
