@@ -259,8 +259,11 @@ export default function Discover({ currentUser, profile }) {
     setError(null);
     let qErr = null;
     if (tab === 'players') {
+      // YOUTH-PRIVACY: minors never surface in people search (RLS also hides
+      // them, but exclude explicitly so an insider's view stays consistent).
       let q = supabase.from('profiles')
         .select('id, name, handle, position, level, points, tier, avatar_color, avatar_initials')
+        .neq('account_type', 'minor')
         .order('points', { ascending: false, nullsFirst: false })
         .limit(40);
       if (ilike) q = q.or(`name.ilike.${ilike},handle.ilike.${ilike}`);

@@ -130,14 +130,13 @@ export async function uploadRoster({ teamId, teamName, invitedBy, rows }) {
   const valid = (rows || []).filter(r => !r.rowErrors || r.rowErrors.length === 0);
   if (valid.length === 0) return { inserted: 0, sent: 0, errors: ['No valid rows to upload.'] };
 
-  // Skip any emails that already exist on this team (idempotent re-upload)
-  const emails = valid.map(r => r.email);
-  const { data: existing } = await supabase
-    .from('team_members')
-    .select('invite_email')
-    .eq('team_id', teamId)
-    .in('invite_email', emails);
-  const skipSet = new Set((existing || []).map(r => r.invite_email));
+  // Skip any emails that already exist on this team (idempotent re-upload).
+  // invite_email is column-revoked (YOUTH-PRIVACY) — read existing contacts via
+  // the insider-gated RPC instead of a direct column select.
+  const { data: existingEmails } = await supabase.rpc('team_invite_emails', { p_team_id: teamId });
+  const skipSet = new Set((existingEmails || [])
+    .map(e => (typeof e === 'string' ? e : e?.team_invite_emails))
+    .filter(Boolean));
   const allToInsert = valid.filter(r => !skipSet.has(r.email));
 
   if (allToInsert.length === 0) {
@@ -158,12 +157,16 @@ export async function uploadRoster({ teamId, teamName, invitedBy, rows }) {
     status: 'pending',
   }));
 
-  const { data: insertedRows, error: insertError } = await supabase
+  // invite_email is column-revoked on read — don't select it back. We already
+  // hold each row's email in `toInsert` (same order PostgREST returns), so zip
+  // it in for the invite send below.
+  const { data: insertedIds, error: insertError } = await supabase
     .from('team_members')
     .insert(inserts)
-    .select('id, invite_email, invite_name');
+    .select('id, invite_name');
 
   if (insertError) return { inserted: 0, sent: 0, errors: [insertError.message], capped };
+  const insertedRows = (insertedIds || []).map((row, i) => ({ ...row, invite_email: toInsert[i]?.email }));
 
   // Send invites in small concurrent chunks instead of firing every row at
   // once — a 20-row upload firing 20 simultaneous Edge Function invocations is
@@ -214,17 +217,15 @@ export async function uploadRoster({ teamId, teamName, invitedBy, rows }) {
  */
 export async function linkPendingInvitesForUser(userId, email) {
   if (!userId || !email) return { linked: 0 };
-  const { data, error } = await supabase
-    .from('team_members')
-    .update({ user_id: userId, status: 'active', joined_at: new Date().toISOString() })
-    .is('user_id', null)
-    .eq('status', 'pending')
-    .eq('invite_email', String(email).toLowerCase())
-    .select('id');
+  // invite_email is column-revoked (YOUTH-PRIVACY), so the client can't filter
+  // on it directly. link_pending_team_invites is a SECURITY DEFINER RPC that
+  // matches + binds pending slots for the CURRENT user (current_profile_id())
+  // server-side — same effect, no contact column exposed.
+  const { data, error } = await supabase.rpc('link_pending_team_invites', { p_email: String(email).toLowerCase() });
   if (error) {
     // eslint-disable-next-line no-console
     console.warn('[roster] linkPendingInvitesForUser failed:', error.message);
     return { linked: 0, error };
   }
-  return { linked: data?.length || 0 };
+  return { linked: data || 0 };
 }

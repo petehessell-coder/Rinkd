@@ -137,23 +137,17 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
     // (Pete, The BLPA, Howie) — same set the auto-follow trigger uses; (2) NEVER
     // suggest demo accounts (`@demo.rinkd.app`, seeded with points=50 so they used
     // to dominate the old order-by-points query — the thing real pilot signups saw).
-    // We filter on `email` without selecting it, so no addresses reach the client.
+    // YOUTH-PRIVACY: email is column-revoked, so the seed/demo filtering runs
+    // server-side in suggested_follow_accounts (SECURITY DEFINER) — seeds first,
+    // demo accounts + minors excluded; no addresses reach the client.
     if (step !== 1 || suggested.length) return;
     const SEED_EMAILS = ['pete@rinkd.app', 'nick@blpa.com', 'howard@cemented.ca'];
-    const COLS = 'id, name, handle, position, avatar_color, avatar_initials, tier';
-    const self = currentUser?.id || '';
     (async () => {
       try {
-        const [seedRes, fillRes] = await Promise.all([
-          supabase.from('profiles').select(COLS).in('email', SEED_EMAILS).neq('id', self),
-          supabase.from('profiles').select(COLS).neq('id', self)
-            .not('email', 'ilike', '%@demo.rinkd.app')
-            .order('points', { ascending: false, nullsFirst: false })
-            .limit(8),
-        ]);
+        const { data } = await supabase.rpc('suggested_follow_accounts', { p_seed_emails: SEED_EMAILS });
         const seen = new Set();
         const merged = [];
-        for (const p of [...(seedRes.data || []), ...(fillRes.data || [])]) {
+        for (const p of (data || [])) {
           if (p && !seen.has(p.id)) { seen.add(p.id); merged.push(p); }
         }
         setSuggested(merged.slice(0, 6));

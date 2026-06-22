@@ -18,17 +18,28 @@ export async function getTeam(id) {
 export async function listTeams({ search = '' } = {}) {
   // TODO: paginate — cap to avoid pulling the entire teams table once the
   // directory grows. The search box lets users find anything beyond the cap.
-  let query = supabase.from('teams').select('*').eq('is_public', true).order('name').limit(50);
+  // YOUTH-PRIVACY: discovery shows PUBLIC (adult) teams only. visibility is the
+  // source of truth (youth teams are always 'private'); is_public stays mirrored.
+  let query = supabase.from('teams').select('*').eq('visibility', 'public').order('name').limit(50);
   if (search) query = query.ilike('name', `%${search}%`);
   const { data, error } = await query;
   if (error) throw error;
   return data || [];
 }
 
-export async function createTeam({ name, division, level, location, home_rink, logo_color, logo_initials, logo_url }) {
+export async function createTeam({ name, division, level, location, home_rink, logo_color, logo_initials, logo_url, is_youth }) {
   const { data: { user } } = await supabase.auth.getUser();
+  // YOUTH-PRIVACY: every team is born with a youth/adult classification. Youth
+  // => private/invite-only (enforced by the DB trigger, which also rejects any
+  // attempt to make a youth team public). Conservative default: youth when the
+  // caller doesn't specify. visibility is derived; the trigger has final say.
+  const youth = is_youth !== false; // default true (private) when unset
   const { data, error } = await supabase.from('teams')
-    .insert({ name, division, level, location, home_rink, logo_color, logo_initials, logo_url: logo_url || null, manager_id: user.id })
+    .insert({
+      name, division, level, location, home_rink, logo_color, logo_initials,
+      logo_url: logo_url || null, manager_id: user.id,
+      is_youth: youth, visibility: youth ? 'private' : 'public',
+    })
     .select().single();
   if (error) throw error;
   // Auto-add manager as member
@@ -43,9 +54,11 @@ export async function updateTeam(id, updates) {
 }
 
 export async function getTeamMembers(teamId) {
+  // YOUTH-PRIVACY: invite_email is column-revoked — select explicit columns
+  // (no contact). Managers fetch roster contacts via the get_team_contacts RPC.
   const { data, error } = await supabase
     .from('team_members')
-    .select('*, profile:profiles!team_members_user_id_fkey(id, name, handle, avatar_color, avatar_initials)')
+    .select('id, team_id, user_id, role, jersey_number, position, shot_hand, is_captain, is_alternate, status, invite_name, profile:profiles!team_members_user_id_fkey(id, name, handle, avatar_color, avatar_initials)')
     .eq('team_id', teamId)
     .in('status', ['active', 'pending'])
     .order('role')
@@ -227,9 +240,26 @@ export async function denyJoinRequest(requestId) {
 export async function getUserTeams(userId) {
   const { data, error } = await supabase
     .from('team_members')
-    .select('*, team:teams(*)')
+    .select('id, team_id, user_id, role, jersey_number, status, team:teams(*)')
     .eq('user_id', userId)
     .in('status', ['active', 'pending']);
+  if (error) throw error;
+  return data || [];
+}
+
+// YOUTH-PRIVACY: results-only public read path. Safe to render for a youth team
+// to a non-insider — team name, logo, record, recent FINAL scores (date +
+// opponent only). NO roster, NO contacts, NO schedule times, NO locations.
+export async function getPublicTeamSummary(teamId) {
+  const { data, error } = await supabase.rpc('public_team_summary', { p_team_id: teamId });
+  if (error) throw error;
+  return Array.isArray(data) ? data[0] || null : data || null;
+}
+
+// YOUTH-PRIVACY: roster contact emails for team insiders (managers/coaches).
+// invite_email is column-revoked, so the manage view fetches contacts here.
+export async function getTeamContacts(teamId) {
+  const { data, error } = await supabase.rpc('get_team_contacts', { p_team_id: teamId });
   if (error) throw error;
   return data || [];
 }

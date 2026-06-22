@@ -4,7 +4,7 @@ import Layout from '../components/Layout';
 import SEO from '../components/SEO';
 import { Avatar } from '../components/Logos';
 import { supabase } from '../lib/supabase';
-import { signOut, updateProfile } from '../lib/auth';
+import { signOut, updateProfile, PROFILE_SELECT } from '../lib/auth';
 import { track } from '../lib/analytics';
 import { listMyBlocks, unblockUser } from '../lib/blocks';
 
@@ -115,12 +115,14 @@ export default function SettingsPage({ currentUser, profile }) {
       // the user's own rows for everything except public reads (which is fine
       // because the rows are limited by .eq() below anyway).
       const tables = await Promise.all([
-        supabase.from('profiles').select('*').eq('id', uid).maybeSingle(),
+        // YOUTH-PRIVACY: email + date_of_birth are column-revoked; merged back
+        // in below via get_my_contact() so the user's own export stays complete.
+        supabase.from('profiles').select(PROFILE_SELECT).eq('id', uid).maybeSingle(),
         supabase.from('posts').select('*').eq('author_id', uid),
         supabase.from('comments').select('*').eq('author_id', uid),
         supabase.from('likes').select('*').eq('user_id', uid),
         supabase.from('follows').select('*').or(`follower_id.eq.${uid},following_id.eq.${uid}`),
-        supabase.from('team_members').select('*').eq('user_id', uid),
+        supabase.from('team_members').select('id, team_id, user_id, role, jersey_number, position, shot_hand, is_captain, is_alternate, status, joined_at, invite_name').eq('user_id', uid),
         supabase.from('team_game_rsvps').select('*').eq('user_id', uid),
         supabase.from('notifications').select('*').eq('recipient_id', uid),
         supabase.from('push_subscriptions').select('*').eq('user_id', uid),
@@ -168,7 +170,11 @@ export default function SettingsPage({ currentUser, profile }) {
           format: 'json-v1',
           ...(exportWarnings.length ? { export_warnings: exportWarnings } : {}),
         },
-        profile: profileRow.data || null,
+        // Merge the user's OWN contact (email/DOB) back in — column-revoked on
+        // the table but theirs to export, fetched via the self-scoped RPC.
+        profile: profileRow.data
+          ? { ...profileRow.data, ...((await supabase.rpc('get_my_contact')).data?.[0] || {}) }
+          : null,
         posts: posts.data || [],
         comments: comments.data || [],
         likes: likes.data || [],

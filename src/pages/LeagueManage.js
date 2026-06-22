@@ -15,6 +15,7 @@ import { generatePlayoffRoundOne, generatePlayoffNextRound, SUPPORTED_BRACKET_SI
 import { listRinks } from '../lib/rinks';
 import { supabase } from '../lib/supabase';
 import { sendLeagueInvite } from '../lib/invites';
+import { getTeamContacts } from '../lib/teams';
 import ScheduleBuilderModal from '../components/ScheduleBuilderModal';
 import LeagueImportModal from '../components/LeagueImportModal';
 import EditGameModal from '../components/EditGameModal';
@@ -192,14 +193,19 @@ function ManageLeague({ id, navigate }) {
       await addLeagueTeam(id, { teamId: team.id, teamName: team.name, logoColor: team.logo_color, logoInitials: team.logo_initials, divisionId: selectedDivisionId });
       setTeamSearch(''); setSearchResults([]);
       await load();
-      // Send league invite to team manager
-      const { data: mgr } = await supabase
-        .from('profiles')
-        .select('email, name')
-        .eq('id', team.manager_id || '')
-        .maybeSingle();
-      if (mgr?.email) {
-        await sendLeagueInvite({ to_email: mgr.email, to_name: mgr.name, league_name: league?.name, league_id: id, division: league?.division, season: league?.season });
+      // Send league invite to the team manager. YOUTH-PRIVACY: profiles.email is
+      // column-revoked — the commissioner is now an insider of this just-linked
+      // team, so the manager's email comes from the insider-gated RPC; the name
+      // is a granted column.
+      if (team.manager_id) {
+        const [{ data: mgrProfile }, contacts] = await Promise.all([
+          supabase.from('profiles').select('name').eq('id', team.manager_id).maybeSingle(),
+          getTeamContacts(team.id).catch(() => []),
+        ]);
+        const mgrEmail = (contacts || []).find(c => c.user_id === team.manager_id)?.account_email;
+        if (mgrEmail) {
+          await sendLeagueInvite({ to_email: mgrEmail, to_name: mgrProfile?.name, league_name: league?.name, league_id: id, division: league?.division, season: league?.season });
+        }
       }
     } catch(e) { setError(e.message); }
   };

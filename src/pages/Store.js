@@ -5,6 +5,7 @@ import TapeText from '../components/TapeText';
 import { getProducts } from '../lib/products';
 import { getMerchProducts, startStoreCheckout } from '../lib/store';
 import { track } from '../lib/analytics';
+import { supabase } from '../lib/supabase';
 
 const C = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
@@ -117,11 +118,22 @@ function CartModal({ cart, currency, onClose, onQty, onRemove, profile }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [form, setForm] = useState({
-    name: profile?.full_name || profile?.display_name || '',
-    email: profile?.email || '',
+    name: profile?.full_name || profile?.display_name || profile?.name || '',
+    email: '',
     address1: '', address2: '', city: '', state: '', country: 'US', zip: '',
   });
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  // YOUTH-PRIVACY: profiles.email is column-revoked. The checkout email prefill
+  // comes from the auth session (the user's own address) instead of the profile.
+  useEffect(() => {
+    let alive = true;
+    supabase.auth.getUser().then(({ data }) => {
+      const e = data?.user?.email;
+      if (alive && e) setForm((f) => (f.email ? f : { ...f, email: e }));
+    });
+    return () => { alive = false; };
+  }, []);
 
   const subtotalCents = cart.reduce((s, i) => s + Math.round(i.price * 100) * i.quantity, 0);
 

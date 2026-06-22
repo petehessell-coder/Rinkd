@@ -5,7 +5,7 @@ import { C } from '../lib/tokens';
 import { Icon, StatNumber, ErrorState, Img } from '../components/ui';
 import { number, plural } from '../lib/format';
 import { TierBadge } from '../components/Logos';
-import { updateProfile } from '../lib/auth';
+import { updateProfile, PROFILE_SELECT } from '../lib/auth';
 import { getTier, getTierProgress, getNextTier, TIERS } from '../lib/tiers';
 import { supabase } from '../lib/supabase';
 import { useOnline } from '../lib/useOnline';
@@ -110,6 +110,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
   const navigate = useNavigate();
   const [profile, setProfile] = useState(myProfile);
   const [loadError, setLoadError] = useState(null);
+  const [minorBlocked, setMinorBlocked] = useState(false); // YOUTH-PRIVACY: no minor profile pages
   const online = useOnline();
   const [posts, setPosts] = useState([]);
   const [editing, setEditing] = useState(false);
@@ -173,6 +174,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
   const loadProfile = useCallback(async () => {
     try {
     setLoadError(null);
+    setMinorBlocked(false);
     // Clear prior/own-profile data so the loading + error states are actually
     // reachable when viewing someone else (profile seeds from myProfile, so
     // without this a failed other-user fetch would keep showing stale data).
@@ -180,8 +182,12 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
     if (isOwnProfile) {
       setProfile(myProfile);
     } else {
-      const { data, error: e } = await supabase.from('profiles').select('*').eq('id', profileId).single();
+      const { data, error: e } = await supabase.from('profiles').select(PROFILE_SELECT).eq('id', profileId).maybeSingle();
       if (e) throw e;
+      // YOUTH-PRIVACY: no browsable minor profile pages. A minor row (or a row
+      // RLS hides from this viewer) resolves to "unavailable" — minor stats
+      // render only at team/event level, shielded. Stop before any stat fetch.
+      if (!data || data.account_type === 'minor') { setMinorBlocked(true); return; }
       setProfile(data);
     }
     if (profileId) {
@@ -381,6 +387,22 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
     });
     setEditing(false);
   };
+
+  if (minorBlocked) return (
+    <Layout profile={myProfile}>
+      <div style={{ padding: '48px 24px', textAlign: 'center', maxWidth: 420, margin: '0 auto' }}>
+        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 26, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+          This profile is private
+        </div>
+        <div style={{ marginTop: 12, fontSize: 14, lineHeight: 1.5, color: C.muted, fontFamily: "'Barlow', sans-serif" }}>
+          Young players don’t have public profiles on Rinkd. Their stats show up on their team and game pages — by jersey number — never as a browsable profile.
+        </div>
+        <button onClick={() => navigate(-1)} style={{ marginTop: 24, minHeight: 44, padding: '0 24px', borderRadius: 999, border: 'none', background: C.red, color: '#fff', fontWeight: 700, fontSize: 15, fontFamily: "'Barlow', sans-serif", cursor: 'pointer' }}>
+          Go back
+        </button>
+      </div>
+    </Layout>
+  );
 
   if (loadError && !profile) return (
     <Layout profile={myProfile}>

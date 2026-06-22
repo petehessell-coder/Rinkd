@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import DateTimePicker from '../components/DateTimePicker';
-import { getTeam, getTeamMembers, getTeamGames, getJoinRequests, createTeam, updateTeam, addTeamMember, removeTeamMember, updateTeamMember, addTeamGame, approveJoinRequest, denyJoinRequest, getUnclaimedSlots } from '../lib/teams';
+import { getTeam, getTeamMembers, getTeamGames, getJoinRequests, createTeam, updateTeam, addTeamMember, removeTeamMember, updateTeamMember, addTeamGame, approveJoinRequest, denyJoinRequest, getUnclaimedSlots, getTeamContacts } from '../lib/teams';
 import { supabase } from '../lib/supabase';
 import RosterUpload from '../components/RosterUpload';
 import { uploadMedia } from '../lib/posts';
@@ -52,7 +52,10 @@ function ActionBtn({ onClick, children, variant = 'primary', small = false }) {
 
 // ── CREATE FLOW ───────────────────────────────────────────────
 function CreateTeam({ profile, navigate }) {
-  const [form, setForm] = useState({ name: '', division: '', level: '', location: '', home_rink: '', logo_color: '#D72638', logo_initials: '', logo_url: '' });
+  // is_youth defaults to true (conservative = private/invite-only). The DB
+  // trigger enforces it; the selector below makes the choice explicit so adult
+  // teams are born public and youth teams are protected from the first save.
+  const [form, setForm] = useState({ name: '', division: '', level: '', location: '', home_rink: '', logo_color: '#D72638', logo_initials: '', logo_url: '', is_youth: true });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -132,6 +135,29 @@ function CreateTeam({ profile, navigate }) {
       <Card>
         <Field label="Team Name *"><input style={inputStyle} value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. North Shore Jr. Eagles" /></Field>
         <Field label="Logo Initials"><input style={inputStyle} value={form.logo_initials} onChange={e => set('logo_initials', e.target.value.toUpperCase().slice(0, 3))} placeholder="e.g. NJ (auto from name if blank)" maxLength={3} /></Field>
+        <Field label="Who plays on this team?">
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[{ v: false, label: 'Adults', sub: '18 & over' }, { v: true, label: 'Youth', sub: 'Under 18' }].map(opt => {
+              const active = form.is_youth === opt.v;
+              return (
+                <button key={String(opt.v)} type="button" onClick={() => set('is_youth', opt.v)}
+                  style={{ flex: 1, minHeight: 56, borderRadius: 12, cursor: 'pointer',
+                    border: active ? `1.5px solid ${C.red}` : `1px solid ${C.border}`,
+                    background: active ? 'rgba(215,38,56,0.12)' : 'transparent', color: C.ice,
+                    fontFamily: 'Barlow, sans-serif', display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+                  <span style={{ fontWeight: 800, fontSize: 15 }}>{active ? '✓ ' : ''}{opt.label}</span>
+                  <span style={{ fontSize: 11, color: C.muted }}>{opt.sub}</span>
+                </button>
+              );
+            })}
+          </div>
+        </Field>
+        <div style={{ fontSize: 12, color: form.is_youth ? '#C9A84C' : C.muted, margin: '-6px 0 12px', lineHeight: 1.45 }}>
+          {form.is_youth
+            ? '🔒 Youth teams are private. Only rostered members, their parents/guardians, and coaches can see the roster, schedule, and locations — never the public.'
+            : 'Adult teams are public and discoverable. Personal contact info (email/phone) still stays members-only.'}
+        </div>
         <Row2>
           <Field label="Division"><input style={inputStyle} value={form.division} onChange={e => set('division', e.target.value)} placeholder="e.g. 14U AA" /></Field>
           <Field label="Level"><input style={inputStyle} value={form.level} onChange={e => set('level', e.target.value)} placeholder="e.g. AAA, AA, Rec" /></Field>
@@ -159,6 +185,7 @@ function ManageTeam({ id, profile, navigate }) {
   const [games, setGames] = useState([]);
   const [requests, setRequests] = useState([]);
   const [unclaimedSlots, setUnclaimedSlots] = useState([]);
+  const [contacts, setContacts] = useState({}); // YOUTH-PRIVACY: member_id -> contact (insider-only RPC)
   const [slotChoice, setSlotChoice] = useState({});
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('Roster');
@@ -172,8 +199,11 @@ function ManageTeam({ id, profile, navigate }) {
 
   const load = useCallback(async () => {
     try {
-      const [t, m, g, r, slots] = await Promise.all([getTeam(id), getTeamMembers(id), getTeamGames(id), getJoinRequests(id), getUnclaimedSlots(id)]);
+      const [t, m, g, r, slots, contactRows] = await Promise.all([getTeam(id), getTeamMembers(id), getTeamGames(id), getJoinRequests(id), getUnclaimedSlots(id), getTeamContacts(id).catch(() => [])]);
       setTeam(t); setMembers(m); setGames(g); setRequests(r); setUnclaimedSlots(slots);
+      // YOUTH-PRIVACY: roster contact emails come from the insider-gated RPC
+      // (invite_email is column-revoked). Keyed by member id for the row render.
+      setContacts(Object.fromEntries((contactRows || []).map(c => [c.member_id, c.invite_email || c.account_email])));
       // Pre-select a ghost slot whose name matches each requester (manager can change).
       setSlotChoice(prev => {
         const next = { ...prev };
@@ -198,16 +228,11 @@ function ManageTeam({ id, profile, navigate }) {
       let userId = null;
       const email = memberForm.email.trim().toLowerCase();
       if (email) {
-        // `.limit(1)` rather than `.maybeSingle()` so a (newly impossible
-        // after the UNIQUE constraint, but historically possible) duplicate
-        // email doesn't blow up the whole add-member flow. We just take the
-        // first match; the new constraint guarantees there's at most one.
-        const { data: matches } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('email', email)
-          .limit(1);
-        if (matches && matches[0]) userId = matches[0].id;
+        // YOUTH-PRIVACY: profiles.email is column-revoked — resolve an existing
+        // account by email via the SECURITY DEFINER RPC (returns identity only,
+        // never echoes the address). null => no account yet (placeholder + invite).
+        const { data: match } = await supabase.rpc('find_account_by_email', { p_email: email });
+        if (match && match[0]) userId = match[0].id;
       }
       await addTeamMember({
         team_id: id,
@@ -379,7 +404,7 @@ function ManageTeam({ id, profile, navigate }) {
                       {m.status === 'pending' && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: 'rgba(245,158,11,0.2)', color: '#F59E0B' }}>INVITE PENDING</span>}
                     </div>
                     <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)' }}>
-                      {m.position}{m.profile?.handle ? ' · @' + m.profile.handle : m.invite_email ? ' · ' + m.invite_email : ''}
+                      {m.position}{m.profile?.handle ? ' · @' + m.profile.handle : contacts[m.id] ? ' · ' + contacts[m.id] : ''}
                     </div>
                   </div>
                   <button onClick={() => removeTeamMember(m.id).then(load)}
