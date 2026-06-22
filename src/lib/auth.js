@@ -1,5 +1,4 @@
 import { supabase } from './supabase';
-import { linkPendingInvitesForUser } from './roster';
 
 const AVATAR_COLORS = ['#D72638','#2E5B8C','#22C55E','#F59E0B','#8B5CF6','#0EA5E9'];
 
@@ -118,25 +117,15 @@ export async function ensureProfileForUser(user) {
     return { error: profileError };
   }
 
-  // Authoritative side effects fire inside the RPC's INSERT via AFTER-INSERT
-  // triggers — one source of truth, runs regardless of onboarding:
-  //   • tr_auto_follow_seed_accounts  — seeds Pete + The BLPA + Howie follows
+  // Invite-linking and follow-seeding happen authoritatively inside the RPC's
+  // INSERT via AFTER-INSERT triggers — one source of truth, runs regardless of
+  // onboarding:
+  //   • tr_auto_follow_seed_accounts      — seeds Pete + The BLPA + Howie follows
   //   • tr_link_invited_player_on_profile — links pending team invites by email
-  // The call below re-runs the invite match defensively (the trigger normally
-  // already did it, so it links 0). Idempotent belt-and-suspenders, kept until
-  // the trigger is confirmed byte-equivalent and this client call is retired.
-  // Quiet failure — invite-linking is nice-to-have on first sign-in.
-  try {
-    const { linked } = await linkPendingInvitesForUser(user.id, user.email);
-    if (linked > 0) {
-      // eslint-disable-next-line no-console
-      console.info(`[ensureProfileForUser] auto-linked ${linked} pending team invite${linked === 1 ? '' : 's'}.`);
-    }
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.warn('[ensureProfileForUser] linkPendingInvitesForUser threw:', e?.message || e);
-  }
-
+  // The old client linkPendingInvitesForUser backstop was retired: that trigger
+  // runs the identical invite match on insert (verified byte-equivalent against
+  // the link_pending_team_invites RPC it called), so the client call was a pure
+  // redundant round-trip.
   return { data: { id: user.id }, error: null };
 }
 

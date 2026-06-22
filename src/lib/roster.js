@@ -209,23 +209,3 @@ export async function uploadRoster({ teamId, teamName, invitedBy, rows }) {
     capped,
   };
 }
-
-/**
- * Auto-link pending invites when a user signs up. Called from auth.signUp
- * after the new auth.users row is created. Finds team_members rows with
- * matching invite_email + status='pending' and binds them to the new user.
- */
-export async function linkPendingInvitesForUser(userId, email) {
-  if (!userId || !email) return { linked: 0 };
-  // invite_email is column-revoked (YOUTH-PRIVACY), so the client can't filter
-  // on it directly. link_pending_team_invites is a SECURITY DEFINER RPC that
-  // matches + binds pending slots for the CURRENT user (current_profile_id())
-  // server-side — same effect, no contact column exposed.
-  const { data, error } = await supabase.rpc('link_pending_team_invites', { p_email: String(email).toLowerCase() });
-  if (error) {
-    // eslint-disable-next-line no-console
-    console.warn('[roster] linkPendingInvitesForUser failed:', error.message);
-    return { linked: 0, error };
-  }
-  return { linked: data || 0 };
-}
