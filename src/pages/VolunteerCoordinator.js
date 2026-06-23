@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { listSlotsForTeams, listMyAssignedSlots, createSlot, updateSlot, deleteSlot, releaseSlot } from '../lib/volunteers';
 import { getTeamGames } from '../lib/teams';
 import { useUndoable } from '../components/ui';
+import { TeamLogo } from '../components/Logos';
 
 const ROLE_PRESETS = ['Scorekeeper', 'Snack Parent', 'Locker Room Monitor', 'Gear Hauler', 'Statkeeper', 'Off-ice Official', 'Tournament Volunteer'];
 
@@ -37,7 +38,7 @@ export default function VolunteerCoordinator({ profile }) {
     if (!profile?.id) return;
     setError(null);
     try {
-      const { data: t } = await supabase.from('teams').select('id, name, logo_color, logo_initials, manager_id').eq('manager_id', profile.id);
+      const { data: t } = await supabase.from('teams').select('id, name, logo_color, logo_initials, logo_url, manager_id').eq('manager_id', profile.id);
       setTeams(t || []);
       const teamIds = (t || []).map(x => x.id);
       const [forTeams, mine] = await Promise.all([
@@ -196,9 +197,7 @@ function SlotRow({ slot, teams, onChange, onOptimisticRemove, profile }) {
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
-      <div style={{ width: 38, height: 38, borderRadius: 9, background: team?.logo_color || C.blue, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 13, color: '#fff', flexShrink: 0 }}>
-        {team?.logo_initials || (team?.name || '?').slice(0, 2).toUpperCase()}
-      </div>
+      <TeamLogo team={team} size={38} radius={9} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{slot.role}</div>
         <div style={{ fontSize: 11, color: C.steel, marginTop: 1 }}>

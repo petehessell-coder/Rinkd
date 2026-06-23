@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import SEO from '../components/SEO';
 import { Icon } from '../components/ui';
-import { Avatar, TierBadge } from '../components/Logos';
+import { Avatar, TierBadge, TeamLogo } from '../components/Logos';
 import TapeText from '../components/TapeText';
 import { CardGridSkeleton, ListRowSkeleton, EmptyState } from '../components/Skeletons';
 import { supabase } from '../lib/supabase';
@@ -275,7 +275,7 @@ export default function Discover({ currentUser, profile }) {
       setPlayers(rows);
     } else if (tab === 'teams') {
       let q = supabase.from('teams')
-        .select('id, name, level, division, location, logo_color, logo_initials')
+        .select('id, name, level, division, location, logo_color, logo_initials, logo_url')
         .order('created_at', { ascending: false })
         .limit(40);
       if (ilike) q = q.or(`name.ilike.${ilike},level.ilike.${ilike},location.ilike.${ilike}`);
@@ -411,9 +411,7 @@ export default function Discover({ currentUser, profile }) {
               <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
                 {teams.map((t, i) => (
                   <div key={t.id} onClick={() => navigate(`/team/${t.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none', cursor: 'pointer' }}>
-                    <div style={{ width: 42, height: 42, borderRadius: 10, background: t.logo_color || C.blue, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 16, color: '#fff', flexShrink: 0 }}>
-                      {t.logo_initials || t.name?.slice(0, 2).toUpperCase()}
-                    </div>
+                    <TeamLogo team={t} size={42} radius={10} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{t.name}</div>
                       <div style={{ fontSize: 12, color: C.steel }}>{[t.level, t.division, t.location].filter(Boolean).join(' · ')}</div>

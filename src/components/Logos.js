@@ -189,6 +189,51 @@ export function TierBadge({ tier, size = 'sm' }) {
   return <span style={{ display:'inline-block',padding:`${s.py}px ${s.px}px`,background:color+'22',color,border:`1px solid ${color}44`,borderRadius:4,fontSize:s.fs,fontWeight:700,fontFamily:"'Barlow Condensed',sans-serif",letterSpacing:'0.08em',textTransform:'uppercase',lineHeight:1.2 }}>{tier}</span>;
 }
 
+/**
+ * Reusable team logo / crest. Renders the team's uploaded `logo_url` image,
+ * falling back to a colored box with `logo_initials` (or the first two letters
+ * of the name). Use this anywhere a team mark appears — game cards, schedules,
+ * standings, directories — so logos render consistently and degrade gracefully.
+ *
+ * Defensive by design (DESIGN_MANIFESTO): the initials sit BEHIND the <img>, so
+ * a broken/deleted image URL fades to initials instead of an empty square.
+ * `object-fit: cover` keeps non-square uploads from distorting.
+ *
+ * Accepts a `team`-shaped object: { name, logo_url, logo_color, logo_initials }.
+ */
+export function TeamLogo({ team, size = 40, radius, style }) {
+  const r = radius != null ? radius : Math.round(size * 0.2);
+  const color = team?.logo_color || '#2E5B8C';
+  const initials = team?.logo_initials || (team?.name || '?').slice(0, 2).toUpperCase();
+  const common = {
+    width: size, height: size, borderRadius: r, flexShrink: 0, overflow: 'hidden',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: color, color: '#fff',
+    fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900,
+    fontSize: Math.round(size * 0.35), lineHeight: 1,
+    ...style,
+  };
+  if (team?.logo_url) {
+    return (
+      <div style={{ ...common, position: 'relative' }}>
+        {/* Fallback initials sit behind the image; if the image errors out
+            (deleted bucket object, broken URL) it hides and these show through. */}
+        <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {initials}
+        </span>
+        <img
+          src={team.logo_url}
+          alt={team?.name || ''}
+          loading="lazy"
+          style={{ position: 'relative', width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+        />
+      </div>
+    );
+  }
+  return <div style={common}>{initials}</div>;
+}
+
 export function Avatar({ profile, size = 36 }) {
   const tierColors = { Mite:'#8BA3BE',Squirt:'#22C55E',Peewee:'#0EA5E9',Bantam:'#F59E0B',Midget:'#8B5CF6',Junior:'#D72638',Pro:'#F4F7FA' };
   const borderColor = tierColors[profile?.tier]||'#8BA3BE';

@@ -173,7 +173,7 @@ function ManageLeague({ id, navigate }) {
   useEffect(() => {
     if (!teamSearch.trim()) { setSearchResults([]); return; }
     const t = setTimeout(async () => {
-      const { data } = await supabase.from('teams').select('id, name, logo_color, logo_initials').ilike('name', `%${teamSearch}%`).limit(5);
+      const { data } = await supabase.from('teams').select('id, name, logo_color, logo_initials, logo_url').ilike('name', `%${teamSearch}%`).limit(5);
       setSearchResults(data || []);
     }, 300);
     return () => clearTimeout(t);

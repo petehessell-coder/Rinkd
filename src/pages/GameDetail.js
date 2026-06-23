@@ -9,7 +9,7 @@ import Layout from '../components/Layout';
 import RsvpBlock from '../components/RsvpBlock';
 import MapLink from '../components/MapLink';
 import CalendarButton from '../components/CalendarButton';
-import { LedR } from '../components/Logos';
+import { LedR, TeamLogo } from '../components/Logos';
 import { getLiveBarnUrl } from '../lib/livebarn';
 import { teamInitials } from '../lib/teamInitials';
 import GamePuckCard from '../components/GamePuckCard';
@@ -68,17 +68,17 @@ export default function GameDetail({ profile }) {
       let g = null;
       if (isLeague) {
         const r = await supabase.from('league_games')
-          .select('*, home_lt:league_teams!home_team_id(id, team_name, logo_color, logo_initials, team:teams(id,name,logo_color,logo_initials)), away_lt:league_teams!away_team_id(id, team_name, logo_color, logo_initials, team:teams(id,name,logo_color,logo_initials)), rink:rinks(name,sub_rink,live_barn_venue_id), league:leagues(name)')
+          .select('*, home_lt:league_teams!home_team_id(id, team_name, logo_color, logo_initials, logo_url, team:teams(id,name,logo_color,logo_initials,logo_url)), away_lt:league_teams!away_team_id(id, team_name, logo_color, logo_initials, logo_url, team:teams(id,name,logo_color,logo_initials,logo_url)), rink:rinks(name,sub_rink,live_barn_venue_id), league:leagues(name)')
           .eq('id', gameId).single();
         g = r.data;
       } else if (isTeamGame) {
         const r = await supabase.from('team_games')
-          .select('*, team:teams(id,name,logo_color,logo_initials,manager_id)')
+          .select('*, team:teams(id,name,logo_color,logo_initials,logo_url,manager_id)')
           .eq('id', gameId).single();
         g = r.data;
       } else {
         const r = await supabase.from('games')
-          .select('*, home_team:tournament_teams!home_team_id(id,team_name,pool,seed), away_team:tournament_teams!away_team_id(id,team_name,pool,seed), rink:rinks(name,sub_rink,live_barn_venue_id), tournament:tournaments(id,name,division)')
+          .select('*, home_team:tournament_teams!home_team_id(id,team_name,pool,seed,logo_url), away_team:tournament_teams!away_team_id(id,team_name,pool,seed,logo_url), rink:rinks(name,sub_rink,live_barn_venue_id), tournament:tournaments(id,name,division)')
           .eq('id', gameId).single();
         g = r.data;
       }
@@ -210,23 +210,23 @@ export default function GameDetail({ profile }) {
 
   // Normalize team data across league, team-only, and tournament shapes.
   const ourTeam = isTeamGame
-    ? { id: game.team?.id, name: game.team?.name, logo_color: game.team?.logo_color || '#1a4a7a', logo_initials: game.team?.logo_initials || teamInitials(game.team?.name, 2) }
+    ? { id: game.team?.id, name: game.team?.name, logo_color: game.team?.logo_color || '#1a4a7a', logo_initials: game.team?.logo_initials || teamInitials(game.team?.name, 2), logo_url: game.team?.logo_url }
     : null;
   const opponentBubble = isTeamGame
     ? { id: null, name: game.opponent, logo_color: '#6b1520', logo_initials: teamInitials(game.opponent, 2) }
     : null;
 
   const homeTeam = isLeague
-    ? { id: game.home_lt?.id, name: game.home_lt?.team?.name || game.home_lt?.team_name, logo_color: game.home_lt?.team?.logo_color || game.home_lt?.logo_color, logo_initials: game.home_lt?.team?.logo_initials || game.home_lt?.logo_initials }
+    ? { id: game.home_lt?.id, name: game.home_lt?.team?.name || game.home_lt?.team_name, logo_color: game.home_lt?.team?.logo_color || game.home_lt?.logo_color, logo_initials: game.home_lt?.team?.logo_initials || game.home_lt?.logo_initials, logo_url: game.home_lt?.team?.logo_url || game.home_lt?.logo_url }
     : isTeamGame
       ? (game.is_home ? ourTeam : opponentBubble)
-      : { id: game.home_team?.id, name: game.home_team?.team_name, logo_color: '#1a4a7a', logo_initials: teamInitials(game.home_team?.team_name) };
+      : { id: game.home_team?.id, name: game.home_team?.team_name, logo_color: '#1a4a7a', logo_initials: teamInitials(game.home_team?.team_name), logo_url: game.home_team?.logo_url };
 
   const awayTeam = isLeague
-    ? { id: game.away_lt?.id, name: game.away_lt?.team?.name || game.away_lt?.team_name, logo_color: game.away_lt?.team?.logo_color || game.away_lt?.logo_color, logo_initials: game.away_lt?.team?.logo_initials || game.away_lt?.logo_initials }
+    ? { id: game.away_lt?.id, name: game.away_lt?.team?.name || game.away_lt?.team_name, logo_color: game.away_lt?.team?.logo_color || game.away_lt?.logo_color, logo_initials: game.away_lt?.team?.logo_initials || game.away_lt?.logo_initials, logo_url: game.away_lt?.team?.logo_url || game.away_lt?.logo_url }
     : isTeamGame
       ? (game.is_home ? opponentBubble : ourTeam)
-      : { id: game.away_team?.id, name: game.away_team?.team_name, logo_color: '#6b1520', logo_initials: teamInitials(game.away_team?.team_name) };
+      : { id: game.away_team?.id, name: game.away_team?.team_name, logo_color: '#6b1520', logo_initials: teamInitials(game.away_team?.team_name), logo_url: game.away_team?.logo_url };
 
   const context = isLeague ? game.league?.name : isTeamGame ? (game.team?.name || 'Team game') : game.tournament?.name;
 
@@ -332,9 +332,7 @@ export default function GameDetail({ profile }) {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 16 }}>
             {/* Home team */}
             <div style={{ flex: 1, textAlign: 'center' }}>
-              <div style={{ width: 52, height: 52, borderRadius: 10, background: homeTeam.logo_color || C.blue, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: '#fff', margin: '0 auto 8px' }}>
-                {homeTeam.logo_initials || '?'}
-              </div>
+              <TeamLogo team={homeTeam} size={52} radius={10} style={{ margin: '0 auto 8px' }} />
               <div style={{ fontSize: 13, fontWeight: 700, color: C.ice }}>{homeTeam.name}</div>
               {isTournamentGame && (game.home_team?.pool || game.home_team?.seed) && (
                 <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.45)', marginTop: 4, fontFamily: "'Barlow Condensed', sans-serif", textTransform: 'uppercase' }}>
@@ -372,9 +370,7 @@ export default function GameDetail({ profile }) {
 
             {/* Away team */}
             <div style={{ flex: 1, textAlign: 'center' }}>
-              <div style={{ width: 52, height: 52, borderRadius: 10, background: awayTeam.logo_color || '#6b1520', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: '#fff', margin: '0 auto 8px' }}>
-                {awayTeam.logo_initials || '?'}
-              </div>
+              <TeamLogo team={awayTeam} size={52} radius={10} style={{ margin: '0 auto 8px' }} />
               <div style={{ fontSize: 13, fontWeight: 700, color: C.ice }}>{awayTeam.name}</div>
               {isTournamentGame && (game.away_team?.pool || game.away_team?.seed) && (
                 <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.45)', marginTop: 4, fontFamily: "'Barlow Condensed', sans-serif", textTransform: 'uppercase' }}>

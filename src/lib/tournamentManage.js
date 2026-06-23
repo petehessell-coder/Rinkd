@@ -69,8 +69,8 @@ export async function listGames(tournamentId) {
     .from('games')
     .select(`
       *,
-      home_team:tournament_teams!home_team_id(id, team_name, pool, seed),
-      away_team:tournament_teams!away_team_id(id, team_name, pool, seed),
+      home_team:tournament_teams!home_team_id(id, team_name, pool, seed, logo_url),
+      away_team:tournament_teams!away_team_id(id, team_name, pool, seed, logo_url),
       rink:rinks(id, name, sub_rink)
     `)
     .eq('tournament_id', tournamentId)
