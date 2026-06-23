@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { LedR } from '../components/Logos';
+import { LedR, TeamLogo } from '../components/Logos';
 import AdSlot from '../components/AdSlot';
 import PinToNavButton from '../components/PinToNavButton';
 import { getLiveBarnUrl } from '../lib/livebarn';
@@ -177,7 +177,7 @@ export default function TournamentPage({ currentUser }) {
       // Load games — surface error instead of silently rendering the empty state.
       const { data: g, error: ge } = await supabase
         .from('games')
-        .select('*, home_team:tournament_teams!home_team_id(id,team_name,pool), away_team:tournament_teams!away_team_id(id,team_name,pool), rink:rinks(id,name,sub_rink,live_barn_venue_id)')
+        .select('*, home_team:tournament_teams!home_team_id(id,team_name,pool,logo_url), away_team:tournament_teams!away_team_id(id,team_name,pool,logo_url), rink:rinks(id,name,sub_rink,live_barn_venue_id)')
         .eq('tournament_id', id)
         // perf(scale): most-recent 1000 by start_time (all upcoming + recent past),
         // returned ascending — a mega-event drops only ancient history, not live games.
@@ -240,7 +240,7 @@ export default function TournamentPage({ currentUser }) {
     try {
       const [{ data: g }, { data: s }] = await Promise.all([
         supabase.from('games')
-          .select('*, home_team:tournament_teams!home_team_id(id,team_name,pool), away_team:tournament_teams!away_team_id(id,team_name,pool), rink:rinks(id,name,sub_rink,live_barn_venue_id)')
+          .select('*, home_team:tournament_teams!home_team_id(id,team_name,pool,logo_url), away_team:tournament_teams!away_team_id(id,team_name,pool,logo_url), rink:rinks(id,name,sub_rink,live_barn_venue_id)')
           .eq('tournament_id', id)
           .order('start_time', { ascending: false }) // perf(scale): most-recent window, reversed to asc below
           .limit(1000),
@@ -1403,14 +1403,14 @@ function GameCard({ game, navigate, canScore }) {
       </div>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:10,opacity:isFinal && !homeWon ? 0.65 : 1}}>
         <div style={{display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0}}>
-          <div style={{width:32,height:32,borderRadius:'50%',background:'#1a4a7a',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:11,color:'#fff',flexShrink:0}}>{teamInitials(game.home_team?.team_name)}</div>
+          <TeamLogo team={{ name: game.home_team?.team_name, logo_url: game.home_team?.logo_url, logo_color: '#1a4a7a' }} size={32} radius={16} />
           <span style={{fontSize:14,fontWeight:homeWon?800:600,color:C.ice,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{game.home_team?.team_name}</span>
         </div>
         {(isLive||isFinal) && <BounceNumber value={game.home_score} style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:26,color:C.ice,flexShrink:0,fontVariantNumeric:'tabular-nums'}} />}
       </div>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:10,opacity:isFinal && !awayWon ? 0.65 : 1}}>
         <div style={{display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0}}>
-          <div style={{width:32,height:32,borderRadius:'50%',background:'#6b1520',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:11,color:'#fff',flexShrink:0}}>{teamInitials(game.away_team?.team_name)}</div>
+          <TeamLogo team={{ name: game.away_team?.team_name, logo_url: game.away_team?.logo_url, logo_color: '#6b1520' }} size={32} radius={16} />
           <span style={{fontSize:14,fontWeight:awayWon?800:600,color:C.ice,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{game.away_team?.team_name}</span>
         </div>
         {(isLive||isFinal) ? <BounceNumber value={game.away_score} style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:26,color:C.ice,flexShrink:0,fontVariantNumeric:'tabular-nums'}} /> : <span style={{fontSize:11,fontWeight:600,color:'rgba(244,247,250,0.3)',flexShrink:0}}>VS</span>}

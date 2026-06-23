@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase';
 import { useOnline } from '../lib/useOnline';
 import { prefetchGamePage, prefetchHandlers } from '../lib/prefetch';
 import RsvpBlock from '../components/RsvpBlock';
+import { TeamLogo } from '../components/Logos';
 import PinToNavButton from '../components/PinToNavButton';
 import MapLink from '../components/MapLink';
 import CalendarButton from '../components/CalendarButton';
@@ -147,9 +148,7 @@ export default function TeamPage({ currentUser, profile }) {
         <div style={{ background: C.dark, minHeight: '100vh', fontFamily: 'Barlow, sans-serif', color: C.ice }}>
           <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.5)', fontSize: 13, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', padding: '16px 16px 0' }}>← Back</button>
           <div style={{ padding: '12px 16px 0', display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{ width: 60, height: 60, borderRadius: 12, background: s.logo_url ? `url(${s.logo_url}) center/cover` : (s.logo_color || C.blue), display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 24, color: '#fff', flexShrink: 0 }}>
-              {!s.logo_url && lockInitials}
-            </div>
+            <TeamLogo team={{ name: s.name, logo_url: s.logo_url, logo_color: s.logo_color, logo_initials: lockInitials }} size={60} radius={12} />
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 24, lineHeight: 1.05, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 5, flexWrap: 'wrap' }}>
@@ -358,9 +357,7 @@ export default function TeamPage({ currentUser, profile }) {
 
         {/* TEAM BANNER */}
         <div style={{ background: 'linear-gradient(135deg,#0B1F3A 0%,#1a3a5c 100%)', padding: '20px 16px 16px', display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ width: 64, height: 64, borderRadius: 12, background: team.logo_url ? `url(${team.logo_url}) center/cover, ${team.logo_color || C.red}` : (team.logo_color || C.red), display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 26, color: '#fff', flexShrink: 0, border: `2px solid ${team.logo_color || C.red}88` }}>
-            {!team.logo_url && (team.logo_initials || team.name.slice(0, 2).toUpperCase())}
-          </div>
+          <TeamLogo team={team} size={64} radius={12} style={{ border: `2px solid ${team.logo_color || C.red}88` }} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 22, color: C.ice, lineHeight: 1.1 }}>{team.name}</div>
             <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.45)', marginTop: 4 }}>

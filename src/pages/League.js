@@ -19,7 +19,7 @@ import { getReactions } from '../lib/reactions';
 import { haptics } from '../lib/haptics';
 import { FeedSkeleton } from '../components/Skeletons';
 import Gallery from '../components/Gallery';
-import { LedR } from '../components/Logos';
+import { LedR, TeamLogo } from '../components/Logos';
 import { getLiveBarnUrl } from '../lib/livebarn';
 import { resolveStreamUrl, streamButtonLabel, detectStreamPlatform } from '../lib/streamUrl';
 import { supabase } from '../lib/supabase';
@@ -64,15 +64,6 @@ function TabEmptyState({ icon = '🏒', title, body }) {
   );
 }
 
-function TeamLogo({ team, size = 32 }) {
-  const logoUrl = team?.logo_url;
-  return (
-    <div style={{ width: size, height: size, borderRadius: 6, background: logoUrl ? `url(${logoUrl}) center/cover, ${team?.logo_color || C.blue}` : (team?.logo_color || C.blue), display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: size * 0.35, color: '#fff', flexShrink: 0 }}>
-      {!logoUrl && (team?.logo_initials || (team?.name || '?').slice(0, 2).toUpperCase())}
-    </div>
-  );
-}
-
 function GameRow({ game, isCommissioner, navigate }) {
   const expand = useExpand();
   const home = game.home_lt?.team || { name: game.home_lt?.team_name, logo_color: game.home_lt?.logo_color, logo_initials: game.home_lt?.logo_initials, logo_url: game.home_lt?.logo_url };
@@ -101,11 +92,11 @@ function GameRow({ game, isCommissioner, navigate }) {
         {/* Teams */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-            <TeamLogo team={home} size={20} />
+            <TeamLogo team={home} size={20} radius={6} />
             <span style={{ fontSize: 13, fontWeight: 600, color: C.ice, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{home?.name || '—'}</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <TeamLogo team={away} size={20} />
+            <TeamLogo team={away} size={20} radius={6} />
             <span style={{ fontSize: 13, fontWeight: 600, color: C.ice, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{away?.name || '—'}</span>
           </div>
           {(game.location || game.rink) && (
@@ -405,7 +396,7 @@ export default function LeaguePage({ currentUser, profile }) {
       style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)', cursor: 'pointer' }}
       onMouseEnter={e => e.currentTarget.style.background = 'rgba(46,91,140,0.1)'}
       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-      <TeamLogo team={lt.team || { name: lt.team_name, logo_color: lt.logo_color, logo_initials: lt.logo_initials, logo_url: lt.logo_url }} size={36} />
+      <TeamLogo team={lt.team || { name: lt.team_name, logo_color: lt.logo_color, logo_initials: lt.logo_initials, logo_url: lt.logo_url }} size={36} radius={6} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lt.team?.name || lt.team_name}</div>
         <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lt.team?.home_rink || lt.team?.location || ''}</div>
@@ -522,14 +513,7 @@ export default function LeaguePage({ currentUser, profile }) {
         {/* BANNER */}
         <div style={{ background: 'linear-gradient(135deg,#0B1F3A 0%,#1a3a5c 100%)', padding: '20px 16px 0' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
-            <div style={{
-              width: 60, height: 60, borderRadius: 12,
-              background: league.logo_url ? `url(${league.logo_url}) center/cover, ${league.logo_color || C.red}` : (league.logo_color || C.red),
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 22, color: '#fff', flexShrink: 0,
-            }}>
-              {!league.logo_url && (league.logo_initials || league.name.slice(0, 2).toUpperCase())}
-            </div>
+            <TeamLogo team={league} size={60} radius={12} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 36, color: C.ice, lineHeight: 1.02, textTransform: 'uppercase', letterSpacing: '0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{league.name}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
@@ -712,9 +696,7 @@ export default function LeaguePage({ currentUser, profile }) {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
                         {/* Rank as a large muted number (gold for 1st), not a column. */}
                         <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, lineHeight: 1, minWidth: 16, textAlign: 'center', fontVariantNumeric: 'tabular-nums', color: rank === 1 ? '#C9A84C' : 'rgba(244,247,250,0.35)', flexShrink: 0 }}>{rank}</span>
-                        <div style={{ width: 24, height: 24, borderRadius: 5, background: row.logo_url ? `url(${row.logo_url}) center/cover, ${row.logo_color || C.blue}` : (row.logo_color || C.blue), display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 10, color: '#fff', flexShrink: 0 }}>
-                          {!row.logo_url && (row.logo_initials || row.team_name.slice(0, 2).toUpperCase())}
-                        </div>
+                        <TeamLogo team={{ name: row.team_name, logo_url: row.logo_url, logo_color: row.logo_color, logo_initials: row.logo_initials }} size={24} radius={5} />
                         <span style={{ fontSize: 13, fontWeight: 600, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{row.team_name}</span>
                       </div>
                       <span style={stat}>{row.gp}</span>
@@ -1206,9 +1188,7 @@ function PublicLeagueLanding({ league, teams, games, navigate }) {
                 const logoUrl = lt.team?.logo_url || lt.logo_url;
                 return (
                   <div key={lt.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderTop: i ? '0.5px solid rgba(244,247,250,0.06)' : 'none' }}>
-                    <div style={{ width: 30, height: 30, borderRadius: '50%', background: logoUrl ? `url(${logoUrl}) center/cover, ${color}` : color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 11, color: '#fff', flexShrink: 0 }}>
-                      {!logoUrl && initials}
-                    </div>
+                    <TeamLogo team={{ name, logo_url: logoUrl, logo_color: color, logo_initials: initials }} size={30} radius={15} />
                     <span style={{ fontSize: 14, fontWeight: 600, color: C.ice, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
                   </div>
                 );

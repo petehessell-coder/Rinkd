@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { listLeagues } from '../lib/leagues';
 import TapeText from '../components/TapeText';
+import { TeamLogo } from '../components/Logos';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 
@@ -61,14 +62,7 @@ export default function Leagues({ profile }) {
             style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: '14px 16px', marginBottom: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14, transition: 'border 0.15s' }}
             onMouseEnter={e => e.currentTarget.style.border = '0.5px solid rgba(46,91,140,0.8)'}
             onMouseLeave={e => e.currentTarget.style.border = `0.5px solid ${C.border}`}>
-            <div style={{
-              width: 48, height: 48, borderRadius: 10,
-              background: league.logo_url ? `url(${league.logo_url}) center/cover, ${league.logo_color || C.red}` : (league.logo_color || C.red),
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: '#fff', flexShrink: 0,
-            }}>
-              {!league.logo_url && (league.logo_initials || league.name.slice(0, 2).toUpperCase())}
-            </div>
+            <TeamLogo team={league} size={48} radius={10} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 17, color: C.ice, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{league.name.toUpperCase()}</div>
               <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.45)', marginTop: 3 }}>

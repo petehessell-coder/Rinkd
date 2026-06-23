@@ -18,13 +18,13 @@ import {
 import { listRinks } from '../lib/rinks';
 import { listScorers, addScorerByInput, removeScorer } from '../lib/tournamentScorers';
 import { listDirectors, addDirectorByInput, removeDirector, isExtraDirector as isDirectorRole } from '../lib/tournamentDirectors';
-import { teamInitials } from '../lib/teamInitials';
 import { uploadMedia } from '../lib/posts';
 import { classifyImage } from '../lib/imageModeration';
 import DateTimePicker from '../components/DateTimePicker';
 import EditGameModal from '../components/EditGameModal';
 import SponsorsManager from '../components/SponsorsManager';
 import { supabase } from '../lib/supabase';
+import { TeamLogo } from '../components/Logos';
 import { getTournamentRegistrations, updateTournamentRegistrationStatus, approveTournamentRegistration } from '../lib/registrations';
 import { tournamentPayoutsReady, startConnectOnboarding } from '../lib/stripeConnect';
 import { listLinks, createLink, setLinkStatus, removeLink, listGameMaps, confirmMatch, ignoreMatch } from '../lib/gamesheet';
@@ -557,9 +557,7 @@ function TeamsTab({ tournamentId, teams, divisionId = null, standingsByTeam = {}
             ) : (
               <div key={t.id} style={{ borderTop: i ? `1px solid rgba(46,91,140,0.25)` : 'none' }}>
                 <div style={{ display: 'flex', alignItems: 'center', padding: 12, gap: 12 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 8, background: t.logo_url ? `url(${t.logo_url}) center/cover` : C.navy, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 13, color: '#fff' }}>
-                    {!t.logo_url && teamInitials(t.team_name, 2)}
-                  </div>
+                  <TeamLogo team={{ name: t.team_name, logo_url: t.logo_url, logo_color: C.navy }} size={36} radius={8} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{t.team_name}{t.seed ? ` · #${t.seed}` : ''}</div>
                     <div style={{ fontSize: 12, color: C.steel }}>

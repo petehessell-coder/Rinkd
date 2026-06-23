@@ -4,6 +4,7 @@ import Layout from '../components/Layout';
 import TapeText from '../components/TapeText';
 import { listTeams } from '../lib/teams';
 import MapLink from '../components/MapLink';
+import { TeamLogo } from '../components/Logos';
 
 export default function Teams({ profile }) {
   const navigate = useNavigate();
@@ -69,9 +70,7 @@ export default function Teams({ profile }) {
             onMouseEnter={e => e.currentTarget.style.border = '0.5px solid rgba(46,91,140,0.8)'}
             onMouseLeave={e => e.currentTarget.style.border = `0.5px solid ${C.border}`}>
             {/* Team logo — uploaded image takes precedence over colored initials */}
-            <div style={{ width: 48, height: 48, borderRadius: 10, background: team.logo_url ? `url(${team.logo_url}) center/cover, ${team.logo_color || C.red}` : (team.logo_color || C.red), display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, color: '#fff', flexShrink: 0 }}>
-              {!team.logo_url && (team.logo_initials || team.name.slice(0, 2).toUpperCase())}
-            </div>
+            <TeamLogo team={team} size={48} radius={10} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 17, color: C.ice, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{team.name.toUpperCase()}</div>
               <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.45)', marginTop: 3 }}>

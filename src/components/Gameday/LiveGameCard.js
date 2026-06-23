@@ -4,6 +4,7 @@ import { Icon, BounceNumber, useExpand } from '../ui';
 import { useGoalMoment, GoalSweep } from '../../lib/goalMoment';
 import { prefetchGamePage, prefetchHandlers } from '../../lib/prefetch';
 import SoundToggle from '../SoundToggle';
+import { TeamLogo } from '../Logos';
 
 // =============================================================================
 // LiveGameCard — the live float. A live game pinned to the top of the feed
@@ -40,9 +41,7 @@ function LivePill() {
 function TeamRow({ team, score, lead }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, opacity: lead === false ? 0.6 : 1 }}>
-      <div style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0, overflow: 'hidden', background: team.logoUrl ? `center/cover url(${team.logoUrl})` : colors.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: font.display, fontStyle: 'italic', fontWeight: 900, fontSize: 11, color: C.ice }}>
-        {!team.logoUrl && (team.name || '?').slice(0, 2).toUpperCase()}
-      </div>
+      <TeamLogo team={{ name: team.name, logo_url: team.logoUrl, logo_color: colors.surface }} size={30} radius={8} />
       <span style={{ ...type.body, fontWeight: lead ? 800 : 600, color: C.ice, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{team.name}</span>
       <BounceNumber value={score ?? 0} style={{ fontFamily: font.display, fontStyle: 'italic', fontWeight: 900, fontSize: 28, lineHeight: 1, color: C.ice, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }} />
     </div>

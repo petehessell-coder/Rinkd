@@ -4,6 +4,7 @@ import Layout from '../components/Layout';
 import DateTimePicker from '../components/DateTimePicker';
 import { getTeam, getTeamMembers, getTeamGames, getJoinRequests, createTeam, updateTeam, addTeamMember, removeTeamMember, updateTeamMember, addTeamGame, approveJoinRequest, denyJoinRequest, getUnclaimedSlots, getTeamContacts } from '../lib/teams';
 import { supabase } from '../lib/supabase';
+import { TeamLogo } from '../components/Logos';
 import RosterUpload from '../components/RosterUpload';
 import { uploadMedia } from '../lib/posts';
 import { classifyImage } from '../lib/imageModeration';
@@ -108,9 +109,7 @@ function CreateTeam({ profile, navigate }) {
 
       {/* Logo preview */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
-        <div style={{ width: 64, height: 64, borderRadius: 12, background: form.logo_url ? `url(${form.logo_url}) center/cover, ${form.logo_color}` : form.logo_color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 26, color: '#fff' }}>
-          {!form.logo_url && (initials || '?')}
-        </div>
+        <TeamLogo team={{ name: form.name, logo_url: form.logo_url, logo_color: form.logo_color, logo_initials: initials }} size={64} radius={12} />
         <div>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(244,247,250,0.4)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Logo</div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -552,9 +551,7 @@ function TeamSettings({ team, onSave }) {
       <SectionLabel>Team Settings</SectionLabel>
       <Card>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
-          <div style={{ width: 56, height: 56, borderRadius: 10, background: form.logo_url ? `url(${form.logo_url}) center/cover, ${form.logo_color}` : form.logo_color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 22, color: '#fff' }}>
-            {!form.logo_url && (form.logo_initials || form.name.split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase())}
-          </div>
+          <TeamLogo team={{ name: form.name, logo_url: form.logo_url, logo_color: form.logo_color, logo_initials: form.logo_initials }} size={56} radius={10} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <label style={{ cursor: 'pointer', fontSize: 11, color: '#9BB5D6', padding: '4px 10px', borderRadius: 999, background: 'rgba(46,91,140,0.25)', border: '0.5px solid rgba(46,91,140,0.5)' }}>

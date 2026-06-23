@@ -3,6 +3,7 @@ import { C, colors, radii, type, font } from '../../lib/tokens';
 import { Icon, useExpand } from '../ui';
 import { getHeadToHead } from '../../lib/gameday';
 import { getRsvp, upsertRsvp } from '../../lib/rsvp';
+import { TeamLogo } from '../Logos';
 
 // =============================================================================
 // HypeCard — the pre-game surface. Manifesto: the feed has fresh content
@@ -41,9 +42,7 @@ function h2hLine(h2h, homeName, awayName) {
 function TeamChip({ team, align }) {
   return (
     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-      <div style={{ width: 40, height: 40, borderRadius: 10, overflow: 'hidden', flexShrink: 0, background: team.logoUrl ? `center/cover url(${team.logoUrl})` : colors.surfaceElevated, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: font.display, fontStyle: 'italic', fontWeight: 900, fontSize: 14, color: C.ice }}>
-        {!team.logoUrl && (team.name || '?').slice(0, 2).toUpperCase()}
-      </div>
+      <TeamLogo team={{ name: team.name, logo_url: team.logoUrl, logo_color: colors.surfaceElevated }} size={40} radius={10} />
       <span style={{ ...type.body, fontWeight: 700, color: C.ice, textAlign: 'center', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', alignSelf: 'stretch' }}>{team.name}</span>
       <span style={{ ...type.meta, color: C.steel, letterSpacing: '0.12em' }}>{align}</span>
     </div>

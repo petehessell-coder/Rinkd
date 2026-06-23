@@ -14,6 +14,7 @@ import { leaguePayoutsReady, startConnectOnboarding } from '../lib/stripeConnect
 import { generatePlayoffRoundOne, generatePlayoffNextRound, SUPPORTED_BRACKET_SIZES } from '../lib/leaguePlayoffGenerator';
 import { listRinks } from '../lib/rinks';
 import { supabase } from '../lib/supabase';
+import { TeamLogo } from '../components/Logos';
 import { sendLeagueInvite } from '../lib/invites';
 import { getTeamContacts } from '../lib/teams';
 import ScheduleBuilderModal from '../components/ScheduleBuilderModal';
@@ -182,7 +183,7 @@ function ManageLeague({ id, navigate }) {
   useEffect(() => {
     if (!linkSearch.trim()) { setLinkResults([]); return; }
     const t = setTimeout(async () => {
-      const { data } = await supabase.from('teams').select('id, name, logo_color, logo_initials').ilike('name', `%${linkSearch}%`).limit(5);
+      const { data } = await supabase.from('teams').select('id, name, logo_color, logo_initials, logo_url').ilike('name', `%${linkSearch}%`).limit(5);
       setLinkResults(data || []);
     }, 300);
     return () => clearTimeout(t);
@@ -400,9 +401,7 @@ function ManageLeague({ id, navigate }) {
                       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderBottom: '0.5px solid rgba(244,247,250,0.06)', cursor: 'pointer' }}
                       onMouseEnter={e => e.currentTarget.style.background = 'rgba(46,91,140,0.2)'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                      <div style={{ width: 28, height: 28, borderRadius: 5, background: t.logo_color || C.blue, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 11, color: '#fff' }}>
-                        {t.logo_initials || t.name.slice(0, 2).toUpperCase()}
-                      </div>
+                      <TeamLogo team={t} size={28} radius={5} />
                       <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: C.ice }}>{t.name}</span>
                       <span style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)' }}>+ Link</span>
                     </div>
@@ -561,9 +560,7 @@ function ManageLeague({ id, navigate }) {
                           style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderBottom: '0.5px solid rgba(244,247,250,0.06)', cursor: 'pointer' }}
                           onMouseEnter={e => e.currentTarget.style.background = 'rgba(46,91,140,0.2)'}
                           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                          <div style={{ width: 28, height: 28, borderRadius: 5, background: t.logo_color || C.blue, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 11, color: '#fff' }}>
-                            {t.logo_initials || t.name.slice(0, 2).toUpperCase()}
-                          </div>
+                          <TeamLogo team={t} size={28} radius={5} />
                           <span style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>{t.name}</span>
                         </div>
                       ))}

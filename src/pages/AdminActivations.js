@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { supabase } from '../lib/supabase';
+import { TeamLogo } from '../components/Logos';
 import { useIsRinkdAdmin } from '../lib/userRole';
 import { deleteTournamentAsAdmin, deleteLeagueAsAdmin, deleteTeamAsAdmin } from '../lib/adminDelete';
 
@@ -87,14 +88,7 @@ function Row({ kind, item, onToggle, onDelete, busyId }) {
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
-      <div style={{
-        width: 36, height: 36, borderRadius: 8,
-        background: item.logo_url ? `url(${item.logo_url}) center/cover, ${avatarColor}` : avatarColor,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 13, color: '#fff', flexShrink: 0,
-      }}>
-        {!item.logo_url && avatarInitials}
-      </div>
+      <TeamLogo team={{ name: item.name, logo_url: item.logo_url, logo_color: avatarColor, logo_initials: avatarInitials }} size={36} radius={8} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div onClick={() => navigate(detailUrl)} style={{ fontSize: 14, fontWeight: 600, color: C.ice, cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 3 }}>

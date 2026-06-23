@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import DatePicker from '../components/DatePicker';
 import Layout from '../components/Layout';
 import { supabase } from '../lib/supabase';
+import { TeamLogo } from '../components/Logos';
 import { createLeague } from '../lib/leagues';
 import { addCommissionerByInput } from '../lib/leagueCommissioners';
 import { addScorerByInput } from '../lib/leagueScorers';
@@ -226,9 +227,7 @@ function Step1({ data, onChange, onNext }) {
 
       {/* Logo preview + upload — mirrors team / tournament pattern */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
-        <div style={{ width: 64, height: 64, borderRadius: 12, background: data.logo_url ? `url(${data.logo_url}) center/cover, ${data.logo_color}` : data.logo_color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 26, color: '#fff' }}>
-          {!data.logo_url && (initials || '?')}
-        </div>
+        <TeamLogo team={{ name: data.name, logo_url: data.logo_url, logo_color: data.logo_color, logo_initials: initials }} size={64} radius={12} />
         <div>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(244,247,250,0.4)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Logo</div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -494,9 +493,7 @@ function Step3({ data, onChange, onBack, onNext }) {
       <Card>
         {(data.teams || []).map((t, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
-            <div style={{ width: 32, height: 32, borderRadius: 6, background: t.logo_url ? `url(${t.logo_url}) center/cover, ${t.logo_color}` : t.logo_color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 13, color: '#fff', flexShrink: 0 }}>
-              {!t.logo_url && (t.logo_initials || '?')}
-            </div>
+            <TeamLogo team={t} size={32} radius={6} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: '#F4F7FA' }}>{t.name}</div>
               {t.division && <div style={{ fontSize: 10, color: 'rgba(244,247,250,0.4)' }}>{t.division}</div>}
@@ -521,9 +518,7 @@ function Step3({ data, onChange, onBack, onNext }) {
           <div style={{ marginTop: 8, background: 'rgba(46,91,140,0.12)', border: '0.5px solid rgba(46,91,140,0.4)', borderRadius: 8 }}>
             {searchResults.map(t => (
               <div key={t.id} onClick={() => addExistingTeam(t)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
-                <div style={{ width: 26, height: 26, borderRadius: 5, background: t.logo_url ? `url(${t.logo_url}) center/cover, ${t.logo_color}` : t.logo_color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 11, color: '#fff' }}>
-                  {!t.logo_url && (t.logo_initials || '?')}
-                </div>
+                <TeamLogo team={t} size={26} radius={5} />
                 <span style={{ fontSize: 13, color: '#F4F7FA' }}>{t.name}</span>
                 <span style={{ marginLeft: 'auto', fontSize: 11, color: '#9BB5D6' }}>+ Add</span>
               </div>
