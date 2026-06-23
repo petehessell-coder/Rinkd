@@ -6,7 +6,6 @@ import AdSlot from '../components/AdSlot';
 import PinToNavButton from '../components/PinToNavButton';
 import { getLiveBarnUrl } from '../lib/livebarn';
 import { captureDataError } from '../lib/sentry';
-import { teamInitials } from '../lib/teamInitials';
 import { followTournament, unfollowTournament, isFollowingTournament } from '../lib/tournamentSubscriptions';
 import { subscribeToPush, isPushSubscribed } from '../lib/push';
 import { iosCanInstallButHasnt } from '../lib/platform';
@@ -740,6 +739,7 @@ export default function TournamentPage({ currentUser }) {
                             <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
                               {/* Rank as a large muted number (gold for 1st), not a column or a badge. */}
                               <span style={{fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:900,fontSize:22,lineHeight:1,minWidth:20,textAlign:'center',fontVariantNumeric:'tabular-nums',color:row.pool_rank===1?'#C9A84C':'rgba(244,247,250,0.35)',flexShrink:0}}>{row.pool_rank}</span>
+                              <TeamLogo team={{ name: row.team_name, logo_url: row.logo_url, logo_color: '#1a4a7a' }} size={22} radius={11} />
                               <span style={{fontSize:14,fontWeight:600,color:C.ice,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{row.team_name}</span>
                               {/* GS-2 — TEAM-LEVEL suspension flag only. Opponents
                                   learn the lineup may differ; no player is ever
@@ -1302,9 +1302,7 @@ function PublicTournamentLanding({ tournament, games, navigate }) {
                 <div style={{background:C.card,border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,overflow:'hidden'}}>
                   {list.map((t, i) => (
                     <div key={t.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderTop:i ? '0.5px solid rgba(244,247,250,0.06)' : 'none'}}>
-                      <div style={{width:30,height:30,borderRadius:'50%',background:'#1a4a7a',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:11,color:'#fff',flexShrink:0}}>
-                        {teamInitials(t.team_name)}
-                      </div>
+                      <TeamLogo team={{ name: t.team_name, logo_url: t.logo_url, logo_color: '#1a4a7a' }} size={30} radius={15} />
                       <span style={{fontSize:14,fontWeight:600,color:C.ice,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.team_name}</span>
                     </div>
                   ))}
