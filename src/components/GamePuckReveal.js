@@ -264,7 +264,7 @@ export default function GamePuckReveal({
         fontFamily: 'Barlow, sans-serif',
       }}
     >
-      <div style={{ width: '100%', maxWidth: 360 }}>
+      <div style={{ width: '100%', maxWidth: 408 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.ice }}>
             <PuckMark size={20} />
@@ -292,28 +292,28 @@ export default function GamePuckReveal({
           {/* ── Winner layer (revealed) ── */}
           <div style={{
             position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center', gap: 12, padding: 22, textAlign: 'center',
+            alignItems: 'center', justifyContent: 'center', gap: 16, padding: 22, textAlign: 'center',
             background: `radial-gradient(120% 90% at 50% 18%, rgba(215,38,56,0.28), rgba(15,40,71,0) 55%), linear-gradient(180deg, rgba(11,31,58,0.55) 0%, rgba(11,31,58,0.82) 100%), url('/recap-card-bg3.jpg') center/cover no-repeat, ${C.card}`,
             backgroundColor: C.card,
           }}>
-            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.16em', color: C.faint, textTransform: 'uppercase' }}>Fans’ Pick</div>
+            <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: '0.2em', color: C.faint, textTransform: 'uppercase' }}>Fans’ Pick</div>
             <div style={{
               transform: done ? 'scale(1)' : 'scale(0.94)', opacity: done ? 1 : 0.0,
               transition: done ? 'transform 0.5s cubic-bezier(.18,1.3,.4,1) 0.05s, opacity 0.35s ease 0.05s' : 'none',
-              filter: 'drop-shadow(0 8px 18px rgba(0,0,0,0.5))',
+              filter: 'drop-shadow(0 10px 22px rgba(0,0,0,0.55))',
             }}>
-              <PuckMark size={132} />
+              <PuckMark size={196} />
             </div>
             <div style={{
               transform: done ? 'translateY(0)' : 'translateY(6px)', opacity: done ? 1 : 0,
               transition: done ? 'all 0.4s ease 0.18s' : 'none',
             }}>
-              <div style={{ fontSize: 22, fontWeight: 900, fontStyle: 'italic', fontFamily: "'Barlow Condensed', sans-serif", color: C.ice, lineHeight: 1.05 }}>
+              <div style={{ fontSize: 36, fontWeight: 900, fontStyle: 'italic', fontFamily: "'Barlow Condensed', sans-serif", color: C.ice, lineHeight: 1.02 }}>
                 {name || `#${jersey}`}
-                {name != null && <span style={{ marginLeft: 7, fontSize: 16, fontWeight: 700, fontStyle: 'normal', color: C.dim }}>#{jersey}</span>}
+                {name != null && <span style={{ marginLeft: 10, fontSize: 24, fontWeight: 700, fontStyle: 'normal', color: C.dim }}>#{jersey}</span>}
               </div>
-              {teamName && <div style={{ fontSize: 13, color: C.dim, marginTop: 3 }}>{teamName}</div>}
-              <div style={{ fontSize: 11.5, color: C.faint, marginTop: 7 }}>
+              {teamName && <div style={{ fontSize: 18, fontWeight: 600, color: C.dim, marginTop: 5 }}>{teamName}</div>}
+              <div style={{ fontSize: 14, color: C.faint, marginTop: 9 }}>
                 {votes} of {totalVotes} {totalVotes === 1 ? 'vote' : 'votes'}
                 {winnerPucks > 1 && <span style={{ marginLeft: 8, color: accent, fontWeight: 800 }}>· {winnerPucks}× Game Puck</span>}
               </div>
