@@ -293,7 +293,8 @@ export default function GamePuckReveal({
           <div style={{
             position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center', gap: 12, padding: 22, textAlign: 'center',
-            background: `radial-gradient(120% 90% at 50% 18%, rgba(215,38,56,0.20), rgba(15,40,71,0) 60%), ${C.card}`,
+            background: `radial-gradient(120% 90% at 50% 18%, rgba(215,38,56,0.28), rgba(15,40,71,0) 55%), linear-gradient(180deg, rgba(11,31,58,0.55) 0%, rgba(11,31,58,0.82) 100%), url('/recap-card-bg3.jpg') center/cover no-repeat, ${C.card}`,
+            backgroundColor: C.card,
           }}>
             <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.16em', color: C.faint, textTransform: 'uppercase' }}>Fans’ Pick</div>
             <div style={{

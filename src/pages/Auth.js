@@ -238,7 +238,8 @@ export default function Auth({ defaultMode = 'login' }) {
   return (
     <div style={{
       minHeight: '100vh',
-      background: `radial-gradient(ellipse at 20% 50%, ${C.blue}22 0%, transparent 60%), radial-gradient(ellipse at 80% 20%, ${C.red}15 0%, transparent 50%), ${C.dark}`,
+      background: `linear-gradient(rgba(7,17,31,0.82), rgba(7,17,31,0.88)), radial-gradient(ellipse at 20% 50%, ${C.blue}22 0%, transparent 60%), radial-gradient(ellipse at 80% 20%, ${C.red}15 0%, transparent 50%), url('/onboarding-ice.jpg') center/cover no-repeat, ${C.dark}`,
+      backgroundColor: C.dark,
       display: 'flex', alignItems: 'stretch',
       fontFamily: "'Barlow', sans-serif",
     }}>
