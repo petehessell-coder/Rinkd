@@ -511,60 +511,69 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
               </div>
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, gap: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, gap: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 26, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.02em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.name}</div>
                 <div style={{ fontSize: 13, color: C.steel, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{profile.handle}</div>
               </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {/* Tier badge stays top-right beside the name; it's small + non-
+                  shrinking, so it never clips the identity line. The action
+                  buttons moved to their own row below (see next block). */}
+              <div style={{ flexShrink: 0 }}>
                 <TierBadge tier={tier.name} size="md" />
-                {isOwnProfile && !editing && (
-                  <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={openEdit} style={{ padding: '8px 16px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'transparent', border: `1.5px solid ${C.border}`, color: C.ice, fontFamily: "'Barlow', sans-serif", fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>Edit</button>
-                  {!pushEnabled && (
-                    <button onClick={handleEnableNotifications} disabled={pushLoading} style={{ padding: '8px 16px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'transparent', border: `1.5px solid #2E5B8C`, color: '#8BA3BE', fontFamily: "'Barlow', sans-serif", fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
-                      {pushLoading ? '...' : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="bell" size={14} />Notify</span>}
-                    </button>
-                  )}
-                  {pushEnabled && (
-                    <button onClick={handleDisableNotifications} disabled={pushLoading}
-                      title="Click to turn off"
-                      style={{ padding: '8px 16px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.5)', color: '#22C55E', fontSize: 13, fontFamily: "'Barlow', sans-serif", cursor: pushLoading ? 'not-allowed' : 'pointer', fontWeight: 600 }}>
-                      {pushLoading ? '...' : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="following" size={14} />On</span>}
-                    </button>
-                  )}
-                  </div>
-                )}
-                {!isOwnProfile && (
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                    {!blocked && (
-                      <button onClick={handleMessage} disabled={dmLoading} title="Send a direct message" style={{
-                        padding: '8px 16px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, cursor: 'pointer',
-                        background: 'transparent', border: `1.5px solid ${C.border}`, color: C.ice,
-                        fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 14,
-                        letterSpacing: '0.05em',
-                      }}>{dmLoading ? '...' : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="message" size={14} />Message</span>}</button>
-                    )}
-                    {!blocked && (
-                      <button onClick={handleFollow} disabled={followLoading} style={{
-                        padding: '8px 20px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: 'none', cursor: 'pointer',
-                        background: following ? C.border : C.red, color: 'white',
-                        fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 14,
-                        letterSpacing: '0.05em',
-                      }}>{followLoading ? '...' : following ? 'Following' : 'Follow'}</button>
-                    )}
-                    <button onClick={handleBlock} disabled={blockLoading} title={blocked ? 'Unblock this user' : 'Block this user'} style={{
-                      padding: '8px 14px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, cursor: 'pointer',
-                      background: 'transparent',
-                      border: `1.5px solid ${blocked ? C.red : C.border}`,
-                      color: blocked ? C.red : C.steel,
-                      fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 13,
-                      letterSpacing: '0.05em',
-                    }}>{blockLoading ? '...' : blocked ? 'Blocked' : 'Block'}</button>
-                  </div>
-                )}
               </div>
             </div>
+
+            {/* Action buttons get their OWN full-width row beneath the name/@handle
+                so on mobile they never crowd or clip the username + @handle. */}
+            {isOwnProfile && !editing && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                <button onClick={openEdit} style={{ flex: 1, minWidth: 120, padding: '8px 16px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'transparent', border: `1.5px solid ${C.border}`, color: C.ice, fontFamily: "'Barlow', sans-serif", fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>Edit</button>
+                {!pushEnabled && (
+                  <button onClick={handleEnableNotifications} disabled={pushLoading} style={{ flex: 1, minWidth: 120, padding: '8px 16px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'transparent', border: `1.5px solid #2E5B8C`, color: '#8BA3BE', fontFamily: "'Barlow', sans-serif", fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
+                    {pushLoading ? '...' : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="bell" size={14} />Notify</span>}
+                  </button>
+                )}
+                {pushEnabled && (
+                  <button onClick={handleDisableNotifications} disabled={pushLoading}
+                    title="Click to turn off"
+                    style={{ flex: 1, minWidth: 120, padding: '8px 16px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.5)', color: '#22C55E', fontSize: 13, fontFamily: "'Barlow', sans-serif", cursor: pushLoading ? 'not-allowed' : 'pointer', fontWeight: 600 }}>
+                    {pushLoading ? '...' : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="following" size={14} />On</span>}
+                  </button>
+                )}
+              </div>
+            )}
+            {!isOwnProfile && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                {!blocked && (
+                  <button onClick={handleMessage} disabled={dmLoading} title="Send a direct message" style={{
+                    flex: 1, minWidth: 120,
+                    padding: '8px 16px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, cursor: 'pointer',
+                    background: 'transparent', border: `1.5px solid ${C.border}`, color: C.ice,
+                    fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 14,
+                    letterSpacing: '0.05em',
+                  }}>{dmLoading ? '...' : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="message" size={14} />Message</span>}</button>
+                )}
+                {!blocked && (
+                  <button onClick={handleFollow} disabled={followLoading} style={{
+                    flex: 1, minWidth: 120,
+                    padding: '8px 20px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: 'none', cursor: 'pointer',
+                    background: following ? C.border : C.red, color: 'white',
+                    fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 14,
+                    letterSpacing: '0.05em',
+                  }}>{followLoading ? '...' : following ? 'Following' : 'Follow'}</button>
+                )}
+                <button onClick={handleBlock} disabled={blockLoading} title={blocked ? 'Unblock this user' : 'Block this user'} style={{
+                  flex: '0 0 auto',
+                  padding: '8px 14px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, cursor: 'pointer',
+                  background: 'transparent',
+                  border: `1.5px solid ${blocked ? C.red : C.border}`,
+                  color: blocked ? C.red : C.steel,
+                  fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 13,
+                  letterSpacing: '0.05em',
+                }}>{blockLoading ? '...' : blocked ? 'Blocked' : 'Block'}</button>
+              </div>
+            )}
 
             {/* Follow counts */}
             <div style={{ display: 'flex', gap: 20, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
