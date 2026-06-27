@@ -1020,6 +1020,10 @@ function LeagueFeedTab({ posts, setPosts, loading, error = false, online = true,
           const body = lines.slice(1).join(' · ');
           const author = p.profiles?.name || p.profiles?.handle || '';
           const mentionMap = mentionMapFromRows(p.post_mentions);
+          // Recaps live in two id-spaces: tournament games (recap_for_game_id)
+          // and league games (recap_for_league_game_id). Fall back so league
+          // recap cards actually render.
+          const recapGameId = p.recap_for_game_id || p.recap_for_league_game_id;
           return (
             <div key={p.id} style={{ background: '#11253E', borderRadius: 10, padding: '12px 14px', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
@@ -1029,7 +1033,7 @@ function LeagueFeedTab({ posts, setPosts, loading, error = false, online = true,
                       {p.tag}
                     </div>
                   )}
-                  <div style={{ fontWeight: p.recap_for_game_id ? 700 : 500, fontSize: p.recap_for_game_id ? 15 : 13, lineHeight: 1.3, marginBottom: body ? 4 : 0 }}><MentionText text={headline} mentions={mentionMap} /></div>
+                  <div style={{ fontWeight: recapGameId ? 700 : 500, fontSize: recapGameId ? 15 : 13, lineHeight: 1.3, marginBottom: body ? 4 : 0 }}><MentionText text={headline} mentions={mentionMap} /></div>
                   {body && <div style={{ fontSize: 13, color: '#C5D2E1', lineHeight: 1.4, marginBottom: 8 }}><MentionText text={body} mentions={mentionMap} /></div>}
                 </div>
                 {currentUser && (
@@ -1059,9 +1063,9 @@ function LeagueFeedTab({ posts, setPosts, loading, error = false, online = true,
                   <Img src={p.media_url} alt="" ratio={5 / 4} radius={6} loading="lazy" style={{ marginTop: 6, marginBottom: 6 }} />
                 )
               )}
-              {p.recap_for_game_id && (
+              {recapGameId && (
                 <div style={{ margin: '8px 0' }}>
-                  <RecapCard gameId={p.recap_for_game_id} source={recapSourceFromPost(p)} />
+                  <RecapCard gameId={recapGameId} source={recapSourceFromPost(p)} />
                 </div>
               )}
               <div style={{ marginTop: 8 }}>
@@ -1079,14 +1083,14 @@ function LeagueFeedTab({ posts, setPosts, loading, error = false, online = true,
                   </button>
                   <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{author ? `${author} · ` : ''}{timeAgo(p.created_at)} ago</span>
                 </div>
-                {p.recap_for_game_id && (
+                {recapGameId && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                    <button {...prefetchHandlers(prefetchGamePage)} onClick={() => navigate(`/game/${p.recap_for_game_id}?type=league`)}
+                    <button {...prefetchHandlers(prefetchGamePage)} onClick={() => navigate(`/game/${recapGameId}?type=league`)}
                       style={{ background: 'transparent', border: 'none', color: '#5B9FE2', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}>
                       View game →
                     </button>
-                    <ShareButton gameId={p.recap_for_game_id} isLeague variant="ghost" cardType="recapv2"
-                      getCard={async () => (await getRecapCardWithSponsor(p.recap_for_game_id, recapSourceFromPost(p))).data} />
+                    <ShareButton gameId={recapGameId} isLeague variant="ghost" cardType="recapv2"
+                      getCard={async () => (await getRecapCardWithSponsor(recapGameId, recapSourceFromPost(p))).data} />
                   </div>
                 )}
                 {p.gamepuck_reveal_game_id && (

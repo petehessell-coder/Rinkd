@@ -142,12 +142,12 @@ function PostCard({ post, currentUser, isLiked, reactions, onLike, onCommentChan
         </div>
         {post.content && <p style={{ fontSize: 15, color: C.ice, lineHeight: 1.55, marginBottom: 10, wordBreak: 'break-word' }}><MentionText text={post.content} mentions={postMentionMap} /></p>}
         <MediaDisplay url={post.media_url} type={post.media_type} />
-        {post.recap_for_game_id && (
+        {(post.recap_for_game_id || post.recap_for_league_game_id) && (
           <div style={{ margin: '4px 0 10px' }}>
-            <RecapCard gameId={post.recap_for_game_id} source={recapSourceFromPost(post)} />
+            <RecapCard gameId={post.recap_for_game_id || post.recap_for_league_game_id} source={recapSourceFromPost(post)} />
             <div style={{ marginTop: 8 }}>
-              <ShareButton gameId={post.recap_for_game_id} isLeague={!!post.league_id} variant="ghost" cardType="recapv2"
-                getCard={async () => (await getRecapCardWithSponsor(post.recap_for_game_id, recapSourceFromPost(post))).data} />
+              <ShareButton gameId={post.recap_for_game_id || post.recap_for_league_game_id} isLeague={!!post.league_id} variant="ghost" cardType="recapv2"
+                getCard={async () => (await getRecapCardWithSponsor(post.recap_for_game_id || post.recap_for_league_game_id, recapSourceFromPost(post))).data} />
             </div>
           </div>
         )}

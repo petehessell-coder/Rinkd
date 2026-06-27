@@ -314,19 +314,19 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
         <MediaDisplay url={post.media_url} type={post.media_type} />
         {/* Auto-recap posts link straight to the game page — saves the
             spectator from copy/pasting the URL out of the content body. */}
-        {post.recap_for_game_id && (
+        {(post.recap_for_game_id || post.recap_for_league_game_id) && (
           <div style={{ marginBottom: 10 }}>
-            <RecapCard gameId={post.recap_for_game_id} source={recapSourceFromPost(post)} />
+            <RecapCard gameId={post.recap_for_game_id || post.recap_for_league_game_id} source={recapSourceFromPost(post)} />
           </div>
         )}
-        {post.recap_for_game_id && (
+        {(post.recap_for_game_id || post.recap_for_league_game_id) && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-            <button type="button" {...prefetchHandlers(prefetchGamePage)} onClick={(e) => expand(e, () => navigate(`/game/${post.recap_for_game_id}`))}
+            <button type="button" {...prefetchHandlers(prefetchGamePage)} onClick={(e) => expand(e, () => navigate(`/game/${post.recap_for_game_id || post.recap_for_league_game_id}${post.league_id ? '?type=league' : ''}`))}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: 'rgba(46,91,140,0.2)', border: '1px solid #2E5B8C', color: '#F4F7FA', fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer' }}>
               <span style={{ fontSize: 16 }}>🏒</span> View game →
             </button>
-            <ShareButton gameId={post.recap_for_game_id} isLeague={!!post.league_id} variant="ghost" cardType="recapv2"
-              getCard={async () => (await getRecapCardWithSponsor(post.recap_for_game_id, recapSourceFromPost(post))).data} />
+            <ShareButton gameId={post.recap_for_game_id || post.recap_for_league_game_id} isLeague={!!post.league_id} variant="ghost" cardType="recapv2"
+              getCard={async () => (await getRecapCardWithSponsor(post.recap_for_game_id || post.recap_for_league_game_id, recapSourceFromPost(post))).data} />
           </div>
         )}
         {/* Sealed Game Puck teaser — no winner named; tap through to the game
