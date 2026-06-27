@@ -62,6 +62,8 @@ export default function CalendarButton({ game, teamLabel, homeName, awayName, st
       uid: `${game.id}@rinkd.app`,
       title,
       start: game.start_time,
+      // Practices/events carry an explicit end_time; games fall back to 90 min.
+      end: game.end_time || undefined,
       durationMinutes: 90,
       location,
       description,

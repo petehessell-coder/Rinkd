@@ -2,13 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import DateTimePicker from '../components/DateTimePicker';
-import { getTeam, getTeamMembers, getTeamGames, getJoinRequests, createTeam, updateTeam, addTeamMember, removeTeamMember, updateTeamMember, addTeamGame, approveJoinRequest, denyJoinRequest, getUnclaimedSlots, getTeamContacts } from '../lib/teams';
+import { getTeam, getTeamMembers, getTeamGames, getJoinRequests, createTeam, updateTeam, addTeamMember, removeTeamMember, updateTeamMember, addTeamGame, addScheduleItem, generatePracticeSeries, deleteSeries, deleteScheduleItem, approveJoinRequest, denyJoinRequest, getUnclaimedSlots, getTeamContacts } from '../lib/teams';
 import { supabase } from '../lib/supabase';
 import { TeamLogo } from '../components/Logos';
 import RosterUpload from '../components/RosterUpload';
 import { uploadMedia } from '../lib/posts';
 import { classifyImage } from '../lib/imageModeration';
 import { listTeamManagers, addTeamManagerByInput, removeTeamManager, demoteTeamManager } from '../lib/teamManagers';
+import { SCHEDULE_TYPES, eventMeta, scheduleTitle } from '../lib/scheduleMeta';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 const inputStyle = { width:'100%', background:'#07111F', border:`0.5px solid ${C.border}`, borderRadius:8, padding:'10px 12px', color:C.ice, fontFamily:'Barlow, sans-serif', fontSize:14, outline:'none' };
@@ -193,8 +194,14 @@ function ManageTeam({ id, profile, navigate }) {
 
   // Add member form
   const [memberForm, setMemberForm] = useState({ name: '', email: '', jersey_number: '', position: 'Center', role: 'player', shot_hand: 'left' });
-  // Add game form
-  const [gameForm, setGameForm] = useState({ opponent: '', is_home: true, location: '', start_time: '', notes: '' });
+  // Add-to-schedule form (one flow for game / practice / event)
+  const [scheduleForm, setScheduleForm] = useState({
+    event_type: 'game',
+    opponent: '', is_home: true,
+    title: '', location: '', start_time: '', end_time: '', notes: '',
+    // recurrence (practice/event only) — time_of_day/end_of_day are 'HH:MM'
+    repeat: false, days_of_week: [], start_date: '', end_date: '', time_of_day: '', end_of_day: '',
+  });
 
   const load = useCallback(async () => {
     try {
@@ -277,15 +284,84 @@ function ManageTeam({ id, profile, navigate }) {
     setSaving(false);
   };
 
-  const handleAddGame = async () => {
-    if (!gameForm.opponent.trim() || !gameForm.start_time) return;
+  const resetScheduleForm = () => setScheduleForm({
+    event_type: scheduleForm.event_type, // keep the toggle where the user left it
+    opponent: '', is_home: true,
+    title: '', location: '', start_time: '', end_time: '', notes: '',
+    repeat: false, days_of_week: [], start_date: '', end_date: '', time_of_day: '', end_of_day: '',
+  });
+
+  const handleAddScheduleItem = async () => {
+    const f = scheduleForm;
+    setError(null);
+
+    // Recurring practice/event → generate the whole series.
+    if (f.event_type !== 'game' && f.repeat) {
+      if (!f.days_of_week.length || !f.time_of_day || !f.start_date || !f.end_date) {
+        setError('Pick at least one weekday, a time, and a start + end date for the repeat.');
+        return;
+      }
+      setSaving(true);
+      try {
+        const { count } = await generatePracticeSeries({
+          team_id: id,
+          event_type: f.event_type,
+          daysOfWeek: f.days_of_week,
+          startTime: f.time_of_day,
+          endTime: f.end_of_day || null,
+          startDate: f.start_date,
+          endDate: f.end_date,
+          location: f.location,
+          title: f.title,
+        });
+        setError(null);
+        resetScheduleForm();
+        await load();
+        // Lightweight confirmation — count is genuinely useful here.
+        // eslint-disable-next-line no-console
+        console.info(`[schedule] generated ${count} ${f.event_type} occurrences`);
+      } catch (e) { setError(e.message); }
+      setSaving(false);
+      return;
+    }
+
+    // Single item.
+    if (f.event_type === 'game') {
+      if (!f.opponent.trim() || !f.start_time) { setError('Add an opponent and a date & time.'); return; }
+    } else {
+      if (!f.start_time) { setError('Pick a date & time.'); return; }
+    }
     setSaving(true);
     try {
-      await addTeamGame({ team_id: id, ...gameForm });
-      setGameForm({ opponent: '', is_home: true, location: '', start_time: '', notes: '' });
+      await addScheduleItem({
+        team_id: id,
+        event_type: f.event_type,
+        opponent: f.event_type === 'game' ? f.opponent : null,
+        is_home: f.event_type === 'game' ? f.is_home : null,
+        title: f.event_type === 'game' ? null : f.title,
+        location: f.location,
+        start_time: f.start_time,
+        end_time: f.event_type === 'game' ? null : (f.end_time || null),
+        notes: f.notes,
+      });
+      resetScheduleForm();
       await load();
-    } catch(e) { setError(e.message); }
+    } catch (e) { setError(e.message); }
     setSaving(false);
+  };
+
+  const handleDeleteItem = async (g) => {
+    if (!window.confirm(`Remove this ${g.event_type === 'game' ? 'game' : g.event_type === 'practice' ? 'practice' : 'event'} from the schedule?`)) return;
+    setError(null);
+    try { await deleteScheduleItem(g.id); await load(); }
+    catch (e) { setError(`Couldn't remove it: ${e?.message || 'try again'}`); }
+  };
+
+  const handleDeleteSeries = async (seriesId, label) => {
+    if (!window.confirm(`Cancel every occurrence in this ${label} series? This removes all of them.`)) return;
+    setError(null);
+    try { await deleteSeries(seriesId); await load(); }
+    catch (e) { setError(`Couldn't cancel the series: ${e?.message || 'try again'}`); }
   };
 
   const handleApprove = async (req) => {
@@ -416,29 +492,113 @@ function ManageTeam({ id, profile, navigate }) {
           </>
         )}
 
-        {/* SCHEDULE */}
+        {/* SCHEDULE — one flow for games, practices & events */}
         {activeTab === 'Schedule' && (
           <>
-            <SectionLabel>Add Game</SectionLabel>
+            <SectionLabel>Add to Schedule</SectionLabel>
             <Card>
-              <Field label="Opponent"><input style={inputStyle} value={gameForm.opponent} onChange={e => setGameForm(p => ({ ...p, opponent: e.target.value }))} placeholder="e.g. Chicago Mission" /></Field>
-              <Row2>
-                <Field label="Home or Away">
-                  <select style={selectStyle} value={gameForm.is_home ? 'home' : 'away'} onChange={e => setGameForm(p => ({ ...p, is_home: e.target.value === 'home' }))}>
-                    <option value="home">Home</option>
-                    <option value="away">Away</option>
-                  </select>
-                </Field>
-                <Field label="Location"><input style={inputStyle} value={gameForm.location} onChange={e => setGameForm(p => ({ ...p, location: e.target.value }))} placeholder="Rink name" /></Field>
-              </Row2>
-              <Field label="Date & Time"><DateTimePicker value={gameForm.start_time} onChange={v => setGameForm(p => ({ ...p, start_time: v })) } placeholder="Select date & time" /></Field>
-              <ActionBtn onClick={handleAddGame}>+ Add Game</ActionBtn>
+              {/* Event-type toggle */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                {SCHEDULE_TYPES.map(t => {
+                  const meta = eventMeta(t);
+                  const active = scheduleForm.event_type === t;
+                  return (
+                    <button key={t} type="button"
+                      onClick={() => setScheduleForm(p => ({ ...p, event_type: t, repeat: t === 'game' ? false : p.repeat }))}
+                      style={{ flex: 1, minHeight: 44, borderRadius: 10, cursor: 'pointer',
+                        border: active ? `1.5px solid ${meta.accent}` : `1px solid ${C.border}`,
+                        background: active ? meta.accentBg : 'transparent', color: C.ice,
+                        fontFamily: 'Barlow, sans-serif', fontWeight: 800, fontSize: 13,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                      <span>{meta.icon}</span>{meta.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {scheduleForm.event_type === 'game' ? (
+                <>
+                  <Field label="Opponent"><input style={inputStyle} value={scheduleForm.opponent} onChange={e => setScheduleForm(p => ({ ...p, opponent: e.target.value }))} placeholder="e.g. Chicago Mission" /></Field>
+                  <Row2>
+                    <Field label="Home or Away">
+                      <select style={selectStyle} value={scheduleForm.is_home ? 'home' : 'away'} onChange={e => setScheduleForm(p => ({ ...p, is_home: e.target.value === 'home' }))}>
+                        <option value="home">Home</option>
+                        <option value="away">Away</option>
+                      </select>
+                    </Field>
+                    <Field label="Location"><input style={inputStyle} value={scheduleForm.location} onChange={e => setScheduleForm(p => ({ ...p, location: e.target.value }))} placeholder="Rink name" /></Field>
+                  </Row2>
+                  <Field label="Date & Time"><DateTimePicker value={scheduleForm.start_time} onChange={v => setScheduleForm(p => ({ ...p, start_time: v }))} placeholder="Select date & time" /></Field>
+                </>
+              ) : (
+                <>
+                  <Row2>
+                    <Field label="Title"><input style={inputStyle} value={scheduleForm.title} onChange={e => setScheduleForm(p => ({ ...p, title: e.target.value }))} placeholder={scheduleForm.event_type === 'practice' ? 'Practice' : 'e.g. Team Meeting'} /></Field>
+                    <Field label="Location"><input style={inputStyle} value={scheduleForm.location} onChange={e => setScheduleForm(p => ({ ...p, location: e.target.value }))} placeholder="Rink / address" /></Field>
+                  </Row2>
+
+                  {/* Repeat toggle */}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 44, cursor: 'pointer', marginBottom: scheduleForm.repeat ? 8 : 4 }}>
+                    <input type="checkbox" checked={scheduleForm.repeat} onChange={e => setScheduleForm(p => ({ ...p, repeat: e.target.checked }))}
+                      style={{ width: 18, height: 18, accentColor: C.blue, cursor: 'pointer' }} />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>Repeat weekly</span>
+                    <span style={{ fontSize: 11, color: C.steel }}>· generate the whole season at once</span>
+                  </label>
+
+                  {!scheduleForm.repeat ? (
+                    <>
+                      <Field label="Date & Time"><DateTimePicker value={scheduleForm.start_time} onChange={v => setScheduleForm(p => ({ ...p, start_time: v }))} placeholder="Select date & time" /></Field>
+                      <Field label="Ends (optional)"><DateTimePicker value={scheduleForm.end_time} onChange={v => setScheduleForm(p => ({ ...p, end_time: v }))} placeholder="Select end (optional)" /></Field>
+                    </>
+                  ) : (
+                    <>
+                      <Field label="Repeat on">
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          {[['Sun',0],['Mon',1],['Tue',2],['Wed',3],['Thu',4],['Fri',5],['Sat',6]].map(([lbl, d]) => {
+                            const on = scheduleForm.days_of_week.includes(d);
+                            return (
+                              <button key={d} type="button"
+                                onClick={() => setScheduleForm(p => ({ ...p, days_of_week: on ? p.days_of_week.filter(x => x !== d) : [...p.days_of_week, d] }))}
+                                title={lbl}
+                                style={{ flex: 1, minWidth: 0, height: 44, borderRadius: 8, cursor: 'pointer',
+                                  border: on ? `1.5px solid ${C.blue}` : `1px solid ${C.border}`,
+                                  background: on ? 'rgba(46,91,140,0.25)' : 'transparent',
+                                  color: on ? C.ice : C.steel, fontFamily: 'Barlow, sans-serif', fontWeight: 800, fontSize: 12 }}>
+                                {lbl[0]}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </Field>
+                      <Row2>
+                        <Field label="Start time"><input type="time" style={inputStyle} value={scheduleForm.time_of_day} onChange={e => setScheduleForm(p => ({ ...p, time_of_day: e.target.value }))} /></Field>
+                        <Field label="End time"><input type="time" style={inputStyle} value={scheduleForm.end_of_day} onChange={e => setScheduleForm(p => ({ ...p, end_of_day: e.target.value }))} /></Field>
+                      </Row2>
+                      <Row2>
+                        <Field label="First week"><input type="date" style={inputStyle} value={scheduleForm.start_date} onChange={e => setScheduleForm(p => ({ ...p, start_date: e.target.value }))} /></Field>
+                        <Field label="Last week"><input type="date" style={inputStyle} value={scheduleForm.end_date} onChange={e => setScheduleForm(p => ({ ...p, end_date: e.target.value }))} /></Field>
+                      </Row2>
+                    </>
+                  )}
+                </>
+              )}
+
+              <ActionBtn onClick={handleAddScheduleItem}>
+                {saving ? 'Saving…'
+                  : scheduleForm.event_type === 'game' ? '+ Add Game'
+                  : scheduleForm.repeat ? `+ Generate ${eventMeta(scheduleForm.event_type).label} Series`
+                  : `+ Add ${eventMeta(scheduleForm.event_type).label}`}
+              </ActionBtn>
             </Card>
 
-            <SectionLabel>Schedule ({games.length} games)</SectionLabel>
+            <SectionLabel>Schedule ({games.length})</SectionLabel>
             <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
-              {games.length === 0 && <div style={{ padding: 16, fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center' }}>No games yet — add your first above.</div>}
+              {games.length === 0 && <div style={{ padding: 16, fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center' }}>Nothing scheduled yet — add a game, practice, or event above.</div>}
               {games.map(g => {
+                const type = g.event_type || 'game';
+                const meta = eventMeta(type);
+                const isLeague = g._source === 'league';
+                const editable = !isLeague; // league games live in league_games, not team_games
                 const date = new Date(g.start_time);
                 const teamScore = g.is_home ? g.home_score : g.away_score;
                 const oppScore = g.is_home ? g.away_score : g.home_score;
@@ -447,14 +607,34 @@ function ManageTeam({ id, profile, navigate }) {
                     <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', width: 44, flexShrink: 0, lineHeight: 1.4 }}>
                       {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                     </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>{g.is_home ? 'vs.' : '@'} {g.opponent}</div>
-                      {g.location && <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 1 }}>{g.location}</div>}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        {type !== 'game' && (
+                          <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', padding: '1px 6px', borderRadius: 4, background: meta.accentBg, color: meta.accent }}>{meta.badge}</span>
+                        )}
+                        <span style={{ fontSize: 13, fontWeight: 600, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{scheduleTitle(g)}</span>
+                        {g.series_id && <span style={{ fontSize: 9, color: C.steel }}>· weekly</span>}
+                      </div>
+                      {g.location && <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.location}</div>}
                     </div>
                     {g.status === 'final'
                       ? <div style={{ fontSize: 12, fontWeight: 700, color: teamScore > oppScore ? '#22C55E' : C.red }}>{teamScore > oppScore ? 'W' : 'L'} {teamScore}–{oppScore}</div>
                       : <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.3)' }}>{date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</div>
                     }
+                    {editable && (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
+                        <button onClick={() => handleDeleteItem(g)} title="Remove"
+                          style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.25)', cursor: 'pointer', fontSize: 15, lineHeight: 1, minWidth: 28, minHeight: 28 }}
+                          onMouseEnter={e => e.currentTarget.style.color = C.red}
+                          onMouseLeave={e => e.currentTarget.style.color = 'rgba(244,247,250,0.25)'}>✕</button>
+                        {g.series_id && (
+                          <button onClick={() => handleDeleteSeries(g.series_id, meta.label.toLowerCase())}
+                            style={{ background: 'none', border: 'none', color: C.steel, cursor: 'pointer', fontSize: 9, padding: 0, whiteSpace: 'nowrap' }}>
+                            cancel all
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}

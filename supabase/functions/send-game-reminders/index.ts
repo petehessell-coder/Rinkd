@@ -49,12 +49,30 @@ function emailHtml(params: {
   opponentName: string;
   isHome: boolean;
   startIso: string;
+  endIso?: string | null;
   location: string;
   gameUrl: string;
   leagueName?: string | null;
+  eventType?: 'game' | 'practice' | 'event';
+  title?: string | null;
 }): string {
-  const { toName, teamName, opponentName, isHome, startIso, location, gameUrl, leagueName } = params;
-  const matchup = `${escape(teamName)} ${isHome ? 'vs.' : '@'} ${escape(opponentName)}`;
+  const { toName, teamName, opponentName, isHome, startIso, endIso, location, gameUrl, leagueName, eventType = 'game', title } = params;
+  const isGame = eventType === 'game';
+  const icon = isGame ? '🏒' : eventType === 'practice' ? '🧊' : '📋';
+  // Headline: game = matchup; practice/event = team + label.
+  const headline = isGame
+    ? `${icon} ${escape(teamName)} ${isHome ? 'vs.' : '@'} ${escape(opponentName)}`
+    : `${icon} ${escape(title || (eventType === 'practice' ? 'Practice' : 'Event'))}`;
+  const kicker = isGame ? 'Game Tomorrow' : eventType === 'practice' ? 'Practice Tomorrow' : 'Event Tomorrow';
+  const whenText = endIso
+    ? `${escape(fmtGameTime(startIso))} – ${escape(fmtGameTime(endIso))}`
+    : escape(fmtGameTime(startIso));
+  const intro = isGame
+    ? 'quick heads-up that your next game is roughly 24 hours away. Tap below to RSVP, see the lineup, or pull up the rink directions.'
+    : eventType === 'practice'
+      ? "quick heads-up that practice is roughly 24 hours away. Tap below to RSVP or pull up directions."
+      : "quick heads-up that this is roughly 24 hours away. Tap below to RSVP or pull up directions.";
+  const ctaLabel = isGame ? 'Open Game →' : 'Open Schedule →';
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#07111F;font-family:'Helvetica Neue',Arial,sans-serif;">
   <div style="max-width:520px;margin:0 auto;padding:32px 20px;">
@@ -64,11 +82,11 @@ function emailHtml(params: {
       </div>
     </div>
     <div style="background:#0B1F3A;border-radius:16px;padding:32px;margin-bottom:24px;border:1px solid rgba(46,91,140,0.4);">
-      <div style="font-size:11px;font-weight:700;color:#D72638;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:6px;">Game Tomorrow</div>
-      <div style="font-size:24px;font-weight:900;font-style:italic;color:#F4F7FA;line-height:1.15;margin-bottom:14px;">🏒 ${matchup}</div>
+      <div style="font-size:11px;font-weight:700;color:#D72638;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:6px;">${kicker}</div>
+      <div style="font-size:24px;font-weight:900;font-style:italic;color:#F4F7FA;line-height:1.15;margin-bottom:14px;">${headline}</div>
       <div style="background:rgba(46,91,140,0.2);border-radius:8px;padding:14px 16px;margin-bottom:20px;">
         <div style="font-size:13px;color:rgba(244,247,250,0.55);margin-bottom:6px;">When</div>
-        <div style="font-size:15px;font-weight:700;color:#F4F7FA;margin-bottom:12px;">${escape(fmtGameTime(startIso))}</div>
+        <div style="font-size:15px;font-weight:700;color:#F4F7FA;margin-bottom:12px;">${whenText}</div>
         ${location ? `
           <div style="font-size:13px;color:rgba(244,247,250,0.55);margin-bottom:6px;">Where</div>
           <div style="font-size:15px;font-weight:600;color:#F4F7FA;margin-bottom:${leagueName ? '12px' : '0'};">${escape(location)}</div>
@@ -79,10 +97,10 @@ function emailHtml(params: {
         ` : ''}
       </div>
       <div style="font-size:14px;color:rgba(244,247,250,0.6);line-height:1.6;margin-bottom:24px;">
-        Hey ${escape(toName) || 'there'} — quick heads-up that your next game is roughly 24 hours away. Tap below to RSVP, see the lineup, or pull up the rink directions.
+        Hey ${escape(toName) || 'there'} — ${intro}
       </div>
       <a href="${escape(gameUrl)}" style="display:inline-block;background:#D72638;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 28px;border-radius:999px;">
-        Open Game →
+        ${ctaLabel}
       </a>
     </div>
     <div style="text-align:center;font-size:12px;color:rgba(244,247,250,0.25);line-height:1.6;">
@@ -98,12 +116,15 @@ type GameRow = {
   id: string;
   source: 'team' | 'league';
   start_iso: string;
+  end_iso?: string | null;
   is_home: boolean;
   team_id: string;
   team_name: string;
   opponent_name: string;
   location: string;
   league_name?: string | null;
+  event_type: 'game' | 'practice' | 'event';
+  title?: string | null;
 };
 
 async function loadDueGames(supabase: ReturnType<typeof createClient>): Promise<GameRow[]> {
@@ -115,10 +136,12 @@ async function loadDueGames(supabase: ReturnType<typeof createClient>): Promise<
   const games: GameRow[] = [];
 
   // --- TEAM GAMES (manager-scheduled, non-league) ---
+  // Team schedule: games AND practices/events (event_type generalizes the row).
   const { data: teamGames, error: tgErr } = await supabase
     .from('team_games')
     .select(`
-      id, start_time, is_home, opponent, location, team_id, status,
+      id, start_time, end_time, is_home, opponent, location, team_id, status,
+      event_type, title,
       rink:rink_id ( name, sub_rink, address ),
       team:team_id ( id, name )
     `)
@@ -135,15 +158,19 @@ async function loadDueGames(supabase: ReturnType<typeof createClient>): Promise<
       rink.address,
       !rink.name ? g.location : null,
     ].filter(Boolean);
+    const eventType = (g.event_type === 'practice' || g.event_type === 'event') ? g.event_type : 'game';
     games.push({
       id: g.id,
       source: 'team',
       start_iso: g.start_time,
+      end_iso: g.end_time ?? null,
       is_home: !!g.is_home,
       team_id: g.team_id,
       team_name: g.team?.name ?? 'Your team',
       opponent_name: g.opponent ?? 'Opponent',
       location: venueParts.join(' — '),
+      event_type: eventType,
+      title: g.title ?? null,
     });
   }
 
@@ -189,6 +216,7 @@ async function loadDueGames(supabase: ReturnType<typeof createClient>): Promise<
         opponent_name: side.opp?.team?.name ?? side.opp?.team_name ?? 'Opponent',
         location,
         league_name: g.league?.name ?? null,
+        event_type: 'game',
       });
     }
   }
@@ -270,10 +298,18 @@ serve(async (req) => {
         if (ledger.has(key)) { skippedDup++; continue; }
 
         attempted++;
-        const subject = `🏒 Tomorrow: ${game.team_name} ${game.is_home ? 'vs.' : '@'} ${game.opponent_name}`;
-        const gameUrl = game.source === 'league'
-          ? `https://www.rinkd.app/league-game/${game.id}`
-          : `https://www.rinkd.app/team-game/${game.id}`;
+        const isGame = game.event_type === 'game';
+        const eventLabel = game.title || (game.event_type === 'practice' ? 'Practice' : 'Event');
+        const subject = isGame
+          ? `🏒 Tomorrow: ${game.team_name} ${game.is_home ? 'vs.' : '@'} ${game.opponent_name}`
+          : `${game.event_type === 'practice' ? '🧊' : '📋'} Tomorrow: ${game.team_name} — ${eventLabel}`;
+        // Games link to their game page; practices/events have no scoring page,
+        // so link to the team's schedule.
+        const gameUrl = !isGame
+          ? `https://www.rinkd.app/team/${game.team_id}`
+          : game.source === 'league'
+            ? `https://www.rinkd.app/league-game/${game.id}`
+            : `https://www.rinkd.app/team-game/${game.id}`;
 
         const html = emailHtml({
           toName: player.name,
@@ -281,9 +317,12 @@ serve(async (req) => {
           opponentName: game.opponent_name,
           isHome: game.is_home,
           startIso: game.start_iso,
+          endIso: game.end_iso ?? null,
           location: game.location,
           gameUrl,
           leagueName: game.league_name ?? null,
+          eventType: game.event_type,
+          title: game.title ?? null,
         });
 
         const r = await sendOne(player.email, subject, html);

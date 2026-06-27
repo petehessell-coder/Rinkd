@@ -186,6 +186,129 @@ export async function updateTeamGame(id, updates) {
   return data;
 }
 
+// ── UNIFIED SCHEDULE (games + practices + events) ──────────────────────────
+// A practice/event is just a team_games row with event_type != 'game'. RSVP,
+// .ics export, and reminders all hang off the row, so they come along for free.
+
+/**
+ * Add a single schedule item of any type. Games keep the opponent/home-away
+ * shape; practices/events use `title` + `end_time` and leave opponent/is_home
+ * null (the DB CHECK only requires an opponent for event_type='game').
+ */
+export async function addScheduleItem({
+  team_id, event_type = 'game', opponent = null, is_home = null,
+  title = null, location = null, start_time, end_time = null, notes = null,
+}) {
+  const row = {
+    team_id,
+    event_type,
+    location: location || null,
+    start_time,
+    end_time: end_time || null,
+    notes: notes || null,
+    status: 'scheduled',
+  };
+  if (event_type === 'game') {
+    row.opponent = opponent;
+    row.is_home = is_home == null ? true : is_home;
+  } else {
+    row.title = title || (event_type === 'practice' ? 'Practice' : 'Event');
+    row.is_home = null;
+  }
+  const { data, error } = await supabase.from('team_games').insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Generate a recurring practice/event SERIES as concrete rows (one team_games
+ * row per occurrence) sharing a client-minted series_id. Concrete rows (not an
+ * RRULE) so RSVP / reminders / per-occurrence .ics all work unchanged.
+ *
+ *   daysOfWeek:  array of 0..6 (0=Sun) — which weekdays each week
+ *   startTime / endTime: 'HH:MM' 24h, applied in the viewer's local timezone
+ *   startDate / endDate: 'YYYY-MM-DD' inclusive range
+ *
+ * Returns the inserted rows. Caps at 200 occurrences as a sanity rail so a
+ * fat-fingered multi-year range can't balloon a team's schedule.
+ */
+export async function generatePracticeSeries({
+  team_id, event_type = 'practice', daysOfWeek = [], startTime, endTime = null,
+  startDate, endDate, location = null, title = null,
+}) {
+  if (!team_id || !startDate || !endDate || !startTime || !daysOfWeek.length) {
+    throw new Error('Pick at least one weekday, a start time, and a date range.');
+  }
+  const series_id =
+    (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : `${team_id}-${startDate}-${startTime}-${Math.round(Math.random() * 1e9)}`;
+  const days = new Set(daysOfWeek.map(Number));
+  const [sh, sm] = startTime.split(':').map(n => parseInt(n, 10));
+  const [eh, em] = (endTime || '').split(':').map(n => parseInt(n, 10));
+
+  const rows = [];
+  const cursor = new Date(`${startDate}T00:00:00`);
+  const last = new Date(`${endDate}T23:59:59`);
+  const CAP = 200;
+  while (cursor <= last && rows.length < CAP) {
+    if (days.has(cursor.getDay())) {
+      const start = new Date(cursor);
+      start.setHours(sh || 0, sm || 0, 0, 0);
+      let end = null;
+      if (endTime && !Number.isNaN(eh)) {
+        end = new Date(cursor);
+        end.setHours(eh, Number.isNaN(em) ? 0 : em, 0, 0);
+        // Spanning midnight (end <= start) → roll end to the next day.
+        if (end <= start) end.setDate(end.getDate() + 1);
+      }
+      rows.push({
+        team_id,
+        event_type,
+        series_id,
+        title: title || (event_type === 'practice' ? 'Practice' : 'Event'),
+        location: location || null,
+        is_home: null,
+        opponent: null,
+        start_time: start.toISOString(),
+        end_time: end ? end.toISOString() : null,
+        status: 'scheduled',
+      });
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  if (!rows.length) throw new Error('No dates matched — check the weekdays and date range.');
+  const { data, error } = await supabase.from('team_games').insert(rows).select();
+  if (error) throw error;
+  return { rows: data || [], series_id, count: (data || []).length };
+}
+
+/** Cancel a whole recurring series (e.g. "cancel all Thursday practices"). */
+export async function deleteSeries(seriesId) {
+  if (!seriesId) throw new Error('Missing series id.');
+  const { error } = await supabase.from('team_games').delete().eq('series_id', seriesId);
+  if (error) throw error;
+}
+
+/** Edit common fields across a whole series (title/location/notes). */
+export async function updateSeries(seriesId, fields = {}) {
+  if (!seriesId) throw new Error('Missing series id.');
+  const allowed = {};
+  for (const k of ['title', 'location', 'notes']) {
+    if (k in fields) allowed[k] = fields[k];
+  }
+  if (!Object.keys(allowed).length) return;
+  const { error } = await supabase.from('team_games').update(allowed).eq('series_id', seriesId);
+  if (error) throw error;
+}
+
+/** Delete a single schedule item (one game/practice/event occurrence). */
+export async function deleteScheduleItem(id) {
+  if (!id) throw new Error('Missing schedule item id.');
+  const { error } = await supabase.from('team_games').delete().eq('id', id);
+  if (error) throw error;
+}
+
 export async function requestToJoin(teamId, message = '') {
   const { data: { user } } = await supabase.auth.getUser();
   const { data, error } = await supabase.from('team_join_requests')

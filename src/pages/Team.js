@@ -18,6 +18,7 @@ import TeamVolunteer from '../components/TeamVolunteer';
 import SEO from '../components/SEO';
 import { buildIcsMulti, downloadIcs } from '../lib/ics';
 import SubscribeCalendarSheet from '../components/SubscribeCalendarSheet';
+import { eventMeta, scheduleTitle } from '../lib/scheduleMeta';
 
 const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
 
@@ -50,6 +51,9 @@ export default function TeamPage({ currentUser, profile }) {
   // expands to every game past + future. Persists per-team via state, resets
   // on page change. Keeps the team page light by default but never hides data.
   const [showAllGames, setShowAllGames] = useState(false);
+  // Schedule filter: All / Games / Practices (practices+events). Games stay the
+  // headline; practices/events are a quieter, condensed class of row.
+  const [scheduleFilter, setScheduleFilter] = useState('all');
   // YOUTH-PRIVACY: when a youth team is RLS-invisible to this viewer, we still
   // show a results-only "locked" view (team-level record) + how to get access,
   // instead of a dead-end "not found".
@@ -219,9 +223,17 @@ export default function TeamPage({ currentUser, profile }) {
   // getTeamGames() returns everything newest-first — correct for finished
   // games (last game on top), backwards for upcoming. So we re-sort the
   // upcoming list ascending: next game on top, end of season at the bottom.
-  const allFinal     = games.filter(g => g.status === 'final');
+  // Unified schedule: games + practices + events. Games are the headline;
+  // practices/events render as a quieter, condensed class of row. The filter
+  // chips let a parent narrow to just games or just practices.
+  const typeOf = (g) => g.event_type || 'game';
+  const matchesFilter = (g) => scheduleFilter === 'all'
+    ? true
+    : scheduleFilter === 'games' ? typeOf(g) === 'game' : typeOf(g) !== 'game';
+  const hasPractices = games.some(g => typeOf(g) !== 'game');
+  const allFinal     = games.filter(g => g.status === 'final' && matchesFilter(g));
   const allUpcoming  = games
-    .filter(g => g.status === 'scheduled')
+    .filter(g => g.status === 'scheduled' && matchesFilter(g))
     .sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
   const recentGames   = showAllGames ? allFinal.slice(0, 200)    : allFinal.slice(0, 5);
   const upcomingGames = showAllGames ? allUpcoming.slice(0, 200) : allUpcoming.slice(0, 5);
@@ -346,6 +358,58 @@ export default function TeamPage({ currentUser, profile }) {
     );
   };
 
+  // Condensed, secondary row for practices & events. Visibly quieter than a game
+  // row — ~70% height, a calm accent stripe, a type badge — but never tiny: full
+  // time + title + location, a working RSVP control, and ≥44px RSVP targets.
+  // No navigation: there's no scoring page for a practice.
+  const renderEventRow = (g) => {
+    const meta = eventMeta(g.event_type);
+    const date = new Date(g.start_time);
+    const end = g.end_time ? new Date(g.end_time) : null;
+    const timeLabel = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+      + (end ? `–${end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : '');
+    return (
+      <div key={g.id}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px 8px 11px',
+          borderLeft: `3px solid ${meta.accent}`,
+          borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(244,247,250,0.4)', width: 46, flexShrink: 0, lineHeight: 1.35 }}>
+          {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}<br/>
+          {date.toLocaleDateString('en-US', { weekday: 'short' })}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', padding: '1px 6px', borderRadius: 4, background: meta.accentBg, color: meta.accent, whiteSpace: 'nowrap' }}>
+              {meta.badge}
+            </span>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+              {scheduleTitle(g)}
+            </span>
+            <span style={{ fontSize: 11, color: 'rgba(244,247,250,0.45)', whiteSpace: 'nowrap' }}>{timeLabel}</span>
+          </div>
+          {g.location && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11, color: 'rgba(244,247,250,0.45)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{g.location}</span>
+              <MapLink text={g.location} icon=""
+                style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', padding: '3px 9px', borderRadius: 999,
+                  background: 'rgba(46,91,140,0.25)', border: '0.5px solid rgba(46,91,140,0.6)', color: C.ice, textDecoration: 'none',
+                  display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: "'Barlow', sans-serif" }}>
+                <Icon name="directions" size={12} /> Directions
+              </MapLink>
+              <CalendarButton game={g} teamLabel={`${team.name} — ${scheduleTitle(g)}`} />
+            </div>
+          )}
+          <RsvpBlock gameId={g.id} compact={false} />
+        </div>
+      </div>
+    );
+  };
+
+  // Dispatch: games (incl. normalized league rows) → full headline row;
+  // practices/events → condensed secondary row.
+  const renderScheduleRow = (g) =>
+    (g.event_type && g.event_type !== 'game') ? renderEventRow(g) : renderGameRow(g);
+
   return (
     <Layout profile={profile}>
       <SEO
@@ -426,7 +490,7 @@ export default function TeamPage({ currentUser, profile }) {
           {isManager && (() => {
             const now = Date.now();
             const next = games
-              .filter(g => g.status === 'scheduled' && g.start_time && new Date(g.start_time).getTime() >= now - 2 * 3.6e6)
+              .filter(g => (g.event_type || 'game') === 'game' && g.status === 'scheduled' && g.start_time && new Date(g.start_time).getTime() >= now - 2 * 3.6e6)
               .sort((a, b) => new Date(a.start_time) - new Date(b.start_time))[0];
             if (!next) return null;
             const d = new Date(next.start_time);
@@ -517,8 +581,12 @@ export default function TeamPage({ currentUser, profile }) {
                     onClick={() => {
                       const events = games.map(g => {
                         const isLeagueG = g._source === 'league';
-                        const opp = g.opponent || '';
-                        const title = `🏒 ${team.name} ${g.is_home ? 'vs.' : '@'} ${opp}`.trim();
+                        const type = g.event_type || 'game';
+                        const meta = eventMeta(type);
+                        // Games title as the matchup; practices/events use their label.
+                        const title = type === 'game'
+                          ? `${meta.icon} ${team.name} ${g.is_home ? 'vs.' : '@'} ${g.opponent || ''}`.trim()
+                          : `${meta.icon} ${team.name} — ${scheduleTitle(g)}`;
                         const venueParts = [];
                         if (g.rink) {
                           const rinkName = [g.rink.sub_rink, g.rink.name].filter(Boolean).join(' · ');
@@ -529,12 +597,14 @@ export default function TeamPage({ currentUser, profile }) {
                         }
                         const descLines = [];
                         if (isLeagueG && g._league_name) descLines.push(`League: ${g._league_name}`);
+                        if (type !== 'game') descLines.push(`Type: ${meta.label}`);
                         descLines.push(`Status: ${g.status || 'scheduled'}`);
                         descLines.push('Added from Rinkd · rinkd.app');
                         return {
                           uid: `${g.id}@rinkd.app`,
                           title,
                           start: g.start_time,
+                          end: g.end_time || undefined, // practices/events carry a real end
                           durationMinutes: 90,
                           location: venueParts.join(' — '),
                           description: descLines.join('\n'),
@@ -559,11 +629,28 @@ export default function TeamPage({ currentUser, profile }) {
                   </button>
                 </div>
               )}
+              {hasPractices && (
+                <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                  {[['all', 'All'], ['games', 'Games'], ['practices', 'Practices']].map(([val, label]) => {
+                    const active = scheduleFilter === val;
+                    return (
+                      <button key={val} onClick={() => setScheduleFilter(val)}
+                        style={{ minHeight: 32, padding: '6px 14px', borderRadius: 999, cursor: 'pointer',
+                          fontFamily: "'Barlow', sans-serif", fontSize: 12, fontWeight: 700,
+                          border: active ? `1px solid ${C.blue}` : `1px solid ${C.border}`,
+                          background: active ? 'rgba(46,91,140,0.25)' : 'transparent',
+                          color: active ? C.ice : C.steel, transition: 'all 0.15s' }}>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
               {recentGames.length > 0 && (
                 <>
                   <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'rgba(244,247,250,0.3)', textTransform: 'uppercase', marginBottom: 8 }}>Recent</div>
                   <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
-                    {recentGames.map(renderGameRow)}
+                    {recentGames.map(renderScheduleRow)}
                   </div>
                 </>
               )}
@@ -571,7 +658,7 @@ export default function TeamPage({ currentUser, profile }) {
                 <>
                   <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'rgba(244,247,250,0.3)', textTransform: 'uppercase', marginBottom: 8 }}>Upcoming</div>
                   <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
-                    {upcomingGames.map(renderGameRow)}
+                    {upcomingGames.map(renderScheduleRow)}
                   </div>
                 </>
               )}
