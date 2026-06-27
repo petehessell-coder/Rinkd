@@ -5,6 +5,7 @@ import InAppBrowserNudge from '../components/InAppBrowserNudge';
 import { signIn, signUp } from '../lib/auth';
 import { track } from '../lib/analytics';
 import HelpButton from '../components/HelpButton';
+import { Icon } from '../components/ui';
 import DownloadCTA from '../components/DownloadCTA';
 import TurnstileWidget, { isTurnstileEnabled } from '../components/TurnstileWidget';
 
@@ -269,22 +270,41 @@ export default function Auth({ defaultMode = 'login' }) {
           The social platform exclusively for the hockey world.
         </p>
 
-        {/* Stats */}
-        <div style={{ display: 'flex', gap: 32 }}>
-          {[
-            { n: '1.18M+', l: 'Registered Players' },
-            { n: '23M+', l: 'NHL Tickets Sold' },
-            { n: '+30%', l: 'Women & Girls Growth' },
-          ].map(stat => (
-            <div key={stat.n}>
-              <div style={{
-                fontFamily: "'Barlow Condensed', sans-serif",
-                fontWeight: 900, fontStyle: 'italic',
-                fontSize: 28, color: C.ice,
-              }}>{stat.n}</div>
-              <div style={{ fontSize: 11, color: C.steel, letterSpacing: '0.06em' }}>{stat.l}</div>
-            </div>
-          ))}
+        {/* What the app does — actual functionality, not vanity stats */}
+        <div style={{ maxWidth: 460 }}>
+          <div style={{
+            fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic',
+            fontSize: 13, letterSpacing: '0.12em', textTransform: 'uppercase',
+            color: C.steel, marginBottom: 14,
+          }}>
+            Everything your hockey world, in one app
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px 20px' }}>
+            {[
+              { icon: 'live',     l: 'Live scoring' },
+              { icon: 'calendar', l: 'Schedules, practices & RSVP' },
+              { icon: 'teams',    l: 'Team & player pages' },
+              { icon: 'lineup',   l: 'Rosters & lineups' },
+              { icon: 'build',    l: 'Leagues & tournaments' },
+              { icon: 'messages', l: 'Messaging & team feeds' },
+              { icon: 'dues',     l: 'Registration & dues' },
+              { icon: 'analytics',l: 'Stats & leaderboards' },
+            ].map(f => (
+              <div key={f.l} style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <div style={{
+                  width: 34, height: 34, borderRadius: 8, flexShrink: 0,
+                  background: 'rgba(46,91,140,0.25)', border: `0.5px solid ${C.border}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <Icon name={f.icon} size={17} color={C.ice} />
+                </div>
+                <span style={{
+                  fontSize: 13, fontWeight: 600, color: C.ice, lineHeight: 1.2,
+                  overflow: 'hidden', textOverflow: 'ellipsis',
+                }}>{f.l}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
