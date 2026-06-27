@@ -277,7 +277,7 @@ export default function Auth({ defaultMode = 'login' }) {
             fontSize: 13, letterSpacing: '0.12em', textTransform: 'uppercase',
             color: C.steel, marginBottom: 14,
           }}>
-            Everything your hockey world, in one app
+            Everything your hockey world needs, in one app
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px 20px' }}>
             {[
