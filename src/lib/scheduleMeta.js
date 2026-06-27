@@ -13,6 +13,9 @@ import { C } from './tokens';
 
 export const SCHEDULE_TYPES = ['game', 'practice', 'event'];
 
+// `accent` = the solid left-stripe / toggle border (high-contrast on dark).
+// `badgeText` = the small badge label color — kept on-token and bright enough to
+// read on `badgeBg` over the card (muted-on-muted is too faint at 9-10px).
 const META = {
   game: {
     type: 'game',
@@ -21,6 +24,7 @@ const META = {
     icon: '🏒',
     accent: C.red,                 // headline / primary
     accentBg: 'rgba(215,38,56,0.16)',
+    badgeText: C.red,
     secondary: false,
   },
   practice: {
@@ -28,8 +32,9 @@ const META = {
     label: 'Practice',
     badge: 'PRACTICE',
     icon: '🧊',
-    accent: C.blue,                // calm steel-blue secondary
-    accentBg: 'rgba(46,91,140,0.20)',
+    accent: C.blue,                // calm steel-blue secondary — NOT game red
+    accentBg: 'rgba(46,91,140,0.22)',
+    badgeText: C.ice,             // ice on the blue tint reads clearly at 10px
     secondary: true,
   },
   event: {
@@ -37,8 +42,9 @@ const META = {
     label: 'Event',
     badge: 'EVENT',
     icon: '📋',
-    accent: '#7C8DB5',            // muted steel — distinct from practice, still calm
-    accentBg: 'rgba(124,141,181,0.18)',
+    accent: C.steel,             // on-token steel — distinct from practice blue, still calm
+    accentBg: 'rgba(139,163,190,0.20)',
+    badgeText: C.ice,
     secondary: true,
   },
 };

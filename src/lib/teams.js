@@ -71,7 +71,10 @@ export async function getTeamMembers(teamId) {
 export async function getTeamGames(teamId) {
   // TODO: paginate — cap each sub-query and the merged result. Once a team
   // accumulates years of games this view needs a real "season" filter UI.
-  const PAGE_CAP = 50;
+  // Bumped 50→200 with the unified schedule: a season of weekly practices sorts
+  // (far-future first) ahead of recent game results, so a 50-row merge cap could
+  // silently drop recent finals. 200 matches the display + series-generation cap.
+  const PAGE_CAP = 200;
 
   // Get regular team games
   const { data: teamGames, error } = await supabase

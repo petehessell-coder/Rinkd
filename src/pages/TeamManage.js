@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import DateTimePicker from '../components/DateTimePicker';
-import { getTeam, getTeamMembers, getTeamGames, getJoinRequests, createTeam, updateTeam, addTeamMember, removeTeamMember, updateTeamMember, addTeamGame, addScheduleItem, generatePracticeSeries, deleteSeries, deleteScheduleItem, approveJoinRequest, denyJoinRequest, getUnclaimedSlots, getTeamContacts } from '../lib/teams';
+import { getTeam, getTeamMembers, getTeamGames, getJoinRequests, createTeam, updateTeam, addTeamMember, removeTeamMember, updateTeamMember, addScheduleItem, generatePracticeSeries, deleteSeries, deleteScheduleItem, approveJoinRequest, denyJoinRequest, getUnclaimedSlots, getTeamContacts } from '../lib/teams';
 import { supabase } from '../lib/supabase';
 import { TeamLogo } from '../components/Logos';
 import RosterUpload from '../components/RosterUpload';
@@ -191,6 +191,7 @@ function ManageTeam({ id, profile, navigate }) {
   const [activeTab, setActiveTab] = useState('Roster');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null); // transient confirmation (e.g. "Added 24 practices")
 
   // Add member form
   const [memberForm, setMemberForm] = useState({ name: '', email: '', jersey_number: '', position: 'Center', role: 'player', shot_hand: 'left' });
@@ -293,7 +294,7 @@ function ManageTeam({ id, profile, navigate }) {
 
   const handleAddScheduleItem = async () => {
     const f = scheduleForm;
-    setError(null);
+    setError(null); setSuccess(null);
 
     // Recurring practice/event → generate the whole series.
     if (f.event_type !== 'game' && f.repeat) {
@@ -315,11 +316,10 @@ function ManageTeam({ id, profile, navigate }) {
           title: f.title,
         });
         setError(null);
+        const label = eventMeta(f.event_type).label.toLowerCase();
+        setSuccess(`Added ${count} ${label}${count === 1 ? '' : 's'} to the schedule.`);
         resetScheduleForm();
         await load();
-        // Lightweight confirmation — count is genuinely useful here.
-        // eslint-disable-next-line no-console
-        console.info(`[schedule] generated ${count} ${f.event_type} occurrences`);
       } catch (e) { setError(e.message); }
       setSaving(false);
       return;
@@ -344,6 +344,7 @@ function ManageTeam({ id, profile, navigate }) {
         end_time: f.event_type === 'game' ? null : (f.end_time || null),
         notes: f.notes,
       });
+      setSuccess(`Added ${f.event_type === 'game' ? 'game' : eventMeta(f.event_type).label.toLowerCase()} to the schedule.`);
       resetScheduleForm();
       await load();
     } catch (e) { setError(e.message); }
@@ -411,6 +412,7 @@ function ManageTeam({ id, profile, navigate }) {
 
       <div style={{ padding: 16, maxWidth: 520, margin: '0 auto' }}>
         {error && <div style={{ background: 'rgba(215,38,56,0.15)', border: '0.5px solid rgba(215,38,56,0.4)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: C.red }}>{error}</div>}
+        {success && <div style={{ background: 'rgba(34,197,94,0.12)', border: '0.5px solid rgba(34,197,94,0.4)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: '#22C55E' }}>{success}</div>}
 
         {/* ROSTER */}
         {activeTab === 'Roster' && (
@@ -571,12 +573,12 @@ function ManageTeam({ id, profile, navigate }) {
                         </div>
                       </Field>
                       <Row2>
-                        <Field label="Start time"><input type="time" style={inputStyle} value={scheduleForm.time_of_day} onChange={e => setScheduleForm(p => ({ ...p, time_of_day: e.target.value }))} /></Field>
-                        <Field label="End time"><input type="time" style={inputStyle} value={scheduleForm.end_of_day} onChange={e => setScheduleForm(p => ({ ...p, end_of_day: e.target.value }))} /></Field>
+                        <Field label="Start time"><input type="time" style={{ ...inputStyle, colorScheme: 'dark', minHeight: 44 }} value={scheduleForm.time_of_day} onChange={e => setScheduleForm(p => ({ ...p, time_of_day: e.target.value }))} /></Field>
+                        <Field label="End time"><input type="time" style={{ ...inputStyle, colorScheme: 'dark', minHeight: 44 }} value={scheduleForm.end_of_day} onChange={e => setScheduleForm(p => ({ ...p, end_of_day: e.target.value }))} /></Field>
                       </Row2>
                       <Row2>
-                        <Field label="First week"><input type="date" style={inputStyle} value={scheduleForm.start_date} onChange={e => setScheduleForm(p => ({ ...p, start_date: e.target.value }))} /></Field>
-                        <Field label="Last week"><input type="date" style={inputStyle} value={scheduleForm.end_date} onChange={e => setScheduleForm(p => ({ ...p, end_date: e.target.value }))} /></Field>
+                        <Field label="First week"><input type="date" style={{ ...inputStyle, colorScheme: 'dark', minHeight: 44 }} value={scheduleForm.start_date} onChange={e => setScheduleForm(p => ({ ...p, start_date: e.target.value }))} /></Field>
+                        <Field label="Last week"><input type="date" style={{ ...inputStyle, colorScheme: 'dark', minHeight: 44 }} value={scheduleForm.end_date} onChange={e => setScheduleForm(p => ({ ...p, end_date: e.target.value }))} /></Field>
                       </Row2>
                     </>
                   )}
@@ -610,7 +612,7 @@ function ManageTeam({ id, profile, navigate }) {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         {type !== 'game' && (
-                          <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', padding: '1px 6px', borderRadius: 4, background: meta.accentBg, color: meta.accent }}>{meta.badge}</span>
+                          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', padding: '1px 6px', borderRadius: 4, background: meta.accentBg, color: meta.badgeText }}>{meta.badge}</span>
                         )}
                         <span style={{ fontSize: 13, fontWeight: 600, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{scheduleTitle(g)}</span>
                         {g.series_id && <span style={{ fontSize: 9, color: C.steel }}>· weekly</span>}
@@ -624,12 +626,12 @@ function ManageTeam({ id, profile, navigate }) {
                     {editable && (
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
                         <button onClick={() => handleDeleteItem(g)} title="Remove"
-                          style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.25)', cursor: 'pointer', fontSize: 15, lineHeight: 1, minWidth: 28, minHeight: 28 }}
+                          style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.25)', cursor: 'pointer', fontSize: 15, lineHeight: 1, minWidth: 44, minHeight: 44 }}
                           onMouseEnter={e => e.currentTarget.style.color = C.red}
                           onMouseLeave={e => e.currentTarget.style.color = 'rgba(244,247,250,0.25)'}>✕</button>
                         {g.series_id && (
                           <button onClick={() => handleDeleteSeries(g.series_id, meta.label.toLowerCase())}
-                            style={{ background: 'none', border: 'none', color: C.steel, cursor: 'pointer', fontSize: 9, padding: 0, whiteSpace: 'nowrap' }}>
+                            style={{ background: 'none', border: 'none', color: C.steel, cursor: 'pointer', fontSize: 11, padding: '6px 4px', whiteSpace: 'nowrap' }}>
                             cancel all
                           </button>
                         )}

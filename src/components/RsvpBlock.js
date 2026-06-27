@@ -115,7 +115,10 @@ export default function RsvpBlock({ gameId, compact = false }) {
 
   const btnBase = {
     borderRadius: 999,
-    padding: compact ? '6px 14px' : '8px 20px',
+    // ≥44px tap target (accessibility floor) regardless of compact density —
+    // compact only trims font/horizontal padding + drops the attendee preview.
+    minHeight: 44,
+    padding: compact ? '0 14px' : '0 20px',
     fontSize: compact ? 12 : 13,
     fontWeight: 700,
     fontFamily: 'Barlow, sans-serif',

@@ -359,27 +359,30 @@ export default function TeamPage({ currentUser, profile }) {
   };
 
   // Condensed, secondary row for practices & events. Visibly quieter than a game
-  // row — ~70% height, a calm accent stripe, a type badge — but never tiny: full
-  // time + title + location, a working RSVP control, and ≥44px RSVP targets.
-  // No navigation: there's no scoring page for a practice.
+  // row — calmer accent stripe, smaller type, COMPACT RSVP (no attendee preview)
+  // so it reads as a lighter class — but never tiny: legible time + title +
+  // location, a working ≥44px RSVP control, and add-to-calendar. No navigation:
+  // there's no scoring page for a practice. Past occurrences drop the RSVP (you
+  // can't change attendance for something that already happened).
   const renderEventRow = (g) => {
     const meta = eventMeta(g.event_type);
     const date = new Date(g.start_time);
     const end = g.end_time ? new Date(g.end_time) : null;
+    const isPast = (end || date).getTime() < Date.now();
     const timeLabel = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
       + (end ? `–${end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : '');
     return (
       <div key={g.id}
-        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px 8px 11px',
+        style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 14px 8px 11px',
           borderLeft: `3px solid ${meta.accent}`,
-          borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(244,247,250,0.4)', width: 46, flexShrink: 0, lineHeight: 1.35 }}>
+          borderBottom: '0.5px solid rgba(244,247,250,0.06)', opacity: isPast ? 0.6 : 1 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(244,247,250,0.4)', width: 46, flexShrink: 0, lineHeight: 1.35, marginTop: 2 }}>
           {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}<br/>
           {date.toLocaleDateString('en-US', { weekday: 'short' })}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', padding: '1px 6px', borderRadius: 4, background: meta.accentBg, color: meta.accent, whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', padding: '1px 6px', borderRadius: 4, background: meta.accentBg, color: meta.badgeText, whiteSpace: 'nowrap' }}>
               {meta.badge}
             </span>
             <span style={{ fontSize: 12.5, fontWeight: 600, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
@@ -387,19 +390,21 @@ export default function TeamPage({ currentUser, profile }) {
             </span>
             <span style={{ fontSize: 11, color: 'rgba(244,247,250,0.45)', whiteSpace: 'nowrap' }}>{timeLabel}</span>
           </div>
-          {g.location && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, color: 'rgba(244,247,250,0.45)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{g.location}</span>
-              <MapLink text={g.location} icon=""
-                style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', padding: '3px 9px', borderRadius: 999,
-                  background: 'rgba(46,91,140,0.25)', border: '0.5px solid rgba(46,91,140,0.6)', color: C.ice, textDecoration: 'none',
-                  display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: "'Barlow', sans-serif" }}>
-                <Icon name="directions" size={12} /> Directions
-              </MapLink>
-              <CalendarButton game={g} teamLabel={`${team.name} — ${scheduleTitle(g)}`} />
-            </div>
-          )}
-          <RsvpBlock gameId={g.id} compact={false} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
+            {g.location && (
+              <>
+                <span style={{ fontSize: 11, color: 'rgba(244,247,250,0.45)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{g.location}</span>
+                <MapLink text={g.location} icon=""
+                  style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', padding: '3px 9px', borderRadius: 999,
+                    background: 'rgba(46,91,140,0.25)', border: '0.5px solid rgba(46,91,140,0.6)', color: C.ice, textDecoration: 'none',
+                    display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: "'Barlow', sans-serif" }}>
+                  <Icon name="directions" size={12} /> Directions
+                </MapLink>
+              </>
+            )}
+            <CalendarButton game={g} teamLabel={`${team.name} — ${scheduleTitle(g)}`} />
+          </div>
+          {!isPast && <RsvpBlock gameId={g.id} compact={true} />}
         </div>
       </div>
     );
@@ -635,7 +640,7 @@ export default function TeamPage({ currentUser, profile }) {
                     const active = scheduleFilter === val;
                     return (
                       <button key={val} onClick={() => setScheduleFilter(val)}
-                        style={{ minHeight: 32, padding: '6px 14px', borderRadius: 999, cursor: 'pointer',
+                        style={{ minHeight: 44, padding: '6px 16px', borderRadius: 999, cursor: 'pointer',
                           fontFamily: "'Barlow', sans-serif", fontSize: 12, fontWeight: 700,
                           border: active ? `1px solid ${C.blue}` : `1px solid ${C.border}`,
                           background: active ? 'rgba(46,91,140,0.25)' : 'transparent',
@@ -685,12 +690,21 @@ export default function TeamPage({ currentUser, profile }) {
                     onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                     {showAllGames
                       ? `Show recent only`
-                      : `Show all ${totalGames} games →`}
+                      : `Show all ${totalGames} ${scheduleFilter === 'practices' ? 'practices' : scheduleFilter === 'games' ? 'games' : 'items'} →`}
                   </button>
                 </div>
               )}
               {games.length === 0 && (
-                <div style={{ textAlign: 'center', color: 'rgba(244,247,250,0.3)', fontSize: 13, padding: '30px 0' }}>Schedule drops soon — games show up here once they're posted.</div>
+                <div style={{ textAlign: 'center', color: 'rgba(244,247,250,0.3)', fontSize: 13, padding: '30px 0' }}>Schedule drops soon — games, practices, and events show up here once they're posted.</div>
+              )}
+              {games.length > 0 && recentGames.length === 0 && upcomingGames.length === 0 && (
+                <div style={{ textAlign: 'center', color: 'rgba(244,247,250,0.35)', fontSize: 13, padding: '30px 0' }}>
+                  {scheduleFilter === 'practices'
+                    ? 'No practices or events on the schedule yet.'
+                    : scheduleFilter === 'games'
+                      ? 'No games on the schedule yet.'
+                      : 'Nothing on the schedule yet.'}
+                </div>
               )}
             </>
           )}
