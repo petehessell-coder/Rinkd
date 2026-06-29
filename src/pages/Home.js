@@ -15,6 +15,20 @@ import {
 // + live cards sit on this; standard rows stay on C.card.
 const ELEV = '#162f55';
 const GOLD = '#C9A84C';
+// Authorized default arena photo (same owned image as the signup/landing hero).
+// The Featured card draws this behind the brand tint when an event has no
+// per-event cover_image_url, so the hero is photographic, not a flat gradient.
+const DEFAULT_HERO_PHOTO = '/onboarding-ice.jpg';
+
+// Period number → broadcast label. Clock (period_time) is unreliable, so we show
+// the period only — real data, never a fabricated stat.
+function fmtPeriod(p) {
+  if (!p) return null;
+  if (p === 1) return '1ST';
+  if (p === 2) return '2ND';
+  if (p === 3) return '3RD';
+  return p >= 4 ? 'OT' : null;
+}
 
 // ===========================================================================
 // Event-Centric Home — the signed-in front door.
@@ -88,6 +102,11 @@ export default function Home({ currentUser, profile }) {
           </div>
         ) : (
           <>
+            {/* Live ticker — the ESPN score-bug strip. Platform-wide, always-on
+                when any public game is live, so the front door reads "alive"
+                even to a cold viewer. */}
+            {data.ticker?.length > 0 && <LiveTicker games={data.ticker} navigate={navigate} />}
+
             {/* Operator on-ramp — leads ABOVE Featured for commissioners/managers */}
             {isOperator && <OperatorBar navigate={navigate} />}
 
@@ -258,6 +277,7 @@ function ManageCard({ label, sub, onClick, icon }) {
 function FeaturedHero({ featured, navigate }) {
   if (!featured) return null;
   const bg = featured.logo_color || C.blue;
+  const photo = featured.cover_image_url || DEFAULT_HERO_PHOTO;
   return (
     <section style={{ marginTop: 18 }}>
       <SectionHeader label="Featured" live={featured.isLive} accessory={featured.isLive ? <span style={{ ...type.sectionHead, fontSize: 13, color: C.red }}>LIVE</span> : null} />
@@ -271,21 +291,31 @@ function FeaturedHero({ featured, navigate }) {
           borderRadius: radii.hero, overflow: 'hidden', padding: 0, background: ELEV,
         }}
       >
-        {/* Brand-color panel with the league logo. No photo column exists today —
-            the launch hero is the logo on the brand panel (clean, on-brand),
-            never a broken/missing image to a cold viewer. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 18, background: `linear-gradient(135deg, ${bg} 0%, ${shade(bg)} 100%)` }}>
-          <div style={{ flexShrink: 0 }}>
-            <TeamLogo team={{ logo_url: featured.logo_url, logo_color: 'rgba(255,255,255,0.12)', logo_initials: featured.logo_initials || (featured.name || '?').slice(0, 4).toUpperCase(), name: featured.name }} size={72} radius={10} />
-          </div>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(244,247,250,0.7)', fontFamily: "'Barlow Condensed', sans-serif" }}>
-              {featured.type === 'league' ? 'Featured league' : 'Featured event'}
+        {/* Real arena photo behind the text ("gradients must be earned"). The
+            brand-color container shows through if the image fails (onError hides
+            it), so a cold viewer never sees a broken image. A dark scrim keeps
+            the white type legible over any photo. */}
+        <div style={{ position: 'relative', minHeight: 168, overflow: 'hidden', background: bg }}>
+          <img
+            src={photo} alt="" loading="eager"
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+          />
+          {/* Brand tint at top → dark scrim at bottom for legibility. */}
+          <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(180deg, ${bg}B3 0%, rgba(7,17,31,0.35) 45%, rgba(7,17,31,0.92) 100%)` }} />
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-end', gap: 14, padding: 16, minHeight: 168 }}>
+            <div style={{ flexShrink: 0 }}>
+              <TeamLogo team={{ logo_url: featured.logo_url, logo_color: 'rgba(11,31,58,0.6)', logo_initials: featured.logo_initials || (featured.name || '?').slice(0, 4).toUpperCase(), name: featured.name }} size={64} radius={10} style={{ boxShadow: '0 4px 16px rgba(0,0,0,0.5)' }} />
             </div>
-            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 26, lineHeight: 1.05, color: '#fff', margin: '2px 0 4px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-              {featured.name}
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(244,247,250,0.85)', fontFamily: "'Barlow Condensed', sans-serif", textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
+                {featured.type === 'league' ? 'Featured league' : 'Featured event'}
+              </div>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 28, lineHeight: 1.02, color: '#fff', margin: '2px 0 4px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', textShadow: '0 2px 8px rgba(0,0,0,0.55)' }}>
+                {featured.name}
+              </div>
+              <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.92)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>{featured.subtitle}</div>
             </div>
-            <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.85)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{featured.subtitle}</div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: ELEV }}>
@@ -294,6 +324,37 @@ function FeaturedHero({ featured, navigate }) {
         </div>
       </button>
     </section>
+  );
+}
+
+// ─── Live ticker (top score-bug strip) ───────────────────────────────────────
+function LiveTicker({ games, navigate }) {
+  return (
+    <div className="home-rail" style={{ display: 'flex', gap: 8, overflowX: 'auto', margin: '14px 0 2px', paddingBottom: 4 }}>
+      <span style={{ flexShrink: 0, alignSelf: 'center', display: 'inline-flex', alignItems: 'center', gap: 5, paddingRight: 4 }}>
+        <span className="home-live-dot" style={{ width: 7, height: 7, borderRadius: '50%', background: C.red }} />
+        <span style={{ ...type.sectionHead, fontSize: 12, color: C.red }}>LIVE</span>
+      </span>
+      {games.map((g) => {
+        const per = fmtPeriod(g.period);
+        return (
+          <button key={`${g.source}-${g.id}`} onClick={() => navigate(g.url)} className="home-tap"
+            style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'left', cursor: 'pointer', background: C.card, border: `1px solid ${C.red}44`, borderRadius: 8, padding: '6px 10px', minWidth: 132 }}>
+            <TickerLine name={g.home?.name} score={g.home?.score} />
+            <TickerLine name={g.away?.name} score={g.away?.score} />
+            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: C.red, fontFamily: "'Barlow Condensed', sans-serif", marginTop: 1 }}>{per ? `${per} · LIVE` : 'LIVE'}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+function TickerLine({ name, score }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+      <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 92 }}>{name || 'TBD'}</span>
+      <span style={{ flexShrink: 0, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 15, color: C.ice }}>{score ?? 0}</span>
+    </div>
   );
 }
 
@@ -321,10 +382,10 @@ function LiveHeroCard({ game, navigate }) {
       boxShadow: '0 8px 32px rgba(215,38,56,0.2)', position: 'relative', overflow: 'hidden',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.steel, fontFamily: "'Barlow Condensed', sans-serif", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>{game.eventName}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.steel, fontFamily: "'Barlow Condensed', sans-serif", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '60%' }}>{game.eventName}</span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <span className="home-live-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: C.red, flexShrink: 0 }} />
-          <span style={{ ...type.sectionHead, fontSize: 13, color: C.red }}>LIVE</span>
+          <span style={{ ...type.sectionHead, fontSize: 13, color: C.red }}>{fmtPeriod(game.period) ? `${fmtPeriod(game.period)} · LIVE` : 'LIVE'}</span>
         </span>
       </div>
       <TeamScoreRow logoUrl={game.home?.logoUrl} name={game.home?.name} score={game.homeScore} />
@@ -349,7 +410,7 @@ function LiveChip({ game, navigate }) {
     <button onClick={() => navigate(game.gameUrl)} className="home-tap" style={{ flexShrink: 0, width: 168, textAlign: 'left', cursor: 'pointer', background: C.card, border: `1px solid ${C.red}55`, borderRadius: radii.card, padding: '10px 12px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
         <span className="home-live-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: C.red }} />
-        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: C.red, fontFamily: "'Barlow Condensed', sans-serif" }}>LIVE</span>
+        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: C.red, fontFamily: "'Barlow Condensed', sans-serif" }}>{fmtPeriod(game.period) ? `${fmtPeriod(game.period)} · LIVE` : 'LIVE'}</span>
       </div>
       <ChipTeam name={game.home?.name} score={game.homeScore} />
       <ChipTeam name={game.away?.name} score={game.awayScore} />
@@ -586,17 +647,6 @@ function HomeSkeleton() {
 }
 function Sk({ h, w, r }) {
   return <div className="home-sk" style={{ height: h, width: w || '100%', borderRadius: r || radii.card, background: C.card }} />;
-}
-
-// Darken a hex/named color for the hero gradient's far stop. Falls back to the
-// app navy if the input isn't a parseable #rrggbb.
-function shade(color) {
-  if (typeof color !== 'string' || !/^#[0-9a-f]{6}$/i.test(color)) return C.navy;
-  const n = parseInt(color.slice(1), 16);
-  const r = Math.max(0, ((n >> 16) & 255) - 40);
-  const g = Math.max(0, ((n >> 8) & 255) - 40);
-  const b = Math.max(0, (n & 255) - 40);
-  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
 }
 
 const HOME_CSS = `

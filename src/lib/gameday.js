@@ -33,6 +33,7 @@ export async function getGamedayContext(userId) {
 function normTournamentGame(g) {
   return {
     id: g.id, source: 'tournament', status: g.status, startTime: g.start_time,
+    period: g.period ?? null,
     homeScore: g.home_score, awayScore: g.away_score,
     home: { id: g.home_team_id, name: g.home_team?.team_name || 'Home', logoUrl: g.home_team?.logo_url || null, teamId: null },
     away: { id: g.away_team_id, name: g.away_team?.team_name || 'Away', logoUrl: g.away_team?.logo_url || null, teamId: null },
@@ -45,6 +46,7 @@ function normLeagueGame(g, teamIds) {
   const awayTeamId = g.away_lt?.team_id || null;
   return {
     id: g.id, source: 'league', status: g.status, startTime: g.start_time,
+    period: g.period ?? null,
     homeScore: g.home_score, awayScore: g.away_score,
     home: { id: g.home_team_id, name: g.home_lt?.team?.name || g.home_lt?.team_name || 'Home', logoUrl: g.home_lt?.team?.logo_url || g.home_lt?.logo_url || null, teamId: homeTeamId },
     away: { id: g.away_team_id, name: g.away_lt?.team?.name || g.away_lt?.team_name || 'Away', logoUrl: g.away_lt?.team?.logo_url || g.away_lt?.logo_url || null, teamId: awayTeamId },
@@ -56,8 +58,8 @@ function normLeagueGame(g, teamIds) {
   };
 }
 
-const T_SELECT = 'id, status, start_time, home_score, away_score, tournament_id, home_team:tournament_teams!home_team_id(id,team_name,logo_url), away_team:tournament_teams!away_team_id(id,team_name,logo_url), tournament:tournaments(name)';
-const L_SELECT = 'id, status, start_time, home_score, away_score, league_id, home_team_id, away_team_id, home_lt:league_teams!home_team_id(id,team_name,logo_color,logo_initials,logo_url,team_id,team:teams(id,name,logo_url)), away_lt:league_teams!away_team_id(id,team_name,logo_color,logo_initials,logo_url,team_id,team:teams(id,name,logo_url)), league:leagues(name)';
+const T_SELECT = 'id, status, start_time, period, home_score, away_score, tournament_id, home_team:tournament_teams!home_team_id(id,team_name,logo_url), away_team:tournament_teams!away_team_id(id,team_name,logo_url), tournament:tournaments(name)';
+const L_SELECT = 'id, status, start_time, period, home_score, away_score, league_id, home_team_id, away_team_id, home_lt:league_teams!home_team_id(id,team_name,logo_color,logo_initials,logo_url,team_id,team:teams(id,name,logo_url)), away_lt:league_teams!away_team_id(id,team_name,logo_color,logo_initials,logo_url,team_id,team:teams(id,name,logo_url)), league:leagues(name)';
 
 // The live + soonest-upcoming games across everything the user follows.
 // Returns { live: [...normalized], upcoming: [...normalized] }, each capped.
