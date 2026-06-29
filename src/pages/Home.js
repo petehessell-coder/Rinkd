@@ -1,0 +1,615 @@
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import Layout from '../components/Layout';
+import { supabase } from '../lib/supabase';
+import { C, type, radii } from '../lib/tokens';
+import { useUserRole } from '../lib/userRole';
+import { SectionHeader, Button, Icon } from '../components/ui';
+import { TeamLogo, Avatar } from '../components/Logos';
+import RecapCard from '../components/RecapCard';
+import {
+  loadHome, searchEverything, fmtGameWhen, fmtEventDate, DEMO_LEAGUE_ID,
+} from '../lib/home';
+
+// Surface-elevated — the "card that matters" tone from the manifesto. The hero
+// + live cards sit on this; standard rows stay on C.card.
+const ELEV = '#162f55';
+const GOLD = '#C9A84C';
+
+// ===========================================================================
+// Event-Centric Home — the signed-in front door.
+//
+// A persona-aware TILE BOARD (not a text feed). Featured XRHL hero on top, then
+// Live now / Your hockey / This week / Discover. Each layer is its own bounded
+// query (see lib/home.js); personalized layers rise for members and collapse
+// cleanly for cold users so the page is NEVER empty. Realtime (not polling)
+// drives the live tiles.
+// ===========================================================================
+export default function Home({ currentUser, profile }) {
+  const navigate = useNavigate();
+  const role = useUserRole(currentUser?.id);
+  const isOperator = role === 'commissioner' || role === 'manager';
+
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  const refresh = useCallback(async () => {
+    if (!currentUser?.id) return;
+    try {
+      const d = await loadHome(currentUser.id);
+      setData(d);
+      setError(false);
+    } catch (e) {
+      console.warn('[Home] load failed:', e?.message || e);
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUser?.id]);
+
+  useEffect(() => { setLoading(true); refresh(); }, [refresh]);
+
+  // ── Realtime: subscribe to the user's followed events; re-run the bounded
+  // load on a (debounced) change. No polling. Unsubscribe on unmount / id change.
+  const follow = data?.followIds;
+  const followKey = follow ? `${follow.tournamentIds.join(',')}|${follow.leagueIds.join(',')}` : '';
+  useEffect(() => {
+    if (!follow || (!follow.tournamentIds.length && !follow.leagueIds.length)) return undefined;
+    let timer = null;
+    const ping = () => { clearTimeout(timer); timer = setTimeout(refresh, 800); };
+    const ch = supabase.channel(`home-${currentUser?.id || 'anon'}`);
+    follow.tournamentIds.slice(0, 20).forEach((tid) => {
+      ch.on('postgres_changes', { event: '*', schema: 'public', table: 'games', filter: `tournament_id=eq.${tid}` }, ping);
+    });
+    follow.leagueIds.slice(0, 20).forEach((lid) => {
+      ch.on('postgres_changes', { event: '*', schema: 'public', table: 'league_games', filter: `league_id=eq.${lid}` }, ping);
+    });
+    ch.subscribe();
+    return () => { clearTimeout(timer); try { supabase.removeChannel(ch); } catch { /* best-effort */ } };
+  }, [followKey, currentUser?.id, follow, refresh]);
+
+  return (
+    <Layout profile={profile}>
+      <style>{HOME_CSS}</style>
+      <div style={{ maxWidth: 640, margin: '0 auto', padding: '20px 16px 32px' }}>
+
+        {/* Persistent search — the navigation guarantee (reach anything in one tap) */}
+        <SearchBar navigate={navigate} />
+
+        {loading ? (
+          <HomeSkeleton />
+        ) : error ? (
+          <div style={{ marginTop: 18, background: C.card, border: `1px solid ${C.border}`, borderRadius: radii.card, padding: 24, textAlign: 'center' }}>
+            <div style={{ fontSize: 30, marginBottom: 8 }}>📡</div>
+            <div style={{ ...type.sectionHead, color: C.ice, marginBottom: 6 }}>Couldn't load your home</div>
+            <div style={{ color: C.steel, fontSize: 14, marginBottom: 16 }}>Your connection dropped. Your data is safe — try again.</div>
+            <Button variant="secondary" size="sm" onClick={() => { setLoading(true); refresh(); }}>Retry</Button>
+          </div>
+        ) : (
+          <>
+            {/* Operator on-ramp — leads ABOVE Featured for commissioners/managers */}
+            {isOperator && <OperatorBar navigate={navigate} />}
+
+            {/* ⭐ FEATURED HERO — top of page (Pete override vs the design image) */}
+            <FeaturedHero featured={data.featured} navigate={navigate} />
+
+            {/* LIVE NOW — only when a followed/rostered game is live */}
+            {data.live.length > 0 && <LiveNow games={data.live} navigate={navigate} />}
+
+            {/* YOUR HOCKEY — members; collapses to an invitation for cold users */}
+            {data.hasFollows && data.your.teamCount > 0 ? (
+              <YourHockey your={data.your} leader={data.leader} navigate={navigate} />
+            ) : (
+              <PickYourTeam navigate={navigate} />
+            )}
+
+            {/* THIS WEEK — the temporal backbone (never empty: public events carry it) */}
+            <ThisWeek upcoming={data.upcoming} events={data.publicEvents} navigate={navigate} />
+
+            {/* DISCOVER — an entry, not a wall */}
+            <DiscoverRow navigate={navigate} cold={!data.hasFollows || data.your.teamCount === 0} />
+          </>
+        )}
+      </div>
+    </Layout>
+  );
+}
+
+// ─── Persistent search ───────────────────────────────────────────────────────
+function SearchBar({ navigate }) {
+  const [term, setTerm] = useState('');
+  const [open, setOpen] = useState(false);
+  const [results, setResults] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const boxRef = useRef(null);
+  const debRef = useRef(null);
+
+  useEffect(() => {
+    clearTimeout(debRef.current);
+    const q = term.trim();
+    if (q.length < 2) { setResults(null); setBusy(false); return undefined; }
+    setBusy(true);
+    debRef.current = setTimeout(async () => {
+      const r = await searchEverything(q);
+      setResults(r); setBusy(false); setOpen(true);
+    }, 220);
+    return () => clearTimeout(debRef.current);
+  }, [term]);
+
+  useEffect(() => {
+    const onDoc = (e) => { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+
+  const go = (path) => { setOpen(false); setTerm(''); setResults(null); navigate(path); };
+  const total = results ? results.players.length + results.teams.length + results.leagues.length + results.tournaments.length : 0;
+
+  return (
+    <div ref={boxRef} style={{ position: 'relative', zIndex: 50 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: C.card, border: `1px solid ${C.border}`, borderRadius: 999, padding: '0 14px', height: 46 }}>
+        <Icon name="discover" size={18} color={C.steel} />
+        <input
+          value={term}
+          onChange={(e) => setTerm(e.target.value)}
+          onFocus={() => { if (total) setOpen(true); }}
+          onKeyDown={(e) => { if (e.key === 'Escape') setOpen(false); }}
+          placeholder="Search teams, events, players"
+          aria-label="Search teams, events, players"
+          style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', outline: 'none', color: C.ice, fontSize: 15, fontFamily: "'Barlow', sans-serif" }}
+        />
+        {term && (
+          <button onClick={() => { setTerm(''); setResults(null); setOpen(false); }} aria-label="Clear search"
+            style={{ background: 'none', border: 'none', color: C.steel, cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 4 }}>×</button>
+        )}
+      </div>
+
+      {open && term.trim().length >= 2 && (
+        <div style={{ position: 'absolute', top: 52, left: 0, right: 0, background: ELEV, border: `1px solid ${C.border}`, borderRadius: radii.card, boxShadow: '0 12px 32px rgba(0,0,0,0.45)', maxHeight: '60vh', overflowY: 'auto', padding: 6 }}>
+          {busy && !results && <div style={{ padding: 14, color: C.steel, fontSize: 13 }}>Searching…</div>}
+          {results && total === 0 && !busy && (
+            <div style={{ padding: 16, color: C.steel, fontSize: 13, textAlign: 'center' }}>
+              No matches for “{term.trim()}”. Try a team, league, or player name.
+            </div>
+          )}
+          {results && (
+            <>
+              <SearchGroup label="Players" items={results.players} render={(p) => (
+                <button key={p.id} onClick={() => go(`/profile/${p.id}`)} style={searchRow}>
+                  <Avatar profile={p} size={30} />
+                  <span style={searchName}>{p.name || `@${p.handle}`}</span>
+                  {p.handle && <span style={searchMeta}>@{p.handle}</span>}
+                </button>
+              )} />
+              <SearchGroup label="Teams" items={results.teams} render={(t) => (
+                <button key={t.id} onClick={() => go(`/team/${t.id}`)} style={searchRow}>
+                  <TeamLogo team={t} size={30} />
+                  <span style={searchName}>{t.name}</span>
+                </button>
+              )} />
+              <SearchGroup label="Leagues" items={results.leagues} render={(l) => (
+                <button key={l.id} onClick={() => go(`/league/${l.id}`)} style={searchRow}>
+                  <TeamLogo team={l} size={30} />
+                  <span style={searchName}>{l.name}</span>
+                  {l.season && <span style={searchMeta}>{l.season}</span>}
+                </button>
+              )} />
+              <SearchGroup label="Tournaments" items={results.tournaments} render={(t) => (
+                <button key={t.id} onClick={() => go(`/tournament/${t.id}`)} style={searchRow}>
+                  <TeamLogo team={{ name: t.name, logo_url: t.logo_url }} size={30} />
+                  <span style={searchName}>{t.name}</span>
+                  {t.start_date && <span style={searchMeta}>{fmtEventDate(t.start_date)}</span>}
+                </button>
+              )} />
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const searchRow = { display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', color: C.ice, padding: '9px 10px', borderRadius: 8, minHeight: 44, fontFamily: "'Barlow', sans-serif" };
+const searchName = { flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
+const searchMeta = { flexShrink: 0, fontSize: 12, color: C.steel, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
+
+function SearchGroup({ label, items, render }) {
+  if (!items || !items.length) return null;
+  return (
+    <div style={{ marginBottom: 4 }}>
+      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 700, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.steel, padding: '8px 10px 4px' }}>{label}</div>
+      {items.map(render)}
+    </div>
+  );
+}
+
+// ─── Operator on-ramp ────────────────────────────────────────────────────────
+function OperatorBar({ navigate }) {
+  return (
+    <section style={{ marginTop: 18 }}>
+      <SectionHeader label="Manage your leagues & tournaments" />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <ManageCard label="Your leagues" sub="Run a season" onClick={() => navigate('/leagues')} icon="leagues" />
+        <ManageCard label="Your tournaments" sub="Run an event" onClick={() => navigate('/tournaments')} icon="bracket" />
+      </div>
+      <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+        <Button variant="primary" size="sm" fullWidth onClick={() => navigate('/league/create')}>+ Create league</Button>
+        <Button variant="secondary" size="sm" fullWidth onClick={() => navigate('/tournament/create')}>+ Create tournament</Button>
+      </div>
+    </section>
+  );
+}
+function ManageCard({ label, sub, onClick, icon }) {
+  return (
+    <button onClick={onClick} className="home-tap" style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', background: C.card, border: `1px solid ${C.border}`, borderRadius: radii.card, padding: '12px 14px', cursor: 'pointer', minHeight: 44, color: C.ice }}>
+      <span style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 8, background: 'rgba(46,91,140,0.25)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Icon name={icon === 'leagues' ? 'analytics' : 'gamePuck'} size={18} color={C.ice} />
+      </span>
+      <span style={{ minWidth: 0 }}>
+        <span style={{ display: 'block', fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+        <span style={{ display: 'block', fontSize: 12, color: C.steel }}>{sub}</span>
+      </span>
+    </button>
+  );
+}
+
+// ─── Featured hero (XRHL) ────────────────────────────────────────────────────
+function FeaturedHero({ featured, navigate }) {
+  if (!featured) return null;
+  const bg = featured.logo_color || C.blue;
+  return (
+    <section style={{ marginTop: 18 }}>
+      <SectionHeader label="Featured" live={featured.isLive} accessory={featured.isLive ? <span style={{ ...type.sectionHead, fontSize: 13, color: C.red }}>LIVE</span> : null} />
+      <button
+        onClick={() => navigate(featured.href)}
+        className="home-tap"
+        style={{
+          position: 'relative', width: '100%', textAlign: 'left', cursor: 'pointer',
+          border: featured.isLive ? `1px solid ${C.red}` : `1px solid ${C.border}`,
+          boxShadow: featured.isLive ? '0 8px 32px rgba(215,38,56,0.2)' : '0 8px 24px rgba(46,91,140,0.35)',
+          borderRadius: radii.hero, overflow: 'hidden', padding: 0, background: ELEV,
+        }}
+      >
+        {/* Brand-color panel with the league logo. No photo column exists today —
+            the launch hero is the logo on the brand panel (clean, on-brand),
+            never a broken/missing image to a cold viewer. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 18, background: `linear-gradient(135deg, ${bg} 0%, ${shade(bg)} 100%)` }}>
+          <div style={{ flexShrink: 0 }}>
+            <TeamLogo team={{ logo_url: featured.logo_url, logo_color: 'rgba(255,255,255,0.12)', logo_initials: featured.logo_initials || (featured.name || '?').slice(0, 4).toUpperCase(), name: featured.name }} size={72} radius={10} />
+          </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(244,247,250,0.7)', fontFamily: "'Barlow Condensed', sans-serif" }}>
+              {featured.type === 'league' ? 'Featured league' : 'Featured event'}
+            </div>
+            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 26, lineHeight: 1.05, color: '#fff', margin: '2px 0 4px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+              {featured.name}
+            </div>
+            <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.85)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{featured.subtitle}</div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: ELEV }}>
+          <span style={{ fontSize: 12, color: C.steel }}>{featured.isLive ? 'Game in progress — tap to watch it live' : 'Tap to follow the action'}</span>
+          <span style={{ ...type.sectionHead, fontSize: 13, color: C.ice }}>OPEN →</span>
+        </div>
+      </button>
+    </section>
+  );
+}
+
+// ─── Live now ────────────────────────────────────────────────────────────────
+function LiveNow({ games, navigate }) {
+  const [hero, ...rest] = games;
+  return (
+    <section style={{ marginTop: 22 }}>
+      <SectionHeader label="Live Now" live accessory={<span style={{ ...type.sectionHead, fontSize: 14, color: C.ice }}>{games.length}</span>} />
+      <LiveHeroCard game={hero} navigate={navigate} />
+      {rest.length > 0 && (
+        <div className="home-rail" style={{ display: 'flex', gap: 10, overflowX: 'auto', marginTop: 10, paddingBottom: 4 }}>
+          {rest.map((g) => <LiveChip key={`${g.source}-${g.id}`} game={g} navigate={navigate} />)}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function LiveHeroCard({ game, navigate }) {
+  return (
+    <button onClick={() => navigate(game.gameUrl)} className="home-tap" style={{
+      width: '100%', textAlign: 'left', cursor: 'pointer', background: ELEV,
+      border: `1px solid ${C.red}`, borderRadius: radii.hero, padding: 16,
+      boxShadow: '0 8px 32px rgba(215,38,56,0.2)', position: 'relative', overflow: 'hidden',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.steel, fontFamily: "'Barlow Condensed', sans-serif", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>{game.eventName}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span className="home-live-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: C.red, flexShrink: 0 }} />
+          <span style={{ ...type.sectionHead, fontSize: 13, color: C.red }}>LIVE</span>
+        </span>
+      </div>
+      <TeamScoreRow logoUrl={game.home?.logoUrl} name={game.home?.name} score={game.homeScore} />
+      <div style={{ height: 8 }} />
+      <TeamScoreRow logoUrl={game.away?.logoUrl} name={game.away?.name} score={game.awayScore} />
+    </button>
+  );
+}
+
+function TeamScoreRow({ logoUrl, name, score }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+      <TeamLogo team={{ logo_url: logoUrl, name }} size={36} />
+      <span style={{ flex: 1, minWidth: 0, fontSize: 17, fontWeight: 600, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: "'Barlow', sans-serif" }}>{name || 'TBD'}</span>
+      <span style={{ flexShrink: 0, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 34, lineHeight: 1, color: C.ice, minWidth: 44, textAlign: 'right' }}>{score ?? 0}</span>
+    </div>
+  );
+}
+
+function LiveChip({ game, navigate }) {
+  return (
+    <button onClick={() => navigate(game.gameUrl)} className="home-tap" style={{ flexShrink: 0, width: 168, textAlign: 'left', cursor: 'pointer', background: C.card, border: `1px solid ${C.red}55`, borderRadius: radii.card, padding: '10px 12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+        <span className="home-live-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: C.red }} />
+        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: C.red, fontFamily: "'Barlow Condensed', sans-serif" }}>LIVE</span>
+      </div>
+      <ChipTeam name={game.home?.name} score={game.homeScore} />
+      <ChipTeam name={game.away?.name} score={game.awayScore} />
+    </button>
+  );
+}
+function ChipTeam({ name, score }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+      <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name || 'TBD'}</span>
+      <span style={{ flexShrink: 0, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 16, color: C.ice }}>{score ?? 0}</span>
+    </div>
+  );
+}
+
+// ─── Your hockey ─────────────────────────────────────────────────────────────
+function YourHockey({ your, leader, navigate }) {
+  const { next, recentFinals } = your;
+  const nothing = !next.length && !recentFinals.length && !leader;
+  return (
+    <section style={{ marginTop: 22 }}>
+      <SectionHeader label="Your Hockey" />
+      {leader && <LeaderTile leader={leader} navigate={navigate} />}
+      {next.length > 0 && (
+        <div style={{ marginTop: leader ? 10 : 0 }}>
+          <RailLabel>Next up</RailLabel>
+          {next.map((g) => <NextGameRow key={`${g._source}-${g.id}`} g={g} navigate={navigate} />)}
+        </div>
+      )}
+      {recentFinals.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <RailLabel>Recent finals</RailLabel>
+          {recentFinals.map((f) => (
+            f.hasRecap
+              ? <div key={`${f.source}-${f.id}`} style={{ marginBottom: 10 }}><RecapCard gameId={f.id} source="league" /></div>
+              : <FinalRow key={`${f.source}-${f.id}`} f={f} />
+          ))}
+        </div>
+      )}
+      {nothing && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: radii.card, padding: 18, color: C.steel, fontSize: 14 }}>
+          No games on the board yet for your teams. New games show up here the moment they're scheduled.
+        </div>
+      )}
+    </section>
+  );
+}
+
+function LeaderTile({ leader, navigate }) {
+  return (
+    <button onClick={() => navigate(`/league/${leader.leagueId}`)} className="home-tap" style={{ width: '100%', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(201,168,76,0.08)', border: `1px solid ${GOLD}66`, borderRadius: radii.card, padding: '12px 14px' }}>
+      <span style={{ flexShrink: 0 }}><TeamLogo team={leader.logo} size={38} /></span>
+      <span style={{ minWidth: 0, flex: 1 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Icon name="milestone" size={14} color={GOLD} />
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: GOLD, fontFamily: "'Barlow Condensed', sans-serif" }}>League leader</span>
+        </span>
+        <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>{leader.teamName}</span>
+        <span style={{ display: 'block', fontSize: 12, color: C.steel }}>{leader.wins}-{leader.losses}{leader.otl ? `-${leader.otl}` : ''} · {leader.pts} PTS</span>
+      </span>
+      <span style={{ flexShrink: 0, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 22, color: GOLD }}>1st</span>
+    </button>
+  );
+}
+
+function NextGameRow({ g, navigate }) {
+  const href = g._source === 'league' ? `/league-game/${g.id}?type=league` : `/team/${g._teamId}`;
+  return (
+    <button onClick={() => navigate(href)} className="home-tap" style={{ width: '100%', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, background: C.card, border: `1px solid ${C.border}`, borderRadius: radii.card, padding: '11px 14px', marginBottom: 8, minHeight: 44 }}>
+      <TeamLogo team={g._team} size={34} />
+      <span style={{ minWidth: 0, flex: 1 }}>
+        <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {g._team?.name || 'My team'} <span style={{ color: C.steel, fontWeight: 400 }}>{g.is_home ? 'vs' : '@'}</span> {g.opponent || 'TBD'}
+        </span>
+        {g.location && <span style={{ display: 'block', fontSize: 12, color: C.steel, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.location}</span>}
+      </span>
+      <span style={{ flexShrink: 0 }}><DatePill text={fmtGameWhen(g.start_time)} /></span>
+    </button>
+  );
+}
+
+function FinalRow({ f }) {
+  const myScore = f.isHome ? f.homeScore : f.awayScore;
+  const oppScore = f.isHome ? f.awayScore : f.homeScore;
+  const win = (myScore ?? 0) > (oppScore ?? 0);
+  const tie = (myScore ?? 0) === (oppScore ?? 0);
+  const resColor = tie ? C.steel : win ? '#22C55E' : C.red;
+  const resLabel = tie ? 'T' : win ? 'W' : 'L';
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: C.card, border: `1px solid ${C.border}`, borderRadius: radii.card, padding: '11px 14px', marginBottom: 8 }}>
+      <TeamLogo team={f.teamLogo || { name: f.teamName }} size={34} />
+      <span style={{ minWidth: 0, flex: 1 }}>
+        <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {f.teamName} <span style={{ color: C.steel, fontWeight: 400 }}>{f.isHome ? 'vs' : '@'}</span> {f.opponent}
+        </span>
+        <span style={{ display: 'block', fontSize: 12, color: C.steel }}>Final{f.leagueName ? ` · ${f.leagueName}` : ''}</span>
+      </span>
+      <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 20, color: C.ice }}>{myScore ?? 0}–{oppScore ?? 0}</span>
+        <span style={{ width: 22, height: 22, borderRadius: 5, background: `${resColor}22`, color: resColor, fontWeight: 800, fontSize: 12, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow Condensed', sans-serif" }}>{resLabel}</span>
+      </span>
+    </div>
+  );
+}
+
+// ─── Pick your team (cold user) ──────────────────────────────────────────────
+function PickYourTeam({ navigate }) {
+  return (
+    <section style={{ marginTop: 22 }}>
+      <SectionHeader label="Your Hockey" />
+      <div style={{ background: ELEV, border: `1px solid ${C.border}`, borderRadius: radii.hero, padding: '26px 20px', textAlign: 'center' }}>
+        <div style={{ fontSize: 34, marginBottom: 8 }}>🏒</div>
+        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 24, color: C.ice, lineHeight: 1.05 }}>Pick your team.<br />The arena fills in.</div>
+        <div style={{ fontSize: 14, color: C.steel, margin: '8px auto 18px', maxWidth: 320, lineHeight: 1.5 }}>Follow your team, league, or event and your live games, scores, and recaps all land right here.</div>
+        <Button variant="primary" size="md" onClick={() => navigate('/discover')}>Find your team</Button>
+        <div style={{ marginTop: 14 }}>
+          <button onClick={() => navigate(`/league/${DEMO_LEAGUE_ID}`)} style={{ background: 'none', border: 'none', color: C.steel, fontSize: 13, cursor: 'pointer', textDecoration: 'underline', fontFamily: "'Barlow', sans-serif" }}>
+            Or take a look around a live league →
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─── This week ───────────────────────────────────────────────────────────────
+function ThisWeek({ upcoming, events, navigate }) {
+  const tiles = [];
+  (upcoming || []).forEach((g) => tiles.push({ kind: 'game', g }));
+  // De-dupe public events that the user already sees via their own upcoming games.
+  const seen = new Set((upcoming || []).map((g) => g.eventId));
+  (events || []).forEach((e) => { if (!seen.has(e.id)) tiles.push({ kind: 'event', e }); });
+  if (!tiles.length) return null;
+
+  return (
+    <section style={{ marginTop: 22 }}>
+      <SectionHeader label="This Week" />
+      <div className="home-rail" style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 6 }}>
+        {tiles.slice(0, 12).map((t) => t.kind === 'game'
+          ? <GameTile key={`g-${t.g.source}-${t.g.id}`} g={t.g} navigate={navigate} />
+          : <EventTile key={`e-${t.e.id}`} e={t.e} navigate={navigate} />)}
+      </div>
+    </section>
+  );
+}
+
+function GameTile({ g, navigate }) {
+  return (
+    <button onClick={() => navigate(g.gameUrl)} className="home-tap" style={tileStyle}>
+      <DatePill text={fmtGameWhen(g.startTime)} />
+      <div style={{ marginTop: 10 }}>
+        <TileTeam name={g.home?.name} />
+        <div style={{ fontSize: 11, color: C.steel, margin: '2px 0' }}>vs</div>
+        <TileTeam name={g.away?.name} />
+      </div>
+      <div style={{ marginTop: 'auto', paddingTop: 10, fontSize: 11, color: C.steel, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.eventName}</div>
+    </button>
+  );
+}
+function TileTeam({ name }) {
+  return <div style={{ fontSize: 14, fontWeight: 600, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name || 'TBD'}</div>;
+}
+
+function EventTile({ e, navigate }) {
+  return (
+    <button onClick={() => navigate(e.href)} className="home-tap" style={tileStyle}>
+      <DatePill text={e.startDate ? fmtEventDate(e.startDate) : 'SOON'} />
+      <div style={{ marginTop: 10, flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <TeamLogo team={{ name: e.name, logo_url: e.logo_url }} size={40} radius={8} />
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.25 }}>{e.name}</div>
+      </div>
+      <div style={{ marginTop: 'auto', paddingTop: 8, fontSize: 11, color: C.steel }}>Tournament</div>
+    </button>
+  );
+}
+
+const tileStyle = { flexShrink: 0, width: 176, minHeight: 150, display: 'flex', flexDirection: 'column', textAlign: 'left', cursor: 'pointer', background: C.card, border: `1px solid ${C.border}`, borderRadius: radii.card, padding: 14 };
+
+function DatePill({ text }) {
+  if (!text) return null;
+  return <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, letterSpacing: '0.05em', color: C.steel, background: 'rgba(139,163,190,0.12)', border: `1px solid ${C.border}`, borderRadius: 6, padding: '3px 8px', fontFamily: "'Barlow Condensed', sans-serif", whiteSpace: 'nowrap' }}>{text}</span>;
+}
+
+function RailLabel({ children }) {
+  return <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 700, fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.steel, marginBottom: 8 }}>{children}</div>;
+}
+
+// ─── Discover ────────────────────────────────────────────────────────────────
+function DiscoverRow({ navigate, cold }) {
+  return (
+    <section style={{ marginTop: 22 }}>
+      <SectionHeader label="Discover" />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <DiscoverCard label="Browse leagues" onClick={() => navigate('/leagues')} icon="analytics" />
+        <DiscoverCard label="Browse tournaments" onClick={() => navigate('/tournaments')} icon="gamePuck" />
+        <DiscoverCard label="Find players & teams" onClick={() => navigate('/discover')} icon="discover" />
+        <DiscoverCard label="Around hockey" sub="The global feed" onClick={() => navigate('/feed')} icon="fan" />
+      </div>
+      {cold && (
+        <button onClick={() => navigate(`/league/${DEMO_LEAGUE_ID}`)} className="home-tap" style={{ width: '100%', marginTop: 10, textAlign: 'left', cursor: 'pointer', background: 'rgba(46,91,140,0.18)', border: `1px solid ${C.border}`, borderRadius: radii.card, padding: '12px 14px', color: C.ice, fontSize: 14, fontWeight: 600 }}>
+          New here? Tour a live league to see Rinkd in action →
+        </button>
+      )}
+    </section>
+  );
+}
+function DiscoverCard({ label, sub, onClick, icon }) {
+  return (
+    <button onClick={onClick} className="home-tap" style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', background: C.card, border: `1px solid ${C.border}`, borderRadius: radii.card, padding: '12px 14px', cursor: 'pointer', minHeight: 44, color: C.ice }}>
+      <span style={{ flexShrink: 0 }}><Icon name={icon} size={18} color={C.steel} /></span>
+      <span style={{ minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+        {sub && <span style={{ display: 'block', fontSize: 12, color: C.steel }}>{sub}</span>}
+      </span>
+    </button>
+  );
+}
+
+// ─── Skeleton ────────────────────────────────────────────────────────────────
+function HomeSkeleton() {
+  return (
+    <div style={{ marginTop: 18 }} aria-hidden>
+      <Sk h={120} r={radii.hero} />
+      <div style={{ height: 16 }} />
+      <Sk h={150} r={radii.hero} />
+      <div style={{ height: 16 }} />
+      <Sk h={64} /><div style={{ height: 8 }} /><Sk h={64} />
+      <div style={{ height: 16 }} />
+      <div style={{ display: 'flex', gap: 12, overflow: 'hidden' }}>
+        <Sk h={150} w={176} /><Sk h={150} w={176} />
+      </div>
+    </div>
+  );
+}
+function Sk({ h, w, r }) {
+  return <div className="home-sk" style={{ height: h, width: w || '100%', borderRadius: r || radii.card, background: C.card }} />;
+}
+
+// Darken a hex/named color for the hero gradient's far stop. Falls back to the
+// app navy if the input isn't a parseable #rrggbb.
+function shade(color) {
+  if (typeof color !== 'string' || !/^#[0-9a-f]{6}$/i.test(color)) return C.navy;
+  const n = parseInt(color.slice(1), 16);
+  const r = Math.max(0, ((n >> 16) & 255) - 40);
+  const g = Math.max(0, ((n >> 8) & 255) - 40);
+  const b = Math.max(0, (n & 255) - 40);
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+}
+
+const HOME_CSS = `
+.home-tap { transition: transform 0.1s ease, box-shadow 0.15s ease; }
+.home-tap:active { transform: scale(0.98); }
+.home-rail { scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.home-rail::-webkit-scrollbar { display: none; }
+@keyframes home-live-pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(0.85); } }
+.home-live-dot { animation: home-live-pulse 1.5s ease-in-out infinite; }
+@keyframes home-sk-shimmer { 0% { opacity: 0.55; } 50% { opacity: 0.85; } 100% { opacity: 0.55; } }
+.home-sk { animation: home-sk-shimmer 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .home-tap:active { transform: none; }
+  .home-live-dot, .home-sk { animation: none !important; }
+}
+`;

@@ -15,6 +15,7 @@ import { subscribeToPush, isPushSubscribed } from '../lib/push';
 import { getLeaguePosts, createPost, uploadMedia, timeAgo, toggleLike, getLikedPosts } from '../lib/posts';
 import PostActionMenu from '../components/PostActionMenu';
 import PostReactions from '../components/PostReactions';
+import CommentThread from '../components/CommentThread';
 import { getReactions } from '../lib/reactions';
 import { haptics } from '../lib/haptics';
 import { FeedSkeleton } from '../components/Skeletons';
@@ -774,6 +775,7 @@ export default function LeaguePage({ currentUser, profile }) {
               onRetry={loadFeed}
               navigate={navigate}
               currentUser={currentUser}
+              viewerProfile={profile}
               leagueId={id}
               canModerate={isManager}
             />
@@ -840,7 +842,7 @@ const card = { background: '#0f2847', border: '0.5px solid rgba(46,91,140,0.4)',
 // ScorerView finalize → createGameRecapPost + triggerLeagueRecapPush) AND
 // user-authored posts scoped to this league. User posts do NOT trigger
 // pushes — only recaps do — to keep notification volume sane.
-function LeagueFeedTab({ posts, setPosts, loading, error = false, online = true, onRetry, navigate, currentUser, leagueId, canModerate = false }) {
+function LeagueFeedTab({ posts, setPosts, loading, error = false, online = true, onRetry, navigate, currentUser, viewerProfile, leagueId, canModerate = false }) {
   const [draft, setDraft] = useState('');
   const [postMentionIds, setPostMentionIds] = useState([]);
   const [mediaFile, setMediaFile] = useState(null);
@@ -848,7 +850,15 @@ function LeagueFeedTab({ posts, setPosts, loading, error = false, online = true,
   const [composerError, setComposerError] = useState(null);
   const [likedPosts, setLikedPosts] = useState([]);
   const [reactionMap, setReactionMap] = useState({});
+  const [openComments, setOpenComments] = useState({});
   const likeInFlightRef = useRef(new Set());
+
+  // Comment-thread parity (Step 5): the league feed now has the same shared
+  // <CommentThread> as the global + team feeds. Toggle open per post; keep the
+  // count chip in sync optimistically (the DB trigger is the source of truth).
+  const toggleComments = (postId) => setOpenComments((m) => ({ ...m, [postId]: !m[postId] }));
+  const bumpCommentCount = (postId, d) => setPosts((prev) => (prev || []).map((p) => p.id === postId
+    ? { ...p, comment_count: Math.max(0, (p.comment_count || 0) + d) } : p));
 
   // Load which of the visible posts the current user has already liked. Keyed
   // on the id SET, not the posts objects — an optimistic like rewrites a post
@@ -1081,6 +1091,13 @@ function LeagueFeedTab({ posts, setPosts, loading, error = false, online = true,
                     <Icon name="like" size={14} fill={likedPosts.includes(p.id) ? '#D72638' : 'none'} />
                     <span style={{ fontWeight: likedPosts.includes(p.id) ? 700 : 400 }}>{p.likes || 0}</span>
                   </button>
+                  <button
+                    onClick={() => toggleComments(p.id)}
+                    aria-label="Comments" aria-expanded={!!openComments[p.id]}
+                    style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: openComments[p.id] ? '#F4F7FA' : '#7C8B9F', fontFamily: 'Barlow, sans-serif', fontSize: 12 }}
+                  >
+                    <Icon name="comment" size={14} /><span>{p.comment_count || 0}</span>
+                  </button>
                   <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{author ? `${author} · ` : ''}{timeAgo(p.created_at)} ago</span>
                 </div>
                 {recapGameId && (
@@ -1100,6 +1117,14 @@ function LeagueFeedTab({ posts, setPosts, loading, error = false, online = true,
                   </button>
                 )}
               </div>
+              <CommentThread
+                open={!!openComments[p.id]}
+                postId={p.id}
+                currentUser={currentUser}
+                viewerProfile={viewerProfile}
+                onCountChange={(d) => bumpCommentCount(p.id, d)}
+                onUserBlocked={handleAuthorBlocked}
+              />
             </div>
           );
         })

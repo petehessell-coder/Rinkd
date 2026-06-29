@@ -55,7 +55,7 @@ export default function ResetPasswordPage() {
     if (error) { track('password_reset_failed', { reason: error.message?.slice(0, 80) }); setErr(error.message); return; }
     track('password_reset_success');
     setStage('success');
-    setTimeout(() => navigate('/feed'), 1600);
+    setTimeout(() => navigate('/home'), 1600);
   };
 
   const inputStyle = {

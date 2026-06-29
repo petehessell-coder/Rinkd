@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { RinkdLogo, Avatar, ProfileNavIcon, ChirpNavIcon } from './Logos';
-import { Users, Bell, MoreHorizontal } from 'lucide-react';
+import { RinkdLogo, Avatar, ProfileNavIcon } from './Logos';
+import { Users, Bell, MoreHorizontal, Home as HomeIcon } from 'lucide-react';
 import { signOut } from '../lib/auth';
 import NotificationBell from './NotificationBell';
 import MessagesIcon from './MessagesIcon';
@@ -28,7 +28,12 @@ const B = {
 // ============================================================================
 
 const NAV = [
-  { path: '/feed',          IconNode: ChirpNavIcon, iconProps: { inline: false }, label: 'Chirps' },
+  // Event-Centric Home: the front door is the personalized "Home Ice" tile
+  // board, NOT the global chirp feed. "Home Ice" matches the top-bar branding
+  // so the home screen has ONE consistent name. Mobile bottom bar uses the
+  // shorter "Home" (mobileLabel) so the two-word label never wraps or crowds
+  // the other four items on the smallest device.
+  { path: '/home',          IconNode: HomeIcon,       label: 'Home Ice', mobileLabel: 'Home' },
   { path: '/teams',         IconNode: Users,          label: 'Teams' },
   { path: '/notifications', IconNode: Bell,           label: 'Notifications', showBadge: true },
   { path: '/profile',       IconNode: ProfileNavIcon, label: 'Profile' },
@@ -61,7 +66,9 @@ function NavIcon({ item, size }) {
 // to a previous detail page is confusing, not helpful. Everywhere else
 // gets a back button automatically.
 const TOP_LEVEL_PATHS = new Set([
-  '/', '/feed', '/teams', '/notifications', '/messages', '/profile',
+  // /home is the new front door; /feed stays (it's now the "Discover" surface,
+  // still a top-level back target so back from a chirp doesn't loop).
+  '/', '/home', '/feed', '/teams', '/notifications', '/messages', '/profile',
   '/login', '/landing',
 ]);
 
@@ -76,9 +83,9 @@ function shouldShowBack(pathname) {
 function BackButton({ inline = false }) {
   const navigate = useNavigate();
   const onBack = () => {
-    // Use browser history if available; otherwise fall back to the feed.
+    // Use browser history if available; otherwise fall back to the home.
     if (window.history.length > 1) navigate(-1);
-    else navigate('/feed');
+    else navigate('/home');
   };
   return (
     <button
@@ -122,7 +129,7 @@ export default function Layout({ children, profile }) {
 
   const isActive = (item) =>
     location.pathname === item.path ||
-    (item.path === '/feed' && location.pathname === '/') ||
+    (item.path === '/home' && location.pathname === '/') ||
     location.pathname.startsWith(item.path + '/');
 
   // Click handler for the More nav item — opens the drawer instead of navigating
@@ -177,7 +184,10 @@ export default function Layout({ children, profile }) {
             <BellBadge userId={profile.id} />
           )}
         </span>
-        <span style={{ fontWeight: isVertical && active ? 600 : undefined }}>{item.label}</span>
+        {/* Mobile bottom bar uses the shorter label (mobileLabel) where set so a
+            two-word label like "Home Ice" never wraps or crowds the 5-item bar.
+            nowrap is belt-and-suspenders against a wrap on the narrowest device. */}
+        <span style={{ fontWeight: isVertical && active ? 600 : undefined, whiteSpace: 'nowrap' }}>{isVertical && item.mobileLabel ? item.mobileLabel : item.label}</span>
         {active && isVertical && <div style={{ width: 4, height: 4, borderRadius: '50%', background: B.red }} />}
       </Link>
     );
@@ -191,7 +201,7 @@ export default function Layout({ children, profile }) {
 
         {/* Brand */}
         <div style={{ padding: '0 18px 18px' }}>
-          <Link to="/feed" style={{ textDecoration: 'none' }}>
+          <Link to="/home" style={{ textDecoration: 'none' }}>
             <RinkdLogo size={40} showText />
           </Link>
         </div>
@@ -249,7 +259,7 @@ export default function Layout({ children, profile }) {
         {showBack ? (
           <BackButton />
         ) : (
-          <Link to="/feed" style={{ textDecoration: 'none' }}>
+          <Link to="/home" style={{ textDecoration: 'none' }}>
             <RinkdLogo size={32} showText />
           </Link>
         )}

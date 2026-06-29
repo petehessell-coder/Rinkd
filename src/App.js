@@ -9,6 +9,7 @@ import { prefersReducedMotion } from './lib/motion';
 // Eager — genuinely first-paint-critical (auth gate + authenticated home).
 // Everything else is lazy so the main bundle stays lean.
 import Auth from './pages/Auth';
+import Home from './pages/Home';
 import Feed from './pages/Feed';
 import Landing from './pages/Landing';
 const Profile = lazyWithRetry(() => import('./pages/Profile'));
@@ -90,7 +91,7 @@ const LOADING_MARK = Math.random() < 0.5
 function LoginRedirect() {
   const params = new URLSearchParams(window.location.search);
   const raw = params.get('returnTo');
-  const safe = raw && raw.startsWith('/') && !raw.startsWith('//') ? raw : '/feed';
+  const safe = raw && raw.startsWith('/') && !raw.startsWith('//') ? raw : '/home';
   return <Navigate to={safe} replace />;
 }
 
@@ -220,7 +221,7 @@ function AppRoutes() {
       {/* Root: Landing handles the "first time mobile visitor" install pitch
           and falls through to Auth for desktop, installed PWA, or "continue
           in browser" tap. /login always goes straight to Auth (no marketing). */}
-      <Route path="/" element={user ? <Navigate to="/feed" replace /> : <Landing />} />
+      <Route path="/" element={user ? <Navigate to="/home" replace /> : <Landing />} />
       {/* If a logged-in user hits /login?returnTo=/tournament/X (e.g., they
           clicked the public-landing CTA but were already signed in), bounce
           them straight to returnTo instead of dropping them on /feed. Auth
@@ -240,6 +241,10 @@ function AppRoutes() {
       <Route path="/pricing" element={<Pricing currentUser={user} profile={profile} />} />
       {/* Password recovery — public, handles the magic-link redirect from Supabase */}
       <Route path="/reset-password" element={<ResetPassword />} />
+      {/* Event-Centric Home — the signed-in front door. A personalized tile
+          board (their teams/events/scores) with the XRHL Featured hero on top,
+          NOT the global chirp feed. /feed stays alive below as "Discover". */}
+      <Route path="/home" element={<ProtectedRoute><Home currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/feed" element={<ProtectedRoute><Feed currentUser={user} profile={profile} /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Profile currentUser={user} profile={profile} onProfileUpdate={setProfile} /></ProtectedRoute>} />
       <Route path="/profile/:userId" element={<ProtectedRoute><Profile currentUser={user} profile={profile} onProfileUpdate={setProfile} /></ProtectedRoute>} />

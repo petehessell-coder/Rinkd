@@ -49,7 +49,7 @@ export default function AcceptTeamInvite({ profile }) {
         setTimeout(() => {
           if (cancelled) return;
           if (leagueId) navigate(`/league/${leagueId}`, { replace: true });
-          else navigate('/feed', { replace: true });
+          else navigate('/home', { replace: true });
         }, 1500);
       } catch (e) {
         if (cancelled) return;
@@ -97,7 +97,7 @@ export default function AcceptTeamInvite({ profile }) {
           <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
           <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 22, marginBottom: 8 }}>Invite couldn't be accepted</div>
           <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.55)', marginBottom: 18, lineHeight: 1.55 }}>{state.message}</div>
-          <button onClick={() => navigate('/feed', { replace: true })} style={{ background: C.red, color: '#fff', border: 'none', borderRadius: 999, padding: '10px 22px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>Back to Feed</button>
+          <button onClick={() => navigate('/home', { replace: true })} style={{ background: C.red, color: '#fff', border: 'none', borderRadius: 999, padding: '10px 22px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>Back to Home</button>
         </div>
       </div>
     </Layout>

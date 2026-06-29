@@ -568,7 +568,7 @@ export default function Survey() {
             <div className="sv-success-icon">🏒</div>
             <h2>You're on the ice.</h2>
             <p>Thanks for taking the time. Your input directly shapes Rinkd. We'll reach out when we're ready to launch — go time is coming.</p>
-            <a href="/feed" className="sv-rinkd-link">Back to Rinkd →</a>
+            <a href="/home" className="sv-rinkd-link">Back to Rinkd →</a>
           </div>
         </div>
         <footer className="sv-footer">

@@ -98,9 +98,9 @@ export default function Pricing({ currentUser }) {
 
       {/* Top bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: `1px solid ${C.border}` }}>
-        <img src="/rinkd-wordmark-tape.png" alt="Rinkd" onClick={() => navigate(currentUser ? '/feed' : '/')}
+        <img src="/rinkd-wordmark-tape.png" alt="Rinkd" onClick={() => navigate(currentUser ? '/home' : '/')}
           style={{ height: 26, width: 'auto', cursor: 'pointer' }} />
-        <button onClick={() => navigate(currentUser ? '/feed' : '/')} style={{ background: 'transparent', border: `1px solid ${C.border}`, color: C.steel, borderRadius: 8, padding: '6px 14px', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+        <button onClick={() => navigate(currentUser ? '/home' : '/')} style={{ background: 'transparent', border: `1px solid ${C.border}`, color: C.steel, borderRadius: 8, padding: '6px 14px', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
           {currentUser ? 'Back to Rinkd' : 'Home'}
         </button>
       </div>

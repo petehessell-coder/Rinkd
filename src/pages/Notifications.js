@@ -108,7 +108,7 @@ export default function NotificationsPage({ currentUser, profile }) {
               icon="🔔"
               title={filter === 'unread' ? 'All caught up' : 'The ice is quiet'}
               body={filter === 'unread' ? 'You\'ve read everything. Go drop a goal.' : 'Follow some teams and players to change that — likes, mentions, and game alerts all land right here.'}
-              cta={filter === 'unread' ? { label: 'Back to Chirps', onClick: () => navigate('/feed') } : { label: 'Discover Teams', onClick: () => navigate('/discover') }}
+              cta={filter === 'unread' ? { label: 'Home Ice', onClick: () => navigate('/home') } : { label: 'Discover Teams', onClick: () => navigate('/discover') }}
             />
           ) : (() => {
             // Group into Today / Earlier with broadcast lower-third dividers.

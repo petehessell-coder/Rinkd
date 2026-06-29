@@ -62,16 +62,16 @@ export default function NotFound() {
           maxWidth: 360, margin: '0 auto 22px',
         }}>
           Wrong locker room, friend. The page you're looking for got benched or
-          never made the roster. Skate it back to the feed.
+          never made the roster. Skate it back to your home ice.
         </div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <button onClick={() => navigate('/feed')} style={{
+          <button onClick={() => navigate('/home')} style={{
             background: C.red, color: '#fff', border: 'none',
             padding: '12px 24px', borderRadius: 999, cursor: 'pointer',
             fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic',
             fontSize: 15, letterSpacing: '0.05em', textTransform: 'uppercase',
           }}>
-            Back to Chirps
+            Home Ice
           </button>
           <button onClick={() => navigate(-1)} style={{
             background: 'transparent', color: C.steel, border: `1px solid ${C.border}`,
