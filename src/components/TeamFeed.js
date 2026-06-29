@@ -5,7 +5,7 @@ import { useOnline } from '../lib/useOnline';
 import { Avatar, TierBadge } from './Logos';
 import {
   getTeamPosts, createPost, toggleLike, getLikedPosts,
-  getComments, createComment, uploadMedia, timeAgo,
+  uploadMedia, timeAgo,
 } from '../lib/posts';
 import { track } from '../lib/analytics';
 import { FeedSkeleton, EmptyState } from './Skeletons';
@@ -18,7 +18,8 @@ import RecapCard from './RecapCard';
 import ShareButton from './ShareButton';
 import { recapSourceFromPost, getRecapCardWithSponsor } from '../lib/recapCard';
 import { MentionInput, MentionText } from './Mentions';
-import { savePostMentions, saveCommentMentions, mentionMapFromRows } from '../lib/mentions';
+import { savePostMentions, mentionMapFromRows } from '../lib/mentions';
+import CommentThread from './CommentThread';
 
 const C = {
   navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
@@ -83,34 +84,13 @@ function MediaDisplay({ url, type }) {
 function PostCard({ post, currentUser, isLiked, reactions, onLike, onCommentChange, onPostHidden, onPostDelete, onUserBlocked }) {
   const navigate = useNavigate();
   const [showComments, setShowComments] = useState(false);
-  const [comments, setComments] = useState([]);
-  const [commentText, setCommentText] = useState('');
-  const [commentMentionIds, setCommentMentionIds] = useState([]);
-  const [submitting, setSubmitting] = useState(false);
   const profile = post.profiles;
   const postMentionMap = mentionMapFromRows(post.post_mentions);
 
-  const loadAndToggle = async () => {
-    if (!showComments) { const c = await getComments(post.id); setComments(c); }
-    setShowComments(v => !v);
-  };
-
-  const submit = async (e) => {
-    e.preventDefault();
-    if (!commentText.trim() || !currentUser) return;
-    setSubmitting(true);
-    const mentionIds = commentMentionIds;
-    const { data, error } = await createComment(post.id, currentUser.id, commentText);
-    if (error) { setSubmitting(false); alert("That comment didn't post — check your connection and try again."); return; }
-    if (data?.id && mentionIds.length) {
-      saveCommentMentions(data.id, mentionIds).then(({ error: mErr }) => {
-        if (mErr) console.warn('[TeamFeed comment] mention save failed:', mErr?.message || mErr);
-      });
-    }
-    const c = await getComments(post.id);
-    setComments(c); setCommentText(''); setCommentMentionIds([]); setSubmitting(false);
-    onCommentChange?.();
-  };
+  // Comment thread is the shared <CommentThread> (one source of truth across all
+  // four feeds). This just flips it open; the component lazy-loads + owns the
+  // optimistic list/composer/undo.
+  const loadAndToggle = () => setShowComments(v => !v);
 
   return (
     <div style={{ background: C.card, borderRadius: 14, border: `1px solid ${C.border}`, marginBottom: 12, overflow: 'hidden' }}>
@@ -161,62 +141,14 @@ function PostCard({ post, currentUser, isLiked, reactions, onLike, onCommentChan
           </button>
           <PostReactions postId={post.id} currentUserId={currentUser?.id} initial={reactions} />
         </div>
-        {showComments && (
-          <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
-            {comments.map(c => (
-              <div key={c.id} style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                <Avatar profile={c.profiles} size={28} />
-                <div style={{ flex: 1, background: C.navy, borderRadius: 8, padding: '8px 10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: C.ice, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.profiles?.name} <span style={{ fontWeight: 400, color: C.steel }}>· {timeAgo(c.created_at)}</span></div>
-                      <div style={{ fontSize: 13, color: C.ice }}><MentionText text={c.content} mentions={mentionMapFromRows(c.comment_mentions)} /></div>
-                    </div>
-                    <PostActionMenu
-                      kind="comment"
-                      targetId={c.id}
-                      authorId={c.author_id}
-                      authorHandle={c.profiles?.handle}
-                      currentUserId={currentUser?.id}
-                      onReported={() => setComments(prev => prev.filter(x => x.id !== c.id))}
-                      onBlocked={() => {
-                        setComments(prev => prev.filter(x => x.author_id !== c.author_id));
-                        onUserBlocked?.(c.author_id);
-                      }}
-                      onDeleted={() => {
-                        setComments(prev => prev.filter(x => x.id !== c.id));
-                        onCommentChange?.();
-                      }}
-                      onDelete={() => {
-                        // Optimistic remove + restore (the menu wraps this in a 5s Undo).
-                        const idx = comments.findIndex(x => x.id === c.id);
-                        setComments(prev => prev.filter(x => x.id !== c.id));
-                        onCommentChange?.();
-                        return () => {
-                          setComments(prev => prev.some(x => x.id === c.id)
-                            ? prev
-                            : (() => { const n = [...prev]; n.splice(idx < 0 ? n.length : Math.min(idx, n.length), 0, c); return n; })());
-                          onCommentChange?.();
-                        };
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
-            {currentUser && (
-              <form onSubmit={submit} style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                <Avatar profile={currentUser} size={28} />
-                <MentionInput value={commentText} onChange={setCommentText} onMentionsChange={setCommentMentionIds}
-                  placeholder="Add a comment… use @ to tag" maxLength={280} rows={1}
-                  style={{ flex: 1 }}
-                  textareaStyle={{ padding: '8px 12px', borderRadius: 8, background: C.navy, border: `1px solid ${C.border}`, color: C.ice, fontSize: 13, fontFamily: "'Barlow', sans-serif", lineHeight: 1.4 }}/>
-                <button type="submit" disabled={!commentText.trim() || submitting}
-                  style={{ padding: '8px 14px', borderRadius: 8, background: commentText.trim() ? C.red : C.border, color: 'white', border: 'none', cursor: 'pointer', fontSize: 13, fontFamily: "'Barlow', sans-serif" }}>Post</button>
-              </form>
-            )}
-          </div>
-        )}
+        <CommentThread
+          open={showComments}
+          postId={post.id}
+          currentUser={currentUser}
+          viewerProfile={currentUser}
+          onCountChange={() => onCommentChange?.()}
+          onUserBlocked={onUserBlocked}
+        />
       </div>
     </div>
   );

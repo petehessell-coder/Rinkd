@@ -63,12 +63,12 @@ function Input({ label, ...props }) {
 
 // Pull a safe `returnTo` from the URL: must be a relative path beginning with
 // a single `/` (rejects `//evil.com`, `http://...`, and protocol-relative
-// URLs). Falls back to /feed when missing, malformed, or unsafe — prevents
+// URLs). Falls back to /home when missing, malformed, or unsafe — prevents
 // open-redirect to attacker-controlled origins.
 function readReturnTo(searchParams) {
   const raw = searchParams.get('returnTo');
-  if (!raw) return '/feed';
-  if (!raw.startsWith('/') || raw.startsWith('//')) return '/feed';
+  if (!raw) return '/home';
+  if (!raw.startsWith('/') || raw.startsWith('//')) return '/home';
   return raw;
 }
 

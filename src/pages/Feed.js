@@ -7,7 +7,7 @@ import { useOnline } from '../lib/useOnline';
 import { staggerStyle, useDelayedFlag } from '../lib/motion';
 import TapeText from '../components/TapeText';
 import { Avatar, TierBadge } from '../components/Logos';
-import { getPosts, getFollowingPosts, createPost, toggleLike, getLikedPosts, getComments, createComment, uploadMedia, timeAgo } from '../lib/posts';
+import { getPosts, getFollowingPosts, createPost, toggleLike, getLikedPosts, uploadMedia, timeAgo } from '../lib/posts';
 import PushPrompt from '../components/PushPrompt';
 import { track } from '../lib/analytics';
 import { FeedSkeleton, PostSkeleton, EmptyState } from '../components/Skeletons';
@@ -18,7 +18,8 @@ import PostActionMenu from '../components/PostActionMenu';
 import PostReactions from '../components/PostReactions';
 import { getReactions } from '../lib/reactions';
 import { MentionInput, MentionText } from '../components/Mentions';
-import { savePostMentions, saveCommentMentions, mentionMapFromRows } from '../lib/mentions';
+import { savePostMentions, mentionMapFromRows } from '../lib/mentions';
+import CommentThread from '../components/CommentThread';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/authContext';
 import ShareButton from '../components/ShareButton';
@@ -187,10 +188,6 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
   const navigate = useNavigate();
   const expand = useExpand();
   const [showComments, setShowComments] = useState(false);
-  const [comments, setComments] = useState([]);
-  const [commentText, setCommentText] = useState('');
-  const [commentMentionIds, setCommentMentionIds] = useState([]);
-  const [submitting, setSubmitting] = useState(false);
   const isLiked = likedPosts.includes(post.id);
   const profile = post.profiles;
   const postMentionMap = mentionMapFromRows(post.post_mentions);
@@ -203,73 +200,10 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
   const isLiveStream = !!post.livebarn_venue_id;
   const isLive = isLiveStream || post.tag === 'Goal Alert';
 
-  const loadComments = async () => {
-    if (!showComments) { const c = await getComments(post.id); setComments(c); }
-    setShowComments(v => !v);
-  };
-
-  // 4E-1 · Optimistic UI on comments
-  // ─────────────────────────────────────────────────────────────────────────
-  // The previous flow was: createComment → getComments → setState. That's two
-  // network round-trips before the user sees their own comment, and during
-  // that time the input is locked and silent. This rewrite shows the comment
-  // instantly with a temp ID, then swaps it for the real row when Supabase
-  // confirms. If the insert fails, we yank the temp comment and restore the
-  // typed text so the user can try again.
-  const submitComment = async (e) => {
-    e.preventDefault();
-    const trimmed = commentText.trim();
-    if (!trimmed || submitting) return;
-    setSubmitting(true);
-
-    const tempId = `temp-${Date.now()}`;
-    const tempComment = {
-      id: tempId,
-      content: trimmed,
-      created_at: new Date().toISOString(),
-      // Use the viewer's full profile (with name/avatar) so the temp comment
-      // renders identically to a real one. PostCard receives `profile` as
-      // `viewerProfile` — the post.profiles join is for the post author.
-      profiles: viewerProfile || null,
-      __pending: true,
-    };
-    const mentionIds = commentMentionIds;
-    setComments(prev => [...prev, tempComment]);
-    setCommentText('');
-    setCommentMentionIds([]);
-
-    const { data, error } = await createComment(post.id, currentUser.id, trimmed);
-    setSubmitting(false);
-
-    if (error) {
-      // Insert failed — roll back so the UI doesn't lie. Restore the text
-      // exactly as typed so the user can edit-and-retry without re-typing.
-      // eslint-disable-next-line no-console
-      console.warn('[submitComment] insert failed, rolling back:', error?.message || error);
-      setComments(prev => prev.filter(c => c.id !== tempId));
-      setCommentText(trimmed);
-      setCommentMentionIds(mentionIds);
-      return;
-    }
-
-    // Persist resolved @-mentions (best-effort — never unwind a landed comment).
-    if (data?.id && mentionIds.length) {
-      saveCommentMentions(data.id, mentionIds).then(({ error: mErr }) => {
-        if (mErr) console.warn('[submitComment] mention save failed:', mErr?.message || mErr);
-      });
-    }
-
-    // Swap the temp row for the real one. We preserve the profile join we
-    // already had locally so Supabase doesn't need a second round-trip just
-    // to re-fetch what we already know.
-    setComments(prev => prev.map(c =>
-      c.id === tempId ? { ...data, profiles: c.profiles } : c
-    ));
-
-    // Bubble up so the parent Feed bumps the comment-count chip on this card
-    // locally — no full feed reload.
-    onComment(post.id);
-  };
+  // Comment threads now live in the shared <CommentThread> (one source of truth
+  // across all four feeds). This just flips the thread open/closed; the
+  // component lazy-loads + owns the optimistic list/composer/undo.
+  const loadComments = () => setShowComments(v => !v);
 
   return (
     <div style={{
@@ -354,67 +288,14 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
           </button>
           <PostReactions postId={post.id} currentUserId={currentUser?.id} initial={reactions} />
         </div>
-        {showComments && (
-          <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
-            {comments.map(c => (
-              <div key={c.id} style={{ display: 'flex', gap: 8, marginBottom: 10, opacity: c.__pending ? 0.55 : 1, transition: 'opacity 0.18s' }}>
-                <Avatar profile={c.profiles} size={28} />
-                <div style={{ flex: 1, minWidth: 0, background: C.navy, borderRadius: 8, padding: '8px 10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: C.ice, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {c.profiles?.name || (c.__pending ? 'You' : '')}
-                        <span style={{ fontWeight: 400, color: C.steel }}> · {c.__pending ? 'sending…' : timeAgo(c.created_at)}</span>
-                      </div>
-                      <div style={{ fontSize: 13, color: C.ice }}><MentionText text={c.content} mentions={mentionMapFromRows(c.comment_mentions)} /></div>
-                    </div>
-                    {!c.__pending && (
-                      <PostActionMenu
-                        kind="comment"
-                        targetId={c.id}
-                        authorId={c.author_id}
-                        authorHandle={c.profiles?.handle}
-                        currentUserId={currentUser?.id}
-                        onReported={() => setComments(prev => prev.filter(x => x.id !== c.id))}
-                        onBlocked={() => {
-                          setComments(prev => prev.filter(x => x.author_id !== c.author_id));
-                          onUserBlocked?.(c.author_id);
-                        }}
-                        onDeleted={() => {
-                          setComments(prev => prev.filter(x => x.id !== c.id));
-                          onCommentRemoved?.(post.id);
-                        }}
-                        onDelete={() => {
-                          // Optimistic remove + restore (the menu wraps this in a 5s Undo).
-                          const idx = comments.findIndex(x => x.id === c.id);
-                          setComments(prev => prev.filter(x => x.id !== c.id));
-                          onCommentRemoved?.(post.id);
-                          return () => {
-                            setComments(prev => prev.some(x => x.id === c.id)
-                              ? prev
-                              : (() => { const n = [...prev]; n.splice(idx < 0 ? n.length : Math.min(idx, n.length), 0, c); return n; })());
-                            onComment?.(post.id);
-                          };
-                        }}
-                      />
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-            {currentUser && (
-              <form onSubmit={submitComment} style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                <Avatar profile={viewerProfile || currentUser} size={28} />
-                <MentionInput value={commentText} onChange={setCommentText} onMentionsChange={setCommentMentionIds}
-                  placeholder="Add a comment… use @ to tag" maxLength={280} rows={1}
-                  style={{ flex: 1 }}
-                  textareaStyle={{ padding: '8px 12px', borderRadius: 8, background: C.navy, border: `1px solid ${C.border}`, color: C.ice, fontSize: 13, fontFamily: "'Barlow', sans-serif", lineHeight: 1.4 }}/>
-                <button type="submit" disabled={!commentText.trim() || submitting}
-                  style={{ padding: '8px 14px', borderRadius: 8, background: commentText.trim() ? C.red : C.border, color: 'white', border: 'none', cursor: 'pointer', fontSize: 13, fontFamily: "'Barlow', sans-serif" }}>Post</button>
-              </form>
-            )}
-          </div>
-        )}
+        <CommentThread
+          open={showComments}
+          postId={post.id}
+          currentUser={currentUser}
+          viewerProfile={viewerProfile}
+          onCountChange={(d) => (d > 0 ? onComment(post.id) : onCommentRemoved?.(post.id))}
+          onUserBlocked={onUserBlocked}
+        />
       </div>
     </div>
   );

@@ -15,6 +15,7 @@ import { isExtraDirector as isDirectorRole } from '../lib/tournamentDirectors';
 import { track } from '../lib/analytics';
 import PostActionMenu from '../components/PostActionMenu';
 import PostReactions from '../components/PostReactions';
+import CommentThread from '../components/CommentThread';
 import { getReactions } from '../lib/reactions';
 import { haptics } from '../lib/haptics';
 import { FeedSkeleton } from '../components/Skeletons';
@@ -471,7 +472,7 @@ export default function TournamentPage({ currentUser }) {
                 </>
               : <>
                   <button onClick={load} style={{background:C.red,color:'#fff',border:'none',borderRadius:8,padding:'8px 18px',cursor:'pointer',fontFamily:'Barlow,sans-serif',fontWeight:700}}>Retry</button>
-                  <button onClick={() => navigate('/feed')} style={{background:C.blue,color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontFamily:'Barlow,sans-serif'}}>Back to Feed</button>
+                  <button onClick={() => navigate('/home')} style={{background:C.blue,color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontFamily:'Barlow,sans-serif'}}>Back to Home</button>
                 </>}
           </div>
         </div>
@@ -932,7 +933,15 @@ function FeedTab({ posts, setPosts, loading, error = false, online = true, onRet
   const [composerError, setComposerError] = useState(null);
   const [likedPosts, setLikedPosts] = useState([]);
   const [reactionMap, setReactionMap] = useState({});
+  const [openComments, setOpenComments] = useState({});
   const likeInFlightRef = useRef(new Set());
+
+  // Comment-thread parity (Step 5): the tournament feed now has the same shared
+  // <CommentThread> as the global + team feeds. Toggle open per post; keep the
+  // count chip in sync optimistically (the DB trigger is the source of truth).
+  const toggleComments = (postId) => setOpenComments((m) => ({ ...m, [postId]: !m[postId] }));
+  const bumpCommentCount = (postId, d) => setPosts((prev) => (prev || []).map((p) => p.id === postId
+    ? { ...p, comment_count: Math.max(0, (p.comment_count || 0) + d) } : p));
 
   // Load which of the visible posts the current user has already liked.
   // Scoped to the loaded ids (same bounded pattern as TeamFeed/Feed). Keyed on
@@ -1179,6 +1188,13 @@ function FeedTab({ posts, setPosts, loading, error = false, online = true, onRet
                     <span style={{fontSize:14}}>{likedPosts.includes(p.id)?'❤️':'🤍'}</span>
                     <span style={{fontWeight:likedPosts.includes(p.id)?700:400}}>{p.likes || 0}</span>
                   </button>
+                  <button
+                    onClick={() => toggleComments(p.id)}
+                    aria-label="Comments" aria-expanded={!!openComments[p.id]}
+                    style={{display:'flex',alignItems:'center',gap:4,background:'none',border:'none',padding:0,cursor:'pointer',color:openComments[p.id]?C.ice:'#7C8B9F',fontFamily:'Barlow,sans-serif',fontSize:12}}
+                  >
+                    <Icon name="comment" size={14} /><span>{p.comment_count || 0}</span>
+                  </button>
                   <span style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{author ? `${author} · ` : ''}{timeAgo(p.created_at)} ago</span>
                 </div>
                 {p.recap_for_game_id && (
@@ -1201,6 +1217,14 @@ function FeedTab({ posts, setPosts, loading, error = false, online = true, onRet
                   </button>
                 )}
               </div>
+              <CommentThread
+                open={!!openComments[p.id]}
+                postId={p.id}
+                currentUser={currentUser}
+                viewerProfile={currentUser}
+                onCountChange={(d) => bumpCommentCount(p.id, d)}
+                onUserBlocked={handleAuthorBlocked}
+              />
             </div>
           );
         })

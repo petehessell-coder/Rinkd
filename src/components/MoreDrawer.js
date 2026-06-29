@@ -41,6 +41,9 @@ export default function MoreDrawer({ open, onClose, userId, onSignOut }) {
   const exploreItems = [
     { path: '/messages',    icon: 'messages',  label: 'Messages',    sub: 'Direct messages with players' },
     { path: '/discover',    icon: 'discover',  label: 'Discover',    sub: 'Search players, teams, leagues, articles' },
+    // Event-Centric Home: the global chirp feed is demoted off the front door
+    // to a secondary "Around Hockey" surface here. The /feed route still works.
+    { path: '/feed',        icon: 'fan',       label: 'Around Hockey', sub: 'The global chirp feed' },
     { path: '/rinkside',    iconImg: '/rinkside-logo.png', label: 'Rinkside', sub: 'Daily hockey reporting' },
     { path: '/crease',      iconImg: '/crease-logo.png',   label: 'Crease',   sub: 'Original premium shows', badge: 'Early Access' },
     { path: '/store',       IconNode: 'duffle', label: 'Store',       sub: 'Hockey gear + Rinkd merch' },

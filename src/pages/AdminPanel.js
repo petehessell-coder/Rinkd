@@ -63,9 +63,9 @@ export default function AdminPanel({ profile }) {
               The admin panel is for league commissioners. If you should have access, ask the league
               owner to add you, then come back here.
             </p>
-            <button onClick={() => navigate('/feed')}
+            <button onClick={() => navigate('/home')}
               style={{ padding: '10px 22px', borderRadius: 999, background: C.red, color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-              Back to Feed
+              Back to Home
             </button>
           </div>
         </div>
