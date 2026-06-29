@@ -37,7 +37,7 @@ async function loadFeaturedBase() {
     // 1) Pinned league.
     const { data: lg } = await supabase
       .from('leagues')
-      .select('id,name,season,location,venue_name,logo_url,logo_color,logo_initials')
+      .select('id,name,season,location,venue_name,logo_url,logo_color,logo_initials,cover_image_url')
       .eq('is_featured', true).eq('is_public', true)
       .order('updated_at', { ascending: false }).limit(1).maybeSingle();
     if (lg) {
@@ -47,7 +47,7 @@ async function loadFeaturedBase() {
     // 2) Pinned tournament (non-youth).
     const { data: tn } = await supabase
       .from('tournaments')
-      .select('id,name,start_date,end_date,logo_url,status,is_youth')
+      .select('id,name,start_date,end_date,logo_url,status,is_youth,cover_image_url')
       .eq('is_featured', true).neq('is_youth', true)
       .order('start_date', { ascending: false }).limit(1).maybeSingle();
     if (tn) {
@@ -57,7 +57,7 @@ async function loadFeaturedBase() {
     // 3) Fallback: most-recently-active public, activated league.
     const { data: any } = await supabase
       .from('leagues')
-      .select('id,name,season,location,venue_name,logo_url,logo_color,logo_initials')
+      .select('id,name,season,location,venue_name,logo_url,logo_color,logo_initials,cover_image_url')
       .eq('is_public', true).eq('is_activated', true)
       .order('updated_at', { ascending: false }).limit(1).maybeSingle();
     if (any) { _featuredBase = leagueToFeatured(any); return _featuredBase; }
@@ -75,6 +75,7 @@ function leagueToFeatured(lg) {
     type: 'league', id: lg.id, name: lg.name,
     subtitle: lg.season || lg.location || lg.venue_name || 'League',
     logo_url: lg.logo_url, logo_color: lg.logo_color, logo_initials: lg.logo_initials,
+    cover_image_url: lg.cover_image_url || null,
     href: `/league/${lg.id}`,
   };
 }
@@ -83,6 +84,7 @@ function tournamentToFeatured(tn) {
     type: 'tournament', id: tn.id, name: tn.name,
     subtitle: tn.start_date ? fmtEventDate(tn.start_date) : 'Tournament',
     logo_url: tn.logo_url, logo_color: null, logo_initials: null,
+    cover_image_url: tn.cover_image_url || null,
     href: `/tournament/${tn.id}`,
   };
 }
@@ -103,6 +105,43 @@ export async function getFeaturedEvent() {
   return { ...base, isLive };
 }
 
+// ── Live ticker (platform-wide, always-on) ───────────────────────────────────
+// The thin ESPN-score-bug strip across the very top. Unlike "Live Now" (which
+// is scoped to the user's follows), the ticker shows ANY live game on a public
+// event so the front door reads "alive" to a cold evaluator the moment a puck
+// drops anywhere. Bounded (limit) + Realtime-refreshed by the home channel.
+const LT_LEAGUE = 'id, status, period, home_score, away_score, league_id, home_lt:league_teams!home_team_id(team_name,logo_initials,team:teams(name)), away_lt:league_teams!away_team_id(team_name,logo_initials,team:teams(name)), league:leagues!inner(name,is_public)';
+const LT_TOURN = 'id, status, period, home_score, away_score, tournament_id, home_team:tournament_teams!home_team_id(team_name), away_team:tournament_teams!away_team_id(team_name), tournament:tournaments!inner(name,is_youth)';
+
+export async function getLiveTicker(limit = 12) {
+  try {
+    const [lg, tg] = await Promise.all([
+      supabase.from('league_games').select(LT_LEAGUE).eq('status', 'live').eq('league.is_public', true).limit(limit)
+        .then((r) => (r.data || []).map((g) => ({
+          id: g.id, source: 'league', url: `/league-game/${g.id}?type=league`,
+          eventName: g.league?.name || 'League', period: g.period || null,
+          home: { name: g.home_lt?.team?.name || g.home_lt?.team_name || 'Home', score: g.home_score ?? 0 },
+          away: { name: g.away_lt?.team?.name || g.away_lt?.team_name || 'Away', score: g.away_score ?? 0 },
+        }))).catch(() => []),
+      // Youth filter is fail-CLOSED: only surface events explicitly marked
+      // non-youth. is_youth=NULL (unknown / not-yet-derived) is treated as
+      // potentially youth and hidden from public discovery. `neq.true` excludes
+      // both true AND null in PostgREST — exactly the privacy-safe behavior.
+      supabase.from('games').select(LT_TOURN).eq('status', 'live').neq('tournament.is_youth', true).limit(limit)
+        .then((r) => (r.data || []).map((g) => ({
+          id: g.id, source: 'tournament', url: `/game/${g.id}`,
+          eventName: g.tournament?.name || 'Tournament', period: g.period || null,
+          home: { name: g.home_team?.team_name || 'Home', score: g.home_score ?? 0 },
+          away: { name: g.away_team?.team_name || 'Away', score: g.away_score ?? 0 },
+        }))).catch(() => []),
+    ]);
+    return [...lg, ...tg].slice(0, limit);
+  } catch (e) {
+    console.warn('[home] live ticker failed:', e?.message || e);
+    return [];
+  }
+}
+
 // ── This week (public, never-empty) ─────────────────────────────────────────
 // Upcoming non-youth tournaments still running or starting soon. Bounded by
 // limit + an end_date floor; ordered soonest-first. Carries "This week" for a
@@ -113,6 +152,7 @@ export async function getUpcomingPublicEvents(limit = 8) {
     const { data } = await supabase
       .from('tournaments')
       .select('id,name,start_date,end_date,logo_url,is_youth,status')
+      // Fail-closed youth filter (excludes true AND null) — see getLiveTicker.
       .neq('is_youth', true)
       .gte('end_date', today)
       .order('start_date', { ascending: true })
@@ -213,13 +253,14 @@ export async function loadHome(userId) {
   const ctx = await getGamedayContext(userId).catch(() => ({ tournamentIds: [], leagueIds: [], teamIds: [] }));
   const hasFollows = !!(ctx.tournamentIds.length || ctx.leagueIds.length || ctx.teamIds.length);
 
-  const [featured, gameday, your, publicEvents, leader] = await Promise.all([
+  const [featured, gameday, your, publicEvents, leader, ticker] = await Promise.all([
     getFeaturedEvent(),
     // Live + this-week (168h) across the user's followed/rostered events.
     getGamedayGames(userId, { windowHours: 168, ctx }).catch(() => ({ live: [], upcoming: [] })),
     getYourHockey(userId),
     getUpcomingPublicEvents(8),
     ctx.leagueIds.length ? getStandingsLeader(ctx.leagueIds[0]) : Promise.resolve(null),
+    getLiveTicker(12),
   ]);
 
   return {
@@ -229,6 +270,7 @@ export async function loadHome(userId) {
     your,
     publicEvents,
     leader,
+    ticker,
     hasFollows,
     // Followed event ids — the home subscribes to these for Realtime live
     // updates (no polling). Capped at the source.
