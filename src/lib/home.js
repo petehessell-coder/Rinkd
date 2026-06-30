@@ -177,9 +177,11 @@ export async function getLiveHeroExtras(game) {
     const [standings, goalsRes, lineupRes] = await Promise.all([
       getLeagueStandings(game.eventId).catch(() => []),
       supabase.from('game_goals')
-        .select('team_id,scorer_number,period,time_in_period,empty_net')
+        .select('team_id,scorer_number,period,time_in_period,empty_net,created_at')
+        // Most-recently-logged goal = the last goal. created_at is reliable
+        // chronological order; the clock string can't be (count-up vs count-down).
         .eq('game_id', game.id).eq('is_shootout', false)
-        .order('period', { ascending: false }).order('time_in_period', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(1),
       supabase.from('game_lineups').select('team_id,jersey_number,invite_name').eq('game_id', game.id),
     ]);
