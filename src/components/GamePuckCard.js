@@ -153,9 +153,13 @@ export default function GamePuckCard({
   const phase = state?.phase || 'open';
   const hideTally = phase === 'blackout';       // seal the count for the reveal
   const votingClosed = phase === 'closed' || phase === 'settled';
-  const closesInMin = state?.closes_at
+  const closesRaw = state?.closes_at
     ? Math.max(0, Math.round((new Date(state.closes_at).getTime() - Date.now()) / 60000))
     : null;
+  // A real Game Puck window is 30 min. If a window reports an implausibly large
+  // remaining time (a long-lived demo window, or clock skew), drop the "~N min"
+  // phrasing instead of printing a nonsense countdown — the open tally still shows.
+  const closesInMin = closesRaw != null && closesRaw <= 180 ? closesRaw : null;
   const nameFor = (teamId, jersey) => lineupByTeam[teamId]?.[jersey] || null;
   const teamNameFor = (teamId) => (teamId === homeTeam.id ? homeTeam.name : awayTeam.name);
   const labelFor = (teamId, jersey) => {

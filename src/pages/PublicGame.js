@@ -6,8 +6,10 @@ import { teamInitials } from '../lib/teamInitials';
 import SEO from '../components/SEO';
 import ShareButton from '../components/ShareButton';
 import SoundToggle from '../components/SoundToggle';
+import GamePuckCard from '../components/GamePuckCard';
 import { ErrorState } from '../components/ui';
 import { useOnline } from '../lib/useOnline';
+import { resolveStreamUrl, streamButtonLabel, detectStreamPlatform } from '../lib/streamUrl';
 import { subscribeGame } from '../lib/gameRealtime';
 import { useGoalMoment, GoalSweep } from '../lib/goalMoment';
 import { loadGameCardData } from '../lib/gameCardData';
@@ -36,9 +38,11 @@ if (typeof document !== 'undefined' && !document.getElementById('rinkd-pg-anim')
   el.textContent =
     '@keyframes pgLiveRing{0%{box-shadow:0 0 0 0 rgba(215,38,56,0.7)}75%{box-shadow:0 0 0 16px rgba(215,38,56,0)}100%{box-shadow:0 0 0 0 rgba(215,38,56,0)}}'
     + '@keyframes pgScorePop{0%{transform:scale(1.2)}100%{transform:scale(1)}}'
+    + '@keyframes pgShimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}'
     + '.pg-live-ring{animation:pgLiveRing 1.5s ease-out infinite}'
     + '.pg-score-pop{animation:pgScorePop 200ms cubic-bezier(0.34,1.56,0.64,1)}'
-    + '@media (prefers-reduced-motion: reduce){.pg-live-ring{animation:none}.pg-score-pop{animation:none}}';
+    + '.pg-shimmer{background:linear-gradient(90deg,rgba(46,91,140,0.18) 0%,rgba(46,91,140,0.32) 50%,rgba(46,91,140,0.18) 100%);background-size:800px 100%;animation:pgShimmer 1.4s linear infinite;border-radius:6px}'
+    + '@media (prefers-reduced-motion: reduce){.pg-live-ring{animation:none}.pg-score-pop{animation:none}.pg-shimmer{animation:none}}';
   document.head.appendChild(el);
 }
 
@@ -153,10 +157,8 @@ export default function PublicGame({ league }) {
 
   if (loading) return (
     <Shell>
-      <Center>
-        <div style={{ fontSize: 34, marginBottom: 12 }}>🏒</div>
-        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 20, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.02em' }}>Getting the ice ready.</div>
-      </Center>
+      <SEO title="Rinkd" noIndex />
+      <GameSkeleton />
     </Shell>
   );
   if (error) return (
@@ -302,6 +304,24 @@ export default function PublicGame({ league }) {
           {venue && <div style={{ textAlign: 'center', marginTop: 16, fontSize: 12, color: C.steel, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📍 {venue}</div>}
         </div>
 
+        {/* Watch button — YouTube / Twitch / Facebook / Vimeo broadcast for this
+            game (resolved from the game then the rink). Platform-colored; shown
+            pre-game + during the live broadcast (archives usually live on at the
+            same URL post-final). */}
+        {(() => {
+          const streamUrl = resolveStreamUrl(game);
+          if (!streamUrl) return null;
+          const p = detectStreamPlatform(streamUrl);
+          const col = p === 'youtube' ? '#FF0000' : p === 'twitch' ? '#9146FF' : p === 'facebook' ? '#1877F2' : p === 'vimeo' ? '#1AB7EA' : accent;
+          return (
+            <div style={{ textAlign: 'center', marginBottom: 16 }}>
+              <a href={streamUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: col, color: '#fff', fontFamily: "'Barlow', sans-serif", fontWeight: 700, fontSize: 14, padding: '11px 22px', borderRadius: 999, textDecoration: 'none' }}>
+                <span style={{ fontSize: 12 }}>▶</span> {streamButtonLabel(streamUrl) || 'Watch live'}
+              </a>
+            </div>
+          );
+        })()}
+
         {/* sponsor lockup — the recap "presented by" (GROWTH-SHARE-1 × ADS-1) */}
         <div style={{ textAlign: 'center', marginBottom: 16, fontSize: 12, color: C.steel, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
           <span style={{ letterSpacing: '0.04em' }}>Recap presented by</span>
@@ -358,6 +378,22 @@ export default function PublicGame({ league }) {
           </Section>
         )}
 
+        {/* Game Puck — the fan "Fans' Pick" vote. Read-only here (voting needs a
+            login); anon spectators still see the live tally + who's leading, the
+            give-first hook. Self-guards every phase (open / sealed / settled). */}
+        {isFinal && (
+          <GamePuckCard
+            gameId={gameId}
+            kind={isLeague ? 'league' : 'tournament'}
+            homeTeam={{ id: homeTeam.id, name: homeTeam.name, logo_color: homeTeam.color, logo_initials: homeTeam.logo_initials }}
+            awayTeam={{ id: awayTeam.id, name: awayTeam.name, logo_color: awayTeam.color, logo_initials: awayTeam.logo_initials }}
+            lineupByTeam={lineupByTeam}
+            goals={goals}
+            canVote={false}
+            accent={accent}
+          />
+        )}
+
         {/* soft conversion */}
         <div style={{ marginTop: 24, textAlign: 'center' }}>
           <Link to={gameAppUrl(isLeague, gameId)} style={{ display: 'inline-block', background: accent, color: '#fff', fontWeight: 800, fontFamily: "'Barlow', sans-serif", fontSize: 15, padding: '12px 28px', borderRadius: 999, textDecoration: 'none' }}>
@@ -394,6 +430,44 @@ function Section({ title, children }) {
     <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 14, overflow: 'hidden', marginBottom: 14 }}>
       <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 700, fontSize: 13, letterSpacing: '0.06em', color: 'rgba(244,247,250,0.55)', textTransform: 'uppercase', padding: '11px 16px 5px' }}>{title}</div>
       <div style={{ paddingBottom: 6 }}>{children}</div>
+    </div>
+  );
+}
+
+// Geometric loading state matching the real game layout (event chip → scoreboard
+// → box score) — no spinner, no layout shift when the data lands.
+function GameSkeleton() {
+  const sk = (style) => <div className="pg-shimmer" style={style} />;
+  return (
+    <div style={{ maxWidth: 600, margin: '0 auto', padding: '20px 16px 40px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+        {sk({ width: 32, height: 32, borderRadius: 8, flexShrink: 0 })}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {sk({ width: '55%', height: 15 })}
+          <div style={{ height: 7 }} />
+          {sk({ width: '35%', height: 11 })}
+        </div>
+      </div>
+      <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 16, padding: '22px 18px', marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 28 }}>
+          {[0, 1].map((i) => (
+            <div key={i} style={{ flex: 1, maxWidth: 160, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+              {sk({ width: 76, height: 76, borderRadius: '50%' })}
+              {sk({ width: '70%', height: 14 })}
+              {sk({ width: 48, height: 48, borderRadius: 8 })}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 14, padding: '14px 16px' }}>
+        {[0, 1, 2].map((i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0' }}>
+            {sk({ width: 28, height: 16 })}
+            {sk({ width: `${55 - i * 8}%`, height: 13 })}
+          </div>
+        ))}
+      </div>
+      <div style={{ textAlign: 'center', marginTop: 22, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 14, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'rgba(244,247,250,0.4)' }}>Dropping the puck.</div>
     </div>
   );
 }

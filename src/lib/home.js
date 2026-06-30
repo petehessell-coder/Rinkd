@@ -34,27 +34,31 @@ let _featuredErr = false;
 async function loadFeaturedBase() {
   if (_featuredBase || _featuredErr) return _featuredBase;
   try {
-    // 1) Pinned league.
-    const { data: lg } = await supabase
-      .from('leagues')
-      .select('id,name,season,location,venue_name,logo_url,logo_color,logo_initials,cover_image_url')
-      .eq('is_featured', true).eq('is_public', true)
-      .order('updated_at', { ascending: false }).limit(1).maybeSingle();
-    if (lg) {
-      _featuredBase = leagueToFeatured(lg);
+    // 1) ALL pinned (is_featured) public leagues + non-youth tournaments.
+    //    When more than one event is featured we ROTATE through them — a random
+    //    pick per load — so each pinned event gets front-door time instead of a
+    //    single one permanently owning the hero. Both queries are bounded.
+    const [{ data: lgs }, { data: tns }] = await Promise.all([
+      supabase
+        .from('leagues')
+        .select('id,name,season,location,venue_name,logo_url,logo_color,logo_initials,cover_image_url')
+        .eq('is_featured', true).eq('is_public', true)
+        .order('updated_at', { ascending: false }).limit(8),
+      supabase
+        .from('tournaments')
+        .select('id,name,start_date,end_date,logo_url,status,is_youth,cover_image_url')
+        .eq('is_featured', true).neq('is_youth', true)
+        .order('start_date', { ascending: false }).limit(8),
+    ]);
+    const pinned = [
+      ...(lgs || []).map(leagueToFeatured),
+      ...(tns || []).map(tournamentToFeatured),
+    ];
+    if (pinned.length) {
+      _featuredBase = pinned[Math.floor(Math.random() * pinned.length)];
       return _featuredBase;
     }
-    // 2) Pinned tournament (non-youth).
-    const { data: tn } = await supabase
-      .from('tournaments')
-      .select('id,name,start_date,end_date,logo_url,status,is_youth,cover_image_url')
-      .eq('is_featured', true).neq('is_youth', true)
-      .order('start_date', { ascending: false }).limit(1).maybeSingle();
-    if (tn) {
-      _featuredBase = tournamentToFeatured(tn);
-      return _featuredBase;
-    }
-    // 3) Fallback: most-recently-active public, activated league.
+    // 2) Fallback: most-recently-active public, activated league.
     const { data: any } = await supabase
       .from('leagues')
       .select('id,name,season,location,venue_name,logo_url,logo_color,logo_initials,cover_image_url')
