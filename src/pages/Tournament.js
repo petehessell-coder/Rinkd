@@ -18,7 +18,7 @@ import PostReactions from '../components/PostReactions';
 import CommentThread from '../components/CommentThread';
 import { getReactions } from '../lib/reactions';
 import { haptics } from '../lib/haptics';
-import { FeedSkeleton } from '../components/Skeletons';
+import { FeedSkeleton, ListRowSkeleton } from '../components/Skeletons';
 import Gallery from '../components/Gallery';
 import StatLeaderboards from '../components/StatLeaderboards';
 import { getRecapSponsor, isPublicSharingEnabled, areScorersHidden } from '../lib/publicShare';
@@ -441,11 +441,7 @@ export default function TournamentPage({ currentUser }) {
       }, {});
   }, [standingsRaw, selectedDivisionId]);
 
-  if (loading) return (
-    <div style={{background:C.dark,minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:C.ice,fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:900,fontSize:18,textTransform:'uppercase',letterSpacing:'0.02em'}}>
-      Getting the ice ready.
-    </div>
-  );
+  if (loading) return <TournamentSkeleton />;
 
   if (error || !tournament) {
     // Anonymous visitors hitting a draft tournament URL get filtered out by
@@ -484,7 +480,10 @@ export default function TournamentPage({ currentUser }) {
   // metadata + teams. Standings, schedule, bracket, and scoresheet stay
   // gated to drive sign-up. After auth they can navigate back here for
   // the full experience.
-  if (!currentUser) {
+  // Demo events are the give-first sales surface — anon visitors get the full
+  // experience (standings/schedule/bracket/stats/feed), not the sign-up teaser.
+  const isDemo = tournament?.settings?.is_demo === true;
+  if (!currentUser && !isDemo) {
     return <PublicTournamentLanding tournament={tournament} games={games} navigate={navigate} />;
   }
 
@@ -553,8 +552,16 @@ export default function TournamentPage({ currentUser }) {
       {/* ADS-1 event banner — renders only when this tournament has an active sponsor */}
       <AdSlot slot="event_banner" targetType="tournament" targetId={tournament.id} style={{ margin: '12px 16px 0' }} />
 
-      {/* HEADER */}
-      <div style={{background:C.navy,padding:'14px 16px 0',borderTop:`3px solid ${accent}`,borderBottom:'0.5px solid rgba(46,91,140,0.4)'}}>
+      {/* HEADER — photographic cover hero (mirrors the League header) when the
+          event has a cover photo; falls back to solid navy otherwise. */}
+      <div style={{position:'relative',overflow:'hidden',background:C.navy,borderTop:`3px solid ${accent}`,borderBottom:'0.5px solid rgba(46,91,140,0.4)'}}>
+        {tournament?.cover_image_url && (
+          <img src={tournament.cover_image_url} alt="" loading="eager" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',display:'block'}} onError={(e)=>{e.currentTarget.style.display='none';}} />
+        )}
+        {tournament?.cover_image_url && (
+          <div style={{position:'absolute',inset:0,background:'linear-gradient(180deg, rgba(11,31,58,0.82) 0%, rgba(7,17,31,0.55) 50%, rgba(7,17,31,0.96) 100%)'}} />
+        )}
+        <div style={{position:'relative',padding:'14px 16px 0'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,gap:8,flexWrap:'wrap'}}>
           <button onClick={() => navigate(-1)} style={{color:'rgba(244,247,250,0.6)',fontSize:13,background:'none',border:'none',cursor:'pointer',fontFamily:'Barlow,sans-serif',minHeight:44,display:'inline-flex',alignItems:'center',padding:'0 6px',marginLeft:-6}}>← Events</button>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
@@ -637,7 +644,7 @@ export default function TournamentPage({ currentUser }) {
               <button key={tab} onClick={() => setActiveTab(tab)}
                 style={{fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:700,fontSize:15,letterSpacing:'0.04em',textTransform:'uppercase',
                   padding:'10px 14px',minHeight:44,display:'inline-flex',alignItems:'center',background:'transparent',border:'none',
-                  borderBottom: on ? '3px solid #D72638' : '3px solid transparent',
+                  borderBottom: on ? `3px solid ${accent}` : '3px solid transparent',
                   marginBottom:-1,cursor:'pointer',whiteSpace:'nowrap',
                   color: on ? C.ice : C.steel,transition:'color 0.15s'}}>
                 {tab}
@@ -645,6 +652,7 @@ export default function TournamentPage({ currentUser }) {
             );
           })}
         </div>
+        </div>{/* /header content over cover */}
       </div>
 
       {/* CONTENT */}
@@ -778,7 +786,7 @@ export default function TournamentPage({ currentUser }) {
             <AdSlot slot="schedule_presented" targetType="tournament" targetId={tournament.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
             {divisionGames.length === 0
             ? <TabEmptyState icon="🗓️" title="Schedule drops soon" body="No games on the board yet. The matchups land here as soon as the organizer posts them." />
-            : <ScheduleByDay games={divisionGames} navigate={navigate} canScore={canScore} />}
+            : <ScheduleByDay games={divisionGames} navigate={navigate} canScore={canScore} anon={!currentUser} />}
           </>
         )}
 
@@ -807,7 +815,7 @@ export default function TournamentPage({ currentUser }) {
                   return groups.map(grp => (
                     <div key={grp.label}>
                       <LowerThird label={grp.label} />
-                      {grp.games.map(g => <GameCard key={g.id} game={g} navigate={navigate} canScore={canScore} />)}
+                      {grp.games.map(g => <GameCard key={g.id} game={g} navigate={navigate} canScore={canScore} anon={!currentUser} />)}
                     </div>
                   ));
                 })()}
@@ -1353,7 +1361,7 @@ function PublicTournamentLanding({ tournament, games, navigate }) {
 // Group a flat list of games into day buckets, ordered by start_time. Each
 // bucket also resolves a label hint ("Pool Play" vs "Championship") for the
 // day heading so spectators can scan the agenda fast.
-function ScheduleByDay({ games, navigate, canScore }) {
+function ScheduleByDay({ games, navigate, canScore, anon = false }) {
   const grouped = useMemo(() => {
     const map = new Map();
     games.forEach(g => {
@@ -1371,12 +1379,34 @@ function ScheduleByDay({ games, navigate, canScore }) {
   return grouped.map(day => (
     <div key={day.key} style={{ marginBottom: 18 }}>
       <LowerThird label={fmtDayHeading(day.iso)} sub={day.subtitle} />
-      {day.games.map(g => <GameCard key={g.id} game={g} navigate={navigate} canScore={canScore} />)}
+      {day.games.map(g => <GameCard key={g.id} game={g} navigate={navigate} canScore={canScore} anon={anon} />)}
     </div>
   ));
 }
 
-function GameCard({ game, navigate, canScore }) {
+// Geometric loading state — mirrors the real layout (hero, tab strip, cards) so
+// there's no spinner and no layout shift when the data lands.
+function TournamentSkeleton() {
+  return (
+    <div style={{ background: C.dark, minHeight: '100vh' }}>
+      <div style={{ background: 'linear-gradient(135deg,#0B1F3A 0%,#1a3a5c 100%)', borderTop: '3px solid rgba(46,91,140,0.6)', padding: '20px 16px 14px' }}>
+        <div className="rinkd-shimmer" style={{ width: 38, height: 38, borderRadius: 8, marginBottom: 10 }} />
+        <div className="rinkd-shimmer" style={{ width: '70%', height: 30, borderRadius: 6 }} />
+        <div style={{ height: 8 }} />
+        <div className="rinkd-shimmer" style={{ width: '45%', height: 12, borderRadius: 6 }} />
+      </div>
+      <div style={{ background: C.navy, display: 'flex', gap: 18, padding: '12px 14px', borderBottom: '1px solid rgba(46,91,140,0.3)' }}>
+        {Array.from({ length: 5 }).map((_, i) => <div key={i} className="rinkd-shimmer" style={{ width: 60, height: 14, borderRadius: 5 }} />)}
+      </div>
+      <div style={{ padding: 16 }}>
+        <ListRowSkeleton rows={5} />
+        <div style={{ textAlign: 'center', marginTop: 18, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 14, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'rgba(244,247,250,0.4)' }}>Dropping the puck.</div>
+      </div>
+    </div>
+  );
+}
+
+function GameCard({ game, navigate, canScore, anon = false }) {
   const expand = useExpand();
   const isLive = game.status === 'live';
   const isFinal = game.status === 'final';
@@ -1402,7 +1432,7 @@ function GameCard({ game, navigate, canScore }) {
   const awayWon = isFinal && ((game.away_score ?? 0) > (game.home_score ?? 0) || game.shootout_winner === 'away');
 
   return (
-    <div {...prefetchHandlers(prefetchGamePage)} onClick={(e) => expand(e, () => navigate('/game/' + game.id), { bg: cardBackground })} style={{background:cardBackground,border:cardBorder,boxShadow:cardShadow,borderRadius:12,padding:'14px 16px',marginBottom:10,cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.border=cardHoverBorder} onMouseLeave={e=>e.currentTarget.style.border=cardBorder}>
+    <div {...prefetchHandlers(prefetchGamePage)} onClick={(e) => expand(e, () => navigate(anon ? '/g/' + game.id : '/game/' + game.id), { bg: cardBackground })} style={{background:cardBackground,border:cardBorder,boxShadow:cardShadow,borderRadius:12,padding:'14px 16px',marginBottom:10,cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.border=cardHoverBorder} onMouseLeave={e=>e.currentTarget.style.border=cardBorder}>
       {/* Status row + round badge + start time. Date/time is now shown for
           every game state — not just scheduled — so spectators can find when
           a finalized game happened without opening the detail page. */}
