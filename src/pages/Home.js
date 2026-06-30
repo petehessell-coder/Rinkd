@@ -405,7 +405,10 @@ function LiveHeroCard({ game, navigate }) {
   // Show-only-when-present broadcast flourishes — Rinkd doesn't track these yet,
   // so they render ONLY if a real value is on the game row (never fabricated).
   const clock = game.clock || null;
-  const sog = (game.shotsHome != null && game.shotsAway != null) ? { h: game.shotsHome, a: game.shotsAway } : null;
+  // Shot share only when there's real shot data AND a non-zero total (a 0–0
+  // shot line is "unknown", not "even" — never render an empty 50/50 bar).
+  const sog = (game.shotsHome != null && game.shotsAway != null && (game.shotsHome + game.shotsAway) > 0)
+    ? { h: game.shotsHome, a: game.shotsAway } : null;
   const watching = (game.watching != null) ? game.watching : null;
   const per = fmtPeriod(game.period);
 
@@ -586,7 +589,7 @@ function HomeGamePuck({ final, navigate }) {
       {data.rows.map((r, i) => (
         <div key={`${r.team_id}-${r.jersey}`} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, overflow: 'hidden', marginBottom: i < data.rows.length - 1 ? 6 : 0, background: 'rgba(7,17,31,0.4)' }}>
           {/* % fill bar — leader in red, the rest in steel-blue. */}
-          <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${r.pct}%`, background: i === 0 ? 'rgba(215,38,56,0.28)' : 'rgba(46,91,140,0.3)', transition: 'width 0.4s ease' }} />
+          <span className="home-puck-fill" style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${r.pct}%`, background: i === 0 ? 'rgba(215,38,56,0.28)' : 'rgba(46,91,140,0.3)' }} />
           <span style={{ position: 'relative', flexShrink: 0, width: 26, height: 26, borderRadius: '50%', background: i === 0 ? C.red : 'rgba(46,91,140,0.5)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 12 }}>{r.jersey}</span>
           <span style={{ position: 'relative', minWidth: 0, flex: 1 }}>
             <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name || `#${r.jersey}`}</span>
@@ -777,14 +780,18 @@ function ThisWeek({ upcoming, events, navigate }) {
   );
 }
 
-// Gradient "art" header for a schedule tile — sport-specific tone + a faint
-// watermark, with the time/date chip floated over it. Pure CSS (no data).
+// Tile-art gradients encode the EVENT CATEGORY (this is meaning, not decoration —
+// a fan reads "tournament" vs "game" at a glance): game = rink-navy, tournament =
+// deep green, community = teal. Dark, on-tone, and confined to the tile header.
+const TILE_GRADIENT = {
+  tournament: 'linear-gradient(135deg, #15543b 0%, #0b3326 100%)',
+  community:  'linear-gradient(135deg, #14464f 0%, #0a2a33 100%)',
+  game:       'linear-gradient(135deg, #16365e 0%, #0c2747 100%)',
+};
+// Gradient "art" header for a schedule tile — category tone + a faint watermark,
+// with the time/date chip floated over it. Pure CSS (no data).
 function TileArt({ variant, chip }) {
-  const grad = variant === 'tournament'
-    ? 'linear-gradient(135deg, #15543b 0%, #0b3326 100%)'
-    : variant === 'community'
-      ? 'linear-gradient(135deg, #14464f 0%, #0a2a33 100%)'
-      : 'linear-gradient(135deg, #16365e 0%, #0c2747 100%)';
+  const grad = TILE_GRADIENT[variant] || TILE_GRADIENT.game;
   return (
     <div style={{ position: 'relative', height: 70, background: grad, overflow: 'hidden' }}>
       {/* Face-off-dot / bracket watermark — concentric rings via radial gradients. */}
@@ -897,8 +904,10 @@ const HOME_CSS = `
 .home-live-dot { animation: home-live-pulse 1.5s ease-in-out infinite; }
 @keyframes home-sk-shimmer { 0% { opacity: 0.55; } 50% { opacity: 0.85; } 100% { opacity: 0.55; } }
 .home-sk { animation: home-sk-shimmer 1.4s ease-in-out infinite; }
+.home-puck-fill { transition: width 0.4s ease; }
 @media (prefers-reduced-motion: reduce) {
   .home-tap:active { transform: none; }
   .home-live-dot, .home-sk { animation: none !important; }
+  .home-puck-fill { transition: none !important; }
 }
 `;

@@ -224,7 +224,7 @@ export default function PublicGame({ league }) {
   const recStr = (ltId) => { const r = recordByLt[ltId]; return r ? `${r.wins ?? 0}-${r.losses ?? 0}-${r.ties ?? 0}${r.otl ? `-${r.otl}` : ''}` : null; };
   const homeRecord = isLeague ? recStr(game.home_team_id) : null;
   const awayRecord = isLeague ? recStr(game.away_team_id) : null;
-  const sog = (game.shots_home != null && game.shots_away != null) ? { h: game.shots_home, a: game.shots_away } : null;
+  const sog = (game.shots_home != null && game.shots_away != null && (game.shots_home + game.shots_away) > 0) ? { h: game.shots_home, a: game.shots_away } : null;
   const watching = game.live_watching != null ? game.live_watching : null;
   const clock = game.clock_display || null;
 
