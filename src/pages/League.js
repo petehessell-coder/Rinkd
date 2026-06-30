@@ -100,8 +100,15 @@ function LeagueSkeleton() {
   );
 }
 
-function GameRow({ game, isCommissioner, navigate, anon = false }) {
+function GameRow({ game, isCommissioner, navigate, anon = false, records = {} }) {
   const expand = useExpand();
+  // Broadcast detail: each team's W-L-T from the live standings (when loaded).
+  // Keyed by league_team id; null-safe so a team with no standings row just
+  // shows its name. Matches the records on the Home live hero.
+  const recStr = (ltId) => {
+    const r = records[ltId];
+    return r ? `${r.wins ?? 0}-${r.losses ?? 0}-${r.ties ?? 0}${r.otl ? `-${r.otl}` : ''}` : null;
+  };
   // Anonymous demo visitors can't enter the auth-gated /league-game route — send
   // them to the login-less public game page (/lg/:id) so the free-for-fans demo
   // never dead-ends at a sign-in wall.
@@ -134,10 +141,12 @@ function GameRow({ game, isCommissioner, navigate, anon = false }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
             <TeamLogo team={home} size={20} radius={6} />
             <span style={{ fontSize: 13, fontWeight: 600, color: C.ice, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{home?.name || '—'}</span>
+            {recStr(game.home_lt?.id) && <span style={recordChip}>{recStr(game.home_lt?.id)}</span>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <TeamLogo team={away} size={20} radius={6} />
             <span style={{ fontSize: 13, fontWeight: 600, color: C.ice, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{away?.name || '—'}</span>
+            {recStr(game.away_lt?.id) && <span style={recordChip}>{recStr(game.away_lt?.id)}</span>}
           </div>
           {(game.location || game.rink) && (
             <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.35)', marginTop: 3 }}>
@@ -531,6 +540,8 @@ export default function LeaguePage({ currentUser, profile }) {
   const multiDivision = divisions.length > 1;
   const scopedGames = multiDivision && selectedDivisionId ? games.filter(g => g.division_id === selectedDivisionId) : games;
   const scopedStandings = multiDivision && selectedDivisionId ? standings.filter(r => r.division_id === selectedDivisionId) : standings;
+  // league_team id → standings row, so a GameRow can show each side's W-L-T.
+  const recordByLt = standings.reduce((m, s) => { m[s.lt_id] = s; return m; }, {});
 
   // OTL column appears only once real OTL data exists (any team has an OTL).
   // Until M3's ScorerView capture marks a game OT/SO, every league renders
@@ -708,19 +719,19 @@ export default function LeaguePage({ currentUser, profile }) {
                     <>
                       <LowerThird label="Live Now" />
                       {/* Card-hero: live games float on an elevated surface with a red glow. */}
-                      <div style={{ background: '#162f55', border: '1px solid rgba(215,38,56,0.6)', boxShadow: '0 8px 32px rgba(215,38,56,0.2)', borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>{liveGames.map(g => <GameRow key={g.id} game={g} isCommissioner={isCommissioner} navigate={navigate} anon={!currentUser} />)}</div>
+                      <div style={{ background: '#162f55', border: '1px solid rgba(215,38,56,0.6)', boxShadow: '0 8px 32px rgba(215,38,56,0.2)', borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>{liveGames.map(g => <GameRow key={g.id} game={g} isCommissioner={isCommissioner} navigate={navigate} anon={!currentUser} records={recordByLt} />)}</div>
                     </>
                   )}
                   {upcomingGames.length > 0 && (
                     <>
                       <LowerThird label="Upcoming" />
-                      <div style={card}>{upcomingGames.slice(0, 5).map(g => <GameRow key={g.id} game={g} isCommissioner={isCommissioner} navigate={navigate} anon={!currentUser} />)}</div>
+                      <div style={card}>{upcomingGames.slice(0, 5).map(g => <GameRow key={g.id} game={g} isCommissioner={isCommissioner} navigate={navigate} anon={!currentUser} records={recordByLt} />)}</div>
                     </>
                   )}
                   {recentGames.length > 0 && (
                     <>
                       <LowerThird label="Recent Results" />
-                      <div style={card}>{recentGames.map(g => <GameRow key={g.id} game={g} isCommissioner={isCommissioner} navigate={navigate} anon={!currentUser} />)}</div>
+                      <div style={card}>{recentGames.map(g => <GameRow key={g.id} game={g} isCommissioner={isCommissioner} navigate={navigate} anon={!currentUser} records={recordByLt} />)}</div>
                     </>
                   )}
                   {scopedGames.length === 0 && <TabEmptyState icon="🗓️" title="Schedule drops soon" body="No games on the board yet. They'll show up here the moment the commissioner posts the slate." />}
@@ -742,7 +753,7 @@ export default function LeaguePage({ currentUser, profile }) {
                   {Object.entries(allGamesByWeek).map(([week, wGames]) => (
                     <div key={week}>
                       <LowerThird label={week} />
-                      <div style={card}>{wGames.map(g => <GameRow key={g.id} game={g} isCommissioner={isCommissioner} navigate={navigate} anon={!currentUser} />)}</div>
+                      <div style={card}>{wGames.map(g => <GameRow key={g.id} game={g} isCommissioner={isCommissioner} navigate={navigate} anon={!currentUser} records={recordByLt} />)}</div>
                     </div>
                   ))}
                 </>
@@ -910,6 +921,7 @@ function getWeekLabel(dateStr) {
 
 const secLabel = { fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'rgba(244,247,250,0.3)', textTransform: 'uppercase', marginBottom: 8 };
 const card = { background: '#0f2847', border: '0.5px solid rgba(46,91,140,0.4)', borderRadius: 12, overflow: 'hidden', marginBottom: 14 };
+const recordChip = { flexShrink: 0, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 11, color: 'rgba(244,247,250,0.42)', fontVariantNumeric: 'tabular-nums', letterSpacing: '0.02em' };
 
 // League-scoped feed. Mirror of the Tournament Feed tab pattern shipped
 // May 18 (commit 4ec187c4 + ae4d7985). Surfaces auto-recap posts (from

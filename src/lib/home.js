@@ -117,32 +117,87 @@ export async function getFeaturedEvent() {
 const LT_LEAGUE = 'id, status, period, home_score, away_score, league_id, home_lt:league_teams!home_team_id(team_name,logo_initials,team:teams(name)), away_lt:league_teams!away_team_id(team_name,logo_initials,team:teams(name)), league:leagues!inner(name,is_public)';
 const LT_TOURN = 'id, status, period, home_score, away_score, tournament_id, home_team:tournament_teams!home_team_id(team_name), away_team:tournament_teams!away_team_id(team_name), tournament:tournaments!inner(name,is_youth)';
 
+// Broadcast-style 2–3 char abbreviation for the score-bug ticker (RIV / BLZ).
+// Prefer the team's own logo_initials; else derive from the name.
+function abbrFromName(name) {
+  const n = (name || '').trim();
+  if (!n) return 'TBD';
+  const words = n.split(/\s+/);
+  if (words.length >= 2) return (words[0][0] + words[1][0] + (words[2]?.[0] || '')).slice(0, 3).toUpperCase();
+  return n.slice(0, 3).toUpperCase();
+}
+
 export async function getLiveTicker(limit = 12) {
   try {
     const [lg, tg] = await Promise.all([
       supabase.from('league_games').select(LT_LEAGUE).eq('status', 'live').eq('league.is_public', true).limit(limit)
-        .then((r) => (r.data || []).map((g) => ({
-          id: g.id, source: 'league', url: `/league-game/${g.id}?type=league`,
-          eventName: g.league?.name || 'League', period: g.period || null,
-          home: { name: g.home_lt?.team?.name || g.home_lt?.team_name || 'Home', score: g.home_score ?? 0 },
-          away: { name: g.away_lt?.team?.name || g.away_lt?.team_name || 'Away', score: g.away_score ?? 0 },
-        }))).catch(() => []),
+        .then((r) => (r.data || []).map((g) => {
+          const homeName = g.home_lt?.team?.name || g.home_lt?.team_name || 'Home';
+          const awayName = g.away_lt?.team?.name || g.away_lt?.team_name || 'Away';
+          return {
+            id: g.id, source: 'league', url: `/league-game/${g.id}?type=league`,
+            eventName: g.league?.name || 'League', period: g.period || null,
+            home: { name: homeName, abbr: g.home_lt?.logo_initials || abbrFromName(homeName), score: g.home_score ?? 0 },
+            away: { name: awayName, abbr: g.away_lt?.logo_initials || abbrFromName(awayName), score: g.away_score ?? 0 },
+          };
+        })).catch(() => []),
       // Youth filter is fail-CLOSED: only surface events explicitly marked
       // non-youth. is_youth=NULL (unknown / not-yet-derived) is treated as
       // potentially youth and hidden from public discovery. `neq.true` excludes
       // both true AND null in PostgREST — exactly the privacy-safe behavior.
       supabase.from('games').select(LT_TOURN).eq('status', 'live').neq('tournament.is_youth', true).limit(limit)
-        .then((r) => (r.data || []).map((g) => ({
-          id: g.id, source: 'tournament', url: `/game/${g.id}`,
-          eventName: g.tournament?.name || 'Tournament', period: g.period || null,
-          home: { name: g.home_team?.team_name || 'Home', score: g.home_score ?? 0 },
-          away: { name: g.away_team?.team_name || 'Away', score: g.away_score ?? 0 },
-        }))).catch(() => []),
+        .then((r) => (r.data || []).map((g) => {
+          const homeName = g.home_team?.team_name || 'Home';
+          const awayName = g.away_team?.team_name || 'Away';
+          return {
+            id: g.id, source: 'tournament', url: `/game/${g.id}`,
+            eventName: g.tournament?.name || 'Tournament', period: g.period || null,
+            home: { name: homeName, abbr: abbrFromName(homeName), score: g.home_score ?? 0 },
+            away: { name: awayName, abbr: abbrFromName(awayName), score: g.away_score ?? 0 },
+          };
+        })).catch(() => []),
     ]);
     return [...lg, ...tg].slice(0, limit);
   } catch (e) {
     console.warn('[home] live ticker failed:', e?.message || e);
     return [];
+  }
+}
+
+// ── Live hero extras (broadcast detail) ──────────────────────────────────────
+// For the ONE big Live Now hero card we enrich with real, derivable broadcast
+// detail: each team's record + division rank (from standings) and the last goal
+// (scorer #, name from the lineup, period/time, empty-net flag). Bounded: two
+// small reads for a single game. League games only (tournament teams are
+// nameplate-only and have no standings record). Everything is null-safe — a team
+// with no standings row or a game with no goals simply renders less, never wrong.
+export async function getLiveHeroExtras(game) {
+  if (!game || game.source !== 'league' || !game.eventId) return null;
+  try {
+    const [standings, goalsRes, lineupRes] = await Promise.all([
+      getLeagueStandings(game.eventId).catch(() => []),
+      supabase.from('game_goals')
+        .select('team_id,scorer_number,period,time_in_period,empty_net')
+        .eq('game_id', game.id).eq('is_shootout', false)
+        .order('period', { ascending: false }).order('time_in_period', { ascending: false })
+        .limit(1),
+      supabase.from('game_lineups').select('team_id,jersey_number,invite_name').eq('game_id', game.id),
+    ]);
+    const recFor = (ltId) => {
+      const r = (standings || []).find((s) => s.lt_id === ltId);
+      if (!r) return null;
+      return { wins: r.wins ?? 0, losses: r.losses ?? 0, ties: r.ties ?? 0, otl: r.otl ?? 0, rank: r.rank ?? null, division: r.division || null };
+    };
+    let lastGoal = null;
+    const lg = goalsRes.data?.[0];
+    if (lg) {
+      const lu = (lineupRes.data || []).find((x) => x.team_id === lg.team_id && x.jersey_number === lg.scorer_number);
+      lastGoal = { jersey: lg.scorer_number, name: lu?.invite_name || null, period: lg.period, time: lg.time_in_period || null, en: !!lg.empty_net };
+    }
+    return { homeRecord: recFor(game.home?.id), awayRecord: recFor(game.away?.id), lastGoal };
+  } catch (e) {
+    console.warn('[home] live hero extras failed:', e?.message || e);
+    return null;
   }
 }
 

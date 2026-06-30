@@ -7,8 +7,10 @@ import { useUserRole } from '../lib/userRole';
 import { SectionHeader, Button, Icon } from '../components/ui';
 import { TeamLogo, Avatar } from '../components/Logos';
 import RecapCard from '../components/RecapCard';
+import PuckMark from '../components/PuckMark';
+import { getGamePuck } from '../lib/gamePucks';
 import {
-  loadHome, searchEverything, fmtGameWhen, fmtEventDate, DEMO_LEAGUE_ID,
+  loadHome, searchEverything, fmtGameWhen, fmtEventDate, getLiveHeroExtras, DEMO_LEAGUE_ID,
 } from '../lib/home';
 
 // Surface-elevated — the "card that matters" tone from the manifesto. The hero
@@ -328,32 +330,35 @@ function FeaturedHero({ featured, navigate }) {
 }
 
 // ─── Live ticker (top score-bug strip) ───────────────────────────────────────
+// Broadcast score-bug cards: 2–3 char team abbreviation + score, a red period
+// pill, and a red accent spine on the left — the TV-bug read. Live games only
+// (the "alive" signal); finals live in the surfaces below, not the ticker.
 function LiveTicker({ games, navigate }) {
   return (
     <div className="home-rail" style={{ display: 'flex', gap: 8, overflowX: 'auto', margin: '14px 0 2px', paddingBottom: 4 }}>
-      <span style={{ flexShrink: 0, alignSelf: 'center', display: 'inline-flex', alignItems: 'center', gap: 5, paddingRight: 4 }}>
-        <span className="home-live-dot" style={{ width: 7, height: 7, borderRadius: '50%', background: C.red }} />
-        <span style={{ ...type.sectionHead, fontSize: 12, color: C.red }}>LIVE</span>
-      </span>
       {games.map((g) => {
         const per = fmtPeriod(g.period);
+        const lead = (g.home?.score ?? 0) >= (g.away?.score ?? 0);
         return (
           <button key={`${g.source}-${g.id}`} onClick={() => navigate(g.url)} className="home-tap"
-            style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'left', cursor: 'pointer', background: C.card, border: `1px solid ${C.red}44`, borderRadius: 8, padding: '6px 10px', minWidth: 132 }}>
-            <TickerLine name={g.home?.name} score={g.home?.score} />
-            <TickerLine name={g.away?.name} score={g.away?.score} />
-            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: C.red, fontFamily: "'Barlow Condensed', sans-serif", marginTop: 1 }}>{per ? `${per} · LIVE` : 'LIVE'}</span>
+            style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 3, textAlign: 'left', cursor: 'pointer', background: C.card, border: `1px solid ${C.red}55`, borderLeft: `3px solid ${C.red}`, borderRadius: 8, padding: '7px 11px 8px', minWidth: 124 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 1 }}>
+              <span className="home-live-dot" style={{ width: 5, height: 5, borderRadius: '50%', background: C.red, flexShrink: 0 }} />
+              <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.08em', color: C.red, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic' }}>{per ? `LIVE · ${per}` : 'LIVE'}</span>
+            </span>
+            <TickerLine abbr={g.home?.abbr} score={g.home?.score} bold={lead} />
+            <TickerLine abbr={g.away?.abbr} score={g.away?.score} bold={!lead && (g.away?.score ?? 0) > (g.home?.score ?? 0)} />
           </button>
         );
       })}
     </div>
   );
 }
-function TickerLine({ name, score }) {
+function TickerLine({ abbr, score, bold }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-      <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 92 }}>{name || 'TBD'}</span>
-      <span style={{ flexShrink: 0, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 15, color: C.ice }}>{score ?? 0}</span>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, minWidth: 0 }}>
+      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 14, letterSpacing: '0.03em', color: bold ? C.ice : 'rgba(244,247,250,0.78)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{abbr || 'TBD'}</span>
+      <span style={{ flexShrink: 0, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 16, color: bold ? C.ice : 'rgba(244,247,250,0.78)', fontVariantNumeric: 'tabular-nums' }}>{score ?? 0}</span>
     </div>
   );
 }
@@ -374,33 +379,108 @@ function LiveNow({ games, navigate }) {
   );
 }
 
+function ordinal(n) {
+  if (n == null) return null;
+  const s = ['th', 'st', 'nd', 'rd'], v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+// "14-3-1 · 2nd in Empire" — record + division standing, from real standings.
+function recordLine(rec) {
+  if (!rec) return null;
+  const wlt = `${rec.wins}-${rec.losses}-${rec.ties}${rec.otl ? `-${rec.otl}` : ''}`;
+  const place = rec.rank ? `${ordinal(rec.rank)} in ${rec.division || 'division'}` : null;
+  return place ? `${wlt} · ${place}` : wlt;
+}
+
 function LiveHeroCard({ game, navigate }) {
+  // Progressive: paint the score instantly, hydrate records + last goal after.
+  const [extras, setExtras] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    getLiveHeroExtras(game).then((x) => { if (alive) setExtras(x); }).catch(() => {});
+    return () => { alive = false; };
+  }, [game?.id, game?.source]);
+
+  const lastGoal = extras?.lastGoal || null;
+  // Show-only-when-present broadcast flourishes — Rinkd doesn't track these yet,
+  // so they render ONLY if a real value is on the game row (never fabricated).
+  const clock = game.clock || null;
+  const sog = (game.shotsHome != null && game.shotsAway != null) ? { h: game.shotsHome, a: game.shotsAway } : null;
+  const watching = (game.watching != null) ? game.watching : null;
+  const per = fmtPeriod(game.period);
+
   return (
     <button onClick={() => navigate(game.gameUrl)} className="home-tap" style={{
       width: '100%', textAlign: 'left', cursor: 'pointer', background: ELEV,
       border: `1px solid ${C.red}`, borderRadius: radii.hero, padding: 16,
       boxShadow: '0 8px 32px rgba(215,38,56,0.2)', position: 'relative', overflow: 'hidden',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.steel, fontFamily: "'Barlow Condensed', sans-serif", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '60%' }}>{game.eventName}</span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 10 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.steel, fontFamily: "'Barlow Condensed', sans-serif", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{game.eventName}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           <span className="home-live-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: C.red, flexShrink: 0 }} />
-          <span style={{ ...type.sectionHead, fontSize: 13, color: C.red }}>{fmtPeriod(game.period) ? `${fmtPeriod(game.period)} · LIVE` : 'LIVE'}</span>
+          <span style={{ ...type.sectionHead, fontSize: 13, color: C.red }}>{per ? `${per} · LIVE` : 'LIVE'}{clock ? ` · ${clock}` : ''}</span>
         </span>
       </div>
-      <TeamScoreRow logoUrl={game.home?.logoUrl} name={game.home?.name} score={game.homeScore} />
-      <div style={{ height: 8 }} />
-      <TeamScoreRow logoUrl={game.away?.logoUrl} name={game.away?.name} score={game.awayScore} />
+      <TeamScoreRow logoUrl={game.home?.logoUrl} name={game.home?.name} record={recordLine(extras?.homeRecord)} score={game.homeScore} />
+      <div style={{ height: 10 }} />
+      <TeamScoreRow logoUrl={game.away?.logoUrl} name={game.away?.name} record={recordLine(extras?.awayRecord)} score={game.awayScore} />
+
+      {sog && <ShotShareBar home={sog.h} away={sog.a} />}
+
+      {(lastGoal || watching != null) && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 12, paddingTop: 10, borderTop: `1px solid ${C.border}` }}>
+          {lastGoal ? (
+            <span style={{ minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 7, overflow: 'hidden' }}>
+              <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.1em', color: C.red, fontFamily: "'Barlow Condensed', sans-serif", flexShrink: 0 }}>LAST GOAL</span>
+              <span style={{ fontSize: 12.5, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <b style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900 }}>#{lastGoal.jersey}</b>
+                {lastGoal.name ? ` ${lastGoal.name}` : ''}
+                {(fmtPeriod(lastGoal.period) || lastGoal.time) ? ` · ${[fmtPeriod(lastGoal.period), lastGoal.time].filter(Boolean).join(' ')}` : ''}
+                {lastGoal.en ? ' · EN' : ''}
+              </span>
+            </span>
+          ) : <span />}
+          {watching != null && (
+            <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: C.steel }}>
+              <span className="home-live-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: C.steel }} />{watching.toLocaleString()} watching
+            </span>
+          )}
+        </div>
+      )}
     </button>
   );
 }
 
-function TeamScoreRow({ logoUrl, name, score }) {
+// SOG split bar — red (home) vs blue (away). Only rendered when real shot data
+// exists on the game (see LiveHeroCard); never shown on zeros-as-unknown.
+function ShotShareBar({ home, away }) {
+  const total = (home || 0) + (away || 0);
+  const homePct = total > 0 ? Math.round((home / total) * 100) : 50;
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: C.ice, fontFamily: "'Barlow Condensed', sans-serif" }}>SOG {home}</span>
+        <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, fontFamily: "'Barlow Condensed', sans-serif" }}>SHOT SHARE</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: C.ice, fontFamily: "'Barlow Condensed', sans-serif" }}>{away}</span>
+      </div>
+      <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', background: 'rgba(7,17,31,0.6)' }}>
+        <span style={{ width: `${homePct}%`, background: C.red }} />
+        <span style={{ flex: 1, background: C.blue }} />
+      </div>
+    </div>
+  );
+}
+
+function TeamScoreRow({ logoUrl, name, record, score }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-      <TeamLogo team={{ logo_url: logoUrl, name }} size={36} />
-      <span style={{ flex: 1, minWidth: 0, fontSize: 17, fontWeight: 600, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: "'Barlow', sans-serif" }}>{name || 'TBD'}</span>
-      <span style={{ flexShrink: 0, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 34, lineHeight: 1, color: C.ice, minWidth: 44, textAlign: 'right' }}>{score ?? 0}</span>
+      <TeamLogo team={{ logo_url: logoUrl, name }} size={40} />
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 17, fontWeight: 700, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: "'Barlow', sans-serif", lineHeight: 1.1 }}>{name || 'TBD'}</span>
+        {record && <span style={{ display: 'block', fontSize: 11.5, color: C.steel, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>{record}</span>}
+      </span>
+      <span style={{ flexShrink: 0, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 38, lineHeight: 1, color: C.ice, minWidth: 44, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{score ?? 0}</span>
     </div>
   );
 }
@@ -440,6 +520,8 @@ function YourHockey({ your, leader, navigate }) {
           {next.map((g) => <NextGameRow key={`${g._source}-${g.id}`} g={g} navigate={navigate} />)}
         </div>
       )}
+      {/* Inline fan vote — only renders when the latest final has an open puck. */}
+      {recentFinals[0] && <div style={{ marginTop: 12 }}><HomeGamePuck final={recentFinals[0]} navigate={navigate} /></div>}
       {recentFinals.length > 0 && (
         <div style={{ marginTop: 12 }}>
           <RailLabel>Recent finals</RailLabel>
@@ -456,6 +538,62 @@ function YourHockey({ your, leader, navigate }) {
         </div>
       )}
     </section>
+  );
+}
+
+// Inline Game Puck "vote live" — top candidates with % bars for a recently-final
+// game whose fan vote is still open. Self-guarding: renders nothing until the
+// game has votes (so it never shows an empty board). Tapping opens the game to
+// cast a vote. Names resolve from the game lineup (jersey-keyed).
+function HomeGamePuck({ final, navigate }) {
+  const kind = final.source === 'league' ? 'league' : 'tournament';
+  const href = final.source === 'league' ? `/league-game/${final.id}?type=league` : `/game/${final.id}`;
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const [tally, lu] = await Promise.all([
+          getGamePuck(final.id, kind),
+          supabase.from('game_lineups').select('team_id,jersey_number,invite_name').eq('game_id', final.id),
+        ]);
+        if (!alive) return;
+        if (!tally.total) { setData({ total: 0, rows: [] }); return; }
+        const nameOf = (tid, j) => (lu.data || []).find((x) => x.team_id === tid && x.jersey_number === j)?.invite_name || null;
+        const rows = tally.rows.slice(0, 3).map((r) => ({ ...r, name: nameOf(r.team_id, r.jersey), pct: Math.round((r.votes / tally.total) * 100) }));
+        setData({ total: tally.total, rows });
+      } catch { if (alive) setData({ total: 0, rows: [] }); }
+    })();
+    return () => { alive = false; };
+  }, [final.id, kind]);
+
+  if (!data || !data.total) return null;
+
+  return (
+    <button onClick={() => navigate(href)} className="home-tap" style={{ width: '100%', textAlign: 'left', cursor: 'pointer', background: C.card, border: `1px solid ${C.border}`, borderRadius: radii.card, padding: '12px 14px', marginBottom: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 700, fontSize: 12, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.red }}>
+          <PuckMark size={16} /> Game Puck · Vote Live
+        </span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: C.steel }}>{data.total.toLocaleString()} votes</span>
+      </div>
+      {data.rows.map((r, i) => (
+        <div key={`${r.team_id}-${r.jersey}`} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, overflow: 'hidden', marginBottom: i < data.rows.length - 1 ? 6 : 0, background: 'rgba(7,17,31,0.4)' }}>
+          {/* % fill bar — leader in red, the rest in steel-blue. */}
+          <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${r.pct}%`, background: i === 0 ? 'rgba(215,38,56,0.28)' : 'rgba(46,91,140,0.3)', transition: 'width 0.4s ease' }} />
+          <span style={{ position: 'relative', flexShrink: 0, width: 26, height: 26, borderRadius: '50%', background: i === 0 ? C.red : 'rgba(46,91,140,0.5)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 12 }}>{r.jersey}</span>
+          <span style={{ position: 'relative', minWidth: 0, flex: 1 }}>
+            <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name || `#${r.jersey}`}</span>
+            {i === 0 && <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.08em', color: C.red, fontFamily: "'Barlow Condensed', sans-serif" }}>LEADING</span>}
+          </span>
+          <span style={{ position: 'relative', flexShrink: 0, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice, fontVariantNumeric: 'tabular-nums' }}>{r.pct}<span style={{ fontSize: 11 }}>%</span></span>
+        </div>
+      ))}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 9, fontSize: 11, color: C.steel }}>
+        <Icon name="gameReminder" size={12} color={C.steel} /> Tap to vote · closes at the final whistle
+      </div>
+    </button>
   );
 }
 
@@ -476,18 +614,48 @@ function LeaderTile({ leader, navigate }) {
   );
 }
 
+// Relative day label for the upcoming-game chip ("TODAY" / "TOMORROW" / "IN 3 DAYS").
+function relDayLabel(dt) {
+  const now = new Date();
+  const d0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const d1 = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+  const days = Math.round((d1 - d0) / 86400000);
+  if (days < 0) return null;
+  if (days === 0) return 'TODAY';
+  if (days === 1) return 'TOMORROW';
+  if (days <= 14) return `IN ${days} DAYS`;
+  return null;
+}
+
 function NextGameRow({ g, navigate }) {
   const href = g._source === 'league' ? `/league-game/${g.id}?type=league` : `/team/${g._teamId}`;
+  const dt = g.start_time ? new Date(g.start_time) : null;
+  const day = dt ? dt.toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase() : '';
+  const dnum = dt ? dt.getDate() : '';
+  const time = dt ? dt.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).replace(/\s?([AP])M/i, (_, p) => p.toLowerCase()) : '';
+  const rel = dt ? relDayLabel(dt) : null;
+  const level = g._level || g._league_name || null;
   return (
-    <button onClick={() => navigate(href)} className="home-tap" style={{ width: '100%', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, background: C.card, border: `1px solid ${C.border}`, borderRadius: radii.card, padding: '11px 14px', marginBottom: 8, minHeight: 44 }}>
-      <TeamLogo team={g._team} size={34} />
-      <span style={{ minWidth: 0, flex: 1 }}>
-        <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+    <button onClick={() => navigate(href)} className="home-tap" style={{ width: '100%', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'stretch', gap: 0, background: C.card, border: `1px solid ${C.border}`, borderRadius: radii.card, padding: 0, marginBottom: 8, overflow: 'hidden' }}>
+      {/* Big date block — the broadcast schedule read. */}
+      <span style={{ flexShrink: 0, width: 72, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, padding: '12px 6px', background: 'rgba(46,91,140,0.18)', borderRight: `1px solid ${C.border}` }}>
+        <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', color: C.steel, fontFamily: "'Barlow Condensed', sans-serif" }}>{day}</span>
+        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 26, lineHeight: 1, color: C.ice }}>{dnum}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: C.steel, fontFamily: "'Barlow Condensed', sans-serif" }}>{time}</span>
+      </span>
+      <span style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 3, padding: '11px 12px' }}>
+        <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.1em', color: C.steel, fontFamily: "'Barlow Condensed', sans-serif", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>NEXT GAME{level ? ` · ${level}` : ''}</span>
+        <span style={{ fontSize: 15, fontWeight: 700, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {g._team?.name || 'My team'} <span style={{ color: C.steel, fontWeight: 400 }}>{g.is_home ? 'vs' : '@'}</span> {g.opponent || 'TBD'}
         </span>
-        {g.location && <span style={{ display: 'block', fontSize: 12, color: C.steel, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.location}</span>}
+        {g.location && <span style={{ fontSize: 12, color: C.steel, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.location}</span>}
+        {rel && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, alignSelf: 'flex-start', marginTop: 2, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', color: C.steel, background: 'rgba(139,163,190,0.12)', border: `1px solid ${C.border}`, borderRadius: 5, padding: '2px 7px', fontFamily: "'Barlow Condensed', sans-serif" }}>
+            <Icon name="gameReminder" size={11} color={C.steel} />{rel}
+          </span>
+        )}
       </span>
-      <span style={{ flexShrink: 0 }}><DatePill text={fmtGameWhen(g.start_time)} /></span>
+      <span style={{ flexShrink: 0, alignSelf: 'center', color: 'rgba(244,247,250,0.3)', fontSize: 20, paddingRight: 12 }}>›</span>
     </button>
   );
 }
@@ -557,37 +725,56 @@ function ThisWeek({ upcoming, events, navigate }) {
   );
 }
 
+// Gradient "art" header for a schedule tile — sport-specific tone + a faint
+// watermark, with the time/date chip floated over it. Pure CSS (no data).
+function TileArt({ variant, chip }) {
+  const grad = variant === 'tournament'
+    ? 'linear-gradient(135deg, #15543b 0%, #0b3326 100%)'
+    : variant === 'community'
+      ? 'linear-gradient(135deg, #14464f 0%, #0a2a33 100%)'
+      : 'linear-gradient(135deg, #16365e 0%, #0c2747 100%)';
+  return (
+    <div style={{ position: 'relative', height: 70, background: grad, overflow: 'hidden' }}>
+      {/* Face-off-dot / bracket watermark — concentric rings via radial gradients. */}
+      <div style={{ position: 'absolute', right: -18, bottom: -18, width: 92, height: 92, borderRadius: '50%', background: 'radial-gradient(circle, transparent 30%, rgba(244,247,250,0.08) 31%, rgba(244,247,250,0.08) 34%, transparent 35%, transparent 52%, rgba(244,247,250,0.06) 53%, rgba(244,247,250,0.06) 56%, transparent 57%)' }} />
+      {variant === 'tournament' && <Icon name="build" size={26} color="rgba(244,247,250,0.18)" style={{ position: 'absolute', left: 12, bottom: 10 }} />}
+      {chip && (
+        <span style={{ position: 'absolute', top: 8, left: 8, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 800, fontSize: 11, letterSpacing: '0.04em', color: '#fff', background: 'rgba(7,17,31,0.55)', borderRadius: 5, padding: '3px 8px', whiteSpace: 'nowrap', textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>{chip}</span>
+      )}
+    </div>
+  );
+}
+
 function GameTile({ g, navigate }) {
   return (
     <button onClick={() => navigate(g.gameUrl)} className="home-tap" style={tileStyle}>
-      <DatePill text={fmtGameWhen(g.startTime)} />
-      <div style={{ marginTop: 10 }}>
+      <TileArt variant="game" chip={fmtGameWhen(g.startTime)} />
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, padding: 12 }}>
         <TileTeam name={g.home?.name} />
-        <div style={{ fontSize: 11, color: C.steel, margin: '2px 0' }}>vs</div>
+        <div style={{ fontSize: 11, color: C.steel, margin: '1px 0' }}>vs</div>
         <TileTeam name={g.away?.name} />
+        <div style={{ marginTop: 'auto', paddingTop: 10, fontSize: 11, color: C.steel, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.eventName}</div>
       </div>
-      <div style={{ marginTop: 'auto', paddingTop: 10, fontSize: 11, color: C.steel, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.eventName}</div>
     </button>
   );
 }
 function TileTeam({ name }) {
-  return <div style={{ fontSize: 14, fontWeight: 600, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name || 'TBD'}</div>;
+  return <div style={{ fontSize: 14, fontWeight: 700, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name || 'TBD'}</div>;
 }
 
 function EventTile({ e, navigate }) {
   return (
     <button onClick={() => navigate(e.href)} className="home-tap" style={tileStyle}>
-      <DatePill text={e.startDate ? fmtEventDate(e.startDate) : 'SOON'} />
-      <div style={{ marginTop: 10, flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <TeamLogo team={{ name: e.name, logo_url: e.logo_url }} size={40} radius={8} />
+      <TileArt variant="tournament" chip={e.startDate ? fmtEventDate(e.startDate) : 'SOON'} />
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, padding: 12 }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.25 }}>{e.name}</div>
+        <div style={{ marginTop: 'auto', paddingTop: 8, fontSize: 11, color: C.steel }}>Tournament</div>
       </div>
-      <div style={{ marginTop: 'auto', paddingTop: 8, fontSize: 11, color: C.steel }}>Tournament</div>
     </button>
   );
 }
 
-const tileStyle = { flexShrink: 0, width: 176, minHeight: 150, display: 'flex', flexDirection: 'column', textAlign: 'left', cursor: 'pointer', background: C.card, border: `1px solid ${C.border}`, borderRadius: radii.card, padding: 14 };
+const tileStyle = { flexShrink: 0, width: 176, minHeight: 158, display: 'flex', flexDirection: 'column', textAlign: 'left', cursor: 'pointer', background: C.card, border: `1px solid ${C.border}`, borderRadius: radii.card, padding: 0, overflow: 'hidden' };
 
 function DatePill({ text }) {
   if (!text) return null;
