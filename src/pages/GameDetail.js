@@ -60,6 +60,7 @@ export default function GameDetail({ profile }) {
   // game_lineups (and only for tournament/league games where lineups exist).
   // Built once on load and consulted by the goal & penalty renderers.
   const [lineupByTeam, setLineupByTeam] = useState({});
+  const [recordByLt, setRecordByLt] = useState({}); // league_team id → W-L-T (league games)
   const online = useOnline();
 
   const load = useCallback(async () => {
@@ -132,6 +133,12 @@ export default function GameDetail({ profile }) {
         setPenalties(pl || []);
         setShots(sl || []);
         setGoalieChanges(gc || []);
+        // Records for the broadcast scoreboard (league games only). Best-effort.
+        if (isLeague && g.league_id) {
+          supabase.from('league_standings').select('lt_id,wins,losses,ties,otl').eq('league_id', g.league_id)
+            .then(({ data }) => setRecordByLt((data || []).reduce((m, r) => { m[r.lt_id] = r; return m; }, {})))
+            .catch(() => {});
+        }
         const lookup = {};
         (lu || []).forEach(row => {
           if (row.jersey_number == null) return;
@@ -256,6 +263,13 @@ export default function GameDetail({ profile }) {
   const isFinal = game.status === 'final';
 
   const periodLabel = (p) => p === 1 ? '1st' : p === 2 ? '2nd' : p === 3 ? '3rd' : p === 4 ? 'OT' : 'SO';
+  // Broadcast detail — records (league) + show-only-when-present flourishes.
+  // Shot share prefers the real per-shot log; falls back to the game's columns.
+  const recStr = (ltId) => { const r = recordByLt[ltId]; return r ? `${r.wins ?? 0}-${r.losses ?? 0}-${r.ties ?? 0}${r.otl ? `-${r.otl}` : ''}` : null; };
+  const homeRecord = isLeague ? recStr(homeTeam.id) : null;
+  const awayRecord = isLeague ? recStr(awayTeam.id) : null;
+  const liveClock = game.clock_display || null;
+  const watching = game.live_watching != null ? game.live_watching : null;
   const teamName = (id) => id === homeTeam.id ? homeTeam.name : awayTeam.name;
   const teamColor = (id) => id === homeTeam.id ? (homeTeam.logo_color || '#1a4a7a') : (awayTeam.logo_color || '#6b1520');
   const severityColor = (s) => s?.includes('Major') || s?.includes('Match') ? C.red : '#F59E0B';
@@ -269,8 +283,13 @@ export default function GameDetail({ profile }) {
   };
 
   // Shots totals per team
-  const homeShots = shots.filter(s => s.team_id === homeTeam.id).reduce((a, s) => a + (s.count || 0), 0);
-  const awayShots = shots.filter(s => s.team_id === awayTeam.id).reduce((a, s) => a + (s.count || 0), 0);
+  // Shots prefer the real per-shot log; fall back to the game's broadcast columns
+  // (shots_home/away) when no per-shot rows exist, so the count + shot-share still
+  // render. Null columns → 0, and the displays already hide on a 0/0 total.
+  const realHomeShots = shots.filter(s => s.team_id === homeTeam.id).reduce((a, s) => a + (s.count || 0), 0);
+  const realAwayShots = shots.filter(s => s.team_id === awayTeam.id).reduce((a, s) => a + (s.count || 0), 0);
+  const homeShots = (realHomeShots + realAwayShots > 0) ? realHomeShots : (game.shots_home ?? 0);
+  const awayShots = (realHomeShots + realAwayShots > 0) ? realAwayShots : (game.shots_away ?? 0);
   const maxShots = Math.max(homeShots, awayShots, 1);
 
   return (
@@ -334,6 +353,7 @@ export default function GameDetail({ profile }) {
             <div style={{ flex: 1, textAlign: 'center' }}>
               <TeamLogo team={homeTeam} size={52} radius={10} style={{ margin: '0 auto 8px' }} />
               <div style={{ fontSize: 13, fontWeight: 700, color: C.ice }}>{homeTeam.name}</div>
+              {homeRecord && <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 11, color: C.steel, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{homeRecord}</div>}
               {isTournamentGame && (game.home_team?.pool || game.home_team?.seed) && (
                 <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.45)', marginTop: 4, fontFamily: "'Barlow Condensed', sans-serif", textTransform: 'uppercase' }}>
                   {game.home_team?.pool || ''}
@@ -351,7 +371,8 @@ export default function GameDetail({ profile }) {
                 <BounceNumber value={game.away_score ?? 0} style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 56, color: C.ice, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }} />
               </div>
               <div style={{ textAlign: 'center', marginTop: 6 }}>
-                {isLive && <span style={{ background: C.red, color: '#fff', fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20, letterSpacing: '0.06em' }}>● LIVE · {periodLabel(game.period)}</span>}
+                {isLive && <span style={{ background: C.red, color: '#fff', fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20, letterSpacing: '0.06em' }}>● LIVE · {periodLabel(game.period)}{liveClock ? ` · ${liveClock}` : ''}</span>}
+                {isLive && watching != null && <span style={{ marginLeft: 8, fontSize: 11, color: C.steel }}>· {watching.toLocaleString()} watching</span>}
                 {isFinal && <span style={{ background: 'rgba(244,247,250,0.08)', color: 'rgba(244,247,250,0.4)', fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>FINAL</span>}
                 {!isLive && !isFinal && <span style={{ background: 'rgba(46,91,140,0.4)', color: C.steel, fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>SCHEDULED</span>}
               </div>
@@ -372,6 +393,7 @@ export default function GameDetail({ profile }) {
             <div style={{ flex: 1, textAlign: 'center' }}>
               <TeamLogo team={awayTeam} size={52} radius={10} style={{ margin: '0 auto 8px' }} />
               <div style={{ fontSize: 13, fontWeight: 700, color: C.ice }}>{awayTeam.name}</div>
+              {awayRecord && <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 11, color: C.steel, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{awayRecord}</div>}
               {isTournamentGame && (game.away_team?.pool || game.away_team?.seed) && (
                 <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.45)', marginTop: 4, fontFamily: "'Barlow Condensed', sans-serif", textTransform: 'uppercase' }}>
                   {game.away_team?.pool || ''}
