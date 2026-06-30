@@ -503,6 +503,9 @@ export default function LeaguePage({ currentUser, profile }) {
   // Brand color behind the cover photo / scrim (and the solid hero when there's
   // no cover). logo_color is the dark team color (Black Bears = near-black).
   const heroBg = league.logo_color || C.navy;
+  // Standings-leader highlight: a league's brand accent when it has one, else
+  // the manifesto's scarce GOLD (leader = award) — never red (red means alive).
+  const leaderHl = league.accent_color || C.gold;
 
   // Anonymous spectators on a non-demo league: render the teaser landing with
   // metadata + teams. Live standings / schedule / scoresheet stay gated behind
@@ -767,7 +770,7 @@ export default function LeaguePage({ currentUser, profile }) {
                     <div key={row.lt_id} style={{ display: 'grid', gridTemplateColumns: standingsCols, padding: '9px 12px', alignItems: 'center', ...staggerStyle(i) }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
                         {/* Rank as a large muted number (gold for 1st), not a column. */}
-                        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, lineHeight: 1, minWidth: 16, textAlign: 'center', fontVariantNumeric: 'tabular-nums', color: rank === 1 ? accent : 'rgba(244,247,250,0.35)', flexShrink: 0 }}>{rank}</span>
+                        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, lineHeight: 1, minWidth: 16, textAlign: 'center', fontVariantNumeric: 'tabular-nums', color: rank === 1 ? leaderHl :'rgba(244,247,250,0.35)', flexShrink: 0 }}>{rank}</span>
                         <TeamLogo team={{ name: row.team_name, logo_url: row.logo_url, logo_color: row.logo_color, logo_initials: row.logo_initials }} size={24} radius={5} />
                         <span style={{ fontSize: 13, fontWeight: 600, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{row.team_name}</span>
                       </div>
@@ -777,7 +780,7 @@ export default function LeaguePage({ currentUser, profile }) {
                       {showOtl && <span style={stat}>{row.otl || 0}</span>}
                       <span style={stat}>{row.ties}</span>
                       <span style={stat}>{row.gf}</span>
-                      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, textAlign: 'center', fontVariantNumeric: 'tabular-nums', color: rank === 1 ? accent : row.pts === 0 ? 'rgba(244,247,250,0.4)' : C.ice }}>{row.pts}</span>
+                      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, textAlign: 'center', fontVariantNumeric: 'tabular-nums', color: rank === 1 ? leaderHl :row.pts === 0 ? 'rgba(244,247,250,0.4)' : C.ice }}>{row.pts}</span>
                     </div>
                     );
                   })}
