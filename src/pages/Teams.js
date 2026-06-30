@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { CardGridSkeleton } from '../components/Skeletons';
 import Layout from '../components/Layout';
 import TapeText from '../components/TapeText';
 import { listTeams } from '../lib/teams';
@@ -50,7 +51,7 @@ export default function Teams({ profile }) {
           style={{ width: '100%', background: '#0f2847', border: `0.5px solid ${C.border}`, borderRadius: 10, padding: '11px 14px', color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 14, outline: 'none', marginBottom: 16 }}
         />
 
-        {loading && <div style={{ color: 'rgba(244,247,250,0.3)', fontSize: 13 }}>Getting the ice ready.</div>}
+        {loading && <CardGridSkeleton count={6} />}
 
         {!loading && teams.length === 0 && (
           <div style={{ background: '#0f2847', border: `0.5px solid ${C.border}`, borderRadius: 12, padding: 28, textAlign: 'center' }}>

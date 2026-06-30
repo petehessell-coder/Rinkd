@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import Layout from '../components/Layout';
+import { CardGridSkeleton } from '../components/Skeletons';
 import TapeText from '../components/TapeText';
 
 export default function Tournaments({ profile, currentUser }) {
@@ -70,7 +71,7 @@ export default function Tournaments({ profile, currentUser }) {
           </div>
         )}
 
-        {loading && <div style={{ color: 'rgba(244,247,250,0.3)', fontSize: 13 }}>Getting the ice ready.</div>}
+        {loading && <CardGridSkeleton count={6} />}
 
         {!loading && error && (
           <div style={{ background: '#0f2847', border: '0.5px solid rgba(215,38,56,0.4)', borderRadius: 12, padding: 24, textAlign: 'center' }}>

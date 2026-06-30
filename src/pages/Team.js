@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Icon, ErrorState } from '../components/ui';
+import { ListRowSkeleton } from '../components/Skeletons';
 import Layout from '../components/Layout';
 import { getTeam, getTeamMembers, getTeamGames, getUserRoleOnTeam, isLeagueStaffOfTeam, requestToJoin, getPublicTeamSummary } from '../lib/teams';
 import { captureDataError } from '../lib/sentry';
@@ -119,7 +120,20 @@ export default function TeamPage({ currentUser, profile }) {
 
   if (loading) return (
     <Layout profile={profile}>
-      <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Getting the ice ready.</div>
+      <div style={{ background: C.dark, minHeight: '100vh' }}>
+        <div style={{ background: 'linear-gradient(135deg,#0B1F3A 0%,#1a3a5c 100%)', padding: '22px 16px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div className="rinkd-shimmer" style={{ width: 60, height: 60, borderRadius: 12, flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="rinkd-shimmer" style={{ width: '60%', height: 24, borderRadius: 6 }} />
+            <div style={{ height: 8 }} />
+            <div className="rinkd-shimmer" style={{ width: '38%', height: 12, borderRadius: 6 }} />
+          </div>
+        </div>
+        <div style={{ padding: 16 }}>
+          <ListRowSkeleton rows={5} />
+          <div style={{ textAlign: 'center', marginTop: 18, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 14, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'rgba(244,247,250,0.4)' }}>Dropping the puck.</div>
+        </div>
+      </div>
     </Layout>
   );
 
