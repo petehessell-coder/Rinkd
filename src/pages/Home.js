@@ -513,19 +513,24 @@ function YourHockey({ your, leader, navigate }) {
   return (
     <section style={{ marginTop: 22 }}>
       <SectionHeader label="Your Hockey" />
-      {leader && <LeaderTile leader={leader} navigate={navigate} />}
       {next.length > 0 && (
-        <div style={{ marginTop: leader ? 10 : 0 }}>
+        <div>
           <RailLabel>Next up</RailLabel>
           {next.map((g) => <NextGameRow key={`${g._source}-${g.id}`} g={g} navigate={navigate} />)}
         </div>
       )}
       {/* Inline fan vote — only renders when the latest final has an open puck. */}
       {recentFinals[0] && <div style={{ marginTop: 12 }}><HomeGamePuck final={recentFinals[0]} navigate={navigate} /></div>}
-      {recentFinals.length > 0 && (
+      {/* Glance pair — the latest final result beside the league leader. */}
+      {(leader || recentFinals[0]) && (
+        <div style={{ marginTop: 12 }}>
+          <GlanceRow leader={leader} final={recentFinals[0]} navigate={navigate} />
+        </div>
+      )}
+      {recentFinals.length > 1 && (
         <div style={{ marginTop: 12 }}>
           <RailLabel>Recent finals</RailLabel>
-          {recentFinals.map((f) => (
+          {recentFinals.slice(1).map((f) => (
             f.hasRecap
               ? <div key={`${f.source}-${f.id}`} style={{ marginBottom: 10 }}><RecapCard gameId={f.id} source="league" /></div>
               : <FinalRow key={`${f.source}-${f.id}`} f={f} />
@@ -597,19 +602,66 @@ function HomeGamePuck({ final, navigate }) {
   );
 }
 
-function LeaderTile({ leader, navigate }) {
+// Compact glance pair (mockup: a recent FINAL · RECAP beside the LEAGUE LEADER).
+// Either side can stand alone; together they form a 2-up row.
+function GlanceRow({ leader, final, navigate }) {
+  if (!leader && !final) return null;
+  const two = leader && final;
   return (
-    <button onClick={() => navigate(`/league/${leader.leagueId}`)} className="home-tap" style={{ width: '100%', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(201,168,76,0.08)', border: `1px solid ${GOLD}66`, borderRadius: radii.card, padding: '12px 14px' }}>
-      <span style={{ flexShrink: 0 }}><TeamLogo team={leader.logo} size={38} /></span>
-      <span style={{ minWidth: 0, flex: 1 }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Icon name="milestone" size={14} color={GOLD} />
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: GOLD, fontFamily: "'Barlow Condensed', sans-serif" }}>League leader</span>
-        </span>
-        <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>{leader.teamName}</span>
-        <span style={{ display: 'block', fontSize: 12, color: C.steel }}>{leader.wins}-{leader.losses}{leader.otl ? `-${leader.otl}` : ''} · {leader.pts} PTS</span>
+    <div style={{ display: 'grid', gridTemplateColumns: two ? '1fr 1fr' : '1fr', gap: 10 }}>
+      {final && <FinalMini f={final} navigate={navigate} />}
+      {leader && <LeaderMini leader={leader} navigate={navigate} />}
+    </div>
+  );
+}
+
+function FinalMini({ f, navigate }) {
+  const myScore = f.isHome ? f.homeScore : f.awayScore;
+  const oppScore = f.isHome ? f.awayScore : f.homeScore;
+  const win = (myScore ?? 0) > (oppScore ?? 0);
+  const tie = (myScore ?? 0) === (oppScore ?? 0);
+  const resColor = tie ? C.steel : win ? '#22C55E' : C.red;
+  const resLabel = tie ? 'T' : win ? 'W' : 'L';
+  const href = f.source === 'league' ? `/league-game/${f.id}?type=league` : null;
+  const inner = (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.1em', color: C.steel, fontFamily: "'Barlow Condensed', sans-serif" }}>FINAL{f.hasRecap ? ' · RECAP' : ''}</span>
+        <span style={{ width: 20, height: 20, borderRadius: 5, background: `${resColor}22`, color: resColor, fontWeight: 800, fontSize: 11, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow Condensed', sans-serif" }}>{resLabel}</span>
+      </div>
+      <ScoreLine name={f.teamName} score={myScore} bold={win} />
+      <ScoreLine name={f.opponent} score={oppScore} bold={!win && !tie} />
+    </>
+  );
+  const style = { width: '100%', textAlign: 'left', background: C.card, border: `1px solid ${C.border}`, borderRadius: radii.card, padding: '12px 14px' };
+  return href
+    ? <button onClick={() => navigate(href)} className="home-tap" style={{ ...style, cursor: 'pointer' }}>{inner}</button>
+    : <div style={style}>{inner}</div>;
+}
+function ScoreLine({ name, score, bold }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 3 }}>
+      <span style={{ minWidth: 0, fontSize: 13, fontWeight: bold ? 700 : 500, color: bold ? C.ice : 'rgba(244,247,250,0.75)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name || 'TBD'}</span>
+      <span style={{ flexShrink: 0, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: bold ? C.ice : 'rgba(244,247,250,0.75)', fontVariantNumeric: 'tabular-nums' }}>{score ?? 0}</span>
+    </div>
+  );
+}
+
+function LeaderMini({ leader, navigate }) {
+  return (
+    <button onClick={() => navigate(`/league/${leader.leagueId}`)} className="home-tap" style={{ width: '100%', textAlign: 'left', cursor: 'pointer', background: 'rgba(201,168,76,0.08)', border: `1px solid ${GOLD}66`, borderRadius: radii.card, padding: '12px 14px', display: 'flex', flexDirection: 'column' }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6 }}>
+        <Icon name="milestone" size={13} color={GOLD} />
+        <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: GOLD, fontFamily: "'Barlow Condensed', sans-serif" }}>League leader</span>
       </span>
-      <span style={{ flexShrink: 0, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 22, color: GOLD }}>1st</span>
+      <span style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 26, color: GOLD, lineHeight: 1 }}>{leader.pts}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: GOLD, fontFamily: "'Barlow Condensed', sans-serif" }}>PTS</span>
+      </span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 7, minWidth: 0 }}>
+        <TeamLogo team={leader.logo} size={22} />
+        <span style={{ minWidth: 0, fontSize: 13, fontWeight: 700, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{leader.teamName}</span>
+      </span>
     </button>
   );
 }

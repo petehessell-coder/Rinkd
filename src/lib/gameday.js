@@ -50,6 +50,9 @@ function normLeagueGame(g, teamIds) {
     homeScore: g.home_score, awayScore: g.away_score,
     home: { id: g.home_team_id, name: g.home_lt?.team?.name || g.home_lt?.team_name || 'Home', logoUrl: g.home_lt?.team?.logo_url || g.home_lt?.logo_url || null, teamId: homeTeamId },
     away: { id: g.away_team_id, name: g.away_lt?.team?.name || g.away_lt?.team_name || 'Away', logoUrl: g.away_lt?.team?.logo_url || g.away_lt?.logo_url || null, teamId: awayTeamId },
+    // Broadcast detail — null unless the game actually carries it (see Home hero).
+    shotsHome: g.shots_home ?? null, shotsAway: g.shots_away ?? null,
+    watching: g.live_watching ?? null, clock: g.clock_display || null,
     eventId: g.league_id, eventName: g.league?.name || 'League',
     // League games open in the league-game detail view.
     gameUrl: `/league-game/${g.id}?type=league`,
@@ -59,7 +62,7 @@ function normLeagueGame(g, teamIds) {
 }
 
 const T_SELECT = 'id, status, start_time, period, home_score, away_score, tournament_id, home_team:tournament_teams!home_team_id(id,team_name,logo_url), away_team:tournament_teams!away_team_id(id,team_name,logo_url), tournament:tournaments(name)';
-const L_SELECT = 'id, status, start_time, period, home_score, away_score, league_id, home_team_id, away_team_id, home_lt:league_teams!home_team_id(id,team_name,logo_color,logo_initials,logo_url,team_id,team:teams(id,name,logo_url)), away_lt:league_teams!away_team_id(id,team_name,logo_color,logo_initials,logo_url,team_id,team:teams(id,name,logo_url)), league:leagues(name)';
+const L_SELECT = 'id, status, start_time, period, home_score, away_score, shots_home, shots_away, live_watching, clock_display, league_id, home_team_id, away_team_id, home_lt:league_teams!home_team_id(id,team_name,logo_color,logo_initials,logo_url,team_id,team:teams(id,name,logo_url)), away_lt:league_teams!away_team_id(id,team_name,logo_color,logo_initials,logo_url,team_id,team:teams(id,name,logo_url)), league:leagues(name)';
 
 // The live + soonest-upcoming games across everything the user follows.
 // Returns { live: [...normalized], upcoming: [...normalized] }, each capped.

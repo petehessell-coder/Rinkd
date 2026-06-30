@@ -83,6 +83,7 @@ export default function PublicGame({ league }) {
   const [goals, setGoals] = useState([]);
   const [penalties, setPenalties] = useState([]);
   const [lineupByTeam, setLineupByTeam] = useState({});
+  const [recordByLt, setRecordByLt] = useState({}); // league_team id → W-L-T (league games)
 
   const load = useCallback(async () => {
     try {
@@ -105,13 +106,19 @@ export default function PublicGame({ league }) {
       const visible = isParentPublic({ isLeague, league: parent, tournament: parent }) && isPublicSharingEnabled(parent?.settings);
       if (!visible) { setState({ loading: false, game: g, parent, blocked: true }); return; }
 
-      const [{ data: gl }, { data: pl }, { data: lu }] = await Promise.all([
+      const [{ data: gl }, { data: pl }, { data: lu }, { data: st }] = await Promise.all([
         supabase.from('game_goals').select('*').eq('game_id', gameId).order('period').order('time_in_period'),
         supabase.from('game_penalties').select('*').eq('game_id', gameId).order('period').order('time_in_period'),
         supabase.from('game_lineups').select('team_id, jersey_number, invite_name').eq('game_id', gameId),
+        // Records for the broadcast scoreboard (league games only; tournament
+        // teams are nameplate-only and carry no standings record).
+        (isLeague && parent?.id)
+          ? supabase.from('league_standings').select('lt_id,wins,losses,ties,otl').eq('league_id', parent.id)
+          : Promise.resolve({ data: [] }),
       ]);
       setGoals(gl || []);
       setPenalties(pl || []);
+      setRecordByLt((st || []).reduce((m, r) => { m[r.lt_id] = r; return m; }, {}));
       const lookup = {};
       (lu || []).forEach(row => {
         if (row.jersey_number == null) return;
@@ -213,6 +220,14 @@ export default function PublicGame({ league }) {
   const dateStr = game.start_time ? new Date(game.start_time).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : null;
   const venue = [game.rink?.name, game.rink?.sub_rink].filter(Boolean).join(' · ');
 
+  // Broadcast detail — records (league only) + show-only-when-present flourishes.
+  const recStr = (ltId) => { const r = recordByLt[ltId]; return r ? `${r.wins ?? 0}-${r.losses ?? 0}-${r.ties ?? 0}${r.otl ? `-${r.otl}` : ''}` : null; };
+  const homeRecord = isLeague ? recStr(game.home_team_id) : null;
+  const awayRecord = isLeague ? recStr(game.away_team_id) : null;
+  const sog = (game.shots_home != null && game.shots_away != null) ? { h: game.shots_home, a: game.shots_away } : null;
+  const watching = game.live_watching != null ? game.live_watching : null;
+  const clock = game.clock_display || null;
+
   const roundLabel = (() => {
     if (isLeague) return game.round && game.round !== 'pool' ? titleCase(game.round) : 'Regular season';
     const r = (game.round || '').toLowerCase();
@@ -286,8 +301,13 @@ export default function PublicGame({ league }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '-22px -18px 18px', padding: '7px 8px 7px 18px', background: C.navy, borderLeft: `4px solid ${C.red}` }}>
               <span className="pg-live-ring" style={{ width: 10, height: 10, borderRadius: 999, background: C.red, flex: '0 0 auto' }} />
               <span style={{ flex: 1, minWidth: 0, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', textTransform: 'uppercase', letterSpacing: '0.05em', color: C.ice, fontSize: 17, lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {periodDisplay(game.period)} · Live
+                {periodDisplay(game.period)} · Live{clock ? ` · ${clock}` : ''}
               </span>
+              {watching != null && (
+                <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'rgba(244,247,250,0.75)', marginRight: 4 }}>
+                  <span className="pg-live-ring" style={{ width: 6, height: 6, borderRadius: 999, background: C.red }} />{watching.toLocaleString()}
+                </span>
+              )}
               <SoundToggle />
             </div>
           ) : (
@@ -298,9 +318,10 @@ export default function PublicGame({ league }) {
             </div>
           )}
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 12 }}>
-            <TeamSide team={homeTeam} score={game.home_score} scorerLine={scorerLine(homeTeam.id)} hideScore={!isFinal && !isLive} />
-            <TeamSide team={awayTeam} score={game.away_score} scorerLine={scorerLine(awayTeam.id)} hideScore={!isFinal && !isLive} />
+            <TeamSide team={homeTeam} score={game.home_score} record={homeRecord} scorerLine={scorerLine(homeTeam.id)} hideScore={!isFinal && !isLive} />
+            <TeamSide team={awayTeam} score={game.away_score} record={awayRecord} scorerLine={scorerLine(awayTeam.id)} hideScore={!isFinal && !isLive} />
           </div>
+          {sog && <PgShotShare home={sog.h} away={sog.a} />}
           {venue && <div style={{ textAlign: 'center', marginTop: 16, fontSize: 12, color: C.steel, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📍 {venue}</div>}
         </div>
 
@@ -408,11 +429,32 @@ export default function PublicGame({ league }) {
   );
 }
 
-function TeamSide({ team, score, scorerLine, hideScore }) {
+// SOG split bar for the live scoreboard — red (home) vs blue (away). Only ever
+// rendered when real shot data is present on the game (see render).
+function PgShotShare({ home, away }) {
+  const total = (home || 0) + (away || 0);
+  const homePct = total > 0 ? Math.round((home / total) * 100) : 50;
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 13, color: C.ice }}>SOG {home}</span>
+        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 10, letterSpacing: '0.12em', color: C.steel }}>SHOT SHARE</span>
+        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 13, color: C.ice }}>{away}</span>
+      </div>
+      <div style={{ display: 'flex', height: 7, borderRadius: 4, overflow: 'hidden', background: 'rgba(3,12,21,0.7)' }}>
+        <span style={{ width: `${homePct}%`, background: C.red }} />
+        <span style={{ flex: 1, background: C.blue }} />
+      </div>
+    </div>
+  );
+}
+
+function TeamSide({ team, score, record, scorerLine, hideScore }) {
   return (
     <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><TeamMark team={team} /></div>
       <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 800, fontSize: 17, color: '#F4F7FA', lineHeight: 1.1, marginBottom: 2, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(team.name || 'TBD').toUpperCase()}</div>
+      {record && <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 11.5, color: C.steel, marginBottom: 2, fontVariantNumeric: 'tabular-nums' }}>{record}</div>}
       {/* TV score bug — Barlow Condensed 900 italic, 72px. key={score} remounts
           on every score change so pgScorePop fires the hard puck-off-the-post
           bounce. */}
