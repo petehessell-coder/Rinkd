@@ -1,10 +1,5 @@
 import React, { useEffect, useState } from 'react';
-
-const C = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
-  ice: '#F4F7FA', steel: '#8BA3BE', dark: '#07111F',
-  card: '#112236', border: '#1E3A5C',
-};
+import { C } from '../lib/tokens';
 
 /**
  * SubscribeCalendarSheet — modal/popover for subscribing to a live calendar

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import PuckMark from './PuckMark';
 import { haptics } from '../lib/haptics';
 import { prefersReducedMotion } from '../lib/motion';
+import { C } from '../lib/tokens';
 
 // SHARE-GOAL-1 — branded pull-to-refresh.
 //
@@ -140,7 +141,7 @@ export default function PullToRefresh({ onRefresh, children, topOffset = 0 }) {
         <span style={{
           fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 700,
           fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase',
-          color: ready || refreshing ? '#D72638' : '#8BA3BE', transition: 'color 0.15s',
+          color: ready || refreshing ? C.red : C.steel, transition: 'color 0.15s',
         }}>{label}</span>
       </div>
       {children}

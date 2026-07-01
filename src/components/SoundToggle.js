@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { goalHornEnabled, setGoalHornEnabled, supportsSound } from '../lib/sound';
+import { colors } from '../lib/tokens';
 
 // SHARE-GOAL-1 — the opt-in goal-horn toggle.
 //
@@ -30,7 +31,7 @@ function SpeakerOff({ color }) {
   );
 }
 
-export default function SoundToggle({ color = '#8BA3BE', activeColor = '#D72638', style }) {
+export default function SoundToggle({ color = colors.muted, activeColor = colors.red, style }) {
   const [on, setOn] = useState(goalHornEnabled());
   // Keep every mounted toggle in sync (a 2nd live card, or another tab).
   useEffect(() => {

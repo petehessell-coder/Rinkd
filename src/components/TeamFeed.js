@@ -20,19 +20,15 @@ import { recapSourceFromPost, getRecapCardWithSponsor } from '../lib/recapCard';
 import { MentionInput, MentionText } from './Mentions';
 import { savePostMentions, mentionMapFromRows } from '../lib/mentions';
 import CommentThread from './CommentThread';
-
-const C = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
-  steel: '#8BA3BE', card: '#112236', border: 'rgba(46,91,140,0.4)',
-};
+import { C, colors } from '../lib/tokens';
 
 const TAGS = [
-  { label: 'Goal Alert', color: '#D72638' },
-  { label: 'Game Recap', color: '#2E5B8C' },
-  { label: 'Practice', color: '#F59E0B' },
-  { label: 'Lineup', color: '#22C55E' },
+  { label: 'Goal Alert', color: C.red },
+  { label: 'Game Recap', color: C.blue },
+  { label: 'Practice', color: colors.warning },
+  { label: 'Lineup', color: colors.success },
   { label: 'Travel', color: '#0EA5E9' },
-  { label: 'Question', color: '#8BA3BE' },
+  { label: 'Question', color: C.steel },
 ];
 
 // Tap-to-fullscreen lightbox.
@@ -133,7 +129,7 @@ function PostCard({ post, currentUser, isLiked, reactions, onLike, onCommentChan
         )}
         <div style={{ display: 'flex', gap: 16, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
           <button onClick={() => onLike(post.id)} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: isLiked ? C.red : C.steel, fontSize: 13, fontFamily: "'Barlow', sans-serif", padding: 0 }}>
-            {isLiked ? <Icon name="like" size={16} color="#D72638" /> : <Icon name="like" size={16} />}
+            {isLiked ? <Icon name="like" size={16} color={C.red} /> : <Icon name="like" size={16} />}
             <span style={{ fontWeight: isLiked ? 600 : 400 }}>{post.likes || 0}</span>
           </button>
           <button onClick={loadAndToggle} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: showComments ? C.ice : C.steel, fontSize: 13, fontFamily: "'Barlow', sans-serif", padding: 0 }}>

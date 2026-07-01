@@ -3,9 +3,9 @@ import SignatureCanvas from 'react-signature-canvas';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { supabase } from '../lib/supabase';
+import { C, colors } from '../lib/tokens';
 
-const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', dark:'#07111F' };
-const inputStyle = { width:'100%', background:'#07111F', border:'0.5px solid rgba(46,91,140,0.5)', borderRadius:8, padding:'8px 12px', color:C.ice, fontFamily:'Barlow, sans-serif', fontSize:13, outline:'none' };
+const inputStyle = { width:'100%', background:C.dark, border:'0.5px solid rgba(46,91,140,0.5)', borderRadius:8, padding:'8px 12px', color:C.ice, fontFamily:'Barlow, sans-serif', fontSize:13, outline:'none' };
 
 // USA Hockey classification → the label printed on the official sheet.
 const CLASS_LABEL = { tier1:'Tier I', tier2:'Tier II', girls_women:'Girls/Women', high_school:'High School', house_rec:'House/Rec', adult:'Adult' };
@@ -15,7 +15,7 @@ function SigPad({ label, sigRef, onClear }) {
     <div style={{ marginBottom: 16 }}>
       <div style={{ fontSize:11, fontWeight:700, color:'rgba(244,247,250,0.4)', letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:6 }}>{label}</div>
       <div style={{ background:'#fff', borderRadius:8, border:'0.5px solid rgba(46,91,140,0.5)', overflow:'hidden' }}>
-        <SignatureCanvas ref={sigRef} penColor="#0B1F3A" canvasProps={{ width:420, height:100, style:{ width:'100%', height:100 } }} />
+        <SignatureCanvas ref={sigRef} penColor={C.navy} canvasProps={{ width:420, height:100, style:{ width:'100%', height:100 } }} />
       </div>
       <button onClick={onClear} style={{ marginTop:4, background:'none', border:'none', color:'rgba(244,247,250,0.4)', fontSize:11, cursor:'pointer', fontFamily:'Barlow, sans-serif' }}>Clear</button>
     </div>
@@ -23,9 +23,9 @@ function SigPad({ label, sigRef, onClear }) {
 }
 
 function StatusRow({ icon, label, status, skippedLabel }) {
-  const color = status === 'success' ? '#22C55E'
+  const color = status === 'success' ? colors.success
     : status === 'error' ? C.red
-    : status === 'loading' ? '#F59E0B'
+    : status === 'loading' ? colors.warning
     : status === 'skipped' ? 'rgba(244,247,250,0.5)'
     : 'rgba(244,247,250,0.3)';
   const symbol = status === 'success' ? '✓'
@@ -348,7 +348,7 @@ export default function Scoresheet({ game, goals, penalties, shots, goalieChange
             {compliant && (
               <div style={{ fontSize:11.5, color:"rgba(244,247,250,0.55)", lineHeight:1.5, marginBottom:16, background:"rgba(34,197,94,0.08)", border:"0.5px solid rgba(34,197,94,0.3)", borderRadius:10, padding:"10px 12px" }}>
                 🇺🇸 USA Hockey mode — the printed roster, coaches, and times come from this game automatically. Officials just sign below.
-                {coachSignoffs.length === 0 && <div style={{ marginTop:6, color:"#F59E0B" }}>⚠ No coach pre-game signatures recorded — the coaches line will print blank.</div>}
+                {coachSignoffs.length === 0 && <div style={{ marginTop:6, color:colors.warning }}>⚠ No coach pre-game signatures recorded — the coaches line will print blank.</div>}
               </div>
             )}
             <div style={{ fontSize:13, fontWeight:700, color:C.ice, marginBottom:6 }}>Official Signatures</div>
@@ -393,7 +393,7 @@ export default function Scoresheet({ game, goals, penalties, shots, goalieChange
           <div style={{ padding:"10px 0" }}>
             <div style={{ background:"rgba(34,197,94,0.1)", border:"0.5px solid rgba(34,197,94,0.3)", borderRadius:10, padding:"14px 16px", marginBottom:16, textAlign:"center" }}>
               <div style={{ fontSize:24, marginBottom:6 }}>✅</div>
-              <div style={{ fontSize:14, fontWeight:700, color:"#22C55E", marginBottom:4 }}>Scoresheet submitted</div>
+              <div style={{ fontSize:14, fontWeight:700, color:colors.success, marginBottom:4 }}>Scoresheet submitted</div>
               <div style={{ fontSize:12, color:"rgba(244,247,250,0.4)" }}>
                 PDF downloaded · saved to Rinkd · {status.email === 'success'
                   ? 'managers notified'
@@ -408,7 +408,7 @@ export default function Scoresheet({ game, goals, penalties, shots, goalieChange
             <StatusRow icon="✉️" label="Emailed to team managers" status={status.email}
               skippedLabel={isLeague ? "No manager emails on file — skipped" : "No team contact emails on file — skipped"} />
             <button onClick={onClose}
-              style={{ width:"100%", padding:12, background:"rgba(46,91,140,0.2)", border:"0.5px solid rgba(46,91,140,0.4)", borderRadius:999, color:C.ice, fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"Barlow, sans-serif", marginTop:16, transition:"all 0.15s" }}
+              style={{ width:"100%", padding:12, background:"rgba(46,91,140,0.2)", border:`0.5px solid ${C.border}`, borderRadius:999, color:C.ice, fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"Barlow, sans-serif", marginTop:16, transition:"all 0.15s" }}
               onMouseEnter={e => { e.currentTarget.style.background=C.ice; e.currentTarget.style.color=C.navy; }}
               onMouseLeave={e => { e.currentTarget.style.background="rgba(46,91,140,0.2)"; e.currentTarget.style.color=C.ice; }}>
               Done

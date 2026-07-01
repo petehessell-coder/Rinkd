@@ -20,8 +20,7 @@ import SEO from '../components/SEO';
 import { buildIcsMulti, downloadIcs } from '../lib/ics';
 import SubscribeCalendarSheet from '../components/SubscribeCalendarSheet';
 import { eventMeta, scheduleTitle } from '../lib/scheduleMeta';
-
-const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
+import { C, colors } from '../lib/tokens';
 
 const TABS = ['Roster', 'Schedule', 'Feed', 'Volunteer', 'Info'];
 
@@ -171,7 +170,7 @@ export default function TeamPage({ currentUser, profile }) {
               <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 24, lineHeight: 1.05, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 5, flexWrap: 'wrap' }}>
                 {s.division && <span style={{ fontSize: 12, color: C.steel }}>{s.division}</span>}
-                <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', padding: '2px 8px', borderRadius: 6, background: 'rgba(201,168,76,0.16)', color: '#C9A84C', textTransform: 'uppercase' }}>Private · Youth</span>
+                <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', padding: '2px 8px', borderRadius: 6, background: 'rgba(201,168,76,0.16)', color: C.gold, textTransform: 'uppercase' }}>Private · Youth</span>
               </div>
             </div>
           </div>
@@ -187,7 +186,7 @@ export default function TeamPage({ currentUser, profile }) {
                 <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.08em', color: C.steel, textTransform: 'uppercase', marginBottom: 8 }}>Recent Results</div>
                 {recent.map((r, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: i < recent.length - 1 ? '0.5px solid rgba(244,247,250,0.06)' : 'none' }}>
-                    <span style={{ fontSize: 12, fontWeight: 800, width: 16, color: r.result === 'W' ? '#22C55E' : r.result === 'L' ? C.red : C.steel }}>{r.result}</span>
+                    <span style={{ fontSize: 12, fontWeight: 800, width: 16, color: r.result === 'W' ? colors.success : r.result === 'L' ? C.red : C.steel }}>{r.result}</span>
                     <span style={{ flex: 1, minWidth: 0, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>vs {r.opponent}</span>
                     <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 15, fontVariantNumeric: 'tabular-nums' }}>{r.gf}-{r.ga}</span>
                   </div>
@@ -281,7 +280,7 @@ export default function TeamPage({ currentUser, profile }) {
       </div>
       <Avatar name={m.profile?.name} color={m.profile?.avatar_color} initials={m.profile?.avatar_initials} size={34} />
       <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{m.profile?.name || m.invite_name || 'Unknown'}{m.status === 'pending' && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: 'rgba(245,158,11,0.2)', color: '#F59E0B' }}>INVITED</span>}</div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{m.profile?.name || m.invite_name || 'Unknown'}{m.status === 'pending' && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: 'rgba(245,158,11,0.2)', color: colors.warning }}>INVITED</span>}</div>
         <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)' }}>
           {[m.position, m.shot_hand ? `${m.shot_hand} shot` : null].filter(Boolean).join(' · ')}
         </div>
@@ -324,7 +323,7 @@ export default function TeamPage({ currentUser, profile }) {
               {g.is_home ? 'vs.' : '@'} {g.opponent}
             </div>
             {isLeagueGame && g._league_name && (
-              <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: 'rgba(46,91,140,0.3)', color: '#8BA3BE', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: 'rgba(46,91,140,0.3)', color: C.steel, letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>
                 {g._league_name}
               </span>
             )}
@@ -360,7 +359,7 @@ export default function TeamPage({ currentUser, profile }) {
           )}
         </div>
         {g.status === 'final'
-          ? <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 14, color: isWin ? '#22C55E' : isLoss ? C.red : C.ice }}>
+          ? <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 14, color: isWin ? colors.success : isLoss ? C.red : C.ice }}>
               {isWin ? 'W' : isLoss ? 'L' : 'T'} {teamScore}–{oppScore}
             </div>
           : <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.3)', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -476,11 +475,11 @@ export default function TeamPage({ currentUser, profile }) {
         </div>
 
         {/* STATS BAR */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', borderBottom: '0.5px solid rgba(46,91,140,0.4)', background: C.navy }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', borderBottom: `0.5px solid ${C.border}`, background: C.navy }}>
           {[
             { num: members.length, label: 'Players' },
             { num: games.filter(g => g.status === 'final').length, label: 'Games' },
-            { num: wins, label: 'Wins', color: '#22C55E' },
+            { num: wins, label: 'Wins', color: colors.success },
             { num: losses, label: 'Losses', color: C.red },
             { num: ties, label: 'Ties', color: 'rgba(244,247,250,0.65)' },
           ].map((s, i) => (
@@ -496,7 +495,7 @@ export default function TeamPage({ currentUser, profile }) {
           {TABS.map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)}
               style={{ fontSize: 13, fontWeight: 700, padding: '10px 16px', color: '#FFFFFF', background: 'transparent', border: 'none', borderBottom: activeTab === tab ? '3px solid #D72638' : '3px solid transparent', marginBottom: -2, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap', opacity: activeTab === tab ? 1 : 0.5, transition: 'opacity 0.15s' }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.color = '#0B1F3A'; e.currentTarget.style.opacity = '1'; }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.color = C.navy; e.currentTarget.style.opacity = '1'; }}
               onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#FFFFFF'; e.currentTarget.style.opacity = activeTab === tab ? '1' : '0.5'; }}>
               {tab}
             </button>
@@ -515,7 +514,7 @@ export default function TeamPage({ currentUser, profile }) {
             const d = new Date(next.start_time);
             return (
               <div style={{ marginBottom: 14, padding: 14, borderRadius: 12, background: 'rgba(46,91,140,0.12)', border: '1px solid rgba(46,91,140,0.5)' }}>
-                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#8BA3BE', marginBottom: 4 }}>Your next game</div>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.steel, marginBottom: 4 }}>Your next game</div>
                 <div style={{ fontSize: 15, fontWeight: 800, color: C.ice }}>
                   {next.is_home ? 'vs.' : '@'} {next.opponent || 'TBD'}
                 </div>

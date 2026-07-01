@@ -6,6 +6,7 @@ import TapeText from '../components/TapeText';
 import { listTeams } from '../lib/teams';
 import MapLink from '../components/MapLink';
 import { TeamLogo } from '../components/Logos';
+import { C } from '../lib/tokens';
 
 export default function Teams({ profile }) {
   const navigate = useNavigate();
@@ -23,8 +24,6 @@ export default function Teams({ profile }) {
     const t = setTimeout(load, 300);
     return () => clearTimeout(t);
   }, [search]);
-
-  const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', border:'rgba(46,91,140,0.4)' };
 
   return (
     <Layout profile={profile}>
@@ -48,13 +47,13 @@ export default function Teams({ profile }) {
         <input
           value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search teams..."
-          style={{ width: '100%', background: '#0f2847', border: `0.5px solid ${C.border}`, borderRadius: 10, padding: '11px 14px', color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 14, outline: 'none', marginBottom: 16 }}
+          style={{ width: '100%', background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 10, padding: '11px 14px', color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 14, outline: 'none', marginBottom: 16 }}
         />
 
         {loading && <CardGridSkeleton count={6} />}
 
         {!loading && teams.length === 0 && (
-          <div style={{ background: '#0f2847', border: `0.5px solid ${C.border}`, borderRadius: 12, padding: 28, textAlign: 'center' }}>
+          <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: 28, textAlign: 'center' }}>
             <div style={{ fontSize: 32, marginBottom: 10 }}>🏒</div>
             <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>{search ? 'No teams found' : 'No teams yet'}</div>
             <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.4)', marginBottom: 16 }}>Be the first to create a team on Rinkd</div>
@@ -67,7 +66,7 @@ export default function Teams({ profile }) {
 
         {teams.map(team => (
           <div key={team.id} onClick={() => navigate('/team/' + team.id)}
-            style={{ background: '#0f2847', border: `0.5px solid ${C.border}`, borderRadius: 12, padding: '14px 16px', marginBottom: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14, transition: 'border 0.15s' }}
+            style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: '14px 16px', marginBottom: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14, transition: 'border 0.15s' }}
             onMouseEnter={e => e.currentTarget.style.border = '0.5px solid rgba(46,91,140,0.8)'}
             onMouseLeave={e => e.currentTarget.style.border = `0.5px solid ${C.border}`}>
             {/* Team logo — uploaded image takes precedence over colored initials */}

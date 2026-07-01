@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../lib/authContext';
 import { acceptTeamManagerInvite } from '../lib/leagueTeamManagers';
+import { C } from '../lib/tokens';
 
 // /accept-team-invite?token=<hex>
 //
@@ -13,11 +14,6 @@ import { acceptTeamManagerInvite } from '../lib/leagueTeamManagers';
 //      (team manager surface comes through the league for now).
 //   3. Signed in, token invalid/expired/already-used/wrong-email → show
 //      the precise error from the RPC + a back-to-feed button.
-
-const C = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
-  steel: '#8BA3BE', dark: '#07111F', card: '#0f2847', border: 'rgba(46,91,140,0.4)',
-};
 
 export default function AcceptTeamInvite({ profile }) {
   const navigate = useNavigate();

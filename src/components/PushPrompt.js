@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { subscribeToPush, getPushState } from '../lib/push';
 import { iosCanInstallButHasnt } from '../lib/platform';
 import { IOS_INSTALL_EVENT } from './IOSInstallBanner';
+import { C } from '../lib/tokens';
 
 const B = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
-  ice: '#F4F7FA', steel: '#8BA3BE', card: '#112236', border: '#1E3A5C',
+  navy: C.navy, blue: C.blue, red: C.red,
+  ice: C.ice, steel: C.steel, card: '#112236', border: '#1E3A5C',
 };
 
 const DISMISS_KEY = 'rinkd_push_prompt_dismissed_v1';

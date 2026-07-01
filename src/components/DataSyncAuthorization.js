@@ -6,6 +6,7 @@ import {
   revokeIntegrationAuthorization,
 } from '../lib/integrationAuthorizations';
 import { useUndoable } from './ui';
+import { C, colors } from '../lib/tokens';
 
 // INTEGRATIONS-1 — reusable data-sync authorization clickwrap.
 //
@@ -24,11 +25,6 @@ import { useUndoable } from './ui';
 //   statement  - override the default statement text (optional)
 //   accent     - accent color (default Rinkd red)
 //   onAuthorizedChange - (authorized: boolean) => void, fired on load + change
-
-const C = {
-  ice: '#F4F7FA', steel: '#8BA3BE', card: '#0f2847',
-  border: 'rgba(46,91,140,0.4)', green: '#22C55E', red: '#D72638',
-};
 
 function defaultStatement(label) {
   return `I authorize Rinkd to sync our ${label} data and confirm we have the right to share it.`;
@@ -101,7 +97,7 @@ export default function DataSyncAuthorization({
     const byYou = me && auth.authorized_by === me;
     return (
       <div style={{ background: 'rgba(34,197,94,0.08)', border: `1px solid rgba(34,197,94,0.35)`, borderRadius: 10, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ color: C.green, fontSize: 16 }}>✓</span>
+        <span style={{ color: colors.success, fontSize: 16 }}>✓</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 12.5, color: C.ice, fontWeight: 600 }}>
             {label} data sync authorized{byYou ? ' by you' : ''}{when ? ` · ${when}` : ''}

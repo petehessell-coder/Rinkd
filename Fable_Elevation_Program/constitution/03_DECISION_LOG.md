@@ -83,3 +83,12 @@ Before proposing a change that touches home, navigation, feeds, privacy, stats, 
 registration, check this log. If your idea contradicts a decision, either (a) don't
 propose it, or (b) make the case explicitly for reversing the decision and, if
 accepted, add a new dated entry that supersedes the old one.
+
+### 2026-07-01 · C01 token decisions (D1–D4, Pete sign-off)
+Added to `tokens.js` colors: `success #22C55E`, `warning #F59E0B`, `onAccent
+#FFFFFF` (text/icons ON saturated surfaces; all other white text → `ice`),
+`redSoft #E26B6B` (error text on dark), `redDeep #B51E2E` (pressed/hover),
+`premium #8B5CF6` (Crease/paid-video tier — Twitch brand `#9146FF` stays as-is
+on provider buttons). **Declined:** a `link` token — sky-blue drift collapses to
+brand `blue` in the Part-2 drift pass. **Reason:** the amber/green families were
+de-facto semantic roles with no token (~146 uses); naming them ends the drift.

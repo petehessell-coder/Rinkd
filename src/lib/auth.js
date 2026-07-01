@@ -1,7 +1,8 @@
 import { supabase } from './supabase';
 import { pilotRef } from './analytics';
+import { colors } from './tokens';
 
-const AVATAR_COLORS = ['#D72638','#2E5B8C','#22C55E','#F59E0B','#8B5CF6','#0EA5E9'];
+const AVATAR_COLORS = [colors.red, colors.blue, colors.success, colors.warning, colors.premium, '#0EA5E9'];
 
 // YOUTH-PRIVACY: profiles.email + date_of_birth are column-revoked from the
 // authenticated role (personal contact info is never client-scrapeable). So

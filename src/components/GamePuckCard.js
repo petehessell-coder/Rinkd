@@ -5,6 +5,7 @@ import PuckMark from './PuckMark';
 import { loadGamePuckCardData } from '../lib/gameCardData';
 import { track } from '../lib/analytics';
 import GamePuckReveal, { hasRevealed } from './GamePuckReveal';
+import { C } from '../lib/tokens';
 
 // Rinkd Game Puck (SOCIAL-3, Phase 1) — fan "Game Puck" / Fans' Pick vote on a
 // FINAL league or tournament game. Jersey-keyed: candidate players come from the
@@ -22,17 +23,17 @@ import GamePuckReveal, { hasRevealed } from './GamePuckReveal';
 //   canVote       boolean — is a user signed in
 //   accent        leader/selection accent color
 
-const C = {
-  card: '#0f2847', border: 'rgba(46,91,140,0.4)', ice: '#F4F7FA',
-  dim: 'rgba(244,247,250,0.5)', faint: 'rgba(244,247,250,0.3)',
-  chip: 'rgba(46,91,140,0.18)', chipBorder: 'rgba(46,91,140,0.5)',
-};
+// Local drift: no exact token match, kept inline per migration rules.
+const GP_DIM = 'rgba(244,247,250,0.5)';
+const GP_FAINT = 'rgba(244,247,250,0.3)';
+const GP_CHIP = 'rgba(46,91,140,0.18)';
+const GP_CHIP_BORDER = 'rgba(46,91,140,0.5)';
 
 const keyOf = (teamId, jersey) => `${teamId}:${jersey}`;
 
 export default function GamePuckCard({
   gameId, kind, homeTeam, awayTeam, lineupByTeam = {}, goals = [],
-  canVote = false, accent = '#D72638',
+  canVote = false, accent = C.red,
 }) {
   const [tally, setTally] = useState(null);     // { rows, total, leader }
   const [myVote, setMyVote] = useState(null);   // { team_id, jersey } | null
@@ -180,19 +181,19 @@ export default function GamePuckCard({
           Game Puck
         </div>
         {!hideTally && total > 0 && (
-          <span style={{ fontSize: 10, fontWeight: 700, color: C.faint }}>{total} {total === 1 ? 'vote' : 'votes'}</span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: GP_FAINT }}>{total} {total === 1 ? 'vote' : 'votes'}</span>
         )}
         {hideTally && (
-          <span style={{ fontSize: 10, fontWeight: 700, color: C.faint }}>🤐 sealed</span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: GP_FAINT }}>🤐 sealed</span>
         )}
       </div>
-      <div style={{ fontSize: 11, color: C.dim, marginBottom: 10 }}>Fans’ Pick — who earned it?</div>
+      <div style={{ fontSize: 11, color: GP_DIM, marginBottom: 10 }}>Fans’ Pick — who earned it?</div>
       {children}
     </div>
   );
 
   if (loading) {
-    return <Wrap><div style={{ color: C.faint, fontSize: 13, textAlign: 'center', padding: '12px 0' }}>Getting the ice ready.</div></Wrap>;
+    return <Wrap><div style={{ color: GP_FAINT, fontSize: 13, textAlign: 'center', padding: '12px 0' }}>Getting the ice ready.</div></Wrap>;
   }
 
   // SOCIAL-3 P2 — settled. GAMEPUCK-2: before the user has peeled the tape on
@@ -223,7 +224,7 @@ export default function GamePuckCard({
           >
             <PuckMark size={30} />
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.12em', color: C.faint, textTransform: 'uppercase' }}>Voting closed · winner sealed</div>
+              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.12em', color: GP_FAINT, textTransform: 'uppercase' }}>Voting closed · winner sealed</div>
               <div style={{ fontSize: 14.5, fontWeight: 900, fontStyle: 'italic', fontFamily: "'Barlow Condensed', sans-serif", color: C.ice, letterSpacing: '0.02em' }}>
                 Peel the tape to reveal the Fans’ Pick
               </div>
@@ -240,17 +241,17 @@ export default function GamePuckCard({
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(215,38,56,0.12)', border: `0.5px solid ${accent}`, borderRadius: 9, padding: '10px 12px' }}>
           <PuckMark size={30} />
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: C.faint, textTransform: 'uppercase' }}>Game Puck winner · Fans’ Pick</div>
+            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: GP_FAINT, textTransform: 'uppercase' }}>Game Puck winner · Fans’ Pick</div>
             <div style={{ fontSize: 14, fontWeight: 800, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {result.winner_name ? `${result.winner_name} ` : ''}<span style={{ opacity: result.winner_name ? 0.7 : 1, fontWeight: 700 }}>#{result.jersey}</span>
               {winnerPucks > 1 && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 800, color: accent, padding: '2px 7px', borderRadius: 999, background: 'rgba(215,38,56,0.16)' }}>{winnerPucks}× Game Puck</span>}
             </div>
-            <div style={{ fontSize: 11, color: C.dim }}>{teamNameFor(result.team_id)} · {result.votes} of {result.total_votes} {result.total_votes === 1 ? 'vote' : 'votes'} · voting closed</div>
+            <div style={{ fontSize: 11, color: GP_DIM }}>{teamNameFor(result.team_id)} · {result.votes} of {result.total_votes} {result.total_votes === 1 ? 'vote' : 'votes'} · voting closed</div>
           </div>
           <ShareButton gameId={gameId} isLeague={kind === 'league'} cardType="gamepuck" variant="ghost" label="Share"
             getCard={() => loadGamePuckCardData(gameId, kind === 'league')} />
         </div>
-        <button onClick={() => setRevealOpen(true)} style={{ marginTop: 8, background: 'transparent', border: 'none', color: C.faint, fontSize: 11, fontWeight: 600, cursor: 'pointer', padding: 0 }}>
+        <button onClick={() => setRevealOpen(true)} style={{ marginTop: 8, background: 'transparent', border: 'none', color: GP_FAINT, fontSize: 11, fontWeight: 600, cursor: 'pointer', padding: 0 }}>
           ▸ Replay reveal
         </button>
         {revealModal}
@@ -267,9 +268,9 @@ export default function GamePuckCard({
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(46,91,140,0.14)', border: `0.5px solid ${C.border}`, borderRadius: 9, padding: '12px 12px' }}>
           <PuckMark size={30} />
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: C.faint, textTransform: 'uppercase' }}>Voting closed</div>
+            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: GP_FAINT, textTransform: 'uppercase' }}>Voting closed</div>
             <div style={{ fontSize: 13.5, fontWeight: 800, color: C.ice }}>Peeling the tape…</div>
-            <div style={{ fontSize: 11, color: C.dim }}>
+            <div style={{ fontSize: 11, color: GP_DIM }}>
               {total > 0 ? `Counting ${total} ${total === 1 ? 'vote' : 'votes'} — winner revealed in a moment.` : 'Tallying the Fans’ Pick — back in a moment.'}
             </div>
           </div>
@@ -281,7 +282,7 @@ export default function GamePuckCard({
   if (!hasCandidates) {
     return (
       <Wrap>
-        <div style={{ color: C.faint, fontSize: 12.5, textAlign: 'center', padding: '10px 0', lineHeight: 1.5 }}>
+        <div style={{ color: GP_FAINT, fontSize: 12.5, textAlign: 'center', padding: '10px 0', lineHeight: 1.5 }}>
           Fan voting opens once a roster or scoring is logged for this game.
         </div>
       </Wrap>
@@ -314,8 +315,8 @@ export default function GamePuckCard({
                   fontFamily: 'Barlow, sans-serif', fontSize: 12, fontWeight: 600,
                   cursor: canVote && !saving ? 'pointer' : 'default',
                   color: mine ? '#fff' : C.ice,
-                  background: mine ? accent : C.chip,
-                  border: `1px solid ${mine ? accent : (isLeader ? 'rgba(244,247,250,0.45)' : C.chipBorder)}`,
+                  background: mine ? accent : GP_CHIP,
+                  border: `1px solid ${mine ? accent : (isLeader ? 'rgba(244,247,250,0.45)' : GP_CHIP_BORDER)}`,
                   transition: 'all 0.12s',
                 }}
               >
@@ -344,10 +345,10 @@ export default function GamePuckCard({
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(46,91,140,0.14)', border: `0.5px solid ${C.border}`, borderRadius: 9, padding: '8px 11px', marginBottom: 12 }}>
           <PuckMark size={22} />
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: C.faint, textTransform: 'uppercase' }}>Leading</div>
+            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: GP_FAINT, textTransform: 'uppercase' }}>Leading</div>
             <div style={{ fontSize: 13, fontWeight: 700, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {labelFor(leader.team_id, leader.jersey)}
-              <span style={{ fontWeight: 400, color: C.dim }}> · {teamNameFor(leader.team_id)}</span>
+              <span style={{ fontWeight: 400, color: GP_DIM }}> · {teamNameFor(leader.team_id)}</span>
             </div>
           </div>
           <ShareButton gameId={gameId} isLeague={kind === 'league'} cardType="gamepuck" variant="ghost" label="Share"
@@ -359,7 +360,7 @@ export default function GamePuckCard({
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(46,91,140,0.14)', border: `0.5px solid ${C.border}`, borderRadius: 9, padding: '8px 11px', marginBottom: 12 }}>
           <span aria-hidden style={{ fontSize: 16 }}>🤐</span>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: C.faint, textTransform: 'uppercase' }}>Final minutes</div>
+            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: GP_FAINT, textTransform: 'uppercase' }}>Final minutes</div>
             <div style={{ fontSize: 12.5, fontWeight: 700, color: C.ice }}>
               Votes are sealed{closesInMin != null && closesInMin > 0 ? ` — winner revealed in ~${closesInMin} min` : ' — winner revealed soon'}
             </div>
@@ -370,7 +371,7 @@ export default function GamePuckCard({
       {renderTeam(homeTeam)}
       {renderTeam(awayTeam)}
 
-      <div style={{ fontSize: 10.5, color: C.faint, marginTop: 4, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 10.5, color: GP_FAINT, marginTop: 4, lineHeight: 1.5 }}>
         {!canVote
           ? 'Sign in to cast your vote for the Game Puck.'
           : hideTally

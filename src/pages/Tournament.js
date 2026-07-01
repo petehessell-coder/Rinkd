@@ -29,7 +29,7 @@ import ShareButton from '../components/ShareButton';
 import RecapCard from '../components/RecapCard';
 import { recapSourceFromPost, getRecapCardWithSponsor } from '../lib/recapCard';
 import { loadGameCardData } from '../lib/gameCardData';
-import { C } from '../lib/tokens';
+import { C, colors } from '../lib/tokens';
 import { Icon, BounceNumber, useExpand, Img, ErrorState } from '../components/ui';
 import { useOnline } from '../lib/useOnline';
 import { prefetchGamePage, prefetchHandlers } from '../lib/prefetch';
@@ -103,7 +103,7 @@ function dayKey(iso) {
 // content padding is 16px) with a red accent slab. Optional muted `sub`.
 function LowerThird({ label, sub }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, background: C.card, borderLeft: '4px solid #D72638', marginLeft: -16, marginBottom: 12, padding: '8px 14px 8px 16px', borderTopRightRadius: 4, borderBottomRightRadius: 4 }}>
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, background: C.card, borderLeft: `4px solid ${C.red}`, marginLeft: -16, marginBottom: 12, padding: '8px 14px 8px 16px', borderTopRightRadius: 4, borderBottomRightRadius: 4 }}>
       <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 18, lineHeight: 1, letterSpacing: '0.05em', color: C.ice, textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{label}</span>
       {sub && <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 11, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.45)', textTransform: 'uppercase', whiteSpace: 'nowrap', flexShrink: 0 }}>{sub}</span>}
     </div>
@@ -554,7 +554,7 @@ export default function TournamentPage({ currentUser }) {
 
       {/* HEADER — photographic cover hero (mirrors the League header) when the
           event has a cover photo; falls back to solid navy otherwise. */}
-      <div style={{position:'relative',overflow:'hidden',background:C.navy,borderTop:`3px solid ${accent}`,borderBottom:'0.5px solid rgba(46,91,140,0.4)'}}>
+      <div style={{position:'relative',overflow:'hidden',background:C.navy,borderTop:`3px solid ${accent}`,borderBottom:`0.5px solid ${C.border}`}}>
         {tournament?.cover_image_url && (
           <img src={tournament.cover_image_url} alt="" loading="eager" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',display:'block'}} onError={(e)=>{e.currentTarget.style.display='none';}} />
         )}
@@ -567,7 +567,7 @@ export default function TournamentPage({ currentUser }) {
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             {tournament && tournament.is_activated === false && (
               <span title="Live scoring + push notifications are locked until a Rinkd admin activates this tournament."
-                style={{background:'rgba(245,158,11,0.18)',color:'#F59E0B',fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:20,letterSpacing:'0.04em'}}>
+                style={{background:'rgba(245,158,11,0.18)',color:colors.warning,fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:20,letterSpacing:'0.04em'}}>
                 🔒 Activation pending
               </span>
             )}
@@ -691,7 +691,7 @@ export default function TournamentPage({ currentUser }) {
               if (showPIM)       tbCols.push({ key: 'pim', label: 'PIM',  render: (r) => r.pim ?? 0 });
               // Always show DIFF as the final fallback column when no GQ is
               // shown — otherwise the GQ column carries the same signal.
-              if (!showGQ)       tbCols.push({ key: 'd',   label: 'DIFF', render: (r) => (r.goal_diff > 0 ? `+${r.goal_diff}` : r.goal_diff), color: (r) => r.goal_diff > 0 ? '#22C55E' : r.goal_diff < 0 ? C.red : 'rgba(244,247,250,0.5)' });
+              if (!showGQ)       tbCols.push({ key: 'd',   label: 'DIFF', render: (r) => (r.goal_diff > 0 ? `+${r.goal_diff}` : r.goal_diff), color: (r) => r.goal_diff > 0 ? colors.success : r.goal_diff < 0 ? C.red : 'rgba(244,247,250,0.5)' });
               // Middle (scrollable) columns: GP, W, L, T, GF, GA, then any
               // tiebreaker cols. TEAM and PTS are sticky and not in this list.
               const midCols = [
@@ -722,7 +722,7 @@ export default function TournamentPage({ currentUser }) {
               return (
               <div key={pool} style={{marginBottom:16}}>
                 <LowerThird label={pool} />
-                <div style={{background:stickyBg,border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,overflow:'hidden'}}>
+                <div style={{background:stickyBg,border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
                   <div style={{overflowX:'auto', WebkitOverflowScrolling:'touch'}}>
                   <table style={{borderCollapse:'collapse', width:'100%', minWidth: 'max-content', tableLayout:'auto'}}>
                     <thead>
@@ -749,7 +749,7 @@ export default function TournamentPage({ currentUser }) {
                           <td style={{...stickyLeft,padding:'10px',minWidth:130,maxWidth:160}}>
                             <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
                               {/* Rank as a large muted number (gold for 1st), not a column or a badge. */}
-                              <span style={{fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:900,fontSize:22,lineHeight:1,minWidth:20,textAlign:'center',fontVariantNumeric:'tabular-nums',color:row.pool_rank===1?'#C9A84C':'rgba(244,247,250,0.35)',flexShrink:0}}>{row.pool_rank}</span>
+                              <span style={{fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:900,fontSize:22,lineHeight:1,minWidth:20,textAlign:'center',fontVariantNumeric:'tabular-nums',color:row.pool_rank===1?C.gold:'rgba(244,247,250,0.35)',flexShrink:0}}>{row.pool_rank}</span>
                               <TeamLogo team={{ name: row.team_name, logo_url: row.logo_url, logo_color: '#1a4a7a' }} size={22} radius={11} />
                               <span style={{fontSize:14,fontWeight:600,color:C.ice,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{row.team_name}</span>
                               {/* GS-2 — TEAM-LEVEL suspension flag only. Opponents
@@ -757,8 +757,8 @@ export default function TournamentPage({ currentUser }) {
                                   named on this public surface. */}
                               {suspendedTeams[row.team_id] > 0 && (
                                 <span title="Suspended player(s) — lineup may differ" aria-label="Team has suspended players"
-                                  style={{fontSize:10,fontWeight:700,color:'#F59E0B',background:'rgba(245,158,11,0.14)',border:'0.5px solid rgba(245,158,11,0.45)',borderRadius:6,padding:'1px 5px',flexShrink:0,whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',gap:3}}>
-                                  <Icon name="alert" size={11} color="#F59E0B" /> Susp.
+                                  style={{fontSize:10,fontWeight:700,color:colors.warning,background:'rgba(245,158,11,0.14)',border:'0.5px solid rgba(245,158,11,0.45)',borderRadius:6,padding:'1px 5px',flexShrink:0,whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',gap:3}}>
+                                  <Icon name="alert" size={11} color={colors.warning} /> Susp.
                                 </span>
                               )}
                             </div>
@@ -769,7 +769,7 @@ export default function TournamentPage({ currentUser }) {
                             </td>
                           ))}
                           {/* Gold PTS on the 1st-place row only — the one earned highlight. */}
-                          <td style={{...stickyRight,fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:900,fontSize:18,textAlign:'center',fontVariantNumeric:'tabular-nums',color:row.pool_rank===1?'#C9A84C':C.ice,padding:'9px 10px',minWidth:48}}>{row.pts}</td>
+                          <td style={{...stickyRight,fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:900,fontSize:18,textAlign:'center',fontVariantNumeric:'tabular-nums',color:row.pool_rank===1?C.gold:C.ice,padding:'9px 10px',minWidth:48}}>{row.pts}</td>
                         </tr>
                       </React.Fragment>
                     ))}
@@ -798,7 +798,7 @@ export default function TournamentPage({ currentUser }) {
             : <>
                 {champion && (
                   <div style={{background:'linear-gradient(135deg,#1a1208 0%,#3d2a0c 50%,#1a1208 100%)',border:'1px solid rgba(245,158,11,0.5)',borderRadius:14,padding:'22px 18px',marginBottom:18,textAlign:'center'}}>
-                    <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.2em',color:'#F59E0B',textTransform:'uppercase',marginBottom:8}}>🏆 Tournament Champion</div>
+                    <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.2em',color:colors.warning,textTransform:'uppercase',marginBottom:8}}>🏆 Tournament Champion</div>
                     <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:28,color:C.ice,textTransform:'uppercase',letterSpacing:'0.02em'}}>{champion.team_name}</div>
                     {tournament?.name && <div style={{fontSize:11,color:'rgba(244,247,250,0.5)',marginTop:6}}>{tournament.name}</div>}
                   </div>
@@ -1090,7 +1090,7 @@ function FeedTab({ posts, setPosts, loading, error = false, online = true, onRet
           {mediaFile && (
             <div style={{display:'flex',alignItems:'center',gap:8,fontSize:11,color:'#9BB5D6',marginTop:6}}>
               <span>📎 {mediaFile.name}</span>
-              <button onClick={() => setMediaFile(null)} style={{background:'transparent',border:'none',color:'#E26B6B',fontSize:11,cursor:'pointer'}}>Remove</button>
+              <button onClick={() => setMediaFile(null)} style={{background:'transparent',border:'none',color:colors.redSoft,fontSize:11,cursor:'pointer'}}>Remove</button>
             </div>
           )}
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:8}}>
@@ -1111,7 +1111,7 @@ function FeedTab({ posts, setPosts, loading, error = false, online = true, onRet
               {submitting ? 'Posting…' : 'Post'}
             </button>
           </div>
-          {composerError && <div style={{color:'#E26B6B',fontSize:11,marginTop:6}}>{composerError}</div>}
+          {composerError && <div style={{color:colors.redSoft,fontSize:11,marginTop:6}}>{composerError}</div>}
           <div style={{fontSize:10,color:'#7C8B9F',marginTop:4,textAlign:'right'}}>{draft.length}/500</div>
         </div>
       )}
@@ -1222,7 +1222,7 @@ function FeedTab({ posts, setPosts, loading, error = false, online = true, onRet
                 )}
                 {p.gamepuck_reveal_game_id && (
                   <button {...prefetchHandlers(prefetchGamePage)} onClick={() => navigate(`/game/${p.gamepuck_reveal_game_id}`)}
-                    style={{display:'inline-flex',alignItems:'center',gap:6,background:'rgba(215,38,56,0.15)',border:'1px solid #D72638',color:C.ice,fontSize:12,fontWeight:700,cursor:'pointer',padding:'6px 12px',borderRadius:999}}>
+                    style={{display:'inline-flex',alignItems:'center',gap:6,background:'rgba(215,38,56,0.15)',border:`1px solid ${C.red}`,color:C.ice,fontSize:12,fontWeight:700,cursor:'pointer',padding:'6px 12px',borderRadius:999}}>
                     🏒 Peel to reveal →
                   </button>
                 )}
@@ -1277,7 +1277,7 @@ function PublicTournamentLanding({ tournament, games, navigate }) {
     <div style={{background:C.dark,minHeight:'100vh',fontFamily:'Barlow,sans-serif',color:C.ice}}>
       {/* ADS-1 M5 — sponsor banner also shows to anon spectators (null when no sponsor) */}
       <AdSlot slot="event_banner" targetType="tournament" targetId={tournament.id} style={{ margin: '12px 16px 0' }} />
-      <div style={{background:C.navy,padding:'16px 18px 0',borderTop:`3px solid ${accent}`,borderBottom:'0.5px solid rgba(46,91,140,0.4)'}}>
+      <div style={{background:C.navy,padding:'16px 18px 0',borderTop:`3px solid ${accent}`,borderBottom:`0.5px solid ${C.border}`}}>
         <button onClick={() => navigate('/tournaments')} style={{color:'rgba(244,247,250,0.6)',fontSize:13,background:'none',border:'none',cursor:'pointer',fontFamily:'Barlow,sans-serif',marginBottom:8}}>← All tournaments</button>
         {tournament?.logo_url && (
           <img src={tournament.logo_url} alt="" onError={(e)=>{e.currentTarget.style.display='none';}}
@@ -1314,11 +1314,11 @@ function PublicTournamentLanding({ tournament, games, navigate }) {
 
         {/* At-a-glance stats — safe data, builds anticipation */}
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:18}}>
-          <div style={{background:C.card,border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,padding:'14px 16px',textAlign:'center'}}>
+          <div style={{background:C.card,border:`0.5px solid ${C.border}`,borderRadius:12,padding:'14px 16px',textAlign:'center'}}>
             <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:30,color:accent,lineHeight:1}}>{totalTeams}</div>
             <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.08em',color:'rgba(244,247,250,0.5)',textTransform:'uppercase',marginTop:4}}>Teams</div>
           </div>
-          <div style={{background:C.card,border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,padding:'14px 16px',textAlign:'center'}}>
+          <div style={{background:C.card,border:`0.5px solid ${C.border}`,borderRadius:12,padding:'14px 16px',textAlign:'center'}}>
             <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:30,color:accent,lineHeight:1}}>{totalGames}</div>
             <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.08em',color:'rgba(244,247,250,0.5)',textTransform:'uppercase',marginTop:4}}>Games</div>
           </div>
@@ -1333,7 +1333,7 @@ function PublicTournamentLanding({ tournament, games, navigate }) {
             {teamsByPool.map(([pool, list]) => (
               <div key={pool} style={{marginBottom:12}}>
                 <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.1em',color:'rgba(244,247,250,0.4)',textTransform:'uppercase',marginBottom:8}}>{pool}</div>
-                <div style={{background:C.card,border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,overflow:'hidden'}}>
+                <div style={{background:C.card,border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
                   {list.map((t, i) => (
                     <div key={t.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderTop:i ? '0.5px solid rgba(244,247,250,0.06)' : 'none'}}>
                       <TeamLogo team={{ name: t.team_name, logo_url: t.logo_url, logo_color: '#1a4a7a' }} size={30} radius={15} />
@@ -1347,7 +1347,7 @@ function PublicTournamentLanding({ tournament, games, navigate }) {
         )}
 
         {/* Secondary CTA at the bottom for scrollers */}
-        <div style={{background:C.card,border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,padding:'18px 16px',textAlign:'center'}}>
+        <div style={{background:C.card,border:`0.5px solid ${C.border}`,borderRadius:12,padding:'18px 16px',textAlign:'center'}}>
           <div style={{fontSize:13,color:'rgba(244,247,250,0.65)',marginBottom:12,lineHeight:1.5}}>
             Live scores, standings, the full bracket, and a recap of every game — as it happens. Free to follow.
           </div>
@@ -1422,9 +1422,9 @@ function GameCard({ game, navigate, canScore, anon = false }) {
   // Live games get the card-hero treatment (elevated surface + red border glow
   // + red drop-shadow) so they float above the schedule. Championship cards get
   // a warm gold border. Everything else stays on the standard navy treatment.
-  const cardBorder = isLive ? '1px solid rgba(215,38,56,0.6)' : isChampionship ? '1px solid rgba(245,158,11,0.55)' : '0.5px solid rgba(46,91,140,0.4)';
-  const cardHoverBorder = isLive ? '1px solid rgba(215,38,56,0.85)' : isChampionship ? '1px solid rgba(245,158,11,0.9)' : '0.5px solid rgba(46,91,140,0.8)';
-  const cardBackground = isLive ? '#162f55' : isChampionship ? 'linear-gradient(135deg,#0f2847 0%,#1a1605 100%)' : C.card;
+  const cardBorder = isLive ? '1px solid rgba(215,38,56,0.6)' : isChampionship ? '1px solid rgba(245,158,11,0.55)' : `0.5px solid ${C.border}`;
+  const cardHoverBorder = isLive ? '1px solid rgba(215,38,56,0.85)' : isChampionship ? '1px solid rgba(245,158,11,0.9)' : `0.5px solid ${colors.borderAccent}`;
+  const cardBackground = isLive ? colors.surfaceElevated : isChampionship ? 'linear-gradient(135deg,#0f2847 0%,#1a1605 100%)' : C.card;
   const cardShadow = isLive ? '0 8px 32px rgba(215,38,56,0.2)' : 'none';
   // Bold the winner's row when the game is final. Shootout winners (tied
   // regulation, SO decided it) get the bold too — game.shootout_winner is
@@ -1444,7 +1444,7 @@ function GameCard({ game, navigate, canScore, anon = false }) {
           {isFinal && <span style={{background:'rgba(244,247,250,0.08)',color:'rgba(244,247,250,0.4)',fontSize:11,fontWeight:700,padding:'4px 11px',borderRadius:20}}>FINAL{isShootoutDecided ? ' / SO' : ''}</span>}
           {!isLive && !isFinal && <span style={{background:C.blue,color:C.ice,fontSize:11,fontWeight:700,padding:'4px 11px',borderRadius:20}}>{fmtGameTime(game.start_time)}</span>}
           {(isLive || isFinal) && game.start_time && <span style={{fontSize:11,color:'rgba(244,247,250,0.45)'}}>{fmtGameTime(game.start_time)}</span>}
-          <span style={{background:isChampionship?'rgba(245,158,11,0.18)':'rgba(46,91,140,0.25)',color:isChampionship?'#F59E0B':'rgba(244,247,250,0.65)',fontSize:10,fontWeight:700,padding:'3px 9px',borderRadius:20,letterSpacing:'0.06em',textTransform:'uppercase'}}>
+          <span style={{background:isChampionship?'rgba(245,158,11,0.18)':'rgba(46,91,140,0.25)',color:isChampionship?colors.warning:'rgba(244,247,250,0.65)',fontSize:10,fontWeight:700,padding:'3px 9px',borderRadius:20,letterSpacing:'0.06em',textTransform:'uppercase'}}>
             {isChampionship ? '🏆 ' : ''}{roundLabel}
           </span>
         </div>
@@ -1505,7 +1505,7 @@ function InfoTab({ tournament }) {
           this is a real paying customer's page; the lead-gen CTA belongs
           on demos + draft tournaments only. */}
       {tournament.is_activated === false && (
-        <div style={{background:'linear-gradient(135deg,#0f2847 0%,#0B1F3A 100%)',border:'1px solid rgba(46,91,140,0.6)',borderRadius:14,padding:'22px 18px',marginBottom:16,textAlign:'center'}}>
+        <div style={{background:`linear-gradient(135deg,${C.card} 0%,${C.navy} 100%)`,border:'1px solid rgba(46,91,140,0.6)',borderRadius:14,padding:'22px 18px',marginBottom:16,textAlign:'center'}}>
           <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:22,textTransform:'uppercase',marginBottom:8}}>Run your tournament on Rinkd</div>
           <div style={{fontSize:14,color:'rgba(244,247,250,0.7)',lineHeight:1.5,maxWidth:340,margin:'0 auto 18px'}}>Live standings and scoring your whole rink can follow from their phone.</div>
           <a href="mailto:hello@rinkd.app?subject=Tournament Hosting Inquiry" style={{display:'inline-block',background:C.red,color:'#fff',borderRadius:999,padding:'13px 30px',fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:900,fontSize:15,letterSpacing:'0.04em',textTransform:'uppercase',textDecoration:'none'}}>Get pricing →</a>
@@ -1515,13 +1515,13 @@ function InfoTab({ tournament }) {
       {venueLine && (
         <div style={{marginBottom:18}}>
           <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:15,color:C.ice,marginBottom:8}}>Venue</div>
-          <div style={{background:C.card,border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,padding:'12px 14px',fontSize:13,color:C.ice,lineHeight:1.5}}>{venueLine}</div>
+          <div style={{background:C.card,border:`0.5px solid ${C.border}`,borderRadius:12,padding:'12px 14px',fontSize:13,color:C.ice,lineHeight:1.5}}>{venueLine}</div>
         </div>
       )}
 
       <div style={{marginBottom:18}}>
         <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:15,color:C.ice,marginBottom:8}}>Format</div>
-        <div style={{background:C.card,border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,overflow:'hidden'}}>
+        <div style={{background:C.card,border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
           {[
             ['Division', tournament?.division || '—'],
             ['Period length', `${s.period_length_minutes??15} min ${s.period_type==='running'?'running':'stop-time'}`],
@@ -1540,12 +1540,12 @@ function InfoTab({ tournament }) {
       </div>
       <div style={{marginBottom:18}}>
         <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:15,color:C.ice,marginBottom:8}}>Point System</div>
-        <div style={{background:C.card,border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,overflow:'hidden'}}>
+        <div style={{background:C.card,border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
           {[
             ['Win',`${s.points_win??2} pts`,C.red],
             ['Tie',`${s.points_tie??1} pt`,C.ice],
             ['Loss',`${s.points_loss??0} pts`,'rgba(244,247,250,0.3)'],
-            s.shootout_win_points != null ? ['OT/SO win',`${s.shootout_win_points} pts`,'#F59E0B'] : null,
+            s.shootout_win_points != null ? ['OT/SO win',`${s.shootout_win_points} pts`,colors.warning] : null,
           ].filter(Boolean).map(([k,v,c]) => (
             <div key={k} style={{display:'flex',justifyContent:'space-between',padding:'11px 14px',borderBottom:'0.5px solid rgba(244,247,250,0.06)'}}>
               <span style={{fontSize:13,color:'rgba(244,247,250,0.5)'}}>{k}</span>
@@ -1558,7 +1558,7 @@ function InfoTab({ tournament }) {
       {tiebreakers && (
         <div style={{marginBottom:18}}>
           <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:15,color:C.ice,marginBottom:8}}>Tiebreakers</div>
-          <div style={{background:C.card,border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:12,padding:'12px 14px',fontSize:12,color:'rgba(244,247,250,0.75)',lineHeight:1.6}}>{tiebreakers}</div>
+          <div style={{background:C.card,border:`0.5px solid ${C.border}`,borderRadius:12,padding:'12px 14px',fontSize:12,color:'rgba(244,247,250,0.75)',lineHeight:1.6}}>{tiebreakers}</div>
         </div>
       )}
     </div>

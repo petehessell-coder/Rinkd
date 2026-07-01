@@ -10,12 +10,12 @@ import { uploadMedia } from '../lib/posts';
 import { classifyImage } from '../lib/imageModeration';
 import { listTeamManagers, addTeamManagerByInput, removeTeamManager, demoteTeamManager } from '../lib/teamManagers';
 import { SCHEDULE_TYPES, eventMeta, scheduleTitle } from '../lib/scheduleMeta';
+import { C, colors } from '../lib/tokens';
 
-const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
-const inputStyle = { width:'100%', background:'#07111F', border:`0.5px solid ${C.border}`, borderRadius:8, padding:'10px 12px', color:C.ice, fontFamily:'Barlow, sans-serif', fontSize:14, outline:'none' };
+const inputStyle = { width:'100%', background:C.dark, border:`0.5px solid ${C.border}`, borderRadius:8, padding:'10px 12px', color:C.ice, fontFamily:'Barlow, sans-serif', fontSize:14, outline:'none' };
 const selectStyle = { ...inputStyle };
 
-const LOGO_COLORS = ['#D72638','#2E5B8C','#22C55E','#F59E0B','#8B5CF6','#0EA5E9','#EC4899','#0B1F3A'];
+const LOGO_COLORS = [C.red, C.blue, colors.success, colors.warning, colors.premium, '#0EA5E9', '#EC4899', C.navy];
 const POSITIONS = ['Center','Left Wing','Right Wing','Defense','Goalie','Coach'];
 
 function Field({ label, children }) {
@@ -57,7 +57,7 @@ function CreateTeam({ profile, navigate }) {
   // is_youth defaults to true (conservative = private/invite-only). The DB
   // trigger enforces it; the selector below makes the choice explicit so adult
   // teams are born public and youth teams are protected from the first save.
-  const [form, setForm] = useState({ name: '', division: '', level: '', location: '', home_rink: '', logo_color: '#D72638', logo_initials: '', logo_url: '', is_youth: true });
+  const [form, setForm] = useState({ name: '', division: '', level: '', location: '', home_rink: '', logo_color: C.red, logo_initials: '', logo_url: '', is_youth: true });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -119,7 +119,7 @@ function CreateTeam({ profile, navigate }) {
               <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} disabled={uploadingLogo} />
             </label>
             {form.logo_url && (
-              <button type="button" onClick={() => set('logo_url', '')} style={{ background: 'transparent', border: 'none', color: '#E26B6B', fontSize: 11, cursor: 'pointer', padding: 0 }}>Remove</button>
+              <button type="button" onClick={() => set('logo_url', '')} style={{ background: 'transparent', border: 'none', color: colors.redSoft, fontSize: 11, cursor: 'pointer', padding: 0 }}>Remove</button>
             )}
           </div>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(244,247,250,0.4)', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 12, marginBottom: 6 }}>{form.logo_url ? 'Fallback Color' : 'Logo Color'}</div>
@@ -147,13 +147,13 @@ function CreateTeam({ profile, navigate }) {
                     fontFamily: 'Barlow, sans-serif', display: 'flex', flexDirection: 'column',
                     alignItems: 'center', justifyContent: 'center', gap: 2 }}>
                   <span style={{ fontWeight: 800, fontSize: 15 }}>{active ? '✓ ' : ''}{opt.label}</span>
-                  <span style={{ fontSize: 11, color: C.muted }}>{opt.sub}</span>
+                  <span style={{ fontSize: 11, color: colors.muted }}>{opt.sub}</span>
                 </button>
               );
             })}
           </div>
         </Field>
-        <div style={{ fontSize: 12, color: form.is_youth ? '#C9A84C' : C.muted, margin: '-6px 0 12px', lineHeight: 1.45 }}>
+        <div style={{ fontSize: 12, color: form.is_youth ? C.gold : colors.muted, margin: '-6px 0 12px', lineHeight: 1.45 }}>
           {form.is_youth
             ? '🔒 Youth teams are private. Only rostered members, their parents/guardians, and coaches can see the roster, schedule, and locations — never the public.'
             : 'Adult teams are public and discoverable. Personal contact info (email/phone) still stays members-only.'}
@@ -402,8 +402,8 @@ function ManageTeam({ id, profile, navigate }) {
       <div style={{ display: 'flex', flexWrap: 'nowrap', overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', background: C.navy, borderBottom: '2px solid rgba(46,91,140,0.3)' }}>
         {MANAGE_TABS.map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
-            style={{ fontSize: 13, fontWeight: 700, padding: '10px 16px', color: '#FFFFFF', background: 'transparent', border: 'none', borderBottom: activeTab === tab ? '3px solid #D72638' : '3px solid transparent', marginBottom: -2, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap', flexShrink: 0, opacity: activeTab === tab ? 1 : 0.5, transition: 'opacity 0.15s' }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.color = '#0B1F3A'; e.currentTarget.style.opacity = '1'; }}
+            style={{ fontSize: 13, fontWeight: 700, padding: '10px 16px', color: '#FFFFFF', background: 'transparent', border: 'none', borderBottom: activeTab === tab ? `3px solid ${C.red}` : '3px solid transparent', marginBottom: -2, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap', flexShrink: 0, opacity: activeTab === tab ? 1 : 0.5, transition: 'opacity 0.15s' }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.color = C.navy; e.currentTarget.style.opacity = '1'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#FFFFFF'; e.currentTarget.style.opacity = activeTab === tab ? '1' : '0.5'; }}>
             {tab} {tab === 'Requests' && requests.length > 0 ? `(${requests.length})` : ''}
           </button>
@@ -412,7 +412,7 @@ function ManageTeam({ id, profile, navigate }) {
 
       <div style={{ padding: 16, maxWidth: 520, margin: '0 auto' }}>
         {error && <div style={{ background: 'rgba(215,38,56,0.15)', border: '0.5px solid rgba(215,38,56,0.4)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: C.red }}>{error}</div>}
-        {success && <div style={{ background: 'rgba(34,197,94,0.12)', border: '0.5px solid rgba(34,197,94,0.4)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: '#22C55E' }}>{success}</div>}
+        {success && <div style={{ background: 'rgba(34,197,94,0.12)', border: '0.5px solid rgba(34,197,94,0.4)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: colors.success }}>{success}</div>}
 
         {/* ROSTER */}
         {activeTab === 'Roster' && (
@@ -423,7 +423,7 @@ function ManageTeam({ id, profile, navigate }) {
             <Card>
               <div style={{ fontSize: 13, color: C.steel, lineHeight: 1.6, marginBottom: 12 }}>
                 Got the whole team in a spreadsheet? Drop a CSV and every player gets a Rinkd
-                signup invite. They show up on your roster as <strong style={{ color: '#F59E0B' }}>INVITED</strong> until they sign up.
+                signup invite. They show up on your roster as <strong style={{ color: colors.warning }}>INVITED</strong> until they sign up.
               </div>
               <RosterUpload
                 teamId={id}
@@ -478,7 +478,7 @@ function ManageTeam({ id, profile, navigate }) {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>
                       {m.profile?.name || m.invite_name}
-                      {m.status === 'pending' && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: 'rgba(245,158,11,0.2)', color: '#F59E0B' }}>INVITE PENDING</span>}
+                      {m.status === 'pending' && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: 'rgba(245,158,11,0.2)', color: colors.warning }}>INVITE PENDING</span>}
                     </div>
                     <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)' }}>
                       {m.position}{m.profile?.handle ? ' · @' + m.profile.handle : contacts[m.id] ? ' · ' + contacts[m.id] : ''}
@@ -620,7 +620,7 @@ function ManageTeam({ id, profile, navigate }) {
                       {g.location && <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.location}</div>}
                     </div>
                     {g.status === 'final'
-                      ? <div style={{ fontSize: 12, fontWeight: 700, color: teamScore > oppScore ? '#22C55E' : C.red }}>{teamScore > oppScore ? 'W' : 'L'} {teamScore}–{oppScore}</div>
+                      ? <div style={{ fontSize: 12, fontWeight: 700, color: teamScore > oppScore ? colors.success : C.red }}>{teamScore > oppScore ? 'W' : 'L'} {teamScore}–{oppScore}</div>
                       : <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.3)' }}>{date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</div>
                     }
                     {editable && (
@@ -741,7 +741,7 @@ function TeamSettings({ team, onSave }) {
                 <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} disabled={uploadingLogo} />
               </label>
               {form.logo_url && (
-                <button type="button" onClick={() => set('logo_url', '')} style={{ background: 'transparent', border: 'none', color: '#E26B6B', fontSize: 11, cursor: 'pointer', padding: 0 }}>Remove</button>
+                <button type="button" onClick={() => set('logo_url', '')} style={{ background: 'transparent', border: 'none', color: colors.redSoft, fontSize: 11, cursor: 'pointer', padding: 0 }}>Remove</button>
               )}
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -852,7 +852,7 @@ function ManagersSection({ teamId, foundingManagerId }) {
           </button>
         </div>
         {msg && (
-          <div style={{ marginTop: 10, fontSize: 12, color: msg.ok ? '#22C55E' : C.red, lineHeight: 1.5 }}>{msg.text}</div>
+          <div style={{ marginTop: 10, fontSize: 12, color: msg.ok ? colors.success : C.red, lineHeight: 1.5 }}>{msg.text}</div>
         )}
       </Card>
 
@@ -877,7 +877,7 @@ function ManagersSection({ teamId, foundingManagerId }) {
                   <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>
                     {name}
                     {isFounder && (
-                      <span style={{ marginLeft: 8, fontSize: 10, padding: '2px 6px', background: 'rgba(245,158,11,0.18)', color: '#F59E0B', borderRadius: 4, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                      <span style={{ marginLeft: 8, fontSize: 10, padding: '2px 6px', background: 'rgba(245,158,11,0.18)', color: colors.warning, borderRadius: 4, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
                         Founder
                       </span>
                     )}

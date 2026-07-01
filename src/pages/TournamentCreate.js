@@ -6,11 +6,12 @@ import { supabase } from '../lib/supabase';
 import { addScorerByInput } from '../lib/tournamentScorers';
 import { roundRobinPairs } from '../lib/tournamentManage';
 import Layout from '../components/Layout';
+import { C, colors } from '../lib/tokens';
 
 const COLORS = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
-  ice: '#F4F7FA', steel: '#8BA3BE', dark: '#07111F',
-  card: '#0f2847', border: 'rgba(46,91,140,0.4)',
+  navy: C.navy, blue: C.blue, red: C.red,
+  ice: C.ice, steel: C.steel, dark: C.dark,
+  card: C.card, border: C.border,
 };
 
 const DEFAULT_SETTINGS = {
@@ -69,7 +70,7 @@ const FORMAT_PRESETS = {
   // format_3: pending — Nick's email left Format 3 blank.
 };
 
-const inputStyle = { width: '100%', background: '#07111F', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 8, padding: '10px 12px', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', fontSize: 14, outline: 'none' };
+const inputStyle = { width: '100%', background: C.dark, border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 8, padding: '10px 12px', color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 14, outline: 'none' };
 const selectStyle = { ...inputStyle };
 
 function Field({ label, children }) {
@@ -84,7 +85,7 @@ function Field({ label, children }) {
 function Input({ value, onChange, placeholder, type = 'text' }) {
   return <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
     style={inputStyle}
-    onFocus={e => e.target.style.borderColor = '#2E5B8C'}
+    onFocus={e => e.target.style.borderColor = C.blue}
     onBlur={e => e.target.style.borderColor = 'rgba(46,91,140,0.5)'} />;
 }
 
@@ -100,10 +101,10 @@ function Toggle({ value, onChange, label, sub }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
       <div>
-        <div style={{ fontSize: 13, color: '#F4F7FA' }}>{label}</div>
+        <div style={{ fontSize: 13, color: C.ice }}>{label}</div>
         {sub && <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>{sub}</div>}
       </div>
-      <div onClick={() => onChange(!value)} style={{ width: 36, height: 20, background: value ? '#2E5B8C' : 'rgba(244,247,250,0.15)', borderRadius: 20, position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background 0.15s' }}>
+      <div onClick={() => onChange(!value)} style={{ width: 36, height: 20, background: value ? C.blue : 'rgba(244,247,250,0.15)', borderRadius: 20, position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background 0.15s' }}>
         <div style={{ width: 14, height: 14, background: '#fff', borderRadius: '50%', position: 'absolute', top: 3, transition: 'left 0.15s', left: value ? 19 : 3 }} />
       </div>
     </div>
@@ -209,7 +210,7 @@ function Step2({ data, onChange, onBack, onNext }) {
           {Object.entries(FORMAT_PRESETS).map(([key, preset]) => (
             <button key={key} onClick={() => applyPreset(key)}
               style={{ flex: '1 1 200px', textAlign: 'left', background: 'rgba(46,91,140,0.15)', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#F4F7FA' }}>{preset.label}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.ice }}>{preset.label}</div>
               <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.45)', marginTop: 2 }}>{preset.sub}</div>
             </button>
           ))}
@@ -259,8 +260,8 @@ function Step2({ data, onChange, onBack, onNext }) {
               <button onClick={() => i > 0 && moveTb(i, i-1)} style={{ background: 'none', border: 'none', color: i>0?'rgba(244,247,250,0.4)':'rgba(244,247,250,0.1)', cursor: i>0?'pointer':'default', fontSize: 12, padding: '0 4px' }}>▲</button>
               <button onClick={() => i < s.tiebreakers.length-1 && moveTb(i, i+1)} style={{ background: 'none', border: 'none', color: i<s.tiebreakers.length-1?'rgba(244,247,250,0.4)':'rgba(244,247,250,0.1)', cursor: i<s.tiebreakers.length-1?'pointer':'default', fontSize: 12, padding: '0 4px' }}>▼</button>
             </div>
-            <span style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(46,91,140,0.4)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'rgba(244,247,250,0.6)', flexShrink: 0 }}>{i+1}</span>
-            <span style={{ fontSize: 13, color: '#F4F7FA' }}>{TIEBREAKER_LABELS[key]}</span>
+            <span style={{ width: 20, height: 20, borderRadius: '50%', background: C.border, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'rgba(244,247,250,0.6)', flexShrink: 0 }}>{i+1}</span>
+            <span style={{ fontSize: 13, color: C.ice }}>{TIEBREAKER_LABELS[key]}</span>
           </div>
         ))}
       </Card>
@@ -298,7 +299,7 @@ function Step3({ data, onChange, onBack, onNext }) {
   };
 
   const poolColors = ['rgba(215,38,56,0.2)','rgba(46,91,140,0.3)','rgba(34,197,94,0.2)','rgba(245,158,11,0.2)'];
-  const poolTextColors = ['#D72638','#8BA3BE','#22C55E','#F59E0B'];
+  const poolTextColors = [C.red,C.steel,colors.success,colors.warning];
 
   return (
     <>
@@ -333,7 +334,7 @@ function Step3({ data, onChange, onBack, onNext }) {
           return (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
               <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: poolColors[pi]||poolColors[0], color: poolTextColors[pi]||poolTextColors[0], letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>POOL {t.pool}</span>
-              <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#F4F7FA' }}>{t.name}</span>
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: C.ice }}>{t.name}</span>
               <button onClick={() => removeTeam(i)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.3)', cursor: 'pointer', fontSize: 16, padding: '0 4px' }}>✕</button>
             </div>
           );
@@ -449,9 +450,9 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
         {(data.rinks||[]).map((r,i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#F4F7FA' }}>{r.sub_rink||r.name}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>{r.sub_rink||r.name}</div>
               {r.live_barn_venue_id
-                ? <div style={{ fontSize: 11, color: '#D72638', fontWeight: 600 }}>LiveBarn: {r.live_barn_venue_id}</div>
+                ? <div style={{ fontSize: 11, color: C.red, fontWeight: 600 }}>LiveBarn: {r.live_barn_venue_id}</div>
                 : <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.3)' }}>No LiveBarn</div>}
             </div>
             <button onClick={() => removeRink(i)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.3)', cursor: 'pointer', fontSize: 16 }}>✕</button>
@@ -495,7 +496,7 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
         ))}
         {/* Round-robin generator — the recommended way to fill the schedule */}
         <div style={{ background: 'rgba(46,91,140,0.12)', border: '0.5px solid rgba(46,91,140,0.4)', borderRadius: 10, padding: 14, marginTop: 12 }}>
-          <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 15, color: '#F4F7FA', marginBottom: 4 }}>⚡ Generate Round-Robin</div>
+          <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 15, color: C.ice, marginBottom: 4 }}>⚡ Generate Round-Robin</div>
           <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.45)', marginBottom: 12, lineHeight: 1.5 }}>
             Every team plays every other team in its pool once. Games are stacked back-to-back from the start time — edit any of them below afterward.
           </div>
@@ -709,9 +710,9 @@ export default function TournamentCreate({ profile }) {
 
   return (
     <Layout profile={profile}>
-      <div style={{ background: '#07111F', minHeight: '100vh', padding: 20, fontFamily: 'Barlow, sans-serif', color: '#F4F7FA', maxWidth: 600, margin: '0 auto' }}>
+      <div style={{ background: C.dark, minHeight: '100vh', padding: 20, fontFamily: 'Barlow, sans-serif', color: C.ice, maxWidth: 600, margin: '0 auto' }}>
         <Progress step={step} />
-        {error && <div style={{ background: 'rgba(215,38,56,0.15)', border: '0.5px solid rgba(215,38,56,0.4)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#D72638' }}>{error}</div>}
+        {error && <div style={{ background: 'rgba(215,38,56,0.15)', border: '0.5px solid rgba(215,38,56,0.4)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: C.red }}>{error}</div>}
         {step===1 && <Step1 data={data} onChange={onChange} onNext={() => setStep(2)} />}
         {step===2 && <Step2 data={data} onChange={onChange} onBack={() => setStep(1)} onNext={() => setStep(3)} />}
         {step===3 && <Step3 data={data} onChange={onChange} onBack={() => setStep(2)} onNext={() => setStep(4)} />}

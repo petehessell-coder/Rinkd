@@ -3,11 +3,7 @@ import { Icon, useUndoable } from './ui';
 import { reportPost, reportComment, REPORT_REASONS, hidePost, hideComment } from '../lib/moderation';
 import { blockUser } from '../lib/blocks';
 import { deletePost, deleteComment } from '../lib/posts';
-
-const C = {
-  navy: '#0B1F3A', ice: '#F4F7FA', steel: '#8BA3BE', card: '#0f2847',
-  border: 'rgba(46,91,140,0.4)', red: '#D72638',
-};
+import { C } from '../lib/tokens';
 
 /**
  * ⋯ menu for an individual post or comment. For your OWN content it offers

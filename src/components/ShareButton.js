@@ -5,6 +5,7 @@ import { prefersNativeShare, downloadBlob, copyText, absoluteShareUrl } from '..
 import { gameShareUrl } from '../lib/publicShare';
 import { uploadShareCard } from '../lib/ogCard';
 import { track } from '../lib/analytics';
+import { C, colors } from '../lib/tokens';
 
 // GROWTH-SHARE-1 · M3 — the Share button.
 //
@@ -18,8 +19,6 @@ import { track } from '../lib/analytics';
 //   isLeague : bool   — picks /g vs /lg for the deep link
 //   gameId   : string
 //   variant  : 'solid' | 'ghost'  (styling)
-
-const C = { blue: '#2E5B8C', ice: '#F4F7FA', steel: '#8BA3BE', card: '#0f2847', border: 'rgba(46,91,140,0.4)', dark: '#07111F' };
 
 export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghost', label = 'Share', cardType = 'recap', compact = false, shareUrl = null }) {
   const [busy, setBusy] = useState(false);
@@ -120,7 +119,7 @@ export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghos
           style={{
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 44, height: 44,
             borderRadius: 999, background: 'transparent', border: 'none', cursor: busy ? 'default' : 'pointer',
-            color: err ? '#E26B6B' : busy ? '#8BA3BE' : '#9ec3ec', opacity: busy ? 0.7 : 1, padding: 0,
+            color: err ? colors.redSoft : busy ? C.steel : '#9ec3ec', opacity: busy ? 0.7 : 1, padding: 0,
           }}>
           <ShareIcon />
         </button>
@@ -134,7 +133,7 @@ export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghos
       <button onClick={onShare} disabled={busy} title={err ? 'Could not build the card — tap to try again' : 'Share'} style={{
         display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 999,
         fontFamily: "'Barlow', sans-serif", fontWeight: 700, fontSize: 14, cursor: busy ? 'default' : 'pointer',
-        opacity: busy ? 0.6 : 1, ...btnStyle, ...(err ? { color: '#E26B6B', borderColor: '#E26B6B' } : {}),
+        opacity: busy ? 0.6 : 1, ...btnStyle, ...(err ? { color: colors.redSoft, borderColor: colors.redSoft } : {}),
       }}>
         <ShareIcon /> {busy ? 'Preparing…' : err ? 'Try again' : label}
       </button>

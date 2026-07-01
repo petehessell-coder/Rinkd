@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { addLeagueTeam } from './leagues';
+import { colors } from './tokens';
 
 // Nameplate initials from a team name (mirrors the stripe-webhook fallback so a
 // team created on payment and one created on manual approve look identical).
@@ -94,7 +95,7 @@ export async function approveRegistration(registrationId) {
 
   const lt = await addLeagueTeam(reg.league_id, {
     teamName: reg.team_name,
-    logoColor: '#2E5B8C',
+    logoColor: colors.blue,
     logoInitials: initials(reg.team_name),
   });
 

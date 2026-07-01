@@ -4,6 +4,7 @@ import { getBlockedIds, excludeBlocked, filterBlockedIds } from './blocks';
 import { POST_MENTIONS_EMBED, COMMENT_MENTIONS_EMBED } from './mentions';
 import { relativeTime } from './format';
 import { compressImage } from './image';
+import { colors } from './tokens';
 
 export async function getPosts(limit = 30, before = null) {
   let query = supabase
@@ -119,7 +120,7 @@ export async function getLeaguePosts(leagueId, limit = 50, before = null) {
 // targets the same recap_for_league_game_id column, so both paths stay
 // idempotent against one recap per league game.
 const GAME_RECAP_TAG = 'Game Recap';
-const GAME_RECAP_TAG_COLOR = '#2E5B8C';
+const GAME_RECAP_TAG_COLOR = colors.blue;
 
 export async function createGameRecapPost({ scorerId, gameId, content, tournamentId = null, leagueId = null }) {
   if (!scorerId || !gameId || !content) {

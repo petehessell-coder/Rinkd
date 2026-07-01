@@ -11,10 +11,11 @@
 
 import { useEffect, useState } from 'react';
 import { getRecapCardWithSponsor } from '../lib/recapCard';
+import { C } from '../lib/tokens';
 
 const PLATE = '/recap-card-bg2.png';
 const WORDMARK = '/rinkd-wordmark-tape.png';
-const PALETTE = ['#2E5B8C', '#D72638', '#1F9E6B', '#9333EA', '#E08A1E', '#0EA5E9'];
+const PALETTE = [C.blue, C.red, '#1F9E6B', '#9333EA', '#E08A1E', '#0EA5E9'];
 
 function teamColor(t, fallback) {
   if (t && t.logo_color) return t.logo_color;
@@ -105,8 +106,8 @@ export default function RecapCard({ gameId, source }) {
 
   if (failed || !card) return null;
 
-  const homeC = teamColor(card.home, '#2E5B8C');
-  const awayC = teamColor(card.away, '#D72638');
+  const homeC = teamColor(card.home, C.blue);
+  const awayC = teamColor(card.away, C.red);
 
   return (
     <div className="rcap">
@@ -137,7 +138,7 @@ export default function RecapCard({ gameId, source }) {
           <div className="cols">
             <div>
               <h3>GOALS</h3>
-              {(card.goals || []).length === 0 && <div className="gl"><span style={{ color: '#8BA3BE', fontSize: '2.7cqw' }}>No goals logged</span></div>}
+              {(card.goals || []).length === 0 && <div className="gl"><span style={{ color: C.steel, fontSize: '2.7cqw' }}>No goals logged</span></div>}
               {(card.goals || []).map((g, i) => (
                 <div className="gl" key={i}>
                   <div className="who">

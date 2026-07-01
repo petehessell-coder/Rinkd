@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { C } from '../lib/tokens';
+import { C, colors } from '../lib/tokens';
 import { Icon, useExpand, Img, ErrorState } from '../components/ui';
 import { useOnline } from '../lib/useOnline';
 import { staggerStyle, useDelayedFlag } from '../lib/motion';
@@ -34,14 +34,14 @@ import { prefetchGamePage, prefetchHandlers } from '../lib/prefetch';
 const PAGE_SIZE = 20;
 
 const TAGS = [
-  { label: 'Goal Alert', color: '#D72638' },
-  { label: 'Game Recap', color: '#2E5B8C' },
-  { label: 'Beer League', color: '#F59E0B' },
-  { label: 'Youth Hockey', color: '#22C55E' },
+  { label: 'Goal Alert', color: C.red },
+  { label: 'Game Recap', color: C.blue },
+  { label: 'Beer League', color: colors.warning },
+  { label: 'Youth Hockey', color: colors.success },
   { label: 'Training', color: '#0EA5E9' },
-  { label: 'Hot Take', color: '#8B5CF6' },
+  { label: 'Hot Take', color: colors.premium },
   { label: 'Trade Talk', color: '#EC4899' },
-  { label: 'Question', color: '#8BA3BE' },
+  { label: 'Question', color: C.steel },
 ];
 
 // Rotating composer prompts — keeps the chirp box feeling alive instead of a
@@ -130,7 +130,7 @@ function MediaDisplay({ url, type }) {
 function LiveDot({ size = 7 }) {
   return (
     <span className="rinkd-live-dot" aria-hidden="true"
-      style={{ width: size, height: size, borderRadius: 999, background: '#D72638', display: 'inline-block', flex: '0 0 auto' }} />
+      style={{ width: size, height: size, borderRadius: 999, background: C.red, display: 'inline-block', flex: '0 0 auto' }} />
   );
 }
 
@@ -142,7 +142,7 @@ function LiveBadge() {
       display: 'inline-flex', alignItems: 'center', gap: 5, flex: '0 0 auto',
       padding: '3px 8px', borderRadius: 6,
       background: 'rgba(215,38,56,0.15)', border: '1px solid rgba(215,38,56,0.6)',
-      color: '#F4F7FA', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+      color: C.ice, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
       fontStyle: 'italic', fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase',
     }}>
       <LiveDot /> Live
@@ -159,7 +159,7 @@ function BroadcastHeader({ label, live }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10,
-      background: '#0f2847', borderLeft: '4px solid #D72638',
+      background: C.card, borderLeft: `4px solid ${C.red}`,
       marginLeft: -16, marginBottom: 12,
       padding: '8px 14px 8px 16px',
       borderTopRightRadius: 4, borderBottomRightRadius: 4,
@@ -168,13 +168,13 @@ function BroadcastHeader({ label, live }) {
         flex: 1, minWidth: 0,
         fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic',
         fontSize: 18, lineHeight: 1, letterSpacing: '0.05em',
-        color: '#F4F7FA', textTransform: 'uppercase',
+        color: C.ice, textTransform: 'uppercase',
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>{label}</span>
       {live && (
         <span style={{
           display: 'inline-flex', alignItems: 'center', gap: 6, flex: '0 0 auto',
-          color: '#D72638', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+          color: C.red, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
           fontStyle: 'italic', fontSize: 13, letterSpacing: '0.1em', textTransform: 'uppercase',
         }}>
           <LiveDot /> Live
@@ -209,7 +209,7 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
     <div style={{
       // card-hero (surface #162f55, 1px red border glow, red drop-shadow) when
       // live so it floats above the flat standard cards; card-standard otherwise.
-      background: isLive ? '#162f55' : C.card,
+      background: isLive ? colors.surfaceElevated : C.card,
       borderRadius: 14,
       border: isLive ? '1px solid rgba(215,38,56,0.6)' : `1px solid ${C.border}`,
       boxShadow: isLive ? '0 8px 32px rgba(215,38,56,0.2)' : 'none',
@@ -256,7 +256,7 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
         {(post.recap_for_game_id || post.recap_for_league_game_id) && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
             <button type="button" {...prefetchHandlers(prefetchGamePage)} onClick={(e) => expand(e, () => navigate(`/game/${post.recap_for_game_id || post.recap_for_league_game_id}${post.league_id ? '?type=league' : ''}`))}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: 'rgba(46,91,140,0.2)', border: '1px solid #2E5B8C', color: '#F4F7FA', fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer' }}>
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: 'rgba(46,91,140,0.2)', border: `1px solid ${C.blue}`, color: C.ice, fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer' }}>
               <span style={{ fontSize: 16 }}>🏒</span> View game →
             </button>
             <ShareButton gameId={post.recap_for_game_id || post.recap_for_league_game_id} isLeague={!!post.league_id} variant="ghost" cardType="recapv2"
@@ -268,13 +268,13 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
         {post.gamepuck_reveal_game_id && (
           <div style={{ marginBottom: 10 }}>
             <button type="button" {...prefetchHandlers(prefetchGamePage)} onClick={(e) => expand(e, () => navigate(`/game/${post.gamepuck_reveal_game_id}${post.league_id ? '?type=league' : ''}`))}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: 'rgba(215,38,56,0.15)', border: '1px solid #D72638', color: '#F4F7FA', fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer' }}>
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: 'rgba(215,38,56,0.15)', border: `1px solid ${C.red}`, color: C.ice, fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer' }}>
               <span style={{ fontSize: 16 }}>🏒</span> Peel to reveal →
             </button>
           </div>
         )}
         {post.livebarn_venue_id && (
-          <a href={"https://watch.livebarn.com/en/videoplayer?venueid=" + post.livebarn_venue_id + "&referrer=rinkd"} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, marginBottom: 10, background: 'rgba(46,91,140,0.2)', border: '1px solid #2E5B8C', color: '#F4F7FA', fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', textDecoration: 'none' }}>
+          <a href={"https://watch.livebarn.com/en/videoplayer?venueid=" + post.livebarn_venue_id + "&referrer=rinkd"} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, marginBottom: 10, background: 'rgba(46,91,140,0.2)', border: `1px solid ${C.blue}`, color: C.ice, fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', textDecoration: 'none' }}>
             <Icon name="live" size={16} /> Watch Live on LiveBarn
           </a>
         )}
@@ -372,7 +372,7 @@ function ProfileNudgeBanner() {
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 10 }}>
         <span style={{ fontSize: 13, lineHeight: 1.4 }}>
-          Quick — who are you? <span style={{ color: '#D72638', fontWeight: 700 }}>+50 pts</span> for one tap.
+          Quick — who are you? <span style={{ color: C.red, fontWeight: 700 }}>+50 pts</span> for one tap.
         </span>
         <button onClick={dismiss} aria-label="Dismiss"
           style={{ background: 'transparent', color: C.steel, border: 'none', cursor: 'pointer', fontSize: 20, lineHeight: 1, minWidth: 44, minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -383,9 +383,9 @@ function ProfileNudgeBanner() {
         {PERSONAS.map(p => (
           <button key={p.id} onClick={() => pick(p.id)} disabled={busy}
             style={{
-              background: '#0B1F3A',
+              background: C.navy,
               color: C.ice,
-              border: '1px solid rgba(46,91,140,0.4)',
+              border: `1px solid ${C.border}`,
               borderRadius: 999,
               padding: '6px 12px',
               fontSize: 12,

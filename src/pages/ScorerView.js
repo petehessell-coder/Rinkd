@@ -29,14 +29,9 @@ import { numericInputProps } from '../lib/forms';
 // Penalty is logged on a tournament game. The filing write itself goes
 // through queuedWrite (rink-side, offline-safe).
 import SuspensionPrompt from '../components/SuspensionPrompt';
+import { C, colors } from '../lib/tokens';
 
-const C = {
-  dark: '#07111F', navy: '#0B1F3A', blue: '#2E5B8C',
-  red: '#D72638', ice: '#F4F7FA', card: '#0f2847',
-  border: 'rgba(46,91,140,0.4)',
-};
-
-const inputStyle = { width: '100%', background: '#07111F', border: '0.5px solid rgba(46,91,140,0.4)', borderRadius: 8, padding: '10px 12px', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', fontSize: 14, outline: 'none' };
+const inputStyle = { width: '100%', background: C.dark, border: `0.5px solid ${C.border}`, borderRadius: 8, padding: '10px 12px', color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 14, outline: 'none' };
 const selectStyle = { ...inputStyle };
 
 // Headline for auto-recap posts. Bracket games get the round + 🏆 framing;
@@ -101,9 +96,9 @@ function SecLabel({ children }) {
 function AddBtn({ onClick, children }) {
   return (
     <button onClick={onClick}
-      style={{ width: '100%', padding: 10, background: 'rgba(46,91,140,0.15)', border: '0.5px dashed rgba(46,91,140,0.5)', borderRadius: 8, color: '#F4F7FA', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'all 0.15s' }}
-      onMouseEnter={e => { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; e.currentTarget.style.borderStyle = 'solid'; }}
-      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(46,91,140,0.15)'; e.currentTarget.style.color = '#F4F7FA'; e.currentTarget.style.borderStyle = 'dashed'; }}>
+      style={{ width: '100%', padding: 10, background: 'rgba(46,91,140,0.15)', border: '0.5px dashed rgba(46,91,140,0.5)', borderRadius: 8, color: C.ice, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'all 0.15s' }}
+      onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; e.currentTarget.style.borderStyle = 'solid'; }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(46,91,140,0.15)'; e.currentTarget.style.color = C.ice; e.currentTarget.style.borderStyle = 'dashed'; }}>
       {children}
     </button>
   );
@@ -113,9 +108,9 @@ function ScoreBtn({ onClick, children, variant = 'minus' }) {
   const bg = variant === 'plus' ? C.red : 'rgba(244,247,250,0.08)';
   return (
     <button onClick={onClick}
-      style={{ width: 44, height: 44, background: bg, border: 'none', borderRadius: 8, color: '#F4F7FA', fontSize: 22, cursor: 'pointer', fontWeight: 700, transition: 'all 0.15s', flexShrink: 0 }}
-      onMouseEnter={e => { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; }}
-      onMouseLeave={e => { e.currentTarget.style.background = bg; e.currentTarget.style.color = '#F4F7FA'; }}>
+      style={{ width: 44, height: 44, background: bg, border: 'none', borderRadius: 8, color: C.ice, fontSize: 22, cursor: 'pointer', fontWeight: 700, transition: 'all 0.15s', flexShrink: 0 }}
+      onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
+      onMouseLeave={e => { e.currentTarget.style.background = bg; e.currentTarget.style.color = C.ice; }}>
       {children}
     </button>
   );
@@ -124,17 +119,17 @@ function ScoreBtn({ onClick, children, variant = 'minus' }) {
 function Modal({ title, onClose, onSave, saveLabel = 'Save', busy = false, children }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div style={{ background: C.navy, borderRadius: '16px 16px 0 0', padding: 20, width: '100%', maxWidth: 480, borderTop: '0.5px solid rgba(46,91,140,0.4)' }}>
-        <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: '#F4F7FA', marginBottom: 16 }}>{title}</div>
+      <div style={{ background: C.navy, borderRadius: '16px 16px 0 0', padding: 20, width: '100%', maxWidth: 480, borderTop: `0.5px solid ${C.border}` }}>
+        <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice, marginBottom: 16 }}>{title}</div>
         {children}
         <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
           <button onClick={onClose}
-            style={{ flex: 1, padding: 12, background: 'rgba(244,247,250,0.08)', border: 'none', borderRadius: 999, color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', fontSize: 14, cursor: 'pointer', transition: 'all 0.15s' }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(244,247,250,0.08)'; e.currentTarget.style.color = '#F4F7FA'; }}>Cancel</button>
+            style={{ flex: 1, padding: 12, background: 'rgba(244,247,250,0.08)', border: 'none', borderRadius: 999, color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 14, cursor: 'pointer', transition: 'all 0.15s' }}
+            onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(244,247,250,0.08)'; e.currentTarget.style.color = C.ice; }}>Cancel</button>
           <button onClick={busy ? undefined : onSave} disabled={busy}
             style={{ flex: 2, padding: 12, background: busy ? C.border : C.red, border: 'none', borderRadius: 999, color: '#fff', fontFamily: 'Barlow, sans-serif', fontSize: 14, fontWeight: 700, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.7 : 1, transition: 'all 0.15s' }}
-            onMouseEnter={e => { if (!busy) { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; } }}
+            onMouseEnter={e => { if (!busy) { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; } }}
             onMouseLeave={e => { e.currentTarget.style.background = busy ? C.border : C.red; e.currentTarget.style.color = '#fff'; }}>{busy ? 'Saving…' : saveLabel}</button>
         </div>
       </div>
@@ -159,11 +154,11 @@ function Row2({ children }) {
 // player instead of typing a jersey number.
 const pickBtnStyle = (active) => ({
   display: 'inline-flex', alignItems: 'center', gap: 4, minHeight: 44, padding: '8px 13px',
-  borderRadius: 10, border: `1px solid ${active ? '#22C55E' : 'rgba(46,91,140,0.5)'}`,
-  background: active ? 'rgba(34,197,94,0.18)' : 'rgba(46,91,140,0.12)', color: '#F4F7FA',
+  borderRadius: 10, border: `1px solid ${active ? colors.success : 'rgba(46,91,140,0.5)'}`,
+  background: active ? 'rgba(34,197,94,0.18)' : 'rgba(46,91,140,0.12)', color: C.ice,
   fontFamily: 'Barlow, sans-serif', fontSize: 14, fontWeight: 700, lineHeight: 1, WebkitTapHighlightColor: 'transparent',
 });
-const pickTagStyle = { fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: 'rgba(215,38,56,0.2)', color: '#D72638', marginLeft: 2 };
+const pickTagStyle = { fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: 'rgba(215,38,56,0.2)', color: C.red, marginLeft: 2 };
 
 // TAP-1 — tap-a-player picker. `players` = [{ jersey, name, is_captain,
 // is_alternate }]. `value` is the selected jersey (string/number) or ''. When
@@ -191,7 +186,7 @@ function PlayerPicker({ label, players, value, onPick, allowClear = false, clear
               style={{ ...pickBtnStyle(isSel), opacity: isDisabled ? 0.3 : 1, cursor: isDisabled ? 'not-allowed' : 'pointer' }}>
               <span style={{ fontWeight: 900 }}>#{p.jersey}</span>
               {p.name ? <span style={{ fontWeight: 600 }}>{p.name}</span> : null}
-              {p.is_captain ? <span style={pickTagStyle}>C</span> : p.is_alternate ? <span style={{ ...pickTagStyle, background: 'rgba(46,91,140,0.4)', color: '#8BA3BE' }}>A</span> : null}
+              {p.is_captain ? <span style={pickTagStyle}>C</span> : p.is_alternate ? <span style={{ ...pickTagStyle, background: C.border, color: C.steel }}>A</span> : null}
             </button>
           );
         })}
@@ -1176,7 +1171,7 @@ export default function ScorerView() {
   };
 
   if (loadError) return (
-    <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', padding: 24 }}>
+    <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif', padding: 24 }}>
       <div style={{ textAlign: 'center', maxWidth: 320 }}>
         <div style={{ fontSize: 32, marginBottom: 12 }}>📶</div>
         <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, marginBottom: 8 }}>Couldn't load the game</div>
@@ -1189,10 +1184,10 @@ export default function ScorerView() {
     </div>
   );
 
-  if (loading) return <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif' }}>Getting the ice ready.</div>;
+  if (loading) return <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Getting the ice ready.</div>;
 
   if (!authorized) return (
-    <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', padding: 24 }}>
+    <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif', padding: 24 }}>
       <div style={{ textAlign: 'center', maxWidth: 320 }}>
         <div style={{ fontSize: 32, marginBottom: 12 }}>🔒</div>
         <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, marginBottom: 8 }}>Scorer access only</div>
@@ -1211,13 +1206,13 @@ export default function ScorerView() {
     ? (game?.league?.is_activated !== false)
     : (game?.tournament?.is_activated !== false);
   if (!parentActivated) return (
-    <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', padding: 24 }}>
+    <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif', padding: 24 }}>
       <div style={{ textAlign: 'center', maxWidth: 360 }}>
         <div style={{ fontSize: 32, marginBottom: 12 }}>🔒</div>
         <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, marginBottom: 8 }}>Activation pending</div>
         <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.65)', marginBottom: 18, lineHeight: 1.6 }}>
           Live scoring is locked until Rinkd activates this {isLeague ? 'league' : 'tournament'}.
-          Email <a href={`mailto:hello@rinkd.app?subject=${encodeURIComponent((isLeague ? 'League' : 'Tournament') + ' Activation Request')}`} style={{ color: '#F59E0B' }}>hello@rinkd.app</a> to activate.
+          Email <a href={`mailto:hello@rinkd.app?subject=${encodeURIComponent((isLeague ? 'League' : 'Tournament') + ' Activation Request')}`} style={{ color: colors.warning }}>hello@rinkd.app</a> to activate.
         </div>
         <button onClick={() => navigate(-1)} style={{ background: C.blue, border: 'none', borderRadius: 999, color: '#fff', padding: '10px 22px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>← Back</button>
       </div>
@@ -1229,7 +1224,7 @@ export default function ScorerView() {
   // scorer UI is replaced with a read-only notice. (League games are never external.)
   const gsExternal = !isLeague && game?.tournament?.scoring_source === 'external';
   if (gsExternal) return (
-    <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', padding: 24 }}>
+    <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif', padding: 24 }}>
       <div style={{ textAlign: 'center', maxWidth: 380 }}>
         <div style={{ fontSize: 32, marginBottom: 12 }}>🔄</div>
         <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, marginBottom: 8 }}>Scores synced from GameSheet</div>
@@ -1250,7 +1245,7 @@ export default function ScorerView() {
     : game.away_team;
   const awayTeam = isLeague ? awayTeamRaw : game.away_team;
   const periodLabel = (p) => p === 1 ? '1st' : p === 2 ? '2nd' : p === 3 ? '3rd' : p === 4 ? 'OT' : 'SO';
-  const severityColor = (s) => s.includes('Major') || s.includes('Match') ? C.red : '#F59E0B';
+  const severityColor = (s) => s.includes('Major') || s.includes('Match') ? C.red : colors.warning;
   const teamName = (id) => id === homeTeam?.id ? homeTeam?.team_name : awayTeam?.team_name;
   // Total shots per team, summed across periods — derived from the per-period rows.
   const shotTotals = {};
@@ -1316,16 +1311,16 @@ export default function ScorerView() {
   const modalPeriodLabel = (n) => n === 4 ? 'OT' : n === 5 ? 'SO' : n === 1 ? '1st' : n === 2 ? '2nd' : '3rd';
 
   return (
-    <div style={{ background: C.dark, minHeight: '100vh', fontFamily: 'Barlow, sans-serif', color: '#F4F7FA', maxWidth: 480, margin: '0 auto', paddingBottom: 40 }}>
+    <div style={{ background: C.dark, minHeight: '100vh', fontFamily: 'Barlow, sans-serif', color: C.ice, maxWidth: 480, margin: '0 auto', paddingBottom: 40 }}>
 
       {/* HEADER */}
-      <div style={{ background: C.navy, padding: '14px 16px', borderBottom: '0.5px solid rgba(46,91,140,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 100 }}>
+      <div style={{ background: C.navy, padding: '14px 16px', borderBottom: `0.5px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 100 }}>
         <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.6)', fontSize: 13, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>← Games</button>
         <div style={{ textAlign: 'center', flex: 1 }}>
-          <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 15, color: '#F4F7FA' }}>{homeTeam?.team_name} vs {awayTeam?.team_name}</div>
+          <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 15, color: C.ice }}>{homeTeam?.team_name} vs {awayTeam?.team_name}</div>
           <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>{game.rink?.sub_rink} · {isLeague ? game.league?.name : game.tournament?.name}</div>
         </div>
-        <span style={{ background: status === 'live' ? 'rgba(215,38,56,0.15)' : status === 'final' ? 'rgba(244,247,250,0.08)' : 'rgba(46,91,140,0.3)', color: status === 'live' ? C.red : status === 'final' ? 'rgba(244,247,250,0.5)' : '#F4F7FA', fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20, whiteSpace: 'nowrap' }}>
+        <span style={{ background: status === 'live' ? 'rgba(215,38,56,0.15)' : status === 'final' ? 'rgba(244,247,250,0.08)' : 'rgba(46,91,140,0.3)', color: status === 'live' ? C.red : status === 'final' ? 'rgba(244,247,250,0.5)' : C.ice, fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20, whiteSpace: 'nowrap' }}>
           {status === 'live' ? '● LIVE' : status === 'final' ? 'FINAL' : 'SCHEDULED'}
         </span>
       </div>
@@ -1334,26 +1329,26 @@ export default function ScorerView() {
           depth), while syncing, red when writes exhausted their retries,
           green flash once everything drains. */}
       {!isOnline && (
-        <div style={{ background: 'rgba(245,158,11,0.14)', borderBottom: '0.5px solid rgba(245,158,11,0.5)', color: '#F4F7FA', padding: '11px 16px', fontSize: 13, fontWeight: 600, textAlign: 'center', lineHeight: 1.45 }}>
+        <div style={{ background: 'rgba(245,158,11,0.14)', borderBottom: '0.5px solid rgba(245,158,11,0.5)', color: C.ice, padding: '11px 16px', fontSize: 13, fontWeight: 600, textAlign: 'center', lineHeight: 1.45 }}>
           📡 Offline — scoring is saved on this device and will sync when the connection returns.
           {queueState.pending > 0 && <span style={{ opacity: 0.75, fontWeight: 400 }}> · {queueState.pending} write{queueState.pending === 1 ? '' : 's'} pending</span>}
           {fromCache && <span style={{ opacity: 0.75, fontWeight: 400 }}> · running from device cache</span>}
         </div>
       )}
       {isOnline && queueState.pending > 0 && (
-        <div style={{ background: 'rgba(245,158,11,0.14)', borderBottom: '0.5px solid rgba(245,158,11,0.5)', color: '#F4F7FA', padding: '11px 16px', fontSize: 13, fontWeight: 600, textAlign: 'center' }}>
+        <div style={{ background: 'rgba(245,158,11,0.14)', borderBottom: '0.5px solid rgba(245,158,11,0.5)', color: C.ice, padding: '11px 16px', fontSize: 13, fontWeight: 600, textAlign: 'center' }}>
           ⏳ Syncing — {queueState.pending} write{queueState.pending === 1 ? '' : 's'} pending…
         </div>
       )}
       {isOnline && fromCache && (
-        <div style={{ background: 'rgba(245,158,11,0.14)', borderBottom: '0.5px solid rgba(245,158,11,0.5)', color: '#F4F7FA', padding: '11px 16px', fontSize: 13, fontWeight: 600, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ background: 'rgba(245,158,11,0.14)', borderBottom: '0.5px solid rgba(245,158,11,0.5)', color: C.ice, padding: '11px 16px', fontSize: 13, fontWeight: 600, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span>📡 Running from device cache — waiting for the server.</span>
           <button onClick={() => { setLoading(true); load(); }}
             style={{ background: C.blue, color: '#fff', border: 'none', borderRadius: 999, padding: '10px 18px', fontSize: 14, fontWeight: 700, minHeight: 44, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>↻ Retry</button>
         </div>
       )}
       {isOnline && queueState.dead > 0 && (
-        <div style={{ background: 'rgba(215,38,56,0.18)', borderBottom: '0.5px solid rgba(215,38,56,0.6)', color: '#F4F7FA', padding: '11px 16px', fontSize: 13, fontWeight: 600, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ background: 'rgba(215,38,56,0.18)', borderBottom: '0.5px solid rgba(215,38,56,0.6)', color: C.ice, padding: '11px 16px', fontSize: 13, fontWeight: 600, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span>⚠ {queueState.dead} write{queueState.dead === 1 ? '' : 's'} failed to sync.</span>
           <button onClick={() => { setErrorMsg(''); retryDeadWrites().catch(() => {}); }}
             style={{ background: C.red, color: '#fff', border: 'none', borderRadius: 999, padding: '10px 18px', fontSize: 14, fontWeight: 700, minHeight: 44, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>↻ Retry Sync</button>
@@ -1361,25 +1356,25 @@ export default function ScorerView() {
             const ok = window.confirm(`Discard ${queueState.dead} failed write${queueState.dead === 1 ? '' : 's'}?\n\nThe server refused them (or retries ran out). The scoring they contain will be permanently lost on this device — check the goal log against the scoresheet afterwards.`);
             if (ok) discardDeadWrites(gameId).then(() => load()).catch(() => {});
           }}
-            style={{ background: 'rgba(244,247,250,0.12)', color: '#F4F7FA', border: 'none', borderRadius: 999, padding: '10px 18px', fontSize: 14, fontWeight: 700, minHeight: 44, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>🗑 Discard</button>
+            style={{ background: 'rgba(244,247,250,0.12)', color: C.ice, border: 'none', borderRadius: 999, padding: '10px 18px', fontSize: 14, fontWeight: 700, minHeight: 44, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>🗑 Discard</button>
         </div>
       )}
       {isOnline && queueState.pending === 0 && queueState.dead === 0 && justSynced && (
-        <div style={{ background: 'rgba(34,197,94,0.14)', borderBottom: '0.5px solid rgba(34,197,94,0.5)', color: '#F4F7FA', padding: '11px 16px', fontSize: 13, fontWeight: 600, textAlign: 'center' }}>
+        <div style={{ background: 'rgba(34,197,94,0.14)', borderBottom: '0.5px solid rgba(34,197,94,0.5)', color: C.ice, padding: '11px 16px', fontSize: 13, fontWeight: 600, textAlign: 'center' }}>
           ✅ Synced — all scoring saved.
         </div>
       )}
 
       {errorMsg && (
         <div onClick={() => setErrorMsg('')}
-          style={{ background: 'rgba(215,38,56,0.18)', borderBottom: '0.5px solid rgba(215,38,56,0.6)', color: '#F4F7FA', padding: '11px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'center' }}>
+          style={{ background: 'rgba(215,38,56,0.18)', borderBottom: '0.5px solid rgba(215,38,56,0.6)', color: C.ice, padding: '11px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'center' }}>
           ⚠ {errorMsg} <span style={{ opacity: 0.6, fontWeight: 400 }}>· tap to dismiss</span>
         </div>
       )}
 
       {suspensionFiledMsg && (
         <div onClick={() => setSuspensionFiledMsg('')}
-          style={{ background: 'rgba(34,197,94,0.14)', borderBottom: '0.5px solid rgba(34,197,94,0.5)', color: '#F4F7FA', padding: '11px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'center' }}>
+          style={{ background: 'rgba(34,197,94,0.14)', borderBottom: '0.5px solid rgba(34,197,94,0.5)', color: C.ice, padding: '11px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'center' }}>
           ✓ {suspensionFiledMsg}
         </div>
       )}
@@ -1398,7 +1393,7 @@ export default function ScorerView() {
       {/* Wake Lock unsupported (older iOS Safari, in-app browsers) — warn
           scorekeepers so they know their phone screen may sleep mid-game. */}
       {!wakeLockSupported && (
-        <div style={{ background: 'rgba(245,158,11,0.12)', borderBottom: '0.5px solid rgba(245,158,11,0.4)', color: '#F4F7FA', padding: '10px 16px', fontSize: 12, lineHeight: 1.45, textAlign: 'center' }}>
+        <div style={{ background: 'rgba(245,158,11,0.12)', borderBottom: '0.5px solid rgba(245,158,11,0.4)', color: C.ice, padding: '10px 16px', fontSize: 12, lineHeight: 1.45, textAlign: 'center' }}>
           ⚠ Your browser may dim or sleep the screen during play. Tap the screen every few minutes, or open in Safari 16.4+ / Chrome to keep it awake automatically.
         </div>
       )}
@@ -1410,7 +1405,7 @@ export default function ScorerView() {
       {eligibilityBlocked ? (
         <div style={{ padding: 16 }}>
           <div style={{ background: 'rgba(215,38,56,0.1)', border: '1px solid rgba(215,38,56,0.45)', borderRadius: 12, padding: 16 }}>
-            <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: '#F4F7FA', marginBottom: 8 }}>
+            <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice, marginBottom: 8 }}>
               ⚠️ Suspended player on the lineup
             </div>
             <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.7)', lineHeight: 1.55, marginBottom: 12 }}>
@@ -1421,7 +1416,7 @@ export default function ScorerView() {
               <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderTop: '0.5px solid rgba(244,247,250,0.08)' }}>
                 <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: 'rgba(215,38,56,0.2)', color: C.red, whiteSpace: 'nowrap' }}>SUSPENDED</span>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#F4F7FA' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>
                     {s.jersey_number != null ? `#${s.jersey_number} ` : ''}{s.player_name}
                   </div>
                   <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.45)', marginTop: 2 }}>{teamName(s.team_id)} · {suspTypeLabel(s)}</div>
@@ -1441,7 +1436,7 @@ export default function ScorerView() {
                 </div>
               )}
               <button onClick={() => { setLoading(true); load(); }}
-                style={{ width: '100%', marginTop: 8, padding: 11, background: 'rgba(244,247,250,0.08)', border: 'none', borderRadius: 999, color: '#F4F7FA', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>
+                style={{ width: '100%', marginTop: 8, padding: 11, background: 'rgba(244,247,250,0.08)', border: 'none', borderRadius: 999, color: C.ice, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>
                 ↻ Re-check lineup
               </button>
             </div>
@@ -1455,7 +1450,7 @@ export default function ScorerView() {
             >= the format's max in the 3rd period. */}
         {!isLeague && !isLocked && Number(settings.max_goal_differential) > 0 && period === 3
           && Math.abs(homeScore - awayScore) >= Number(settings.max_goal_differential) && (
-          <div style={{ background: 'rgba(245,158,11,0.14)', border: '0.5px solid rgba(245,158,11,0.45)', borderRadius: 10, color: '#F4F7FA', padding: '10px 14px', fontSize: 13, lineHeight: 1.45, textAlign: 'center', fontWeight: 600, marginBottom: 12 }}>
+          <div style={{ background: 'rgba(245,158,11,0.14)', border: '0.5px solid rgba(245,158,11,0.45)', borderRadius: 10, color: C.ice, padding: '10px 14px', fontSize: 13, lineHeight: 1.45, textAlign: 'center', fontWeight: 600, marginBottom: 12 }}>
             🕐 Running time in effect — {settings.max_goal_differential}-goal differential reached. (Advisory; follow the arena clock.)
           </div>
         )}
@@ -1484,7 +1479,7 @@ export default function ScorerView() {
           </div>
         )}
         {showPreGameCheck && rostersVerified && (
-          <div style={{ background: 'rgba(34,197,94,0.1)', border: '0.5px solid rgba(34,197,94,0.4)', borderRadius: 12, padding: '10px 14px', marginBottom: 16, fontSize: 13, fontWeight: 600, color: '#22C55E', textAlign: 'center' }}>
+          <div style={{ background: 'rgba(34,197,94,0.1)', border: '0.5px solid rgba(34,197,94,0.4)', borderRadius: 12, padding: '10px 14px', marginBottom: 16, fontSize: 13, fontWeight: 600, color: colors.success, textAlign: 'center' }}>
             ✓ Rosters verified
           </div>
         )}
@@ -1500,8 +1495,8 @@ export default function ScorerView() {
               const signed = coachSigned(team?.id, role);
               return signed ? (
                 <div key={side} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 12px', marginBottom: 8, background: 'rgba(34,197,94,0.1)', border: '0.5px solid rgba(34,197,94,0.4)', borderRadius: 10 }}>
-                  <span style={{ color: '#22C55E', fontWeight: 700, fontSize: 14 }}>✓</span>
-                  <span style={{ fontSize: 13, color: '#F4F7FA', flex: 1 }}>{team?.team_name} — signed by {signed.printed_name}</span>
+                  <span style={{ color: colors.success, fontWeight: 700, fontSize: 14 }}>✓</span>
+                  <span style={{ fontSize: 13, color: C.ice, flex: 1 }}>{team?.team_name} — signed by {signed.printed_name}</span>
                 </div>
               ) : (
                 <button key={side} onClick={() => setCoachModal({ teamId: team?.id, teamName: team?.team_name, role })}
@@ -1515,7 +1510,7 @@ export default function ScorerView() {
 
         {/* SCORE + GOAL LOG — combined card */}
         <SecLabel>Score & Goals {saving && <span style={{ color: 'rgba(244,247,250,0.3)', fontWeight: 400, textTransform: 'none', fontSize: 10 }}>saving...</span>}</SecLabel>
-        <div style={{ background: C.card, border: '0.5px solid rgba(46,91,140,0.4)', borderRadius: 12, overflow: 'hidden', marginBottom: 16 }}>
+        <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 16 }}>
 
           {/* Score section */}
           <div style={{ padding: '14px 16px', borderBottom: '0.5px solid rgba(46,91,140,0.3)' }}>
@@ -1528,7 +1523,7 @@ export default function ScorerView() {
                   onClick={!isLocked ? () => openGoalForTeam(side) : undefined}
                   onKeyDown={!isLocked ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openGoalForTeam(side); } } : undefined}
                   style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minHeight: 44, cursor: !isLocked ? 'pointer' : 'default', WebkitTapHighlightColor: 'transparent' }}>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: '#F4F7FA' }}>{team?.team_name}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: C.ice }}>{team?.team_name}</div>
                   {!isLocked && <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: C.blue, border: `0.5px solid ${C.blue}`, borderRadius: 6, padding: '2px 6px', flexShrink: 0 }}>+ Goal</span>}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -1536,7 +1531,7 @@ export default function ScorerView() {
                   <div
                     onClick={!isLocked ? () => openGoalForTeam(side) : undefined}
                     title={!isLocked ? 'Tap to log a goal' : undefined}
-                    style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 44, color: '#F4F7FA', width: 56, textAlign: 'center', lineHeight: 1, cursor: !isLocked ? 'pointer' : 'default', WebkitTapHighlightColor: 'transparent' }}>{score}</div>
+                    style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 44, color: C.ice, width: 56, textAlign: 'center', lineHeight: 1, cursor: !isLocked ? 'pointer' : 'default', WebkitTapHighlightColor: 'transparent' }}>{score}</div>
                   {!isLocked && <ScoreBtn onClick={() => openGoalForTeam(side)} variant="plus">+</ScoreBtn>}
                 </div>
               </div>
@@ -1552,7 +1547,7 @@ export default function ScorerView() {
               <div key={g.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 0', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
                 <div style={{ width: 9, height: 9, borderRadius: '50%', background: g.team_id === homeTeam?.id ? '#1a4a7a' : '#6b1520', flexShrink: 0, marginTop: 4 }} />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#F4F7FA' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>
                     {g.scorer_number ? `#${g.scorer_number}` : 'Unknown'}
                     {g.assist1_number ? ` — assist: #${g.assist1_number}` : ' — unassisted'}
                     {g.assist2_number ? `, #${g.assist2_number}` : ''}
@@ -1583,9 +1578,9 @@ export default function ScorerView() {
             const isFinal = val === 'final';
             return (
               <button key={val} onClick={() => changePeriod(val)}
-                style={{ padding: '9px 0', border: `0.5px solid ${isActive ? (isFinal ? 'rgba(215,38,56,0.35)' : C.blue) : C.border}`, borderRadius: 8, background: isActive ? (isFinal ? 'rgba(215,38,56,0.15)' : C.blue) : 'rgba(46,91,140,0.1)', color: isActive ? (isFinal ? C.red : '#F4F7FA') : '#F4F7FA', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', opacity: isActive ? 1 : 0.5, transition: 'all 0.15s' }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; e.currentTarget.style.opacity = '1'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = isActive ? (isFinal ? 'rgba(215,38,56,0.15)' : C.blue) : 'rgba(46,91,140,0.1)'; e.currentTarget.style.color = isActive ? (isFinal ? C.red : '#F4F7FA') : '#F4F7FA'; e.currentTarget.style.opacity = isActive ? '1' : '0.5'; }}>
+                style={{ padding: '9px 0', border: `0.5px solid ${isActive ? (isFinal ? 'rgba(215,38,56,0.35)' : C.blue) : C.border}`, borderRadius: 8, background: isActive ? (isFinal ? 'rgba(215,38,56,0.15)' : C.blue) : 'rgba(46,91,140,0.1)', color: isActive ? (isFinal ? C.red : C.ice) : C.ice, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', opacity: isActive ? 1 : 0.5, transition: 'all 0.15s' }}
+                onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; e.currentTarget.style.opacity = '1'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = isActive ? (isFinal ? 'rgba(215,38,56,0.15)' : C.blue) : 'rgba(46,91,140,0.1)'; e.currentTarget.style.color = isActive ? (isFinal ? C.red : C.ice) : C.ice; e.currentTarget.style.opacity = isActive ? '1' : '0.5'; }}>
                 {label}
               </button>
             );
@@ -1594,24 +1589,24 @@ export default function ScorerView() {
 
         {/* SHOTS */}
         <SecLabel>Shots on Goal</SecLabel>
-        <div style={{ background: C.card, border: '0.5px solid rgba(46,91,140,0.4)', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
+        <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
           {[homeTeam, awayTeam].map((team, i) => (
             <div key={team?.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderTop: i > 0 ? '0.5px solid rgba(244,247,250,0.07)' : 'none' }}>
-              <span style={{ fontSize: 14, fontWeight: 600, color: '#F4F7FA', flex: 1 }}>{team?.team_name}</span>
-              {!isLocked && <button onClick={() => changeShots(team?.id, -1)} style={{ width: 36, height: 36, background: 'rgba(244,247,250,0.08)', border: 'none', borderRadius: 8, color: '#F4F7FA', fontSize: 18, cursor: 'pointer', transition: 'all 0.15s' }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(244,247,250,0.08)'; e.currentTarget.style.color = '#F4F7FA'; }}>−</button>}
-              <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 32, color: '#F4F7FA', width: 48, textAlign: 'center' }}>{shotTotals[team?.id] || 0}</span>
-              {!isLocked && <button onClick={() => changeShots(team?.id, 1)} style={{ width: 44, height: 44, background: C.blue, border: 'none', borderRadius: 8, color: '#F4F7FA', fontSize: 22, cursor: 'pointer', transition: 'all 0.15s' }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = C.blue; e.currentTarget.style.color = '#F4F7FA'; }}>+</button>}
+              <span style={{ fontSize: 14, fontWeight: 600, color: C.ice, flex: 1 }}>{team?.team_name}</span>
+              {!isLocked && <button onClick={() => changeShots(team?.id, -1)} style={{ width: 36, height: 36, background: 'rgba(244,247,250,0.08)', border: 'none', borderRadius: 8, color: C.ice, fontSize: 18, cursor: 'pointer', transition: 'all 0.15s' }}
+                onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(244,247,250,0.08)'; e.currentTarget.style.color = C.ice; }}>−</button>}
+              <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 32, color: C.ice, width: 48, textAlign: 'center' }}>{shotTotals[team?.id] || 0}</span>
+              {!isLocked && <button onClick={() => changeShots(team?.id, 1)} style={{ width: 44, height: 44, background: C.blue, border: 'none', borderRadius: 8, color: C.ice, fontSize: 22, cursor: 'pointer', transition: 'all 0.15s' }}
+                onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
+                onMouseLeave={e => { e.currentTarget.style.background = C.blue; e.currentTarget.style.color = C.ice; }}>+</button>}
             </div>
           ))}
         </div>
 
         {/* PENALTIES */}
         <SecLabel>Penalties ({penalties.length})</SecLabel>
-        <div style={{ background: C.card, border: '0.5px solid rgba(46,91,140,0.4)', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
+        <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
           {penalties.length === 0 && <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center', padding: '8px 0' }}>No penalties logged yet</div>}
           {penalties.map(p => (
             <div key={p.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 0', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
@@ -1619,7 +1614,7 @@ export default function ScorerView() {
                 {p.severity.includes('Major') || p.severity.includes('Match') ? 'MAJOR' : p.severity.includes('Double') ? 'DBL MIN' : 'MINOR'}
               </span>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#F4F7FA' }}>{p.player_number ? `#${p.player_number} ` : ''}{teamName(p.team_id)} — {p.penalty_type}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>{p.player_number ? `#${p.player_number} ` : ''}{teamName(p.team_id)} — {p.penalty_type}</div>
                 <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>{periodLabel(p.period)}{p.time_in_period ? ` · ${p.time_in_period}` : ''} · {p.duration_minutes} min</div>
               </div>
               {!isLocked && (
@@ -1634,7 +1629,7 @@ export default function ScorerView() {
 
         {/* GOALIE CHANGES */}
         <SecLabel>Goalie Changes</SecLabel>
-        <div style={{ background: C.card, border: '0.5px solid rgba(46,91,140,0.4)', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
+        <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
           {[homeTeam, awayTeam].map((team, ti) => (
             <div key={team?.id}>
               {ti > 0 && <div style={{ height: '0.5px', background: 'rgba(244,247,250,0.06)', margin: '12px 0' }} />}
@@ -1643,14 +1638,14 @@ export default function ScorerView() {
                   with no designated starter and no change logged yet. */}
               {!isLocked && needsStarterNudge(team?.id) && (
                 <div style={{ background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.4)', borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 700, color: '#F59E0B', marginBottom: 4 }}>🥅 Who's starting in net?</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: colors.warning, marginBottom: 4 }}>🥅 Who's starting in net?</div>
                   <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.45)', marginBottom: 8, lineHeight: 1.4 }}>
                     More than one goalie is dressed — one tap logs the starter so each goalie's stats stay exact.
                   </div>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {dressedGoalies(team?.id).map(g => (
                       <button key={g.id} onClick={() => logStartingGoalie(team?.id, g.jersey_number)}
-                        style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.45)', color: '#F59E0B', borderRadius: 999, padding: '6px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>
+                        style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.45)', color: colors.warning, borderRadius: 999, padding: '6px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>
                         #{g.jersey_number}{g.invite_name ? ` ${g.invite_name}` : ''}
                       </button>
                     ))}
@@ -1660,7 +1655,7 @@ export default function ScorerView() {
               {goalieChanges.filter(g => g.team_id === team?.id).map(c => (
                 <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#F4F7FA' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>
                       {c.goalie_out_number && c.goalie_in_number ? `#${c.goalie_out_number} → #${c.goalie_in_number}`
                         : c.goalie_in_number ? `#${c.goalie_in_number} in net`
                         : c.goalie_out_number ? `#${c.goalie_out_number} pulled — empty net`
@@ -1678,9 +1673,9 @@ export default function ScorerView() {
         {/* FINALIZE */}
         {status === 'final' && (
           <button onClick={() => setShowScoresheet(true)}
-            style={{ width: '100%', padding: 14, background: '#2E5B8C', border: 'none', borderRadius: 999, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', marginTop: 10, transition: 'all 0.15s' }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = '#2E5B8C'; e.currentTarget.style.color = '#fff'; }}>
+            style={{ width: '100%', padding: 14, background: C.blue, border: 'none', borderRadius: 999, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', marginTop: 10, transition: 'all 0.15s' }}
+            onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
+            onMouseLeave={e => { e.currentTarget.style.background = C.blue; e.currentTarget.style.color = '#fff'; }}>
             📄 Generate Official Scoresheet
           </button>
         )}
@@ -1690,7 +1685,7 @@ export default function ScorerView() {
             resolution read games.shootout_winner from here. */}
         {needsShootoutPick && !isLocked && (
           <div style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.5)', borderRadius: 12, padding: 14, marginTop: 10, marginBottom: 4 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#F59E0B', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>Shootout winner</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: colors.warning, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>Shootout winner</div>
             <div style={{ fontSize: 13, color: C.ice, marginBottom: 12, lineHeight: 1.45 }}>
               Tied {homeScore}–{awayScore} after regulation. {isBracketRound ? 'Bracket games' : 'This game'} can't end tied — tap whoever took the shootout.
             </div>
@@ -1702,7 +1697,7 @@ export default function ScorerView() {
                 <button key={side} onClick={() => setShootoutWinner(side)}
                   style={{
                     padding: 12,
-                    border: `1px solid ${shootoutWinner === side ? '#F59E0B' : C.border}`,
+                    border: `1px solid ${shootoutWinner === side ? colors.warning : C.border}`,
                     background: shootoutWinner === side ? 'rgba(245,158,11,0.22)' : 'rgba(46,91,140,0.15)',
                     color: C.ice, borderRadius: 10,
                     fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif',
@@ -1750,7 +1745,7 @@ export default function ScorerView() {
         {status !== 'final'
           ? <button onClick={() => changePeriod('final')} disabled={finalizeBlocked || saving}
               style={{ width: '100%', padding: 14, background: (finalizeBlocked || saving) ? C.border : C.red, border: 'none', borderRadius: 999, color: '#fff', fontSize: 15, fontWeight: 700, cursor: (finalizeBlocked || saving) ? 'not-allowed' : 'pointer', fontFamily: 'Barlow, sans-serif', marginTop: 4, transition: 'all 0.15s', opacity: (finalizeBlocked || saving) ? 0.6 : 1 }}
-              onMouseEnter={e => { if (!(finalizeBlocked || saving)) { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; } }}
+              onMouseEnter={e => { if (!(finalizeBlocked || saving)) { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; } }}
               onMouseLeave={e => { e.currentTarget.style.background = C.red; e.currentTarget.style.color = '#fff'; }}>
               {saving ? '⏳ Finalizing…'
                 : !isOnline ? '📡 Offline — Finalize locked until synced'
@@ -1764,7 +1759,7 @@ export default function ScorerView() {
       )}
 
       {showScoresheet && (
-        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif' }}>Preparing scoresheet…</div>}>
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Preparing scoresheet…</div>}>
           <Scoresheet
             game={{ ...game, home_score: homeScore, away_score: awayScore }}
             goals={goals}
@@ -1781,7 +1776,7 @@ export default function ScorerView() {
 
       {/* GS-6 — coach pre-game sign-off modal (compliant mode). */}
       {coachModal && (
-        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif' }}>Getting the ice ready.</div>}>
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Getting the ice ready.</div>}>
           <CoachSignoff
             game={game}
             isLeague={isLeague}

@@ -6,11 +6,7 @@ import { getProducts } from '../lib/products';
 import { getMerchProducts, startStoreCheckout } from '../lib/store';
 import { track } from '../lib/analytics';
 import { supabase } from '../lib/supabase';
-
-const C = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
-  steel: '#8BA3BE', dark: '#07111F', card: '#112236', border: '#1E3A5C',
-};
+import { C, colors } from '../lib/tokens';
 
 const CART_KEY = 'rinkd_cart_v1';
 
@@ -304,7 +300,7 @@ export default function Store({ profile }) {
 
         {success && (
           <div style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.4)', borderRadius: 10, padding: '12px 14px', marginBottom: 18, fontSize: 13.5, lineHeight: 1.5 }}>
-            <strong style={{ color: '#22C55E' }}>Order confirmed!</strong> Thanks for repping Rinkd. You'll get an email when it ships.
+            <strong style={{ color: colors.success }}>Order confirmed!</strong> Thanks for repping Rinkd. You'll get an email when it ships.
             <button onClick={clearParams} style={{ background: 'none', border: 'none', color: C.steel, marginLeft: 8, cursor: 'pointer', fontSize: 12 }}>Dismiss</button>
           </div>
         )}

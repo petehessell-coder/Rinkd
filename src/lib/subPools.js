@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { createPost } from './posts';
+import { colors } from './tokens';
 
 // LRS-1 Phase 3 — subs pools (ESHL). A pool IS a league_team flagged
 // is_sub_pool ('skaters' | 'goalies'), so its roster/page/feed are the
@@ -101,7 +102,7 @@ export async function sendSubNeededAlert({ pool, gameTitle, note }) {
   const { data: post, error } = await createPost(user.id, {
     content,
     tag: 'Sub Needed',
-    tagColor: '#F59E0B',
+    tagColor: colors.warning,
     teamId: pool.team_id,
   });
   if (error) throw error;

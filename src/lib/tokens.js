@@ -43,6 +43,14 @@ export const colors = {
   // Text
   ice:             '#F4F7FA', // primary text — never a background
   muted:           '#8BA3BE', // secondary text — allowed to stay quiet
+
+  // C01 semantic + accent additions (Pete sign-off 2026-07-01, D1–D4)
+  success:  '#22C55E',   // success / complete / paid
+  warning:  '#F59E0B',   // warning / pending / needs attention
+  onAccent: '#FFFFFF',   // text/icons ON a saturated surface (red/blue/colored)
+  redSoft:  '#E26B6B',   // error text on dark
+  redDeep:  '#B51E2E',   // pressed / hover red
+  premium:  '#8B5CF6',   // Crease / paid-video tier accent
 };
 
 // Backward-compatible brand shorthand. These are the keys the pages already use

@@ -2,16 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { getLeague } from '../lib/leagues';
 import { createRegistrationCheckout } from '../lib/registrations';
+import { C, colors } from '../lib/tokens';
 
 // Public, unauthenticated registration page: /league/:id/register
 // A team contact (who may have no Rinkd account) fills the form → Stripe Checkout
 // (paid league) or a direct confirmation (free league). Standalone — no app nav.
-
-const C = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
-  steel: '#8BA3BE', dark: '#07111F', card: '#0f2847', border: 'rgba(46,91,140,0.4)',
-  green: '#22C55E', amber: '#F59E0B',
-};
 
 const input = {
   width: '100%', background: C.dark, border: `0.5px solid ${C.border}`, borderRadius: 8,
@@ -133,7 +128,7 @@ export default function LeagueRegister() {
         <div style={{ display: 'flex', gap: 18, marginTop: 16, paddingTop: 16, borderTop: `0.5px solid ${C.border}` }}>
           <div>
             <div style={label}>Entry Fee</div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: feeCents > 0 ? C.ice : C.green }}>{feeLabel}</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: feeCents > 0 ? C.ice : colors.success }}>{feeLabel}</div>
           </div>
           {deadline && (
             <div>
@@ -147,7 +142,7 @@ export default function LeagueRegister() {
 
         {closed ? (
           <div style={{ marginTop: 18, background: 'rgba(245,158,11,0.12)', border: '0.5px solid rgba(245,158,11,0.4)', borderRadius: 10, padding: '14px 16px' }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: C.amber }}>Registration is currently closed</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: colors.warning }}>Registration is currently closed</div>
             <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.7)', marginTop: 6, lineHeight: 1.5 }}>
               {deadlinePassed ? 'The registration deadline has passed.' : 'The commissioner hasn’t opened registration yet.'} Reach out to the league directly if you think this is a mistake.
             </div>

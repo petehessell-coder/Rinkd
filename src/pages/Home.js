@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { supabase } from '../lib/supabase';
-import { C, type, radii } from '../lib/tokens';
+import { C, colors, type, radii } from '../lib/tokens';
 import { useUserRole } from '../lib/userRole';
 import { SectionHeader, Button, Icon } from '../components/ui';
 import { TeamLogo, Avatar } from '../components/Logos';
@@ -15,8 +15,8 @@ import {
 
 // Surface-elevated — the "card that matters" tone from the manifesto. The hero
 // + live cards sit on this; standard rows stay on C.card.
-const ELEV = '#162f55';
-const GOLD = '#C9A84C';
+const ELEV = colors.surfaceElevated;
+const GOLD = C.gold;
 // Authorized default arena photo (same owned image as the signup/landing hero).
 // The Featured card draws this behind the brand tint when an event has no
 // per-event cover_image_url, so the hero is photographic, not a flat gradient.
@@ -623,7 +623,7 @@ function FinalMini({ f, navigate }) {
   const oppScore = f.isHome ? f.awayScore : f.homeScore;
   const win = (myScore ?? 0) > (oppScore ?? 0);
   const tie = (myScore ?? 0) === (oppScore ?? 0);
-  const resColor = tie ? C.steel : win ? '#22C55E' : C.red;
+  const resColor = tie ? C.steel : win ? colors.success : C.red;
   const resLabel = tie ? 'T' : win ? 'W' : 'L';
   const href = f.source === 'league' ? `/league-game/${f.id}?type=league` : null;
   const inner = (
@@ -720,7 +720,7 @@ function FinalRow({ f }) {
   const oppScore = f.isHome ? f.awayScore : f.homeScore;
   const win = (myScore ?? 0) > (oppScore ?? 0);
   const tie = (myScore ?? 0) === (oppScore ?? 0);
-  const resColor = tie ? C.steel : win ? '#22C55E' : C.red;
+  const resColor = tie ? C.steel : win ? colors.success : C.red;
   const resLabel = tie ? 'T' : win ? 'W' : 'L';
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: C.card, border: `1px solid ${C.border}`, borderRadius: radii.card, padding: '11px 14px', marginBottom: 8 }}>

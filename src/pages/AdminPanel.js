@@ -4,10 +4,11 @@ import Layout, { BRAND_COLORS as C } from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { useUserRole } from '../lib/userRole';
 import { listRinks, createRink, updateRink, deleteRink } from '../lib/rinks';
+import { colors } from '../lib/tokens';
 
 const TABS = ['Overview', 'Rinks', 'Requests'];
 const inputStyle = {
-  width: '100%', background: '#07111F', border: `0.5px solid ${C.border}`,
+  width: '100%', background: colors.surfaceDeep, border: `0.5px solid ${C.border}`,
   borderRadius: 8, padding: '9px 11px', color: C.ice,
   fontFamily: "'Barlow', sans-serif", fontSize: 13, outline: 'none',
 };
@@ -207,8 +208,8 @@ function OverviewTab({ profile, navigate }) {
     { num: stats.leagueTeams,    label: 'Teams in your leagues' },
     { num: stats.teams,          label: 'Teams you manage' },
     { num: stats.totalGames,     label: 'Total league games' },
-    { num: stats.upcomingGames,  label: 'Upcoming games',      color: '#22C55E' },
-    { num: stats.pendingReqs,    label: 'Pending requests',    color: stats.pendingReqs > 0 ? '#F59E0B' : undefined },
+    { num: stats.upcomingGames,  label: 'Upcoming games',      color: colors.success },
+    { num: stats.pendingReqs,    label: 'Pending requests',    color: stats.pendingReqs > 0 ? colors.warning : undefined },
   ];
 
   return (
@@ -253,7 +254,7 @@ function OverviewTab({ profile, navigate }) {
             </div>
             <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 4,
               background: l.status === 'active' ? 'rgba(34,197,94,0.15)' : 'rgba(244,247,250,0.08)',
-              color: l.status === 'active' ? '#22C55E' : C.steel,
+              color: l.status === 'active' ? colors.success : C.steel,
               letterSpacing: '0.08em', textTransform: 'uppercase' }}>{l.status || 'draft'}</span>
             <span style={{ fontSize: 14, color: 'rgba(244,247,250,0.3)' }}>›</span>
           </div>

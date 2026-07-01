@@ -1,9 +1,10 @@
 import React from 'react';
 import { buildIcs, downloadIcs } from '../lib/ics';
+import { C } from '../lib/tokens';
 
 const B = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
-  ice: '#F4F7FA', steel: '#8BA3BE',
+  navy: C.navy, blue: C.blue, red: C.red,
+  ice: C.ice, steel: C.steel,
 };
 
 /**

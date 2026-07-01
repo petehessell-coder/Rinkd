@@ -3,11 +3,12 @@ import {
   generateRoundRobin, expandFixturesToGames,
   detectScheduleConflicts, bulkInsertLeagueGames,
 } from '../lib/scheduleBuilder';
+import { colors } from '../lib/tokens';
 
 const B = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
-  ice: '#F4F7FA', steel: '#8BA3BE', dark: '#07111F',
-  card: '#112236', border: '#1E3A5C', amber: '#F59E0B', green: '#22C55E',
+  navy: colors.bg, blue: colors.blue, red: colors.red,
+  ice: colors.ice, steel: colors.muted, dark: colors.surfaceDeep,
+  card: '#112236', border: '#1E3A5C', amber: colors.warning, green: colors.success,
 };
 
 const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -239,7 +240,7 @@ function Field({ label, children }) {
 }
 
 const inputStyle = {
-  width: '100%', background: '#07111F', border: `1px solid ${B.border}`,
+  width: '100%', background: colors.surfaceDeep, border: `1px solid ${B.border}`,
   borderRadius: 8, padding: '8px 10px', color: B.ice,
   fontFamily: "'Barlow', sans-serif", fontSize: 13, outline: 'none',
 };

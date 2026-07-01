@@ -26,11 +26,11 @@ import { uploadMedia } from '../lib/posts';
 import { classifyImage } from '../lib/imageModeration';
 import { assignTeamManagerByInput } from '../lib/leagueTeamManagers';
 import { createLeagueSubPools } from '../lib/subPools';
+import { C, colors } from '../lib/tokens';
 
-const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
-const inputStyle = { width:'100%', background:'#07111F', border:`0.5px solid ${C.border}`, borderRadius:8, padding:'10px 12px', color:C.ice, fontFamily:'Barlow, sans-serif', fontSize:14, outline:'none' };
-const LOGO_COLORS = ['#D72638','#2E5B8C','#22C55E','#F59E0B','#8B5CF6','#0EA5E9','#EC4899','#0B1F3A'];
-const DEFAULT_TEAM_COLOR = '#2E5B8C';
+const inputStyle = { width:'100%', background:C.dark, border:`0.5px solid ${C.border}`, borderRadius:8, padding:'10px 12px', color:C.ice, fontFamily:'Barlow, sans-serif', fontSize:14, outline:'none' };
+const LOGO_COLORS = [C.red, C.blue, colors.success, colors.warning, colors.premium, '#0EA5E9', '#EC4899', C.navy];
+const DEFAULT_TEAM_COLOR = C.blue;
 
 function Field({ label, children }) {
   return (
@@ -343,7 +343,7 @@ function ManageLeague({ id, navigate }) {
         {MANAGE_TABS.map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             style={{ fontSize: 13, fontWeight: 700, padding: '10px 16px', color: '#FFFFFF', background: 'transparent', border: 'none', borderBottom: activeTab === tab ? '3px solid #D72638' : '3px solid transparent', marginBottom: -2, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap', flexShrink: 0, opacity: activeTab === tab ? 1 : 0.5, transition: 'opacity 0.15s' }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.color = '#0B1F3A'; e.currentTarget.style.opacity = '1'; }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.color = C.navy; e.currentTarget.style.opacity = '1'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#FFFFFF'; e.currentTarget.style.opacity = activeTab === tab ? '1' : '0.5'; }}>
             {tab}
           </button>
@@ -355,9 +355,9 @@ function ManageLeague({ id, navigate }) {
           <div style={{ background: 'rgba(245,158,11,0.12)', border: '0.5px solid rgba(245,158,11,0.4)', borderRadius: 10, padding: '12px 14px', marginBottom: 14, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
             <div style={{ fontSize: 18 }}>🔒</div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#F59E0B' }}>Activation pending</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: colors.warning }}>Activation pending</div>
               <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.65)', marginTop: 4, lineHeight: 1.5 }}>
-                You can set up teams, schedule, and bracket now. Live scoring + auto-recap pushes are locked until Rinkd activates this league. Email <a href="mailto:hello@rinkd.app?subject=League Activation Request" style={{ color: '#F59E0B' }}>hello@rinkd.app</a> to activate, or see <a href="/pricing" style={{ color: '#F59E0B' }}>pricing</a>.
+                You can set up teams, schedule, and bracket now. Live scoring + auto-recap pushes are locked until Rinkd activates this league. Email <a href="mailto:hello@rinkd.app?subject=League Activation Request" style={{ color: colors.warning }}>hello@rinkd.app</a> to activate, or see <a href="/pricing" style={{ color: colors.warning }}>pricing</a>.
               </div>
             </div>
           </div>
@@ -414,7 +414,7 @@ function ManageLeague({ id, navigate }) {
                 <div style={{ flex: 1, height: '0.5px', background: 'rgba(244,247,250,0.1)' }} />
               </div>
               <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
-              <input style={{width:'100%',background:'#07111F',border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:8,padding:'10px 12px',color:'#F4F7FA',fontFamily:'Barlow,sans-serif',fontSize:14,outline:'none',marginBottom:8}} type='email' value={unlinkedEmail} onChange={e => setUnlinkedEmail(e.target.value)} placeholder='Manager email (optional — sends league invite)' />
+              <input style={{width:'100%',background:C.dark,border:'0.5px solid rgba(46,91,140,0.4)',borderRadius:8,padding:'10px 12px',color:C.ice,fontFamily:'Barlow,sans-serif',fontSize:14,outline:'none',marginBottom:8}} type='email' value={unlinkedEmail} onChange={e => setUnlinkedEmail(e.target.value)} placeholder='Manager email (optional — sends league invite)' />
                 <button onClick={handleAddUnlinkedTeam}
                   style={{ background: 'rgba(46,91,140,0.2)', border: `0.5px solid ${C.border}`, borderRadius: 8, padding: '9px 16px', color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap' }}
                   onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
@@ -443,10 +443,10 @@ function ManageLeague({ id, navigate }) {
                       </div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>{name}</div>
-                        {!isLinked && <div style={{ fontSize: 10, color: '#F59E0B', fontWeight: 700, marginTop: 2 }}>No Rinkd page · <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setLinkingTeam(lt)}>Link team</span></div>}
-                        {isLinked && !isClaimed && <div style={{ fontSize: 10, color: '#F59E0B', marginTop: 2, fontWeight: 700 }}>Unclaimed — no manager assigned</div>}
+                        {!isLinked && <div style={{ fontSize: 10, color: colors.warning, fontWeight: 700, marginTop: 2 }}>No Rinkd page · <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setLinkingTeam(lt)}>Link team</span></div>}
+                        {isLinked && !isClaimed && <div style={{ fontSize: 10, color: colors.warning, marginTop: 2, fontWeight: 700 }}>Unclaimed — no manager assigned</div>}
                         {isLinked && isClaimed && (
-                          <div style={{ fontSize: 10, color: '#22C55E', marginTop: 2 }}>
+                          <div style={{ fontSize: 10, color: colors.success, marginTop: 2 }}>
                             ✓ Manager: {manager ? (manager.name || ('@' + manager.handle)) : '<assigned>'}
                           </div>
                         )}
@@ -485,7 +485,7 @@ function ManageLeague({ id, navigate }) {
                           </button>
                         </div>
                         {assignFlash && (
-                          <div style={{ fontSize: 11, color: assignFlash.kind === 'ok' ? '#22C55E' : '#E26B6B' }}>
+                          <div style={{ fontSize: 11, color: assignFlash.kind === 'ok' ? colors.success : colors.redSoft }}>
                             {assignFlash.text}
                           </div>
                         )}
@@ -921,7 +921,7 @@ function LeagueIntegrationsTab({ league, games = [], onSave }) {
       )}
 
       {err && <div style={{ color: C.red, fontSize: 12.5, marginTop: 10 }}>{err}</div>}
-      {ok && <div style={{ color: '#22C55E', fontSize: 12.5, marginTop: 10 }}>{ok}</div>}
+      {ok && <div style={{ color: colors.success, fontSize: 12.5, marginTop: 10 }}>{ok}</div>}
 
       {/* GameSheet — live for leagues (GAMESHEET-LEAGUES-1) */}
       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', color: C.ice, textTransform: 'uppercase', margin: '26px 0 4px', paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}>GameSheet</div>
@@ -1043,7 +1043,7 @@ function LeagueGameSheetSection({ league, games = [] }) {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>
                 Season {lk.gamesheet_season_id}
-                <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 6, color: lk.status === 'active' ? '#22C55E' : C.steel, background: lk.status === 'active' ? 'rgba(34,197,94,0.15)' : 'rgba(139,163,190,0.15)' }}>{lk.status === 'active' ? 'ACTIVE' : 'PAUSED'}</span>
+                <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 6, color: lk.status === 'active' ? colors.success : C.steel, background: lk.status === 'active' ? 'rgba(34,197,94,0.15)' : 'rgba(139,163,190,0.15)' }}>{lk.status === 'active' ? 'ACTIVE' : 'PAUSED'}</span>
                 <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 6, color: C.steel, background: 'rgba(139,163,190,0.12)' }}>{lk.auto_import ? 'AUTO-IMPORT' : 'MATCH-ONLY'}</span>
               </div>
               <div style={{ fontSize: 11, color: C.steel, marginTop: 3 }}>
@@ -1067,7 +1067,7 @@ function LeagueGameSheetSection({ league, games = [] }) {
         </div>
       </div>
 
-      {msg && <div style={{ color: msg.kind === 'ok' ? '#22C55E' : C.red, fontSize: 12.5, margin: '0 0 14px' }}>{msg.text}</div>}
+      {msg && <div style={{ color: msg.kind === 'ok' ? colors.success : C.red, fontSize: 12.5, margin: '0 0 14px' }}>{msg.text}</div>}
 
       {loading ? (
         <div style={{ textAlign: 'center', color: C.steel, padding: '24px 0', fontSize: 13 }}>Getting the ice ready.</div>
@@ -1097,7 +1097,7 @@ function LeagueGameSheetSection({ league, games = [] }) {
                     </div>
                   ) : (
                     <div style={{ marginTop: 8 }}>
-                      <div style={{ fontSize: 11, color: '#F59E0B', marginBottom: 4 }}>No automatic match — pick the league game:</div>
+                      <div style={{ fontSize: 11, color: colors.warning, marginBottom: 4 }}>No automatic match — pick the league game:</div>
                       <select value={pick[m.id] || ''} onChange={(e) => setPick(p => ({ ...p, [m.id]: e.target.value }))} style={inputStyle}>
                         <option value="">— Select game —</option>
                         {unmappedGames.map(g => <option key={g.id} value={g.id}>{gameLabel[g.id]}</option>)}
@@ -1127,7 +1127,7 @@ function LeagueGameSheetSection({ league, games = [] }) {
                     <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>{m.gs_home_name} {m.gs_home_goals}–{m.gs_visitor_goals} {m.gs_visitor_name}</div>
                     <div style={{ fontSize: 11, color: C.steel, marginTop: 2 }}>{m.rinkd_game_id ? (gameLabel[m.rinkd_game_id] || 'imported game') : '—'}</div>
                   </div>
-                  <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 6, color: '#22C55E', background: 'rgba(34,197,94,0.15)' }}>SYNCED</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 6, color: colors.success, background: 'rgba(34,197,94,0.15)' }}>SYNCED</span>
                 </div>
               ))}
             </div>
@@ -1354,10 +1354,10 @@ function PlayoffsTab({ leagueId, teams, standings, games, rinks, divisionId = nu
               Round 1 preview — {round1Preview.label || '—'}
             </div>
             {round1Preview.error === 'not_enough_teams' && (
-              <div style={{ fontSize: 13, color: '#E26B6B' }}>Only {standings.length} teams have a standings rank — need at least {bracketSize}.</div>
+              <div style={{ fontSize: 13, color: colors.redSoft }}>Only {standings.length} teams have a standings rank — need at least {bracketSize}.</div>
             )}
             {round1Preview.error === 'calendar_exhausted' && (
-              <div style={{ fontSize: 13, color: '#E26B6B' }}>Calendar full — try more days-of-week or more games-per-day.</div>
+              <div style={{ fontSize: 13, color: colors.redSoft }}>Calendar full — try more days-of-week or more games-per-day.</div>
             )}
             {!round1Preview.error && round1Preview.rows.length > 0 && (
               <div style={{ fontSize: 13, color: C.ice, lineHeight: 1.7 }}>
@@ -1398,10 +1398,10 @@ function PlayoffsTab({ leagueId, teams, standings, games, rinks, divisionId = nu
               <div style={{ fontSize: 13, color: C.steel }}>Final has been played — bracket complete.</div>
             )}
             {nextRoundPreview?.error === 'incomplete_winners' && (
-              <div style={{ fontSize: 13, color: '#E26B6B' }}>Some {lastFinalRound} games ended in a tie or have no clear winner — fix the scores before generating next round.</div>
+              <div style={{ fontSize: 13, color: colors.redSoft }}>Some {lastFinalRound} games ended in a tie or have no clear winner — fix the scores before generating next round.</div>
             )}
             {nextRoundPreview?.error === 'calendar_exhausted' && (
-              <div style={{ fontSize: 13, color: '#E26B6B' }}>Calendar full — try more days-of-week or more games-per-day.</div>
+              <div style={{ fontSize: 13, color: colors.redSoft }}>Calendar full — try more days-of-week or more games-per-day.</div>
             )}
             {!nextRoundPreview?.error && nextRoundPreview?.rows?.length > 0 && (
               <>
@@ -1418,7 +1418,7 @@ function PlayoffsTab({ leagueId, teams, standings, games, rinks, divisionId = nu
                     const t = new Date(r.start_time).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
                     return (
                       <div key={i}>
-                        <span style={{ display: 'inline-block', minWidth: 60, fontSize: 10, fontWeight: 700, padding: '1px 6px', marginRight: 6, borderRadius: 4, background: r.round === 'final' ? 'rgba(245,158,11,0.2)' : r.round === 'bronze' ? 'rgba(180,83,9,0.2)' : 'rgba(46,91,140,0.3)', color: r.round === 'final' ? '#F59E0B' : r.round === 'bronze' ? '#B45309' : C.steel, textAlign: 'center' }}>
+                        <span style={{ display: 'inline-block', minWidth: 60, fontSize: 10, fontWeight: 700, padding: '1px 6px', marginRight: 6, borderRadius: 4, background: r.round === 'final' ? 'rgba(245,158,11,0.2)' : r.round === 'bronze' ? 'rgba(180,83,9,0.2)' : 'rgba(46,91,140,0.3)', color: r.round === 'final' ? colors.warning : r.round === 'bronze' ? '#B45309' : C.steel, textAlign: 'center' }}>
                           {(r.round || '').toUpperCase()}
                         </span>
                         <strong>{homeName}</strong> vs. <strong>{awayName}</strong>
@@ -1459,13 +1459,13 @@ function PlayoffsTab({ leagueId, teams, standings, games, rinks, divisionId = nu
           <div>
             {standings.slice(0, bracketSize).map((row, i) => (
               <div key={row.lt_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: i < bracketSize - 1 ? '0.5px solid rgba(244,247,250,0.06)' : 'none' }}>
-                <span style={{ width: 22, height: 22, borderRadius: '50%', background: i === 0 ? C.red : 'rgba(46,91,140,0.4)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff' }}>{i + 1}</span>
+                <span style={{ width: 22, height: 22, borderRadius: '50%', background: i === 0 ? C.red : C.border, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff' }}>{i + 1}</span>
                 <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: C.ice }}>{row.team_name}</span>
                 <span style={{ fontSize: 11, color: C.steel }}>{row.wins}-{row.losses}-{row.ties} · {row.pts} pts</span>
               </div>
             ))}
             {standings.length < bracketSize && (
-              <div style={{ marginTop: 8, fontSize: 12, color: '#E26B6B' }}>
+              <div style={{ marginTop: 8, fontSize: 12, color: colors.redSoft }}>
                 Only {standings.length} teams have a standings rank — need {bracketSize} for this bracket size.
               </div>
             )}
@@ -1682,7 +1682,7 @@ function SmartScheduleGenerator({ leagueId, teams, rinks, divisionId = null, onP
         ) : preview?.shape?.totalGames === 0 ? (
           <div style={{ fontSize: 13, color: C.steel }}>Set a target above to preview.</div>
         ) : preview?.error === 'calendar_exhausted' ? (
-          <div style={{ fontSize: 13, color: '#E26B6B' }}>
+          <div style={{ fontSize: 13, color: colors.redSoft }}>
             Calendar full — try more days-of-week or more games-per-day.
           </div>
         ) : (
@@ -1725,10 +1725,10 @@ function SmartScheduleGenerator({ leagueId, teams, rinks, divisionId = null, onP
 
 // --- Registrations tab: config (open/fee/deadline/cap/link) + submissions list ---
 const REG_STATUS = {
-  pending:     { label: 'Pending',     color: '#F59E0B', bg: 'rgba(245,158,11,0.15)' },
-  approved:    { label: 'Approved',    color: '#22C55E', bg: 'rgba(34,197,94,0.15)' },
-  waitlisted:  { label: 'Waitlisted',  color: '#8BA3BE', bg: 'rgba(139,163,190,0.15)' },
-  rejected:    { label: 'Rejected',    color: '#D72638', bg: 'rgba(215,38,56,0.15)' },
+  pending:     { label: 'Pending',     color: colors.warning, bg: 'rgba(245,158,11,0.15)' },
+  approved:    { label: 'Approved',    color: colors.success, bg: 'rgba(34,197,94,0.15)' },
+  waitlisted:  { label: 'Waitlisted',  color: C.steel, bg: 'rgba(139,163,190,0.15)' },
+  rejected:    { label: 'Rejected',    color: C.red, bg: 'rgba(215,38,56,0.15)' },
 };
 const REG_GROUPS = [['pending', 'Pending'], ['approved', 'Approved'], ['waitlisted', 'Waitlisted'], ['rejected', 'Rejected']];
 
@@ -1830,9 +1830,9 @@ function RegistrationsTab({ leagueId, league, registrations, onChanged }) {
     fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 999, cursor: 'pointer',
     fontFamily: 'Barlow, sans-serif', border: '0.5px solid',
     ...(kind === 'approve'
-      ? { background: 'rgba(34,197,94,0.15)', borderColor: 'rgba(34,197,94,0.5)', color: '#22C55E' }
+      ? { background: 'rgba(34,197,94,0.15)', borderColor: 'rgba(34,197,94,0.5)', color: colors.success }
       : kind === 'rejected'
-        ? { background: 'transparent', borderColor: 'rgba(215,38,56,0.45)', color: '#E26B6B' }
+        ? { background: 'transparent', borderColor: 'rgba(215,38,56,0.45)', color: colors.redSoft }
         : { background: 'transparent', borderColor: C.border, color: C.steel }),
   });
 
@@ -1864,7 +1864,7 @@ function RegistrationsTab({ leagueId, league, registrations, onChanged }) {
               {connecting ? 'Opening Stripe…' : '💳 Connect payouts'}
             </button>
             {connectReturn && (
-              <div style={{ fontSize: 12, color: '#F59E0B', marginTop: 10 }}>
+              <div style={{ fontSize: 12, color: colors.warning, marginTop: 10 }}>
                 Just finished on Stripe? Verification can take a moment — reload this page to see it as connected.
               </div>
             )}
@@ -1885,7 +1885,7 @@ function RegistrationsTab({ leagueId, league, registrations, onChanged }) {
             <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.5)', marginTop: 2 }}>Teams can submit via your link only while open.</div>
           </div>
           <button onClick={() => setOpen(o => !o)} aria-label="Toggle registration open"
-            style={{ width: 48, height: 28, borderRadius: 999, border: 'none', cursor: 'pointer', position: 'relative', background: open ? '#22C55E' : 'rgba(139,163,190,0.35)', transition: 'background 0.15s', flexShrink: 0 }}>
+            style={{ width: 48, height: 28, borderRadius: 999, border: 'none', cursor: 'pointer', position: 'relative', background: open ? colors.success : 'rgba(139,163,190,0.35)', transition: 'background 0.15s', flexShrink: 0 }}>
             <span style={{ position: 'absolute', top: 3, left: open ? 23 : 3, width: 22, height: 22, borderRadius: '50%', background: '#fff', transition: 'left 0.15s' }} />
           </button>
         </div>
@@ -1908,11 +1908,11 @@ function RegistrationsTab({ leagueId, league, registrations, onChanged }) {
             {savingCfg ? 'Saving…' : 'Save Settings'}
           </button>
           <button onClick={copyLink}
-            style={{ padding: '11px 16px', background: 'transparent', border: `0.5px solid ${C.border}`, borderRadius: 999, color: copied ? '#22C55E' : C.ice, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>
+            style={{ padding: '11px 16px', background: 'transparent', border: `0.5px solid ${C.border}`, borderRadius: 999, color: copied ? colors.success : C.ice, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>
             {copied ? '✓ Copied' : '🔗 Copy Link'}
           </button>
         </div>
-        {cfgFlash && <div style={{ marginTop: 10, fontSize: 12, color: cfgFlash.kind === 'ok' ? '#22C55E' : C.red }}>{cfgFlash.text}</div>}
+        {cfgFlash && <div style={{ marginTop: 10, fontSize: 12, color: cfgFlash.kind === 'ok' ? colors.success : C.red }}>{cfgFlash.text}</div>}
         <div style={{ marginTop: 10, fontSize: 11, color: 'rgba(244,247,250,0.4)', wordBreak: 'break-all' }}>{regLink}</div>
       </Card>
 
@@ -1946,7 +1946,7 @@ function RegistrationsTab({ leagueId, league, registrations, onChanged }) {
                     <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.55)', marginTop: 2 }}>{r.contact_name} · {r.contact_email}</div>
                     <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.45)', marginTop: 4 }}>
                       {r.paid_at
-                        ? <span style={{ color: '#22C55E' }}>✓ Paid {new Date(r.paid_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                        ? <span style={{ color: colors.success }}>✓ Paid {new Date(r.paid_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
                         : (r.fee_cents > 0 ? <span>Unpaid</span> : <span>No fee</span>)}
                       {r.fee_cents != null && r.fee_cents > 0 && <span> · ${(r.fee_cents / 100).toFixed(2)}</span>}
                     </div>
@@ -2063,7 +2063,7 @@ function LeagueSettings({ league, onSave }) {
               <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} disabled={uploadingLogo} />
             </label>
             {form.logo_url && (
-              <button type="button" onClick={() => set('logo_url', '')} style={{ background: 'transparent', border: 'none', color: '#E26B6B', fontSize: 11, cursor: 'pointer', padding: 0 }}>Remove</button>
+              <button type="button" onClick={() => set('logo_url', '')} style={{ background: 'transparent', border: 'none', color: colors.redSoft, fontSize: 11, cursor: 'pointer', padding: 0 }}>Remove</button>
             )}
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -2092,8 +2092,8 @@ function LeagueSettings({ league, onSave }) {
           </Field>
         </Row2>
       </Card>
-      <div style={{ fontSize: 12, color: '#8BA3BE', margin: '4px 0 14px', lineHeight: 1.5 }}>
-        Recap &amp; Game Puck sponsors moved to the <b style={{ color: '#F4F7FA' }}>Sponsors</b> tab.
+      <div style={{ fontSize: 12, color: C.steel, margin: '4px 0 14px', lineHeight: 1.5 }}>
+        Recap &amp; Game Puck sponsors moved to the <b style={{ color: C.ice }}>Sponsors</b> tab.
       </div>
 
       {/* GS-6 — USA Hockey compliant scoresheet (set once here; the scorer's
@@ -2106,8 +2106,8 @@ function LeagueSettings({ league, onSave }) {
             onChange={e => set('usah_compliant_scoresheet', e.target.checked)}
             style={{ width: 20, height: 20, accentColor: C.red, flexShrink: 0, cursor: 'pointer' }} />
           <span style={{ flex: 1 }}>
-            <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: '#F4F7FA' }}>Produce a USA Hockey official scoresheet</span>
-            <span style={{ display: 'block', fontSize: 12, color: '#8BA3BE', marginTop: 2, lineHeight: 1.4 }}>
+            <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: C.ice }}>Produce a USA Hockey official scoresheet</span>
+            <span style={{ display: 'block', fontSize: 12, color: C.steel, marginTop: 2, lineHeight: 1.4 }}>
               Turns on the printed roster, coaches block, game times, and coach + referee signatures. Leave off for non-USA-Hockey play.
             </span>
           </span>

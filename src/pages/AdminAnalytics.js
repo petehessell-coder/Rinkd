@@ -4,6 +4,7 @@ import Layout from '../components/Layout';
 import { loadDailyRollup, loadDAU, loadRecentEvents, loadTopPages, loadGrowthFunnel, loadPilotScorecards } from '../lib/analytics';
 import { useIsRinkdAdmin } from '../lib/userRole';
 import { supabase } from '../lib/supabase';
+import { C, colors } from '../lib/tokens';
 
 // ENRICH-1 follow-on (May 28, 2026): admin dormancy cohorting + recently-active
 // table. Reads profiles.last_seen_at (stamped by App.js touchLastSeen with a
@@ -22,12 +23,6 @@ function humanAgo(ts) {
   if (days < 30) return `${Math.floor(days)}d ago`;
   return `${Math.floor(days / 30)}mo ago`;
 }
-
-const C = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
-  steel: '#8BA3BE', dark: '#07111F', card: '#0f2847', border: 'rgba(46,91,140,0.4)',
-  green: '#22C55E',
-};
 
 const pct = (a, b) => (b > 0 ? `${Math.round((a / b) * 100)}%` : '—');
 
@@ -380,9 +375,9 @@ export default function AdminAnalytics({ currentUser, profile }) {
               let agoColor = C.steel;
               if (p.last_seen_at) {
                 const ageH = (Date.now() - new Date(p.last_seen_at).getTime()) / 3_600_000;
-                if (ageH < 24) agoColor = C.green;
+                if (ageH < 24) agoColor = colors.success;
                 else if (ageH < 24 * 7) agoColor = C.ice;
-                else if (ageH < 24 * 14) agoColor = '#F59E0B';
+                else if (ageH < 24 * 14) agoColor = colors.warning;
                 else agoColor = C.red;
               }
               return (
@@ -410,7 +405,7 @@ export default function AdminAnalytics({ currentUser, profile }) {
               <div key={row.event} style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none' }}>
                 <div style={{ flex: 1, fontSize: 13, color: C.ice, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>{row.event}</div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: C.ice, width: 70, textAlign: 'right' }}>{row.v}</div>
-                <div style={{ fontSize: 11, color: row.delta >= 0 ? C.green : C.red, width: 70, textAlign: 'right' }}>
+                <div style={{ fontSize: 11, color: row.delta >= 0 ? colors.success : C.red, width: 70, textAlign: 'right' }}>
                   {row.delta >= 0 ? '↑' : '↓'} {Math.abs(row.delta)}
                 </div>
               </div>

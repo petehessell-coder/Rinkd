@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { isInAppBrowser } from '../lib/platform';
 import { track } from '../lib/analytics';
-
-const C = { red: '#D72638', ice: '#F4F7FA', steel: '#8BA3BE', amber: '#F59E0B' };
+import { C, colors } from '../lib/tokens';
 
 /**
  * Shown only inside social in-app webviews (Instagram/Facebook/etc.), where
@@ -34,10 +33,10 @@ export default function InAppBrowserNudge() {
 
   return (
     <div role="alert" style={{
-      background: 'rgba(245,158,11,0.12)', border: `1px solid ${C.amber}66`,
+      background: 'rgba(245,158,11,0.12)', border: `1px solid ${colors.warning}66`,
       borderRadius: 12, padding: '12px 14px', marginBottom: 16, fontFamily: "'Barlow', sans-serif",
     }}>
-      <div style={{ fontWeight: 700, color: C.amber, fontSize: 13, marginBottom: 4 }}>
+      <div style={{ fontWeight: 700, color: colors.warning, fontSize: 13, marginBottom: 4 }}>
         Open in your browser to sign up
       </div>
       <div style={{ fontSize: 12.5, color: C.ice, lineHeight: 1.5 }}>
@@ -45,8 +44,8 @@ export default function InAppBrowserNudge() {
         Tap the <strong>•••</strong> menu at the top and choose <strong>“Open in browser”</strong> (Safari / Chrome) — or copy the link:
       </div>
       <button onClick={copyLink} style={{
-        marginTop: 10, padding: '8px 16px', borderRadius: 999, border: `1px solid ${C.amber}`,
-        background: 'transparent', color: C.amber, fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+        marginTop: 10, padding: '8px 16px', borderRadius: 999, border: `1px solid ${colors.warning}`,
+        background: 'transparent', color: colors.warning, fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
         fontFamily: 'inherit',
       }}>
         {copied ? 'Copied ✓ — paste in Safari/Chrome' : 'Copy rinkd.app'}

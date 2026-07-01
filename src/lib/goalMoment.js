@@ -24,6 +24,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { prefersReducedMotion } from './motion';
 import { haptics } from './haptics';
 import { playGoalHorn } from './sound';
+import { colors } from './tokens';
 
 // -----------------------------------------------------------------------------
 // Keyframes — injected once. Each has a reduced-motion no-op override.
@@ -106,7 +107,7 @@ export function useGoalMoment(homeScore, awayScore, { enabled = true, ready = tr
 // hidden card. Renders the raking light bar + a GOAL! flare. No-op under reduced
 // motion (returns the static container so layout never shifts). Pointer-through.
 // -----------------------------------------------------------------------------
-export function GoalSweep({ side = 'home', label = 'GOAL!', accent = '#D72638' }) {
+export function GoalSweep({ side = 'home', label = 'GOAL!', accent = colors.red }) {
   ensureGoalKeyframes();
   const reduced = prefersReducedMotion();
   if (reduced) return null;

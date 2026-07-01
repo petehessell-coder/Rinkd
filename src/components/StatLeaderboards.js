@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import ShareButton from './ShareButton';
 import { buildStatCardData } from '../lib/shareCard';
+import { C } from '../lib/tokens';
 
 // Phase-1 review-only stat leaderboards (skaters + goalies), jersey-keyed.
 // Shared by the Tournament and League pages via the `source` prop:
@@ -26,9 +27,9 @@ const RPC = {
   league: { skater: 'get_league_skater_stats', goalie: 'get_league_goalie_stats', arg: 'p_league_id' },
 };
 
-const C = {
-  card: '#0f2847', cardHdr: '#152e54',
-  text: '#F4F7FA', dim: 'rgba(244,247,250,0.5)', dim2: 'rgba(244,247,250,0.65)',
+const localC = {
+  cardHdr: '#152e54',
+  dim: 'rgba(244,247,250,0.5)', dim2: 'rgba(244,247,250,0.65)',
   faint: 'rgba(244,247,250,0.3)', line: 'rgba(244,247,250,0.06)',
 };
 
@@ -52,7 +53,7 @@ function StatTable({ rows, accent, idLabel, renderId, cols, rowKey, showRank = t
         <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 'max-content', tableLayout: 'auto' }}>
           <thead>
             <tr style={{ background: 'rgba(46,91,140,0.2)', fontSize: 10, fontWeight: 700, color: 'rgba(244,247,250,0.35)', textTransform: 'uppercase' }}>
-              <th style={{ position: 'sticky', left: 0, zIndex: 2, background: C.cardHdr, boxShadow: '4px 0 6px -4px rgba(0,0,0,0.4)', textAlign: 'left', padding: '8px 10px', minWidth: idMin, maxWidth: idMax }}>{idLabel}</th>
+              <th style={{ position: 'sticky', left: 0, zIndex: 2, background: localC.cardHdr, boxShadow: '4px 0 6px -4px rgba(0,0,0,0.4)', textAlign: 'left', padding: '8px 10px', minWidth: idMin, maxWidth: idMax }}>{idLabel}</th>
               {cols.map(c => (
                 <th key={c.key} style={{ textAlign: 'center', padding: '8px 4px', width: midCellW, minWidth: midCellW }}>{c.label}</th>
               ))}
@@ -60,7 +61,7 @@ function StatTable({ rows, accent, idLabel, renderId, cols, rowKey, showRank = t
           </thead>
           <tbody>
             {rows.map((row, i) => (
-              <tr key={rowKey ? rowKey(row, i) : (row.team_id + ':' + row.jersey_number)} style={{ borderTop: '0.5px solid ' + C.line }}>
+              <tr key={rowKey ? rowKey(row, i) : (row.team_id + ':' + row.jersey_number)} style={{ borderTop: '0.5px solid ' + localC.line }}>
                 <td style={{ position: 'sticky', left: 0, zIndex: 1, background: C.card, boxShadow: '4px 0 6px -4px rgba(0,0,0,0.4)', padding: '9px 10px', minWidth: idMin, maxWidth: idMax }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
                     {showRank && <span style={{ width: 18, height: 18, borderRadius: '50%', background: i === 0 ? accent : 'rgba(244,247,250,0.1)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>}
@@ -69,7 +70,7 @@ function StatTable({ rows, accent, idLabel, renderId, cols, rowKey, showRank = t
                   </div>
                 </td>
                 {cols.map(c => (
-                  <td key={c.key} style={{ fontSize: 11, textAlign: 'center', color: c.strong ? C.text : C.dim2, fontWeight: c.strong ? 700 : 400, padding: '9px 4px', width: midCellW, minWidth: midCellW, fontVariantNumeric: 'tabular-nums' }}>
+                  <td key={c.key} style={{ fontSize: 11, textAlign: 'center', color: c.strong ? C.ice : localC.dim2, fontWeight: c.strong ? 700 : 400, padding: '9px 4px', width: midCellW, minWidth: midCellW, fontVariantNumeric: 'tabular-nums' }}>
                     {c.render(row)}
                   </td>
                 ))}
@@ -110,14 +111,14 @@ function ArchivedStats({ archived, accent }) {
 
   const renderPlayerId = (r) => (
     <>
-      <div style={{ fontSize: 12, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
-      <div style={{ fontSize: 10, color: C.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
+      <div style={{ fontSize: 10, color: localC.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {r.number != null && r.number !== '' ? `#${r.number} · ${r.team}` : r.team}
       </div>
     </>
   );
   const renderTeamId = (r) => (
-    <div style={{ fontSize: 12, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.team}</div>
+    <div style={{ fontSize: 12, fontWeight: 600, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.team}</div>
   );
 
   const skaterCols = [
@@ -162,7 +163,7 @@ function ArchivedStats({ archived, accent }) {
           rowKey={(r) => r.team} />
       )}
 
-      <div style={{ fontSize: 10.5, color: C.faint, marginTop: 10, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 10.5, color: localC.faint, marginTop: 10, lineHeight: 1.5 }}>
         Final {archived.label} season totals, imported from the league’s prior stats system{archived.source ? ` (${archived.source})` : ''}{archived.as_of ? `, as of ${archived.as_of}` : ''}.
       </div>
     </div>
@@ -173,9 +174,9 @@ function ArchivedStats({ archived, accent }) {
 // the jersey-keyed RPC boards would be empty. Instead we embed GameSheet's own
 // player/goalie stats widget, recolored + branding-stripped — accurate, zero
 // ingestion. Fails soft to an external link if the frame doesn't load.
-function GameSheetStatsEmbed({ seasonId, accent = '#D72638' }) {
+function GameSheetStatsEmbed({ seasonId, accent = C.red }) {
   const [view, setView] = useState('players');
-  const hex = String(accent || '#D72638').replace('#', '');
+  const hex = String(accent || C.red).replace('#', '');
   const base = `https://gamesheetstats.com/seasons/${encodeURIComponent(seasonId)}/${view}`;
   const src = `${base}?configuration[logo]=false&configuration[navigation]=false&configuration[primary-colour]=${hex}`;
   const Tab = ({ tid, label }) => (
@@ -198,7 +199,7 @@ function GameSheetStatsEmbed({ seasonId, accent = '#D72638' }) {
         src={src}
         style={{ width: '100%', height: 640, border: '0.5px solid rgba(46,91,140,0.4)', borderRadius: 12, background: '#fff' }}
       />
-      <div style={{ fontSize: 11, color: C.faint, marginTop: 8, display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+      <div style={{ fontSize: 11, color: localC.faint, marginTop: 8, display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
         <span>Stats synced live from GameSheet.</span>
         <a href={base} target="_blank" rel="noreferrer" style={{ color: accent, fontWeight: 700 }}>Open on GameSheet ↗</a>
       </div>
@@ -206,7 +207,7 @@ function GameSheetStatsEmbed({ seasonId, accent = '#D72638' }) {
   );
 }
 
-export default function StatLeaderboards({ source = 'tournament', id, divisionId = null, accent = '#D72638', archived = null, gamesheetSeasonId = null, shareMeta = null, revealNames = false }) {
+export default function StatLeaderboards({ source = 'tournament', id, divisionId = null, accent = C.red, archived = null, gamesheetSeasonId = null, shareMeta = null, revealNames = false }) {
   const cfg = RPC[source] || RPC.tournament;
   const [view, setView] = useState('skaters');
   const [season, setSeason] = useState('current'); // 'current' | 'archive'
@@ -270,7 +271,7 @@ export default function StatLeaderboards({ source = 'tournament', id, divisionId
   }
 
   if (loading) {
-    return <div style={{ textAlign: 'center', color: C.faint, fontSize: 13, paddingTop: 40 }}>Loading stats…</div>;
+    return <div style={{ textAlign: 'center', color: localC.faint, fontSize: 13, paddingTop: 40 }}>Loading stats…</div>;
   }
 
   const SeasonBar = hasArchive ? (
@@ -295,7 +296,7 @@ export default function StatLeaderboards({ source = 'tournament', id, divisionId
     return (
       <div>
         {SeasonBar}
-        <div style={{ textAlign: 'center', color: C.faint, fontSize: 13, paddingTop: 40 }}>
+        <div style={{ textAlign: 'center', color: localC.faint, fontSize: 13, paddingTop: 40 }}>
           Couldn't load stats.{' '}
           <button onClick={load} style={{ background: 'transparent', border: 'none', color: accent, fontWeight: 700, cursor: 'pointer' }}>Retry</button>
         </div>
@@ -307,7 +308,7 @@ export default function StatLeaderboards({ source = 'tournament', id, divisionId
     return (
       <div>
         {SeasonBar}
-        <div style={{ textAlign: 'center', color: C.faint, fontSize: 13, paddingTop: 40 }}>Player and goalie stats appear here as games go final.</div>
+        <div style={{ textAlign: 'center', color: localC.faint, fontSize: 13, paddingTop: 40 }}>Player and goalie stats appear here as games go final.</div>
       </div>
     );
   }
@@ -345,15 +346,15 @@ export default function StatLeaderboards({ source = 'tournament', id, divisionId
       const jersey = r.jersey_number != null ? `#${r.jersey_number}` : (r.team_name || '—');
       return (
         <>
-          <div style={{ fontSize: 12, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{jersey}</div>
-          <div style={{ fontSize: 10, color: C.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.team_name || ''}</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{jersey}</div>
+          <div style={{ fontSize: 10, color: localC.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.team_name || ''}</div>
         </>
       );
     }
     return (
       <>
-        <div style={{ fontSize: 12, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.player_name || r.goalie_name}</div>
-        <div style={{ fontSize: 10, color: C.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.player_name || r.goalie_name}</div>
+        <div style={{ fontSize: 10, color: localC.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {r.jersey_number != null ? `#${r.jersey_number} · ${r.team_name}` : r.team_name}
         </div>
       </>
@@ -409,16 +410,16 @@ export default function StatLeaderboards({ source = 'tournament', id, divisionId
       {view === 'skaters' && (
         hasSkaters
           ? <StatTable rows={skaters} accent={accent} idLabel="Player" renderId={renderRowId} cols={skaterCols} action={skaterShare} />
-          : <div style={{ textAlign: 'center', color: C.faint, fontSize: 13, paddingTop: 30 }}>No skater scoring logged yet.</div>
+          : <div style={{ textAlign: 'center', color: localC.faint, fontSize: 13, paddingTop: 30 }}>No skater scoring logged yet.</div>
       )}
 
       {view === 'goalies' && (
         hasGoalies
           ? <>
               <StatTable rows={goalies} accent={accent} idLabel="Goalie" renderId={renderRowId} cols={goalieCols} action={goalieShare} />
-              <div style={{ fontSize: 10.5, color: C.faint, marginTop: 10, lineHeight: 1.5 }}>{goalieFootnote}</div>
+              <div style={{ fontSize: 10.5, color: localC.faint, marginTop: 10, lineHeight: 1.5 }}>{goalieFootnote}</div>
             </>
-          : <div style={{ textAlign: 'center', color: C.faint, fontSize: 13, paddingTop: 30 }}>No goalie stats yet — needs a finalized game with a goalie on the roster.</div>
+          : <div style={{ textAlign: 'center', color: localC.faint, fontSize: 13, paddingTop: 30 }}>No goalie stats yet — needs a finalized game with a goalie on the roster.</div>
       )}
     </div>
   );

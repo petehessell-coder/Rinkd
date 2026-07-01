@@ -4,6 +4,7 @@ import PuckMark from './PuckMark';
 import { loadGamePuckCardData } from '../lib/gameCardData';
 import { prefersReducedMotion } from '../lib/motion';
 import { haptics } from '../lib/haptics';
+import { C } from '../lib/tokens';
 
 // GAMEPUCK-2 — the "peel the tape" reveal. A settled Game Puck winner sits UNDER
 // a strip of worn hockey tape; you grab the loose end and drag across to peel it
@@ -32,10 +33,9 @@ import { haptics } from '../lib/haptics';
 //   onClose()                     dismiss the modal
 //   onRevealed()                  called once when the peel completes
 
-const C = {
-  card: '#0f2847', ice: '#F4F7FA', border: 'rgba(46,91,140,0.4)',
-  dim: 'rgba(244,247,250,0.6)', faint: 'rgba(244,247,250,0.35)',
-};
+// Local drift: no exact token match, kept inline per migration rules.
+const GPR_DIM = 'rgba(244,247,250,0.6)';
+const GPR_FAINT = 'rgba(244,247,250,0.35)';
 const RIP_AT = 0.7;            // fraction peeled before it auto-finishes
 const HAPTIC_STEPS = 8;        // "ticks per wrap" as the tape lifts
 
@@ -110,7 +110,7 @@ function ensureConfettiKeyframes() {
 }
 function Confetti({ seed = 0 }) {
   ensureConfettiKeyframes();
-  const COLORS = ['#D72638', '#F4F7FA', '#8BA3BE', '#F5B301', '#2E5B8C'];
+  const COLORS = [C.red, C.ice, C.steel, '#F5B301', C.blue];
   // Deterministic pseudo-random from an index (Math.random is fine in the app,
   // but a seed keeps the burst stable across re-renders within its short life).
   const rnd = (i, salt) => {
@@ -150,7 +150,7 @@ function Confetti({ seed = 0 }) {
 
 export default function GamePuckReveal({
   gameId, kind, result, teamName = null,
-  winnerPucks = 0, accent = '#D72638', onClose, onRevealed,
+  winnerPucks = 0, accent = C.red, onClose, onRevealed,
 }) {
   const stageRef = useRef(null);
   const draggingRef = useRef(false);
@@ -268,9 +268,9 @@ export default function GamePuckReveal({
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.ice }}>
             <PuckMark size={20} />
-            <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: C.dim }}>Game Puck</span>
+            <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: GPR_DIM }}>Game Puck</span>
           </div>
-          <button onClick={onClose} aria-label="Close" style={{ background: 'transparent', border: 'none', color: C.faint, fontSize: 22, lineHeight: 1, cursor: 'pointer', padding: 4 }}>×</button>
+          <button onClick={onClose} aria-label="Close" style={{ background: 'transparent', border: 'none', color: GPR_FAINT, fontSize: 22, lineHeight: 1, cursor: 'pointer', padding: 4 }}>×</button>
         </div>
 
         {/* The stage: winner underneath, tape on top. */}
@@ -296,7 +296,7 @@ export default function GamePuckReveal({
             background: `radial-gradient(120% 90% at 50% 18%, rgba(215,38,56,0.28), rgba(15,40,71,0) 55%), linear-gradient(180deg, rgba(11,31,58,0.55) 0%, rgba(11,31,58,0.82) 100%), url('/recap-card-bg3.jpg') center/cover no-repeat, ${C.card}`,
             backgroundColor: C.card,
           }}>
-            <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: '0.2em', color: C.faint, textTransform: 'uppercase' }}>Fans’ Pick</div>
+            <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: '0.2em', color: GPR_FAINT, textTransform: 'uppercase' }}>Fans’ Pick</div>
             <div style={{
               transform: done ? 'scale(1)' : 'scale(0.94)', opacity: done ? 1 : 0.0,
               transition: done ? 'transform 0.5s cubic-bezier(.18,1.3,.4,1) 0.05s, opacity 0.35s ease 0.05s' : 'none',
@@ -310,10 +310,10 @@ export default function GamePuckReveal({
             }}>
               <div style={{ fontSize: 36, fontWeight: 900, fontStyle: 'italic', fontFamily: "'Barlow Condensed', sans-serif", color: C.ice, lineHeight: 1.02 }}>
                 {name || `#${jersey}`}
-                {name != null && <span style={{ marginLeft: 10, fontSize: 24, fontWeight: 700, fontStyle: 'normal', color: C.dim }}>#{jersey}</span>}
+                {name != null && <span style={{ marginLeft: 10, fontSize: 24, fontWeight: 700, fontStyle: 'normal', color: GPR_DIM }}>#{jersey}</span>}
               </div>
-              {teamName && <div style={{ fontSize: 18, fontWeight: 600, color: C.dim, marginTop: 5 }}>{teamName}</div>}
-              <div style={{ fontSize: 14, color: C.faint, marginTop: 9 }}>
+              {teamName && <div style={{ fontSize: 18, fontWeight: 600, color: GPR_DIM, marginTop: 5 }}>{teamName}</div>}
+              <div style={{ fontSize: 14, color: GPR_FAINT, marginTop: 9 }}>
                 {votes} of {totalVotes} {totalVotes === 1 ? 'vote' : 'votes'}
                 {winnerPucks > 1 && <span style={{ marginLeft: 8, color: accent, fontWeight: 800 }}>· {winnerPucks}× Game Puck</span>}
               </div>
@@ -425,13 +425,13 @@ export default function GamePuckReveal({
               <ShareButton gameId={gameId} isLeague={kind === 'league'} cardType="gamepuck" variant="solid" label="Share"
                 getCard={() => loadGamePuckCardData(gameId, kind === 'league')} />
               <button onClick={onClose} style={{
-                background: 'transparent', color: C.dim, border: `1px solid ${C.border}`, borderRadius: 999,
+                background: 'transparent', color: GPR_DIM, border: `1px solid ${C.border}`, borderRadius: 999,
                 padding: '10px 20px', cursor: 'pointer', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 600,
               }}>Done</button>
             </>
           )}
         </div>
-        <div style={{ textAlign: 'center', fontSize: 10.5, color: C.faint, marginTop: 8 }}>
+        <div style={{ textAlign: 'center', fontSize: 10.5, color: GPR_FAINT, marginTop: 8 }}>
           Fan vote — separate from any team or league award.
         </div>
       </div>

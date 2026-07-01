@@ -1,5 +1,6 @@
 import React from 'react';
 import { isChunkLoadError, reloadOnceForChunk } from '../lib/chunkReload';
+import { C } from '../lib/tokens';
 
 /**
  * Top-level error boundary. Without this, any uncaught render error blanks
@@ -68,27 +69,27 @@ export default class ErrorBoundary extends React.Component {
     if (this.state.isChunk) {
       return (
         <div style={{
-          minHeight: '100vh', background: '#07111F', color: '#8BA3BE',
+          minHeight: '100vh', background: C.dark, color: C.steel,
           fontFamily: 'Barlow, sans-serif', display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center', gap: 14,
         }}>
           <div style={{ fontSize: 40 }}>🏒</div>
-          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 20, color: '#F4F7FA', textTransform: 'uppercase' }}>Updating to the latest version…</div>
-          <button onClick={this.handleReload} style={{ background: 'transparent', color: '#8BA3BE', border: '1px solid rgba(46,91,140,0.4)', borderRadius: 999, padding: '8px 18px', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Reload now</button>
+          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 20, color: C.ice, textTransform: 'uppercase' }}>Updating to the latest version…</div>
+          <button onClick={this.handleReload} style={{ background: 'transparent', color: C.steel, border: `1px solid ${C.border}`, borderRadius: 999, padding: '8px 18px', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Reload now</button>
         </div>
       );
     }
     const isProd = window.location.hostname === 'rinkd.app' || window.location.hostname === 'www.rinkd.app';
     return (
       <div style={{
-        minHeight: '100vh', background: '#07111F', color: '#F4F7FA',
+        minHeight: '100vh', background: C.dark, color: C.ice,
         fontFamily: 'Barlow, sans-serif',
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         padding: 24, textAlign: 'center',
       }}>
         <div style={{
-          maxWidth: 480, background: '#0f2847',
-          border: '1px solid rgba(46,91,140,0.4)', borderRadius: 16,
+          maxWidth: 480, background: C.card,
+          border: `1px solid ${C.border}`, borderRadius: 16,
           padding: 32,
         }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>🏒</div>
@@ -98,15 +99,15 @@ export default class ErrorBoundary extends React.Component {
           }}>
             Something hit the boards
           </div>
-          <div style={{ fontSize: 14, color: '#8BA3BE', lineHeight: 1.55, marginBottom: 20 }}>
+          <div style={{ fontSize: 14, color: C.steel, lineHeight: 1.55, marginBottom: 20 }}>
             Rinkd hit an unexpected error. Try reloading — usually that's enough.
-            If it keeps happening, drop a note to <a href="mailto:hello@rinkd.app" style={{ color: '#F4F7FA', textDecoration: 'underline' }}>hello@rinkd.app</a> and we'll take a look.
+            If it keeps happening, drop a note to <a href="mailto:hello@rinkd.app" style={{ color: C.ice, textDecoration: 'underline' }}>hello@rinkd.app</a> and we'll take a look.
           </div>
           {!isProd && this.state.error && (
             <div style={{
               fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-              fontSize: 11, color: '#D72638',
-              background: '#07111F', border: '1px solid rgba(215,38,56,0.3)',
+              fontSize: 11, color: C.red,
+              background: C.dark, border: '1px solid rgba(215,38,56,0.3)',
               padding: 10, borderRadius: 8, textAlign: 'left',
               marginBottom: 16, overflow: 'auto', maxHeight: 200,
             }}>
@@ -118,7 +119,7 @@ export default class ErrorBoundary extends React.Component {
           )}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button onClick={this.handleReload} style={{
-              background: '#D72638', color: '#fff', border: 'none',
+              background: C.red, color: '#fff', border: 'none',
               padding: '11px 22px', borderRadius: 999, cursor: 'pointer',
               fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic',
               fontSize: 14, letterSpacing: '0.05em', textTransform: 'uppercase',
@@ -126,8 +127,8 @@ export default class ErrorBoundary extends React.Component {
               Reload Rinkd
             </button>
             <button onClick={this.handleSignOut} style={{
-              background: 'transparent', color: '#F4F7FA',
-              border: '1px solid rgba(46,91,140,0.4)',
+              background: 'transparent', color: C.ice,
+              border: `1px solid ${C.border}`,
               padding: '11px 22px', borderRadius: 999, cursor: 'pointer',
               fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 600,
             }}>

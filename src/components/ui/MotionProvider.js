@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { useReducedMotion, ensureMotionKeyframes } from '../../lib/motion';
-import { motion } from '../../lib/tokens';
+import { colors, motion } from '../../lib/tokens';
 
 // =============================================================================
 // MotionProvider + useExpand — a shared-element-style "card opens into the
@@ -24,7 +24,7 @@ export function MotionProvider({ children }) {
   useEffect(() => { ensureMotionKeyframes(); }, []);
 
   const expandFrom = useCallback((rect, bg, radius) => {
-    setLayer({ rect, bg: bg || '#162f55', radius: radius == null ? 12 : radius });
+    setLayer({ rect, bg: bg || colors.surfaceElevated, radius: radius == null ? 12 : radius });
   }, []);
 
   return (

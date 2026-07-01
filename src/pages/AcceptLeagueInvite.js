@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../lib/authContext';
 import { acceptLeagueManagerInvite } from '../lib/leagueManagers';
+import { C } from '../lib/tokens';
 
 // /accept-league-invite?token=<hex>
 //
@@ -12,11 +13,6 @@ import { acceptLeagueManagerInvite } from '../lib/leagueManagers';
 //   2. Signed in, token valid → call accept RPC, redirect to /league/:id
 //   3. Signed in, token invalid/expired/already-used/wrong-email → show
 //      the precise error from the RPC + a back-to-feed button.
-
-const C = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
-  steel: '#8BA3BE', dark: '#07111F', card: '#0f2847', border: 'rgba(46,91,140,0.4)',
-};
 
 export default function AcceptLeagueInvite({ profile }) {
   const navigate = useNavigate();

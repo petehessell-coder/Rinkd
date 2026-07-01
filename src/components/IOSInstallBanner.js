@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { RinkdLogo } from './Logos';
 import { track } from '../lib/analytics';
 import { detectPlatform, detectStandalone } from '../lib/platform';
+import { C } from '../lib/tokens';
 
 const B = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
-  ice: '#F4F7FA', steel: '#8BA3BE', card: '#112236', border: '#1E3A5C',
+  navy: C.navy, blue: C.blue, red: C.red,
+  ice: C.ice, steel: C.steel, card: '#112236', border: '#1E3A5C',
 };
 
 const VISIT_KEY = 'rinkd_visit_count';

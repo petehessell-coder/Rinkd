@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getLineup } from '../lib/lineups';
 import LineupModal from './LineupModal';
-
-const C = { navy: '#0B1F3A', ice: '#E8F0F8', red: '#D72638', blue: '#2E5B8C', green: '#1A7A4A' };
+import { C } from '../lib/tokens';
 
 /**
  * Prominent, stateful "set your lines" CTA for one scheduled game.

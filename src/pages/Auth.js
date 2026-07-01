@@ -8,11 +8,7 @@ import HelpButton from '../components/HelpButton';
 import { Icon } from '../components/ui';
 import DownloadCTA from '../components/DownloadCTA';
 import TurnstileWidget, { isTurnstileEnabled } from '../components/TurnstileWidget';
-
-const C = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
-  steel: '#8BA3BE', dark: '#07111F', card: '#112236', border: '#1E3A5C',
-};
+import { C } from '../lib/tokens';
 
 // ONBOARD-1 (May 28, 2026): POSITIONS / LEVELS removed from the signup gate —
 // the wizard collapsed to a single step (email + password + DOB + Turnstile +

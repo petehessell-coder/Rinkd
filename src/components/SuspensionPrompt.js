@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { C, colors } from '../lib/tokens';
 
 // GS-2 — the modal ScorerView raises right after a Game Misconduct / Match
 // Penalty is logged. Filing is a deliberate second step (the penalty is
@@ -9,15 +10,10 @@ import React, { useState } from 'react';
 // The parent owns the actual write (onFile goes through GS-1's queuedWrite so
 // a rink-side filing is offline-safe) — this component is pure UI.
 
-const C = {
-  navy: '#0B1F3A', red: '#D72638', ice: '#F4F7FA',
-  border: 'rgba(46,91,140,0.4)', amber: '#F59E0B',
-};
-
 const inputStyle = {
-  width: '100%', boxSizing: 'border-box', background: '#07111F',
+  width: '100%', boxSizing: 'border-box', background: C.dark,
   border: '0.5px solid rgba(46,91,140,0.4)', borderRadius: 8, padding: '10px 12px',
-  color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', fontSize: 14, outline: 'none',
+  color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 14, outline: 'none',
 };
 
 // Picker value → the row we file. 'indefinite' uses games_remaining=0 as the
@@ -52,7 +48,7 @@ export default function SuspensionPrompt({ penalty, playerLabel, teamName, busy,
             <button key={l.key} onClick={() => setPicked(l.key)}
               style={{
                 padding: '11px 0',
-                border: `1px solid ${picked === l.key ? C.amber : C.border}`,
+                border: `1px solid ${picked === l.key ? colors.warning : C.border}`,
                 background: picked === l.key ? 'rgba(245,158,11,0.18)' : 'rgba(46,91,140,0.15)',
                 color: C.ice, borderRadius: 10, fontSize: 12, fontWeight: 700,
                 cursor: 'pointer', fontFamily: 'Barlow, sans-serif',
