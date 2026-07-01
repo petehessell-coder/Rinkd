@@ -42,6 +42,19 @@ import { prefetchGamePage, prefetchHandlers } from '../lib/prefetch';
 import { staggerStyle } from '../lib/motion';
 const TABS = ['Schedule', 'Standings', 'Stats', 'Teams', 'Feed', 'Gallery', 'Info'];
 
+// S04: tabs are deep-linkable. ?tab= is read once on mount (validated against
+// TABS, case-insensitive); writes go through setSearchParams (see selectTab in
+// the component) so the router-owned ?division= param and ?tab= coexist.
+// { replace: true } = no history entry per tab; Back leaves the page in one
+// tap. trackPage strips query strings, so the param never pollutes analytics.
+function initialTabFromUrl(fallback) {
+  try {
+    const t = new URLSearchParams(window.location.search).get('tab') || '';
+    return TABS.find((x) => x.toLowerCase() === t.toLowerCase()) || fallback;
+  } catch { return fallback; }
+}
+
+
 // Broadcast lower-third section header — white Barlow Condensed 700 italic caps
 // on solid navy (#0f2847), bleeding to the content column's left edge (content
 // padding is 16px) with a red accent slab. Optional muted `sub`.
@@ -237,7 +250,7 @@ export default function LeaguePage({ currentUser, profile }) {
   const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState('Schedule');
+  const [activeTab, setActiveTab] = useState(() => initialTabFromUrl('Schedule'));
   const [showAll, setShowAll] = useState(false);
   const [subscribeOpen, setSubscribeOpen] = useState(false);
   // Additional commissioner granted via league_roles — mirror of the
@@ -429,6 +442,17 @@ export default function LeaguePage({ currentUser, profile }) {
     const { error: followErr } = await followLeague(currentUser.id, id);
     setFollowBusy(false);
     if (!followErr) { setIsFollowing(true); track('league_subscribed', { league_id: id }); }
+  };
+
+  // S04: switch tab + reflect it in the URL through react-router (NOT a raw
+  // replaceState — this page also writes ?division= via setSearchParams, and
+  // the router rebuilds the URL from its own snapshot, which a bare
+  // replaceState never updates; the next division switch would drop ?tab=).
+  const selectTab = (tab) => {
+    setActiveTab(tab);
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', tab.toLowerCase());
+    setSearchParams(next, { replace: true });
   };
 
   // Switch division + reflect it in the URL (shareable link + reload-safe).
@@ -676,7 +700,7 @@ export default function LeaguePage({ currentUser, profile }) {
             {TABS.map(tab => {
               const on = activeTab === tab;
               return (
-                <button key={tab} onClick={() => setActiveTab(tab)}
+                <button key={tab} onClick={() => selectTab(tab)}
                   style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 700, fontSize: 15, letterSpacing: '0.04em', textTransform: 'uppercase', padding: '10px 14px', minHeight: 44, display: 'inline-flex', alignItems: 'center', background: 'transparent', border: 'none', borderBottom: on ? `3px solid ${accent}` : '3px solid transparent', marginBottom: -1, cursor: 'pointer', whiteSpace: 'nowrap', color: on ? C.ice : C.steel, transition: 'color 0.15s' }}>
                   {tab}
                 </button>

@@ -154,8 +154,8 @@ export default function Layout({ children, profile }) {
           }}
           onMouseEnter={e => { if (!isVertical) e.currentTarget.style.background = B.border + '66'; }}
           onMouseLeave={e => { if (!isVertical) e.currentTarget.style.background = 'transparent'; }}>
-          <span style={{ fontSize: isVertical ? 20 : size, lineHeight: 1, fontWeight: 700 }}>⋯</span>
-          <span>More</span>
+          <NavIcon item={item} size={size} />
+          <span style={{ whiteSpace: 'nowrap' }}>More</span>
         </button>
       );
     }
