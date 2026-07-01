@@ -4,6 +4,9 @@ import { Avatar } from './Logos';
 import { searchMentionable, HANDLE_RE } from '../lib/mentions';
 import { C } from '../lib/tokens';
 
+// Preserved local drift (C01): dropdown border ran alpha .5 vs the token's .4.
+const LOCAL_BORDER = 'rgba(46,91,140,0.5)';
+
 // Find the @token the caret is currently sitting inside (if any). Returns the
 // partial query (without '@') and the index of the '@' so we can splice a
 // resolved handle back in. Only triggers after a word boundary so emails and
@@ -129,7 +132,7 @@ export function MentionInput({
       {showMenu && (
         <div style={{
           position: 'absolute', left: 0, right: 0, top: '100%', zIndex: 40, marginTop: 4,
-          background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden',
+          background: C.card, border: `1px solid ${LOCAL_BORDER}`, borderRadius: 10, overflow: 'hidden',
           boxShadow: '0 8px 24px rgba(0,0,0,0.4)', maxHeight: 240, overflowY: 'auto',
         }}>
           {results.map((p, i) => (

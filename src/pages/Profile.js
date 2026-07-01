@@ -394,7 +394,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
         <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 26, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
           This profile is private
         </div>
-        <div style={{ marginTop: 12, fontSize: 14, lineHeight: 1.5, color: C.muted, fontFamily: "'Barlow', sans-serif" }}>
+        <div style={{ marginTop: 12, fontSize: 14, lineHeight: 1.5, color: colors.muted, fontFamily: "'Barlow', sans-serif" }}>
           Young players don’t have public profiles on Rinkd. Their stats show up on their team and game pages — by jersey number — never as a browsable profile.
         </div>
         <button onClick={() => navigate(-1)} style={{ marginTop: 24, minHeight: 44, padding: '0 24px', borderRadius: 999, border: 'none', background: C.red, color: '#fff', fontWeight: 700, fontSize: 15, fontFamily: "'Barlow', sans-serif", cursor: 'pointer' }}>

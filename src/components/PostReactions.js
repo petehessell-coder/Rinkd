@@ -3,6 +3,11 @@ import { REACTION_EMOJIS, toggleReaction } from '../lib/reactions';
 import { haptics } from '../lib/haptics';
 import { C } from '../lib/tokens';
 
+// Preserved local drift (C01): the "mine" chip border is the bright sky-blue
+// matching its rgba(91,159,226,...) fill, and borders here run a hair heavier
+// (alpha .5) than the token (.4). Kept pixel-identical; drift pass may revisit.
+const LOCAL = { blue: '#5B9FE2', border: 'rgba(46,91,140,0.5)' };
+
 // Inject the reaction micro-interaction keyframes once (the app styles inline,
 // so there's no global stylesheet to drop these in). `rinkdReactPop` springs
 // the tapped emoji; `rinkdReactFloat` lofts a ghost copy up + away for a beat.
@@ -107,7 +112,7 @@ export default function PostReactions({ postId, currentUserId, initial }) {
               display: 'inline-flex', alignItems: 'center', gap: 4,
               padding: '2px 8px', borderRadius: 999,
               background: mine ? 'rgba(91,159,226,0.22)' : 'rgba(11,31,58,0.6)',
-              border: `1px solid ${mine ? C.blue : C.border}`,
+              border: `1px solid ${mine ? LOCAL.blue : LOCAL.border}`,
               color: C.ice, fontSize: 12, lineHeight: 1.4,
               cursor: currentUserId ? 'pointer' : 'default',
               fontFamily: "'Barlow', sans-serif",
@@ -132,7 +137,7 @@ export default function PostReactions({ postId, currentUserId, initial }) {
           style={{
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
             width: 44, height: 44, borderRadius: 999,
-            background: 'rgba(11,31,58,0.6)', border: `1px solid ${C.border}`,
+            background: 'rgba(11,31,58,0.6)', border: `1px solid ${LOCAL.border}`,
             color: C.steel, fontSize: 15, cursor: 'pointer', padding: 0, fontWeight: 700,
           }}>
           ＋
@@ -143,7 +148,7 @@ export default function PostReactions({ postId, currentUserId, initial }) {
         <div style={{
           position: 'absolute', bottom: '100%', left: 0, marginBottom: 6, zIndex: 60,
           display: 'flex', gap: 4, padding: 6,
-          background: C.card, border: `1px solid ${C.border}`, borderRadius: 999,
+          background: C.card, border: `1px solid ${LOCAL.border}`, borderRadius: 999,
           boxShadow: '0 6px 18px rgba(0,0,0,0.35)',
         }}>
           {REACTION_EMOJIS.map((emoji) => (
