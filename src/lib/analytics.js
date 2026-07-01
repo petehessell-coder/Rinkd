@@ -210,6 +210,29 @@ export async function loadTopPages(limit = 40) {
   return data || [];
 }
 
+/**
+ * PILOT-ANALYTICS Step 3 — the per-pilot scorecard, read from the four
+ * security_invoker views deployed 2026-07-01 (commissioner/admin-gated by the
+ * analytics_events RLS underneath). Each view is grouped by the first-touch
+ * `ref`, so cardinality is tiny (#pilots × #actions) — no pagination needed.
+ * Rows with ref NULL are organic traffic; callers filter/label as they like.
+ * Denominator definitions live in PILOT_SCORECARD_DENOMINATORS.md.
+ */
+export async function loadPilotScorecards() {
+  const [actions, activation, engagement, retention] = await Promise.all([
+    supabase.from('analytics_pilot_actions').select('*'),
+    supabase.from('analytics_pilot_activation').select('*'),
+    supabase.from('analytics_pilot_engagement').select('*'),
+    supabase.from('analytics_pilot_retention').select('*'),
+  ]);
+  return {
+    actions: actions.data || [],
+    activation: activation.data || [],
+    engagement: engagement.data || [],
+    retention: retention.data || [],
+  };
+}
+
 // GROWTH-SHARE-1 P2 — the share → visit → install funnel. Counts the three
 // events over `days` plus a per-card-type share breakdown. Head-count queries
 // (no rows fetched). share_recap fires on every Share (recap/gamepuck/photo);

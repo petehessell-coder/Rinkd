@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { loadDailyRollup, loadDAU, loadRecentEvents, loadTopPages, loadGrowthFunnel } from '../lib/analytics';
+import { loadDailyRollup, loadDAU, loadRecentEvents, loadTopPages, loadGrowthFunnel, loadPilotScorecards } from '../lib/analytics';
 import { useIsRinkdAdmin } from '../lib/userRole';
 import { supabase } from '../lib/supabase';
 
@@ -67,6 +67,9 @@ export default function AdminAnalytics({ currentUser, profile }) {
   const [recent, setRecent] = useState([]);
   const [topPages, setTopPages] = useState([]);
   const [funnel, setFunnel] = useState(null); // GROWTH-SHARE-1 share→visit→install
+  // PILOT-ANALYTICS: the four per-pilot scorecard views + the selected pilot ref.
+  const [pilots, setPilots] = useState(null);
+  const [pilotSel, setPilotSel] = useState(null);
   // ENRICH-1: snapshot of every profile's last_seen_at + handle/name/persona
   // for the cohort tiles + recently-active table below. Sorted server-side
   // so we can also use .slice(0, N) for the visible table without resorting.
@@ -78,7 +81,7 @@ export default function AdminAnalytics({ currentUser, profile }) {
     setLoading(true);
     setError(null);
     try {
-      const [d, u, r, a, tp, gf] = await Promise.all([
+      const [d, u, r, a, tp, gf, ps] = await Promise.all([
         loadDailyRollup(30),
         loadDAU(30),
         loadRecentEvents(80),
@@ -94,8 +97,10 @@ export default function AdminAnalytics({ currentUser, profile }) {
           .limit(20000),
         loadTopPages(40),
         loadGrowthFunnel(30).catch(() => null),
+        loadPilotScorecards().catch(() => null),
       ]);
       setDaily(d); setDau(u); setRecent(r); setTopPages(tp); setFunnel(gf);
+      setPilots(ps);
       setActivity(a?.data || []);
     } catch (e) {
       // Without this catch, the entire useEffect's promise rejects unhandled
@@ -129,6 +134,27 @@ export default function AdminAnalytics({ currentUser, profile }) {
       .map(([event, v]) => ({ event, v, prev: prev[event] || 0, delta: v - (prev[event] || 0) }))
       .sort((a, b) => b.v - a.v);
   }, [daily]);
+
+  // PILOT-ANALYTICS: distinct non-null pilot refs across the four views. Rows
+  // with ref NULL are organic traffic — excluded; the scorecard is per-pilot.
+  const pilotRefs = useMemo(() => {
+    if (!pilots) return [];
+    const s = new Set();
+    for (const key of ['actions', 'activation', 'engagement', 'retention']) {
+      for (const row of pilots[key] || []) if (row.ref) s.add(row.ref);
+    }
+    return [...s].sort();
+  }, [pilots]);
+  const pilotRef = pilotSel && pilotRefs.includes(pilotSel) ? pilotSel : (pilotRefs[0] || null);
+  const pilotCard = useMemo(() => {
+    if (!pilots || !pilotRef) return null;
+    return {
+      activation: pilots.activation.find((r) => r.ref === pilotRef) || null,
+      engagement: pilots.engagement.find((r) => r.ref === pilotRef) || null,
+      retention: pilots.retention.find((r) => r.ref === pilotRef) || null,
+      actions: pilots.actions.filter((r) => r.ref === pilotRef).sort((a, b) => b.actions - a.actions),
+    };
+  }, [pilots, pilotRef]);
 
   const dauSeries = useMemo(
     () => [...dau].sort((a, b) => a.day.localeCompare(b.day)).map((d) => ({ day: d.day, v: d.dau })),
@@ -227,6 +253,70 @@ export default function AdminAnalytics({ currentUser, profile }) {
             <span style={{ color: C.ice }}>Game Puck <b>{funnel?.byType?.gamepuck ?? 0}</b></span>
             <span style={{ color: C.ice }}>Photo <b>{funnel?.byType?.photo ?? 0}</b></span>
           </div>
+
+          {/* PILOT-ANALYTICS — the Yury scorecard, sliced per pilot by first-touch
+              ?ref cohort (analytics_pilot_* security_invoker views). Activation %
+              here is ÷ signups (the attribution path); the roster-based
+              denominators for full-platform pilots are locked in
+              PILOT_SCORECARD_DENOMINATORS.md and applied at reporting time. */}
+          <div style={{ fontSize: 11, color: C.steel, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 8 }}>
+            Pilot scorecards · by ?ref cohort
+          </div>
+          {pilotRefs.length === 0 ? (
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18, marginBottom: 22, color: C.steel, fontSize: 13, textAlign: 'center' }}>
+              No pilot traffic yet. Hand out <span style={{ color: C.ice, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>rinkd.app/?ref=&lt;pilot&gt;</span> links or QRs — scorecards appear here as signups and social actions land.
+            </div>
+          ) : (
+            <div style={{ marginBottom: 22 }}>
+              {/* Pilot selector chips */}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                {pilotRefs.map((r) => (
+                  <button key={r} onClick={() => setPilotSel(r)}
+                    style={{
+                      background: r === pilotRef ? C.red : C.card,
+                      color: r === pilotRef ? '#fff' : C.steel,
+                      border: `1px solid ${r === pilotRef ? C.red : C.border}`,
+                      borderRadius: 999, padding: '8px 16px', minHeight: 44, cursor: 'pointer',
+                      fontFamily: 'Barlow, sans-serif', fontWeight: 700, fontSize: 13,
+                    }}>
+                    {r}
+                  </button>
+                ))}
+              </div>
+              {/* Scorecard: activation · engagement · retention */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 10 }}>
+                <StatBox label="Signups" value={pilotCard?.activation?.signups ?? 0} sub={`ref: ${pilotRef}`} />
+                <StatBox label="Activation" value={pilotCard?.activation?.activation_pct != null ? `${pilotCard.activation.activation_pct}%` : '—'}
+                  sub={`${pilotCard?.activation?.activated_users ?? 0} followed/joined · ÷ signups · target 40%`} />
+                <StatBox label="Sessions / user" value={pilotCard?.engagement?.avg_sessions_per_user ?? '—'}
+                  sub={`${pilotCard?.engagement?.users_3plus_sessions ?? 0} users with 3+ · target 3+`} />
+                <StatBox label="Action rate" value={pilotCard?.engagement?.action_rate_pct != null ? `${pilotCard.engagement.action_rate_pct}%` : '—'}
+                  sub="≥1 social action · target 50%" />
+                <StatBox label="Week-2 return" value={pilotCard?.retention?.retention_week2_pct != null ? `${pilotCard.retention.retention_week2_pct}%` : '—'}
+                  sub={`cohort of ${pilotCard?.retention?.cohort_size ?? 0} · target 30%`} />
+              </div>
+              {/* Social actions breakdown for the selected pilot */}
+              <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', padding: '8px 14px', borderBottom: `1px solid ${C.border}`, fontSize: 10, color: C.steel, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700 }}>
+                  <span style={{ flex: 1 }}>Social action</span>
+                  <span style={{ width: 70, textAlign: 'right' }}>Count</span>
+                  <span style={{ width: 70, textAlign: 'right' }}>Users</span>
+                </div>
+                {(pilotCard?.actions?.length ?? 0) === 0 ? (
+                  <div style={{ padding: 16, color: C.steel, fontSize: 13, textAlign: 'center' }}>No social actions from this cohort yet.</div>
+                ) : pilotCard.actions.map((row, i) => (
+                  <div key={row.event} style={{ display: 'flex', alignItems: 'center', padding: '9px 14px', borderTop: i ? '1px solid rgba(46,91,140,0.2)' : 'none', fontSize: 13 }}>
+                    <span style={{ flex: 1, minWidth: 0, color: C.ice, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.event}</span>
+                    <span style={{ width: 70, textAlign: 'right', fontWeight: 700, color: C.ice }}>{row.actions}</span>
+                    <span style={{ width: 70, textAlign: 'right', color: C.steel }}>{row.distinct_users}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize: 11, color: C.steel, marginTop: 8 }}>
+                Activation ÷ signups shown here; full-platform pilots (roster-based denominators) are finalized per PILOT_SCORECARD_DENOMINATORS.md before reporting.
+              </div>
+            </div>
+          )}
 
           {/* DAU sparkline */}
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 22 }}>
