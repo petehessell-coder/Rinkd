@@ -604,7 +604,9 @@ export default function TournamentPage({ currentUser }) {
           <img src={tournament.logo_url} alt="" onError={(e)=>{e.currentTarget.style.display='none';}}
             style={{height:38,width:'auto',display:'block',marginBottom:8,borderRadius:6}} />
         )}
-        <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:40,lineHeight:1.02,color:C.ice,textTransform:'uppercase',letterSpacing:'0.01em',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+        {/* Name always shows in FULL — wraps as needed, never ellipsized;
+            responsive size keeps a long name tidy on a narrow phone. */}
+        <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:'clamp(24px, 7vw, 40px)',lineHeight:1.04,color:C.ice,textTransform:'uppercase',letterSpacing:'0.01em',overflowWrap:'anywhere',textShadow:'0 2px 10px rgba(0,0,0,0.6)'}}>
           {(tournament?.name || '').toUpperCase()}
         </div>
         <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',margin:'7px 0 12px'}}>

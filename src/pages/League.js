@@ -594,10 +594,15 @@ export default function LeaguePage({ currentUser, profile }) {
             <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg,#0B1F3A 0%,#1a3a5c 100%)' }} />
           )}
           <div style={{ position: 'relative', padding: '22px 16px 18px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', rowGap: 10 }}>
             <TeamLogo team={league} size={64} radius={12} style={{ boxShadow: '0 4px 18px rgba(0,0,0,0.55)', flexShrink: 0 }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 36, color: C.ice, lineHeight: 1.02, textTransform: 'uppercase', letterSpacing: '0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textShadow: '0 2px 10px rgba(0,0,0,0.6)' }}>{league.name}</div>
+            {/* min width floor so the name keeps a full line and the action
+                buttons wrap BELOW on a narrow phone instead of squeezing it. */}
+            <div style={{ flex: '1 1 auto', minWidth: 180 }}>
+              {/* Name always shows in FULL — wraps to as many lines as it needs
+                  (never ellipsized). Responsive size keeps a long name tidy on
+                  a narrow phone instead of blowing out the hero. */}
+              <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 'clamp(24px, 6.4vw, 36px)', color: C.ice, lineHeight: 1.04, textTransform: 'uppercase', letterSpacing: '0.01em', overflowWrap: 'anywhere', textShadow: '0 2px 10px rgba(0,0,0,0.6)' }}>{league.name}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
                 {statusActive
                   ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: C.red, color: '#fff', fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 700, fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', padding: '3px 11px', borderRadius: 999 }}>● {statusLabel}</span>
@@ -611,6 +616,9 @@ export default function LeaguePage({ currentUser, profile }) {
                 </span>
               )}
             </div>
+            {/* Action buttons grouped so they wrap together below the name on a
+                narrow phone (flexShrink:0 keeps them intact). */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 'auto' }}>
             {/* Follow button — hidden for commissioners (they already get
                 events from their own writes via the live recap path).
                 Mirrors the Tournament.js Follow pattern. */}
@@ -639,6 +647,7 @@ export default function LeaguePage({ currentUser, profile }) {
                 <Icon name="manage" size={14} />Manage
               </button>
             )}
+            </div>{/* /action buttons */}
           </div>
           </div>{/* /hero foreground */}
         </div>{/* /cover hero */}
