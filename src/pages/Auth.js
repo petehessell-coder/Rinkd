@@ -591,7 +591,7 @@ export default function Auth({ defaultMode = 'login' }) {
           .auth-form { width: 100% !important; padding: 40px 28px !important; }
         }
         .auth-cta { transition: transform ${motion.duration.press}ms ease, box-shadow 150ms ease, background 150ms ease; }
-        .auth-cta:active:not(:disabled) { transform: scale(0.97); box-shadow: 0 2px 8px rgba(215,38,56,0.35); }
+        .auth-cta:active:not(:disabled) { transform: scale(0.97); box-shadow: 0 2px 8px rgba(215,38,56,0.35) !important; }
         @media (prefers-reduced-motion: reduce) {
           .auth-cta, .auth-cta:active { transform: none !important; transition: none; }
         }
