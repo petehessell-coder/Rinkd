@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { supabase } from '../lib/supabase';
-import { C, colors, type, radii } from '../lib/tokens';
+import { C, colors, type, radii, motion } from '../lib/tokens';
 import { useUserRole } from '../lib/userRole';
 import { SectionHeader, Button, Icon } from '../components/ui';
 import { TeamLogo, Avatar } from '../components/Logos';
@@ -107,29 +107,38 @@ export default function Home({ currentUser, profile }) {
             {/* Live ticker — the ESPN score-bug strip. Platform-wide, always-on
                 when any public game is live, so the front door reads "alive"
                 even to a cold viewer. */}
-            {data.ticker?.length > 0 && <LiveTicker games={data.ticker} navigate={navigate} />}
+            {data.ticker?.length > 0 && <div className="home-in">{<LiveTicker games={data.ticker} navigate={navigate} />}</div>}
 
             {/* Operator on-ramp — leads ABOVE Featured for commissioners/managers */}
-            {isOperator && <OperatorBar navigate={navigate} />}
+            {isOperator && <div className="home-in">{<OperatorBar navigate={navigate} />}</div>}
 
-            {/* ⭐ FEATURED HERO — top of page (Pete override vs the design image) */}
-            <FeaturedHero featured={data.featured} navigate={navigate} />
+            {/* ⭐ FEATURED HERO — top of page (Pete override vs the design image).
+                S03: staged entrance (fade + rise, one per section) — the hero
+                leads, everything below follows at 40ms steps. Content is already
+                loaded when these mount, so motion never delays paint. */}
+            <div className="home-in"><FeaturedHero featured={data.featured} navigate={navigate} /></div>
 
             {/* LIVE NOW — only when a followed/rostered game is live */}
-            {data.live.length > 0 && <LiveNow games={data.live} navigate={navigate} />}
+            {data.live.length > 0 && <div className="home-in" style={{ animationDelay: '40ms' }}><LiveNow games={data.live} navigate={navigate} /></div>}
 
             {/* YOUR HOCKEY — members; collapses to an invitation for cold users */}
-            {data.hasFollows && data.your.teamCount > 0 ? (
-              <YourHockey your={data.your} leader={data.leader} navigate={navigate} />
-            ) : (
-              <PickYourTeam navigate={navigate} />
-            )}
+            <div className="home-in" style={{ animationDelay: '80ms' }}>
+              {data.hasFollows && data.your.teamCount > 0 ? (
+                <YourHockey your={data.your} leader={data.leader} navigate={navigate} />
+              ) : (
+                <PickYourTeam navigate={navigate} />
+              )}
+            </div>
 
             {/* THIS WEEK — the temporal backbone (never empty: public events carry it) */}
-            <ThisWeek upcoming={data.upcoming} events={data.publicEvents} navigate={navigate} />
+            <div className="home-in" style={{ animationDelay: '120ms' }}>
+              <ThisWeek upcoming={data.upcoming} events={data.publicEvents} navigate={navigate} />
+            </div>
 
             {/* DISCOVER — an entry, not a wall */}
-            <DiscoverRow navigate={navigate} cold={!data.hasFollows || data.your.teamCount === 0} />
+            <div className="home-in" style={{ animationDelay: '160ms' }}>
+              <DiscoverRow navigate={navigate} cold={!data.hasFollows || data.your.teamCount === 0} />
+            </div>
           </>
         )}
       </div>
@@ -835,11 +844,6 @@ function EventTile({ e, navigate }) {
 
 const tileStyle = { flexShrink: 0, width: 176, minHeight: 158, display: 'flex', flexDirection: 'column', textAlign: 'left', cursor: 'pointer', background: C.card, border: `1px solid ${C.border}`, borderRadius: radii.card, padding: 0, overflow: 'hidden' };
 
-function DatePill({ text }) {
-  if (!text) return null;
-  return <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, letterSpacing: '0.05em', color: C.steel, background: 'rgba(139,163,190,0.12)', border: `1px solid ${C.border}`, borderRadius: 6, padding: '3px 8px', fontFamily: "'Barlow Condensed', sans-serif", whiteSpace: 'nowrap' }}>{text}</span>;
-}
-
 function RailLabel({ children }) {
   return <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 700, fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.steel, marginBottom: 8 }}>{children}</div>;
 }
@@ -876,26 +880,45 @@ function DiscoverCard({ label, sub, onClick, icon }) {
 }
 
 // ─── Skeleton ────────────────────────────────────────────────────────────────
+// Mirrors the real first fold EXACTLY (S03 perceived-speed rule: zero layout
+// shift on hydrate): Featured header stub + hero (168px photo + 44px footer bar),
+// then Your Hockey header + two next-game rows (86px incl. margin), then the
+// This Week rail at true tile size. Copy lives in the header stubs — brand
+// loading language, never "Loading…".
 function HomeSkeleton() {
   return (
-    <div style={{ marginTop: 18 }} aria-hidden>
-      <Sk h={120} r={radii.hero} />
-      <div style={{ height: 16 }} />
-      <Sk h={150} r={radii.hero} />
-      <div style={{ height: 16 }} />
-      <Sk h={64} /><div style={{ height: 8 }} /><Sk h={64} />
-      <div style={{ height: 16 }} />
+    <div aria-hidden>
+      <SkHeader text="Getting the ice ready." top={18} />
+      <div style={{ borderRadius: radii.hero, overflow: 'hidden', border: `1px solid ${C.border}` }}>
+        <Sk h={168} r={0} />
+        <div style={{ height: 1 }} />
+        <Sk h={43} r={0} />
+      </div>
+      <SkHeader text="Warming up." top={22} />
+      <Sk h={78} /><div style={{ height: 8 }} /><Sk h={78} />
+      <SkHeader text="Dropping the puck." top={22} />
       <div style={{ display: 'flex', gap: 12, overflow: 'hidden' }}>
-        <Sk h={150} w={176} /><Sk h={150} w={176} />
+        <Sk h={158} w={176} /><Sk h={158} w={176} /><Sk h={158} w={176} />
       </div>
     </div>
   );
 }
+// Header stub at SectionHeader's real height, carrying the intermission copy.
+function SkHeader({ text, top }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: `${top}px 0 10px` }}>
+      <Sk h={18} w={110} r={4} />
+      <span style={{ fontSize: 11, color: C.steel, fontFamily: "'Barlow', sans-serif", opacity: 0.7 }}>{text}</span>
+    </div>
+  );
+}
 function Sk({ h, w, r }) {
-  return <div className="home-sk" style={{ height: h, width: w || '100%', borderRadius: r || radii.card, background: C.card }} />;
+  return <div className="home-sk" style={{ height: h, width: w || '100%', borderRadius: r != null ? r : radii.card, background: C.card, flexShrink: 0 }} />;
 }
 
 const HOME_CSS = `
+@keyframes home-enter { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+.home-in { animation: home-enter ${motion.duration.entrance}ms ${motion.easing.out} both; }
 .home-tap { transition: transform 0.1s ease, box-shadow 0.15s ease; }
 .home-tap:active { transform: scale(0.98); }
 .home-rail { scrollbar-width: none; -webkit-overflow-scrolling: touch; }
@@ -906,6 +929,7 @@ const HOME_CSS = `
 .home-sk { animation: home-sk-shimmer 1.4s ease-in-out infinite; }
 .home-puck-fill { transition: width 0.4s ease; }
 @media (prefers-reduced-motion: reduce) {
+  .home-in { animation: none; }
   .home-tap:active { transform: none; }
   .home-live-dot, .home-sk { animation: none !important; }
   .home-puck-fill { transition: none !important; }

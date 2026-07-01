@@ -92,3 +92,11 @@ Added to `tokens.js` colors: `success #22C55E`, `warning #F59E0B`, `onAccent
 on provider buttons). **Declined:** a `link` token — sky-blue drift collapses to
 brand `blue` in the Part-2 drift pass. **Reason:** the amber/green families were
 de-facto semantic roles with no token (~146 uses); naming them ends the drift.
+
+### 2026-07-01 · S03 Gate-1 decisions (Pete sign-off)
+**D-S03-1:** Landing splash stat bar (industry vanity stats) → 2×2 feature-chip
+grid, mirroring the Jun-27 Auth-hero call. **Reason:** the cold open should sell
+what the app does, not the sport's size. **D-S03-2:** Auth primary red buttons →
+manifesto pill (radius 999) + red-glow shadow + press collapse. **Reason:**
+manifesto "Corner Philosophy / Primary buttons" compliance on the highest-stakes
+form. Rest of S03 = motion/stress/skeleton polish, no content or nav changes.

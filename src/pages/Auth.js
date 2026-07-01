@@ -8,7 +8,7 @@ import HelpButton from '../components/HelpButton';
 import { Icon } from '../components/ui';
 import DownloadCTA from '../components/DownloadCTA';
 import TurnstileWidget, { isTurnstileEnabled } from '../components/TurnstileWidget';
-import { C } from '../lib/tokens';
+import { C, colors, shadows, motion } from '../lib/tokens';
 
 // ONBOARD-1 (May 28, 2026): POSITIONS / LEVELS removed from the signup gate —
 // the wizard collapsed to a single step (email + password + DOB + Turnstile +
@@ -56,6 +56,18 @@ function Input({ label, ...props }) {
     </div>
   );
 }
+
+// D-S03-2 (manifesto "Primary buttons"): every primary red CTA on the auth
+// surface is a pill with the red-glow shadow; press collapses the shadow +
+// scales 0.97 (see the .auth-cta rules in the style block below).
+const ctaBase = {
+  borderRadius: 999,
+  boxShadow: shadows.heroRed,
+  background: C.red, color: colors.onAccent, border: 'none',
+  fontFamily: "'Barlow Condensed', sans-serif",
+  fontWeight: 700, fontStyle: 'italic', textTransform: 'uppercase',
+  letterSpacing: '0.05em', cursor: 'pointer',
+};
 
 // Pull a safe `returnTo` from the URL: must be a relative path beginning with
 // a single `/` (rejects `//evil.com`, `http://...`, and protocol-relative
@@ -324,11 +336,8 @@ export default function Auth({ defaultMode = 'login' }) {
               Rinkd requires users to be 13 or older to create an account.
               Check back when you're ready to hit the ice!
             </p>
-            <button onClick={() => setMode('login')} style={{
-              padding: '12px 32px', borderRadius: 10,
-              background: C.red, color: 'white', border: 'none',
-              fontFamily: "'Barlow Condensed', sans-serif",
-              fontWeight: 700, fontSize: 16, cursor: 'pointer',
+            <button onClick={() => setMode('login')} className="auth-cta" style={{
+              ...ctaBase, padding: '12px 32px', fontSize: 16,
             }}>Back to Login</button>
           </div>
         ) : mode === 'check-email' ? (
@@ -350,11 +359,8 @@ export default function Auth({ defaultMode = 'login' }) {
             <p style={{ color: C.steel, lineHeight: 1.6, marginBottom: 24, fontSize: 13 }}>
               Click the link to finish creating your account. If you don't see it within a minute, check your spam folder.
             </p>
-            <button onClick={() => { setMode('login'); setError(''); }} style={{
-              padding: '12px 32px', borderRadius: 10,
-              background: C.red, color: 'white', border: 'none',
-              fontFamily: "'Barlow Condensed', sans-serif",
-              fontWeight: 700, fontSize: 16, cursor: 'pointer',
+            <button onClick={() => { setMode('login'); setError(''); }} className="auth-cta" style={{
+              ...ctaBase, padding: '12px 32px', fontSize: 16,
             }}>Back to Sign In</button>
           </div>
         ) : mode === 'forgot' ? (
@@ -382,23 +388,18 @@ export default function Auth({ defaultMode = 'login' }) {
                   onError={() => setCaptchaToken(null)}
                 />
                 {error && <p style={{ color: C.red, fontSize: 13, marginBottom: 12 }}>{error}</p>}
-                <button type="submit" disabled={forgotBusy || !forgotEmail.trim()} style={{
-                  width: '100%', padding: '14px', borderRadius: 10,
-                  background: forgotBusy ? C.border : C.red, color: 'white', border: 'none',
-                  fontFamily: "'Barlow Condensed', sans-serif",
-                  fontWeight: 700, fontStyle: 'italic', fontSize: 18, textTransform: 'uppercase',
-                  cursor: forgotBusy ? 'not-allowed' : 'pointer', letterSpacing: '0.05em',
+                <button type="submit" disabled={forgotBusy || !forgotEmail.trim()} className="auth-cta" style={{
+                  ...ctaBase, width: '100%', padding: '14px', fontSize: 18,
+                  background: forgotBusy ? C.border : C.red,
+                  boxShadow: forgotBusy ? 'none' : shadows.heroRed,
+                  cursor: forgotBusy ? 'not-allowed' : 'pointer',
                 }}>
                   {forgotBusy ? 'Sending…' : 'Send Reset Link →'}
                 </button>
               </form>
             ) : (
-              <button onClick={() => { setMode('login'); setError(''); }} style={{
-                width: '100%', padding: '13px', borderRadius: 10,
-                background: C.red, color: 'white', border: 'none',
-                fontFamily: "'Barlow Condensed', sans-serif",
-                fontWeight: 700, fontStyle: 'italic', fontSize: 16, textTransform: 'uppercase',
-                cursor: 'pointer', letterSpacing: '0.05em',
+              <button onClick={() => { setMode('login'); setError(''); }} className="auth-cta" style={{
+                ...ctaBase, width: '100%', padding: '13px', fontSize: 16,
               }}>
                 Back to Sign In
               </button>
@@ -445,13 +446,11 @@ export default function Auth({ defaultMode = 'login' }) {
                 onError={() => setCaptchaToken(null)}
               />
               {error && <p style={{ color: C.red, fontSize: 13, marginBottom: 12 }}>{error}</p>}
-              <button type="submit" disabled={loading} style={{
-                width: '100%', padding: '14px', borderRadius: 10,
-                background: loading ? C.border : C.red, color: 'white', border: 'none',
-                fontFamily: "'Barlow Condensed', sans-serif",
-                fontWeight: 700, fontStyle: 'italic', fontSize: 18, textTransform: 'uppercase',
-                cursor: loading ? 'not-allowed' : 'pointer', letterSpacing: '0.05em',
-                transition: 'all 0.15s',
+              <button type="submit" disabled={loading} className="auth-cta" style={{
+                ...ctaBase, width: '100%', padding: '14px', fontSize: 18,
+                background: loading ? C.border : C.red,
+                boxShadow: loading ? 'none' : shadows.heroRed,
+                cursor: loading ? 'not-allowed' : 'pointer',
               }}>
                 {loading ? 'Signing In...' : 'Sign In →'}
               </button>
@@ -551,13 +550,11 @@ export default function Auth({ defaultMode = 'login' }) {
 
               {error && <p style={{ color: C.red, fontSize: 13, margin: '8px 0 12px' }}>{error}</p>}
 
-              <button type="submit" disabled={loading} style={{
-                width: '100%', padding: '14px', borderRadius: 10,
-                background: loading ? C.border : C.red, color: 'white', border: 'none',
-                fontFamily: "'Barlow Condensed', sans-serif",
-                fontWeight: 700, fontStyle: 'italic', fontSize: 18, textTransform: 'uppercase',
-                cursor: loading ? 'not-allowed' : 'pointer', letterSpacing: '0.05em',
-                marginTop: 8,
+              <button type="submit" disabled={loading} className="auth-cta" style={{
+                ...ctaBase, width: '100%', padding: '14px', fontSize: 18, marginTop: 8,
+                background: loading ? C.border : C.red,
+                boxShadow: loading ? 'none' : shadows.heroRed,
+                cursor: loading ? 'not-allowed' : 'pointer',
               }}>
                 {loading ? 'Creating…' : 'Hit the Ice →'}
               </button>
@@ -592,6 +589,11 @@ export default function Auth({ defaultMode = 'login' }) {
         @media (max-width: 768px) {
           .auth-hero { display: none !important; }
           .auth-form { width: 100% !important; padding: 40px 28px !important; }
+        }
+        .auth-cta { transition: transform ${motion.duration.press}ms ease, box-shadow 150ms ease, background 150ms ease; }
+        .auth-cta:active:not(:disabled) { transform: scale(0.97); box-shadow: 0 2px 8px rgba(215,38,56,0.35) !important; }
+        @media (prefers-reduced-motion: reduce) {
+          .auth-cta, .auth-cta:active { transform: none !important; transition: none; }
         }
       `}</style>
 
