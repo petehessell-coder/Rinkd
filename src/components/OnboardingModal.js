@@ -5,7 +5,7 @@ import { followUser } from '../lib/posts';
 import { subscribeToPush } from '../lib/push';
 import { track } from '../lib/analytics';
 import { Icon } from './ui';
-import { C } from '../lib/tokens';
+import { C, colors, motion } from '../lib/tokens';
 
 // Locker Room → Tunnel → Ice (DESIGN_MANIFESTO "Onboarding Narrative").
 // The locker-room photo sits BEHIND the onboarding steps; the tunnel plays once
@@ -33,7 +33,7 @@ const ROLES = [
 ];
 
 const btnPrimary = {
-  background: C.red, color: '#fff', border: 'none', padding: '12px 24px',
+  background: C.red, color: colors.onAccent, border: 'none', padding: '12px 24px',
   borderRadius: 999, cursor: 'pointer',
   fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic',
   fontSize: 14, letterSpacing: '0.05em', textTransform: 'uppercase',
@@ -272,8 +272,18 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
       {/* Readability overlay so the white type holds over any frame of the photo. */}
       <div style={{ position: 'fixed', inset: 0, background: 'rgba(7,17,31,0.65)' }} />
 
+      {/* S03 entrance: the locker-room column rises in once on mount; each step
+          crossfades (200ms). Reduced motion gets a static card. */}
+      <style>{`
+        @keyframes ob-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+        .ob-in { animation: ob-rise ${motion.duration.entrance}ms ${motion.easing.out} both; }
+        @keyframes ob-step { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        .ob-step-in { animation: ob-step ${motion.duration.exit}ms ${motion.easing.out} both; }
+        @media (prefers-reduced-motion: reduce) { .ob-in, .ob-step-in { animation: none; } }
+      `}</style>
+
       {/* Content column — sits over the photo, no competing card surface. */}
-      <div style={{
+      <div className="ob-in" style={{
         position: 'relative', zIndex: 1,
         width: '100%', maxWidth: 480, color: C.ice,
         maxHeight: '92vh', overflowY: 'auto',
@@ -288,8 +298,8 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
           <button onClick={handleSkip} style={{ background: 'transparent', color: C.ice, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, opacity: 0.85 }}>Skip for now</button>
         </div>
 
-        {/* Body */}
-        <div style={{ padding: '4px 4px 0' }}>
+        {/* Body — keyed by step so each step change re-runs the crossfade. */}
+        <div key={step} className="ob-step-in" style={{ padding: '4px 4px 0' }}>
           {step === 0 && (
             <>
               <div style={{
@@ -365,7 +375,7 @@ export default function OnboardingModal({ currentUser, profile, onClose, onProfi
                       disabled={!!followingMap[p.id]}
                       style={{
                         background: followingMap[p.id] ? 'transparent' : C.red,
-                        color: followingMap[p.id] ? C.steel : '#fff',
+                        color: followingMap[p.id] ? C.steel : colors.onAccent,
                         border: followingMap[p.id] ? `1px solid ${C.border}` : 'none',
                         padding: '6px 14px', borderRadius: 999, cursor: followingMap[p.id] ? 'default' : 'pointer',
                         fontSize: 12, fontWeight: 700, fontFamily: 'Barlow, sans-serif', flex: '0 0 auto',

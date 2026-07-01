@@ -6,7 +6,22 @@ import SEO from '../components/SEO';
 import { RinkdLogo } from '../components/Logos';
 import TapeText from '../components/TapeText';
 import { track } from '../lib/analytics';
-import { C, colors } from '../lib/tokens';
+import { C, colors, motion } from '../lib/tokens';
+import { Icon } from '../components/ui';
+
+// S03: one-time staged entrance (logo → headline → CTA), manifesto puck physics
+// (fade + rise, quick in / smooth stop) + press feedback on the CTA. All of it
+// collapses to static under prefers-reduced-motion.
+const LANDING_CSS = `
+@keyframes ld-enter { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+.ld-in { animation: ld-enter ${motion.duration.entrance}ms ${motion.easing.out} both; }
+.ld-tap { transition: transform ${motion.duration.press}ms ease, box-shadow 150ms ease; }
+.ld-tap:active { transform: scale(0.97); box-shadow: 0 2px 8px rgba(215,38,56,0.35) !important; }
+@media (prefers-reduced-motion: reduce) {
+  .ld-in { animation: none; }
+  .ld-tap, .ld-tap:active { transform: none; transition: none; }
+}
+`;
 
 /**
  * Landing — the front door for rinkd.app.
@@ -123,6 +138,7 @@ export default function LandingPage() {
         title="The Platform Built for Hockey"
         description="Rinkd is the mobile-first social platform built exclusively for the hockey community. Teams, leagues, scores, and stories — all in one place."
       />
+      <style>{LANDING_CSS}</style>
 
       {/* Real arena photography behind the front door — the opening beat of the
           Locker Room → Tunnel → Ice arc. A real rink, darkened and faded into the
@@ -137,7 +153,7 @@ export default function LandingPage() {
 
       <div style={{ position: 'relative', zIndex: 1, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       {/* Big brand mark — logo + the hand-taped "tape job" wordmark */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 18, marginBottom: 26 }}>
+      <div className="ld-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 18, marginBottom: 26 }}>
         <RinkdLogo size={84} />
         <div style={{ marginTop: 14 }}>
           <TapeText height={56}>RINKD</TapeText>
@@ -147,33 +163,37 @@ export default function LandingPage() {
       {/* In-app-browser nudge — IG/FB clicks land here and can't complete signup */}
       <div style={{ width: '100%', maxWidth: 420 }}><InAppBrowserNudge /></div>
 
-      {/* Hero headline — big, cold, competitive. Says what Rinkd is in one line. */}
-      <div style={{
+      {/* Hero headline — big, cold, competitive. Says what Rinkd is in one line.
+          clamp() so "WHERE HOCKEY" survives a 320px iPhone SE without clipping. */}
+      <div className="ld-in" style={{
         fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic',
-        fontSize: 64, lineHeight: 0.9, letterSpacing: '-0.01em', textTransform: 'uppercase',
+        fontSize: 'clamp(44px, 16vw, 64px)', lineHeight: 0.9, letterSpacing: '-0.01em', textTransform: 'uppercase',
         color: C.ice, textAlign: 'center', marginBottom: 14,
+        animationDelay: '60ms',
       }}>
         Where Hockey<br />Lives Online
       </div>
-      <div style={{ fontSize: 15, color: C.steel, lineHeight: 1.5, textAlign: 'center', maxWidth: 360, marginBottom: 24 }}>
+      <div className="ld-in" style={{ fontSize: 15, color: C.steel, lineHeight: 1.5, textAlign: 'center', maxWidth: 360, marginBottom: 24, animationDelay: '60ms' }}>
         Teams, leagues, schedules, live scores — the off-ice home the sport has never had.
       </div>
 
       {/* PRIMARY CTA — single red pill, the one action: create an account. */}
-      <button onClick={goSignup} style={{
+      <button onClick={goSignup} className="ld-in ld-tap" style={{
         width: '100%', maxWidth: 360,
-        background: C.red, color: '#fff', border: 'none',
+        background: C.red, color: colors.onAccent, border: 'none',
         padding: '16px 22px', borderRadius: 999, cursor: 'pointer',
         fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic',
         fontSize: 18, letterSpacing: '0.05em', textTransform: 'uppercase',
         boxShadow: '0 10px 30px rgba(215,38,56,0.4)',
         marginBottom: 14,
+        animationDelay: '120ms',
       }}>
         Create Free Account
       </button>
 
       {/* Secondary — log in for returning users. Subordinate text link. */}
-      <button onClick={goLogin} style={{
+      <button onClick={goLogin} className="ld-in" style={{
+        animationDelay: '120ms',
         background: 'transparent', color: C.steel, border: 'none',
         padding: '8px 16px', cursor: 'pointer',
         fontFamily: 'Barlow, sans-serif', fontSize: 14, fontWeight: 500,
@@ -183,25 +203,34 @@ export default function LandingPage() {
         <span style={{ color: C.ice, textDecoration: 'underline', textUnderlineOffset: 3 }}>Log in →</span>
       </button>
 
-      {/* Stat bar — hockey is big. Jersey-size numbers (Barlow Condensed 900). */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 32, flexWrap: 'wrap', justifyContent: 'center' }}>
+      {/* Feature chips — what the app DOES (D-S03-1: replaced industry vanity
+          stats, mirroring the Jun-27 Auth-hero call). Same icon set as Auth. */}
+      <div className="ld-in" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 32, width: '100%', maxWidth: 360, animationDelay: '180ms' }}>
         {[
-          { n: '1.18M+', l: 'NA Players' },
-          { n: '23M+', l: 'NHL Tickets' },
-          { n: '+30%', l: 'Women & Girls' },
-        ].map(({ n, l }) => (
-          <div key={l} style={{
+          { icon: 'live',      l: 'Live scoring' },
+          { icon: 'calendar',  l: 'Schedules & RSVP' },
+          { icon: 'teams',     l: 'Team & player pages' },
+          { icon: 'analytics', l: 'Stats & leaderboards' },
+        ].map((f) => (
+          <div key={f.l} style={{
+            display: 'flex', alignItems: 'center', gap: 9, minWidth: 0,
             background: 'rgba(46,91,140,0.12)', border: `1px solid ${C.border}`,
-            borderRadius: 10, padding: '10px 14px', textAlign: 'center', minWidth: 96,
+            borderRadius: 10, padding: '10px 12px',
           }}>
-            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 30, lineHeight: 1, color: C.ice }}>{n}</div>
-            <div style={{ fontSize: 9, color: C.steel, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 4 }}>{l}</div>
+            <div style={{
+              width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+              background: 'rgba(46,91,140,0.25)', border: `0.5px solid ${C.border}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Icon name={f.icon} size={15} color={C.ice} />
+            </div>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: C.ice, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.l}</span>
           </div>
         ))}
       </div>
 
       {/* What Rinkd is — broadcast lower-third headers, not feature cards. */}
-      <div style={{ width: '100%', maxWidth: 380, marginBottom: 24 }}>
+      <div className="ld-in" style={{ width: '100%', maxWidth: 380, marginBottom: 24, animationDelay: '240ms' }}>
         {[
           { tag: 'The Platform', body: 'Teams, leagues, schedules, scoring, and stats — one app.' },
           { tag: 'The Content', body: 'Daily reporting, features, and community storytelling.' },
