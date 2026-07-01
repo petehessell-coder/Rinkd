@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useUserRole, useIsRinkdAdmin, roleMenuSections } from '../lib/userRole';
 import { Icon } from './ui';
-import { C } from '../lib/tokens';
+import { C, motion } from '../lib/tokens';
 
 const B = {
   navy: C.navy, blue: C.blue, red: C.red,
@@ -39,6 +39,17 @@ export default function MoreDrawer({ open, onClose, userId, onSignOut }) {
 
   if (!open) return null;
 
+  // Manifesto "Sheet slide up" — 350ms, the sheet easing from tokens; backdrop
+  // fades in alongside. Entrance only (close stays instant — an exit animation
+  // would need delayed unmount for no real gain). Static under reduced motion.
+  const sheetCss = `
+    @keyframes rinkd-sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    @keyframes rinkd-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+    .rinkd-sheet { animation: rinkd-sheet-up ${motion.duration.sheet}ms ${motion.easing.sheet} both; }
+    .rinkd-sheet-backdrop { animation: rinkd-backdrop-in 200ms ease-out both; }
+    @media (prefers-reduced-motion: reduce) { .rinkd-sheet, .rinkd-sheet-backdrop { animation: none; } }
+  `;
+
   const exploreItems = [
     { path: '/messages',    icon: 'messages',  label: 'Messages',    sub: 'Direct messages with players' },
     { path: '/discover',    icon: 'discover',  label: 'Discover',    sub: 'Search players, teams, leagues, articles' },
@@ -50,18 +61,24 @@ export default function MoreDrawer({ open, onClose, userId, onSignOut }) {
     { path: '/store',       IconNode: 'duffle', label: 'Store',       sub: 'Hockey gear + Rinkd merch' },
     { path: '/leagues',     IconNode: 'leagues', label: 'Leagues',     sub: 'Find or create a league' },
     { path: '/tournaments', IconNode: 'bracket', label: 'Tournaments', sub: 'Browse + manage events' },
-    { path: '/pricing',     icon: 'pricing', label: 'Pricing',     sub: 'Plans for leagues + tournaments' },
+    // D-S04-2 — the cold-operator on-ramp. A commissioner who doesn't run
+    // anything yet has no OperatorBar on Home; this row IS their front door.
+    // Same /pricing destination the old "Pricing" row pointed at, reframed.
+    { path: '/pricing',     icon: 'pricing', label: 'Run your league or tournament', sub: 'Start free — plans & pricing' },
   ];
 
   return (
     <div onClick={onClose}
+      className="rinkd-sheet-backdrop"
       style={{
         position: 'fixed', inset: 0, zIndex: 9990,
         background: 'rgba(7,17,31,0.85)',
         display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
         fontFamily: "'Barlow', sans-serif",
       }}>
+      <style>{sheetCss}</style>
       <div onClick={(e) => e.stopPropagation()}
+        className="rinkd-sheet"
         style={{
           background: B.card, border: `1px solid ${B.border}`,
           borderTopLeftRadius: 18, borderTopRightRadius: 18,
@@ -74,7 +91,7 @@ export default function MoreDrawer({ open, onClose, userId, onSignOut }) {
             More
           </div>
           <button onClick={onClose} aria-label="Close"
-            style={{ background: 'transparent', color: B.steel, border: 'none', fontSize: 24, cursor: 'pointer', padding: 4, lineHeight: 1 }}>
+            style={{ background: 'transparent', color: B.steel, border: 'none', fontSize: 24, cursor: 'pointer', minWidth: 44, minHeight: 44, margin: '-10px -10px -10px 0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
             ×
           </button>
         </div>

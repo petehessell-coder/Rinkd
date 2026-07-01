@@ -100,3 +100,12 @@ what the app does, not the sport's size. **D-S03-2:** Auth primary red buttons �
 manifesto pill (radius 999) + red-glow shadow + press collapse. **Reason:**
 manifesto "Corner Philosophy / Primary buttons" compliance on the highest-stakes
 form. Rest of S03 = motion/stress/skeleton polish, no content or nav changes.
+
+### 2026-07-01 · S04 Gate-1 decisions (Pete sign-off)
+League/Tournament in-page tabs are **deep-linkable** via `?tab=` (replaceState —
+no history spam; back stays one-tap). More drawer gets the manifesto sheet
+slide-up; More nav item renders a real icon. **D-S04-2:** the drawer's Pricing
+row is reframed as the cold-operator on-ramp — "Run your league or tournament"
+→ /pricing (visible to all; no Home clutter; same destination, operator
+framing). Tab-order divergence (League leads Schedule, Tournament leads
+Standings) confirmed INTENTIONAL — do not unify.

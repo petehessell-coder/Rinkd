@@ -38,6 +38,25 @@ import { staggerStyle } from '../lib/motion';
 
 const TABS = ['Standings','Schedule','Bracket','Stats','Feed','Gallery','Info'];
 
+// S04: tabs are deep-linkable. ?tab= is read once on mount (validated against
+// TABS, case-insensitive) and written via replaceState on every switch — no
+// history entry per tab, so Back still leaves the page in one tap. trackPage
+// strips query strings, so the param never pollutes analytics.
+function initialTabFromUrl(fallback) {
+  try {
+    const t = new URLSearchParams(window.location.search).get('tab') || '';
+    return TABS.find((x) => x.toLowerCase() === t.toLowerCase()) || fallback;
+  } catch { return fallback; }
+}
+function writeTabToUrl(tab) {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', tab.toLowerCase());
+    window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+  } catch { /* old browser — tab still switches, just not shareable */ }
+}
+
+
 // MULTIDIV-1: standings come from the division-scoped view (carries a
 // `division_id` column); single-division events seed a "Main" division so this
 // view behaves identically to the legacy `tournament_standings`.
@@ -124,7 +143,7 @@ function TabEmptyState({ icon = '🏒', title, body }) {
 export default function TournamentPage({ currentUser }) {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('Standings');
+  const [activeTab, setActiveTab] = useState(() => initialTabFromUrl('Standings'));
   const [tournament, setTournament] = useState(null);
   const [games, setGames] = useState([]);
   // MULTIDIV-1: raw standings rows for ALL divisions; the grouped, division-
@@ -643,7 +662,7 @@ export default function TournamentPage({ currentUser }) {
           {TABS.map(tab => {
             const on = activeTab === tab;
             return (
-              <button key={tab} onClick={() => setActiveTab(tab)}
+              <button key={tab} onClick={() => { setActiveTab(tab); writeTabToUrl(tab); }}
                 style={{fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:700,fontSize:15,letterSpacing:'0.04em',textTransform:'uppercase',
                   padding:'10px 14px',minHeight:44,display:'inline-flex',alignItems:'center',background:'transparent',border:'none',
                   borderBottom: on ? `3px solid ${accent}` : '3px solid transparent',
