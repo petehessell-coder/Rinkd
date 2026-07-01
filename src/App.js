@@ -17,7 +17,7 @@ const Leagues = lazyWithRetry(() => import('./pages/Leagues'));
 const Tournament = lazyWithRetry(() => import('./pages/Tournament'));
 const Tournaments = lazyWithRetry(() => import('./pages/Tournaments'));
 import { setSentryUser, captureException } from './lib/sentry';
-import { track } from './lib/analytics';
+import { track, capturePilotRef } from './lib/analytics';
 import OnboardingModal from './components/OnboardingModal';
 import { MotionProvider, RouteTransition, ToastProvider } from './components/ui';
 import RouteAnalytics from './components/RouteAnalytics';
@@ -377,6 +377,10 @@ export default function App() {
     }
     return null;
   };
+
+  // PILOT-ANALYTICS: capture first-touch ?ref= / ?utm_source= on the very first
+  // load, before any route change strips the query string. First touch wins.
+  useEffect(() => { capturePilotRef(); }, []);
 
   useEffect(() => {
     // Track the signed-in identity so the expensive profile fetch only runs

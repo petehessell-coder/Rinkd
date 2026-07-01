@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { track } from './analytics';
 import { getBlockedIds, excludeBlocked, filterBlockedIds } from './blocks';
 import { POST_MENTIONS_EMBED, COMMENT_MENTIONS_EMBED } from './mentions';
 import { relativeTime } from './format';
@@ -297,6 +298,8 @@ export async function toggleLike(postId, userId) {
   const { error } = await supabase
     .from('likes')
     .insert({ post_id: postId, user_id: userId });
+  // PILOT-ANALYTICS: fire on the LIKE (add) path only — never on un-like.
+  if (!error) track('post_liked', { post_id: postId });
   return { liked: true, error: error || null };
 }
 
@@ -344,6 +347,8 @@ export async function createComment(postId, authorId, content) {
     .from('comments')
     .insert({ post_id: postId, author_id: authorId, content, created_at: new Date().toISOString() })
     .select().single();
+  // PILOT-ANALYTICS: a comment is always a create (no toggle). No body/PII.
+  if (!error) track('comment_created', { post_id: postId });
   return { data, error };
 }
 

@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { pilotRef } from './analytics';
 
 const AVATAR_COLORS = ['#D72638','#2E5B8C','#22C55E','#F59E0B','#8B5CF6','#0EA5E9'];
 
@@ -115,6 +116,18 @@ export async function ensureProfileForUser(user) {
     // eslint-disable-next-line no-console
     console.error('[ensureProfileForUser] ensure_profile RPC failed:', profileError);
     return { error: profileError };
+  }
+
+  // PILOT-ANALYTICS: stamp the first-touch pilot ref onto the freshly created
+  // profile so per-pilot cohorts survive a localStorage clear. Runs exactly once
+  // (existing rows returned above). Plain UPDATE, no RETURNING → immune to the
+  // youth-privacy column gate. Best-effort: attribution must never fail signup.
+  try {
+    const ref = pilotRef();
+    if (ref) await supabase.from('profiles').update({ acquisition_ref: ref }).eq('id', user.id);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[ensureProfileForUser] acquisition_ref stamp skipped:', e?.message || e);
   }
 
   // Invite-linking and follow-seeding happen authoritatively inside the RPC's

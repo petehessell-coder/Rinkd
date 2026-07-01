@@ -428,7 +428,7 @@ export default function LeaguePage({ currentUser, profile }) {
     }
     const { error: followErr } = await followLeague(currentUser.id, id);
     setFollowBusy(false);
-    if (!followErr) setIsFollowing(true);
+    if (!followErr) { setIsFollowing(true); track('league_subscribed', { league_id: id }); }
   };
 
   // Switch division + reflect it in the URL (shareable link + reload-safe).

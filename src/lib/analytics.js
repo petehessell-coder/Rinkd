@@ -14,6 +14,48 @@ import { supabase } from './supabase';
  */
 
 const SESSION_KEY = 'rinkd_anon_session_v1';
+const PILOT_REF_KEY = 'rinkd_pilot_ref';
+
+/**
+ * Canonical social-action set — the events that count toward the pilot
+ * scorecard's "50%+ took a social action" metric. Single source of truth for
+ * the dashboards + the ref-attribution allowlist below.
+ * NOTE: team_followed is reserved for a future discrete team-follow action.
+ * Team affiliation today is relational (team_members) and is derived that way
+ * for the full-platform pilots — see the Pilot Analytics decision note.
+ */
+export const SOCIAL_ACTIONS = [
+  'post_created', 'chirp_created', 'gamepuck_vote', 'reaction_added',
+  'post_liked', 'comment_created', 'team_followed', 'league_subscribed',
+  'share_recap',
+];
+
+// Events that carry the first-touch pilot ref for per-pilot attribution:
+// the social actions above + the signup conversion.
+const REF_ATTACH = new Set([...SOCIAL_ACTIONS, 'signup_success']);
+
+/**
+ * First-touch pilot attribution. On first app load we read ?ref= (or
+ * ?utm_source=) from the URL and persist it — FIRST TOUCH WINS, so a later
+ * organic visit never overwrites the pilot that acquired the user. Pilots hand
+ * out links/QRs like rinkd.app/?ref=little-caesars. Call once on boot.
+ */
+export function capturePilotRef() {
+  if (typeof window === 'undefined') return;
+  try {
+    const params = new URLSearchParams(window.location.search || '');
+    const ref = (params.get('ref') || params.get('utm_source') || '').trim().slice(0, 64);
+    if (ref && !localStorage.getItem(PILOT_REF_KEY)) {
+      localStorage.setItem(PILOT_REF_KEY, ref);
+    }
+  } catch { /* attribution is best-effort */ }
+}
+
+/** The stored first-touch pilot ref, or null. */
+export function pilotRef() {
+  if (typeof window === 'undefined') return null;
+  try { return localStorage.getItem(PILOT_REF_KEY) || null; } catch { return null; }
+}
 
 // Crawlers, link-unfurlers, headless browsers, and uptime/SEO bots inflate the
 // top of the funnel (auth_view / landing_view) but never convert — they made
@@ -93,6 +135,14 @@ export async function track(event, properties = {}, urlOverride) {
 
   try {
     const user_id = await resolveCachedUserId();
+    // Per-pilot attribution: stamp the first-touch ref onto conversion + social
+    // events so metrics can be sliced by pilot. Additive — no existing event or
+    // rollup depends on it; absent when no ref was captured.
+    let props = properties;
+    if (REF_ATTACH.has(event)) {
+      const ref = pilotRef();
+      if (ref) props = { ...properties, ref };
+    }
     await supabase.from('analytics_events').insert({
       event,
       user_id,
@@ -102,7 +152,7 @@ export async function track(event, properties = {}, urlOverride) {
       url: urlOverride != null ? urlOverride : window.location?.pathname + (window.location?.search || ''),
       referrer: document.referrer || null,
       user_agent: navigator.userAgent || null,
-      properties,
+      properties: props,
     });
   } catch { /* silent */ }
 }

@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { track } from './analytics';
 
 /**
  * Emoji reactions on posts (REACT-1). Additive layer ALONGSIDE the existing
@@ -42,6 +43,9 @@ export async function toggleReaction(postId, userId, emoji) {
   const { error } = await supabase
     .from('post_reactions')
     .insert({ post_id: postId, user_id: userId, emoji });
+  // PILOT-ANALYTICS: fire on the ADD path only (never on un-react). track() is
+  // fire-and-forget — failures are swallowed and never block the UI.
+  if (!error) track('reaction_added', { post_id: postId, emoji });
   return { reacted: true, error: error || null };
 }
 

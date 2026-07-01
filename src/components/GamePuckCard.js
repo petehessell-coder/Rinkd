@@ -3,6 +3,7 @@ import { getGamePuck, getMyGamePuckVote, castGamePuckVote, getGamePuckResult, ge
 import ShareButton from './ShareButton';
 import PuckMark from './PuckMark';
 import { loadGamePuckCardData } from '../lib/gameCardData';
+import { track } from '../lib/analytics';
 import GamePuckReveal, { hasRevealed } from './GamePuckReveal';
 
 // Rinkd Game Puck (SOCIAL-3, Phase 1) — fan "Game Puck" / Fans' Pick vote on a
@@ -137,6 +138,10 @@ export default function GamePuckCard({
     setMyVote({ team_id: teamId, jersey }); // optimistic
     try {
       await castGamePuckVote(gameId, kind, teamId, jersey);
+      // PILOT-ANALYTICS: the headline engagement action. The no-op guard above
+      // (tapping your current pick) already returns before we get here, so this
+      // only fires on a real new/changed vote.
+      track('gamepuck_vote', { game_id: gameId, kind });
       await load();
     } catch (e) {
       console.error('[GamePuck] vote failed', e);

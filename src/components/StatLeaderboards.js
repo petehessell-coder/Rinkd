@@ -206,7 +206,7 @@ function GameSheetStatsEmbed({ seasonId, accent = '#D72638' }) {
   );
 }
 
-export default function StatLeaderboards({ source = 'tournament', id, divisionId = null, accent = '#D72638', archived = null, gamesheetSeasonId = null, shareMeta = null }) {
+export default function StatLeaderboards({ source = 'tournament', id, divisionId = null, accent = '#D72638', archived = null, gamesheetSeasonId = null, shareMeta = null, revealNames = false }) {
   const cfg = RPC[source] || RPC.tournament;
   const [view, setView] = useState('skaters');
   const [season, setSeason] = useState('current'); // 'current' | 'archive'
@@ -330,16 +330,35 @@ export default function StatLeaderboards({ source = 'tournament', id, divisionId
     { key: 'so', label: 'SO', render: r => r.shutouts },
   ];
 
+  // YOUTH-PRIVACY (COPPA): on a youth (youth_competitive) event, a minor's name
+  // must never render to the public Stats tab. Show jersey-only ("#42") instead,
+  // keeping team context (team name is not minor PII). Adult events, and explicit
+  // insider views where the caller vouches for the viewer (revealNames), still
+  // show names. Mirrors the youth suppression already applied to the shareable
+  // stat card. Safe default: absent an insider signal, youth events hide names.
+  const hideYouthName = !!shareMeta?.youth && !revealNames;
+
   // Identity cell: name (bold) + "#jersey · team" subline. League goaltending
   // rows can have a null jersey (per-team line) — show team only in that case.
-  const renderRowId = (r) => (
-    <>
-      <div style={{ fontSize: 12, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.player_name || r.goalie_name}</div>
-      <div style={{ fontSize: 10, color: C.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {r.jersey_number != null ? `#${r.jersey_number} · ${r.team_name}` : r.team_name}
-      </div>
-    </>
-  );
+  const renderRowId = (r) => {
+    if (hideYouthName) {
+      const jersey = r.jersey_number != null ? `#${r.jersey_number}` : (r.team_name || '—');
+      return (
+        <>
+          <div style={{ fontSize: 12, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{jersey}</div>
+          <div style={{ fontSize: 10, color: C.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.team_name || ''}</div>
+        </>
+      );
+    }
+    return (
+      <>
+        <div style={{ fontSize: 12, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.player_name || r.goalie_name}</div>
+        <div style={{ fontSize: 10, color: C.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {r.jersey_number != null ? `#${r.jersey_number} · ${r.team_name}` : r.team_name}
+        </div>
+      </>
+    );
+  };
 
   const goalieFootnote = source === 'league'
     ? 'League games don’t record which goalie was in net, so this is team goaltending — attributed to the roster goalie when a team has exactly one. SV% needs logged shots; GAA is per game played.'
