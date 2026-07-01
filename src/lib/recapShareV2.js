@@ -12,18 +12,19 @@
 // shareCard.js pipeline that GamePuck + photo shares depend on.
 
 import QRCode from 'qrcode';
+import { colors } from './tokens';
 
 const PLATE = '/recap-card-bg2.png';
 const WORDMARK = '/rinkd-wordmark-tape.png';
 const W = 1003, H = 1568, PAD = 58;
-const C = { ice: '#F4F7FA', steel: '#8BA3BE', blue: '#4a93e6', line: 'rgba(46,91,140,.5)', dark: '#060c15' };
-const PALETTE = ['#2E5B8C', '#D72638', '#1F9E6B', '#9333EA', '#E08A1E', '#0EA5E9'];
+const C = { ice: colors.ice, steel: colors.muted, blue: '#4a93e6', line: 'rgba(46,91,140,.5)', dark: '#060c15' };
+const PALETTE = [colors.blue, colors.red, '#1F9E6B', '#9333EA', '#E08A1E', '#0EA5E9'];
 
 function teamColor(t) {
   if (t && t.logo_color) return t.logo_color;
   const name = (t && t.name) || '';
   let h = 0; for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
-  return PALETTE[h % PALETTE.length] || '#2E5B8C';
+  return PALETTE[h % PALETTE.length] || colors.blue;
 }
 function initials(t) {
   if (t && t.logo_initials) return t.logo_initials;
@@ -70,7 +71,7 @@ async function ensureFonts() {
 export async function composeRecapCardV2(payload, { shareUrl, sponsorName = null } = {}) {
   await ensureFonts();
   let qrDataUrl = null;
-  try { qrDataUrl = await QRCode.toDataURL(shareUrl || 'https://rinkd.app', { margin: 0, width: 204, color: { dark: '#07111F', light: '#ffffff' } }); } catch { /* QR optional */ }
+  try { qrDataUrl = await QRCode.toDataURL(shareUrl || 'https://rinkd.app', { margin: 0, width: 204, color: { dark: colors.surfaceDeep, light: '#ffffff' } }); } catch { /* QR optional */ }
   const [plate, wm, qr] = await Promise.all([loadImage(PLATE), loadImage(WORDMARK), loadImage(qrDataUrl)]);
 
   const canvas = document.createElement('canvas');
@@ -85,7 +86,7 @@ export async function composeRecapCardV2(payload, { shareUrl, sponsorName = null
     ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = "900 italic 52px 'Barlow Condensed'"; ctx.fillText(init, cx, cy + 3);
   };
 
-  if (plate) ctx.drawImage(plate, 0, 0, W, H); else { ctx.fillStyle = '#07111F'; ctx.fillRect(0, 0, W, H); }
+  if (plate) ctx.drawImage(plate, 0, 0, W, H); else { ctx.fillStyle = colors.surfaceDeep; ctx.fillRect(0, 0, W, H); }
   const g = ctx.createLinearGradient(0, 420, 0, H);
   g.addColorStop(0, 'rgba(7,17,31,0)'); g.addColorStop(.10, 'rgba(7,17,31,.55)'); g.addColorStop(.34, 'rgba(6,12,21,.85)'); g.addColorStop(.6, C.dark); g.addColorStop(1, C.dark);
   ctx.fillStyle = g; ctx.fillRect(0, 420, W, H - 420);

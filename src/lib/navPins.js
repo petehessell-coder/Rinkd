@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { colors } from './tokens';
 
 // NAV-PIN-2 — the user's explicit nav pins (up to 3: one league, one team, one
 // tournament). v1 auto-derived a single league; v2 is fully user-chosen via the
@@ -54,7 +55,7 @@ export async function getMyNavPins(userId, { force = false } = {}) {
       const rec = maps[p.pin_type]?.get(p.target_id);
       if (!rec) return null; // target deleted → drop the stale pin
       const initials = rec.logo_initials || (rec.name ? rec.name.trim().charAt(0).toUpperCase() : '?');
-      const bg = rec.accent_color || rec.logo_color || '#2E5B8C';
+      const bg = rec.accent_color || rec.logo_color || colors.blue;
       return { pin_type: p.pin_type, target_id: p.target_id, name: rec.name, logo_url: rec.logo_url, bg, initials, href: hrefFor(p.pin_type, p.target_id) };
     }).filter(Boolean);
   } catch { out = []; }

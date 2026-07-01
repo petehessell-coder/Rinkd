@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { C } from '../lib/tokens';
 
 // Shared "edit a previously-scheduled game" modal for both the league and
 // tournament Schedule tabs. Presentational only: it normalizes the form into a
@@ -22,20 +23,16 @@ import React, { useState } from 'react';
 //              buttons (MULTIDIV-1 Phase 4). Tournament-only; the league side
 //              omits it. (throw to surface an inline error)
 
-const C = {
-  ink: '#07111F',
-  card: '#0E2036',
-  border: 'rgba(46,91,140,0.45)',
-  ice: '#F4F7FA',
-  steel: 'rgba(244,247,250,0.55)',
-  red: '#E2342B',
-  blue: '#2E5B8C',
-};
+// Local drift: no exact token match, kept inline per migration rules.
+const MODAL_CARD = '#0E2036';
+const MODAL_BORDER = 'rgba(46,91,140,0.45)';
+const MODAL_STEEL = 'rgba(244,247,250,0.55)';
+const MODAL_RED = '#E2342B';
 
 const inputStyle = {
   width: '100%',
-  background: C.ink,
-  border: `0.5px solid ${C.border}`,
+  background: C.dark,
+  border: `0.5px solid ${MODAL_BORDER}`,
   borderRadius: 8,
   padding: '9px 10px',
   color: C.ice,
@@ -44,7 +41,7 @@ const inputStyle = {
   outline: 'none',
   boxSizing: 'border-box',
 };
-const labelStyle = { display: 'block', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: C.steel, marginBottom: 5 };
+const labelStyle = { display: 'block', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: MODAL_STEEL, marginBottom: 5 };
 
 function isoToLocal(iso) {
   if (!iso) return '';
@@ -143,11 +140,11 @@ export default function EditGameModal({ game, rinks = [], teams = null, title = 
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{ width: '100%', maxWidth: 460, maxHeight: '90vh', overflowY: 'auto', background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 14, padding: 20, fontFamily: 'Barlow, sans-serif', boxShadow: '0 24px 60px rgba(0,0,0,0.5)' }}
+        style={{ width: '100%', maxWidth: 460, maxHeight: '90vh', overflowY: 'auto', background: MODAL_CARD, border: `0.5px solid ${MODAL_BORDER}`, borderRadius: 14, padding: 20, fontFamily: 'Barlow, sans-serif', boxShadow: '0 24px 60px rgba(0,0,0,0.5)' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: C.ice }}>{title}</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: C.steel, fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>×</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: MODAL_STEEL, fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>×</button>
         </div>
 
         <Field label="Date & Time">
@@ -194,25 +191,25 @@ export default function EditGameModal({ game, rinks = [], teams = null, title = 
 
         {/* MULTIDIV-1 Phase 4 — forfeit (tournament-only; only before final + both teams set) */}
         {onForfeit && game?.status !== 'final' && homeId && awayId && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', margin: '4px 0 14px', paddingTop: 12, borderTop: `0.5px solid ${C.border}` }}>
-            <span style={{ fontSize: 11, color: C.steel, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Forfeit:</span>
-            <button onClick={() => handleForfeit('home')} disabled={busy} style={{ background: 'none', border: `0.5px solid ${C.border}`, color: C.ice, borderRadius: 999, padding: '7px 12px', fontSize: 11, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', margin: '4px 0 14px', paddingTop: 12, borderTop: `0.5px solid ${MODAL_BORDER}` }}>
+            <span style={{ fontSize: 11, color: MODAL_STEEL, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Forfeit:</span>
+            <button onClick={() => handleForfeit('home')} disabled={busy} style={{ background: 'none', border: `0.5px solid ${MODAL_BORDER}`, color: C.ice, borderRadius: 999, padding: '7px 12px', fontSize: 11, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif' }}>
               {(teams || []).find((t) => t.id === homeId)?.name || 'Home'} wins 3–0
             </button>
-            <button onClick={() => handleForfeit('away')} disabled={busy} style={{ background: 'none', border: `0.5px solid ${C.border}`, color: C.ice, borderRadius: 999, padding: '7px 12px', fontSize: 11, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif' }}>
+            <button onClick={() => handleForfeit('away')} disabled={busy} style={{ background: 'none', border: `0.5px solid ${MODAL_BORDER}`, color: C.ice, borderRadius: 999, padding: '7px 12px', fontSize: 11, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif' }}>
               {(teams || []).find((t) => t.id === awayId)?.name || 'Away'} wins 3–0
             </button>
           </div>
         )}
 
-        {err && <div style={{ color: C.red, fontSize: 12, margin: '4px 0 12px' }}>{err}</div>}
+        {err && <div style={{ color: MODAL_RED, fontSize: 12, margin: '4px 0 12px' }}>{err}</div>}
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
           {onDelete ? (
-            <button onClick={handleDelete} disabled={busy} style={{ background: 'none', border: `0.5px solid ${C.red}`, color: C.red, borderRadius: 999, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif' }}>Delete</button>
+            <button onClick={handleDelete} disabled={busy} style={{ background: 'none', border: `0.5px solid ${MODAL_RED}`, color: MODAL_RED, borderRadius: 999, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif' }}>Delete</button>
           ) : <span />}
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={onClose} disabled={busy} style={{ background: 'none', border: `0.5px solid ${C.border}`, color: C.ice, borderRadius: 999, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif' }}>Cancel</button>
+            <button onClick={onClose} disabled={busy} style={{ background: 'none', border: `0.5px solid ${MODAL_BORDER}`, color: C.ice, borderRadius: 999, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif' }}>Cancel</button>
             <button onClick={handleSave} disabled={busy} style={{ background: C.blue, border: 'none', color: '#fff', borderRadius: 999, padding: '9px 18px', fontSize: 13, fontWeight: 800, cursor: busy ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif' }}>{busy ? 'Saving…' : 'Save changes'}</button>
           </div>
         </div>

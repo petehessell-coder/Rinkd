@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { downloadRosterTemplate, parseRoster, uploadRoster } from '../lib/roster';
+import { C, colors } from '../lib/tokens';
 
 const B = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
-  ice: '#F4F7FA', steel: '#8BA3BE', dark: '#07111F',
-  card: '#112236', border: '#1E3A5C', amber: '#F59E0B', green: '#22C55E',
+  navy: C.navy, blue: C.blue, red: C.red,
+  ice: C.ice, steel: C.steel, dark: C.dark,
+  card: '#112236', border: '#1E3A5C', amber: colors.warning, green: colors.success,
 };
 
 /**

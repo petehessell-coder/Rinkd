@@ -1,9 +1,9 @@
 import React, { useRef, useState, useEffect } from 'react';
 import SignatureCanvas from 'react-signature-canvas';
 import { supabase } from '../lib/supabase';
+import { C } from '../lib/tokens';
 
-const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', dark:'#07111F', steel:'#8BA3BE', green:'#22C55E' };
-const inputStyle = { width:'100%', background:'#07111F', border:'0.5px solid rgba(46,91,140,0.5)', borderRadius:8, padding:'10px 12px', color:C.ice, fontFamily:'Barlow, sans-serif', fontSize:14, outline:'none' };
+const inputStyle = { width:'100%', background:C.dark, border:'0.5px solid rgba(46,91,140,0.5)', borderRadius:8, padding:'10px 12px', color:C.ice, fontFamily:'Barlow, sans-serif', fontSize:14, outline:'none' };
 
 // GS-6 — pre-game coach roster sign-off (USA Hockey Rule 505). The coach
 // reviews the dressed roster and signs to certify it, BEFORE the game. Runs on
@@ -110,7 +110,7 @@ export default function CoachSignoff({ game, isLeague, teamId, teamName, role, r
 
         <div style={{ fontSize:11, fontWeight:700, color:'rgba(244,247,250,0.45)', letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:6 }}>Sign here</div>
         <div style={{ background:'#fff', borderRadius:8, border:'0.5px solid rgba(46,91,140,0.5)', overflow:'hidden', marginBottom:4 }}>
-          <SignatureCanvas ref={sigRef} penColor="#0B1F3A" canvasProps={{ width:420, height:110, style:{ width:'100%', height:110 } }} />
+          <SignatureCanvas ref={sigRef} penColor={C.navy} canvasProps={{ width:420, height:110, style:{ width:'100%', height:110 } }} />
         </div>
         <button onClick={() => sigRef.current?.clear()} style={{ background:'none', border:'none', color:'rgba(244,247,250,0.4)', fontSize:11, cursor:'pointer', fontFamily:'Barlow, sans-serif', marginBottom:14 }}>Clear</button>
 
@@ -118,7 +118,7 @@ export default function CoachSignoff({ game, isLeague, teamId, teamName, role, r
           By signing, the coach certifies this roster is correct for this game (USA Hockey Rule 505).
         </div>
 
-        {error && <div style={{ background:'rgba(215,38,56,0.12)', border:'0.5px solid rgba(215,38,56,0.4)', borderRadius:8, padding:'9px 12px', marginBottom:12, fontSize:12.5, color:'#F4F7FA' }}>{error}</div>}
+        {error && <div style={{ background:'rgba(215,38,56,0.12)', border:'0.5px solid rgba(215,38,56,0.4)', borderRadius:8, padding:'9px 12px', marginBottom:12, fontSize:12.5, color:C.ice }}>{error}</div>}
 
         <button onClick={submit} disabled={busy}
           style={{ width:'100%', padding:14, background:busy?'rgba(46,91,140,0.4)':C.red, border:'none', borderRadius:999, color:'#fff', fontSize:15, fontWeight:700, cursor:busy?'not-allowed':'pointer', fontFamily:'Barlow, sans-serif' }}>

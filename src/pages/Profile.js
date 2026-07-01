@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { subscribeToPush, isPushSubscribed, unsubscribeFromPush } from '../lib/push';
 import Layout from '../components/Layout';
-import { C } from '../lib/tokens';
+import { C, colors } from '../lib/tokens';
 import { Icon, StatNumber, ErrorState, Img } from '../components/ui';
 import { number, plural } from '../lib/format';
 import { TierBadge } from '../components/Logos';
@@ -38,14 +38,14 @@ function LowerThird({ label }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center',
-      background: '#0f2847', borderLeft: '4px solid #D72638',
+      background: C.card, borderLeft: `4px solid ${C.red}`,
       marginLeft: -16, marginBottom: 12, padding: '8px 14px 8px 16px',
       borderTopRightRadius: 4, borderBottomRightRadius: 4,
     }}>
       <span style={{
         flex: 1, minWidth: 0,
         fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic',
-        fontSize: 18, lineHeight: 1, letterSpacing: '0.05em', color: '#F4F7FA',
+        fontSize: 18, lineHeight: 1, letterSpacing: '0.05em', color: C.ice,
         textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>{label}</span>
     </div>
@@ -62,14 +62,14 @@ function ProfileAvatar({ profile, size = 72 }) {
   return (
     <div style={{
       width: size, height: size, borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
-      background: '#162f55', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: colors.surfaceElevated, display: 'flex', alignItems: 'center', justifyContent: 'center',
       border: '2px solid rgba(255,255,255,0.16)',
     }}>
       {showImg ? (
         <img src={profile.avatar_url} alt={profile?.name || ''} onError={() => setImgError(true)}
           style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
       ) : (
-        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: Math.round(size * 0.4), color: '#F4F7FA', lineHeight: 1 }}>{initials}</span>
+        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: Math.round(size * 0.4), color: C.ice, lineHeight: 1 }}>{initials}</span>
       )}
     </div>
   );
@@ -83,7 +83,7 @@ function StatLine({ logoColor, initials, title, subtitle, gp, goals, assists, po
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 16px', marginBottom: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-        <div style={{ width: 36, height: 36, borderRadius: 8, background: logoColor || '#2E5B8C', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 14, color: '#fff', flexShrink: 0 }}>
+        <div style={{ width: 36, height: 36, borderRadius: 8, background: logoColor || C.blue, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 14, color: '#fff', flexShrink: 0 }}>
           {initials}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -458,7 +458,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                       position: 'absolute', right: -2, bottom: -2,
                       width: 24, height: 24, borderRadius: '50%',
                       background: avatarUploading ? C.border : C.red, color: '#fff',
-                      border: '2px solid #07111F',
+                      border: `2px solid ${C.dark}`,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: 12, lineHeight: 1,
                     }}>{avatarUploading ? '…' : <Icon name="camera" size={12} color="#fff" />}</span>
@@ -491,7 +491,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
               }}>
                 <span style={{ fontSize: 20, flexShrink: 0 }}>👋</span>
                 <div style={{ flex: 1, minWidth: 160 }}>
-                  <strong style={{ color: '#F59E0B' }}>Pick your username.</strong>{' '}
+                  <strong style={{ color: colors.warning }}>Pick your username.</strong>{' '}
                   Right now you're{' '}
                   <code style={{
                     background: 'rgba(0,0,0,0.3)', padding: '1px 6px', borderRadius: 4,
@@ -500,7 +500,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                   — an auto-generated placeholder. Others see this on your posts and chirps.
                 </div>
                 <button onClick={openEdit} style={{
-                  background: '#F59E0B', color: '#0B1F3A', border: 'none',
+                  background: colors.warning, color: C.navy, border: 'none',
                   padding: '8px 16px', borderRadius: 999, cursor: 'pointer',
                   fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic',
                   fontSize: 13, letterSpacing: '0.05em', textTransform: 'uppercase',
@@ -530,14 +530,14 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
                 <button onClick={openEdit} style={{ flex: 1, minWidth: 120, padding: '8px 16px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'transparent', border: `1.5px solid ${C.border}`, color: C.ice, fontFamily: "'Barlow', sans-serif", fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>Edit</button>
                 {!pushEnabled && (
-                  <button onClick={handleEnableNotifications} disabled={pushLoading} style={{ flex: 1, minWidth: 120, padding: '8px 16px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'transparent', border: `1.5px solid #2E5B8C`, color: '#8BA3BE', fontFamily: "'Barlow', sans-serif", fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
+                  <button onClick={handleEnableNotifications} disabled={pushLoading} style={{ flex: 1, minWidth: 120, padding: '8px 16px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'transparent', border: `1.5px solid ${C.blue}`, color: C.steel, fontFamily: "'Barlow', sans-serif", fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
                     {pushLoading ? '...' : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="bell" size={14} />Notify</span>}
                   </button>
                 )}
                 {pushEnabled && (
                   <button onClick={handleDisableNotifications} disabled={pushLoading}
                     title="Click to turn off"
-                    style={{ flex: 1, minWidth: 120, padding: '8px 16px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.5)', color: '#22C55E', fontSize: 13, fontFamily: "'Barlow', sans-serif", cursor: pushLoading ? 'not-allowed' : 'pointer', fontWeight: 600 }}>
+                    style={{ flex: 1, minWidth: 120, padding: '8px 16px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.5)', color: colors.success, fontSize: 13, fontFamily: "'Barlow', sans-serif", cursor: pushLoading ? 'not-allowed' : 'pointer', fontWeight: 600 }}>
                     {pushLoading ? '...' : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="following" size={14} />On</span>}
                   </button>
                 )}
@@ -580,7 +580,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
               <span style={{ fontSize: 13, color: C.steel }}><strong style={{ color: C.ice }}>{followCounts.followers}</strong> Followers</span>
               <span style={{ fontSize: 13, color: C.steel }}><strong style={{ color: C.ice }}>{followCounts.following}</strong> Following</span>
               {puckCount > 0 && (
-                <span title="Game Pucks won — the fans' Player of the Game pick" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: '#0B1F3A', background: '#C9A84C', padding: '3px 10px', borderRadius: 999, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', letterSpacing: '0.04em', textTransform: 'uppercase' }}>🏆 {puckCount}× Game Puck</span>
+                <span title="Game Pucks won — the fans' Player of the Game pick" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: C.navy, background: C.gold, padding: '3px 10px', borderRadius: 999, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', letterSpacing: '0.04em', textTransform: 'uppercase' }}>🏆 {puckCount}× Game Puck</span>
               )}
             </div>
 
@@ -621,7 +621,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                     {/* Inline hint while the field still holds the auto-
                         generated `user-<UUID-prefix>` placeholder. */}
                     {editHandle.startsWith('user-') && (
-                      <div style={{ fontSize: 11, color: '#F59E0B', marginTop: 4, lineHeight: 1.4 }}>
+                      <div style={{ fontSize: 11, color: colors.warning, marginTop: 4, lineHeight: 1.4 }}>
                         That&apos;s an auto-generated placeholder — pick something you&apos;ll be known by.
                       </div>
                     )}
@@ -661,7 +661,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
             : `Tournament Play · ${plural(tournamentStats.length, 'Event')}`;
           const sub = [profile.position, profile.level].filter(Boolean).join(' · ');
           return (
-            <div style={{ position: 'relative', overflow: 'hidden', background: 'linear-gradient(135deg, #162f55 0%, #0B1F3A 100%)', border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px 18px', marginBottom: 16 }}>
+            <div style={{ position: 'relative', overflow: 'hidden', background: `linear-gradient(135deg, ${colors.surfaceElevated} 0%, ${C.navy} 100%)`, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px 18px', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                 <span style={{ width: 3, height: 14, background: C.red, borderRadius: 2, flexShrink: 0 }} />
                 <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.steel, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{kicker}</span>
@@ -776,7 +776,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                     <LowerThird label="Tournament Stats" />
                     {tournamentStats.map((s, i) => (
                       <StatLine key={`tn-${i}`}
-                        logoColor="#2E5B8C"
+                        logoColor={C.blue}
                         initials={s.team_name?.slice(0, 2).toUpperCase()}
                         title={`${s.team_name} · #${s.jersey_number}`}
                         subtitle={`${s.tournament_name}${s.division ? ` · ${s.division}` : ''}`}

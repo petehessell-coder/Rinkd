@@ -5,17 +5,12 @@ import { supabase } from '../lib/supabase';
 import { useIsRinkdAdmin } from '../lib/userRole';
 import { timeAgo } from '../lib/posts';
 import { ListRowSkeleton, EmptyState } from '../components/Skeletons';
-
-const C = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
-  steel: '#8BA3BE', dark: '#07111F', card: '#0f2847', border: 'rgba(46,91,140,0.4)',
-  green: '#22C55E', amber: '#F59E0B',
-};
+import { C, colors } from '../lib/tokens';
 
 const STATUS_META = {
   new:       { label: 'New',       color: C.red },
-  triaging:  { label: 'Triaging',  color: C.amber },
-  resolved:  { label: 'Resolved',  color: C.green },
+  triaging:  { label: 'Triaging',  color: colors.warning },
+  resolved:  { label: 'Resolved',  color: colors.success },
   wontfix:   { label: "Won't fix", color: C.steel },
 };
 

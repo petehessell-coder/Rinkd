@@ -7,7 +7,7 @@ import { Avatar } from '../components/Logos';
 import { EmptyState, ListRowSkeleton } from '../components/Skeletons';
 import { listNotifications, markRead, markAllRead, deleteNotification, KIND_META } from '../lib/notifications';
 import { timeAgo } from '../lib/posts';
-import { C } from '../lib/tokens';
+import { C, colors } from '../lib/tokens';
 import { Icon, ErrorState } from '../components/ui';
 import { useOnline } from '../lib/useOnline';
 import { prefetchGamePage, prefetchHandlers } from '../lib/prefetch';
@@ -162,8 +162,8 @@ function toneFor(kind) {
 // navy with a red accent slab, bleeding to the content column's left edge.
 function LowerThird({ label }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', background: '#0f2847', borderLeft: '4px solid #D72638', marginLeft: -16, marginBottom: 12, padding: '8px 14px 8px 16px', borderTopRightRadius: 4, borderBottomRightRadius: 4 }}>
-      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 18, lineHeight: 1, letterSpacing: '0.05em', color: '#F4F7FA', textTransform: 'uppercase' }}>{label}</span>
+    <div style={{ display: 'flex', alignItems: 'center', background: C.card, borderLeft: '4px solid #D72638', marginLeft: -16, marginBottom: 12, padding: '8px 14px 8px 16px', borderTopRightRadius: 4, borderBottomRightRadius: 4 }}>
+      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 18, lineHeight: 1, letterSpacing: '0.05em', color: C.ice, textTransform: 'uppercase' }}>{label}</span>
     </div>
   );
 }
@@ -172,7 +172,7 @@ function NotifRow({ n, first, onOpen, onDelete }) {
   const meta = KIND_META[n.kind] || { icon: 'notifications', label: 'Notification' };
   const isUnread = !n.read_at;
   const tone = toneFor(n.kind);
-  const accent = tone === 'red' ? '#D72638' : tone === 'gold' ? '#C9A84C' : '#F4F7FA';
+  const accent = tone === 'red' ? C.red : tone === 'gold' ? C.gold : C.ice;
   const hot = tone !== 'white'; // goal/urgency/POTG → bolder type + accent
   // Split the leading actor name (bold) from the action text (muted). Falls
   // back to the whole body when it isn't name-prefixed (system notifications).
@@ -187,11 +187,11 @@ function NotifRow({ n, first, onOpen, onDelete }) {
         display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px',
         borderTop: first ? 'none' : '1px solid rgba(46,91,140,0.18)',
         borderLeft: isUnread ? '4px solid #D72638' : '4px solid transparent',
-        background: isUnread ? '#162f55' : C.card,
+        background: isUnread ? colors.surfaceElevated : C.card,
         cursor: 'pointer', transition: 'background 0.15s',
       }}
       onMouseEnter={(e) => { if (!isUnread) e.currentTarget.style.background = 'rgba(46,91,140,0.12)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = isUnread ? '#162f55' : C.card; }}>
+      onMouseLeave={(e) => { e.currentTarget.style.background = isUnread ? colors.surfaceElevated : C.card; }}>
       {/* Type icon — tone-colored container (red urgency / gold POTG / neutral). */}
       {n.actor ? (
         <div style={{ position: 'relative', flexShrink: 0 }}>

@@ -13,10 +13,11 @@
 // areScorersHidden) and the card renders team + score only.
 
 import { teamInitials } from './teamInitials';
+import { C as tokensC } from './tokens';
 
 const C = {
-  dark: '#07111F', navy: '#0B1F3A', navyHi: '#13335c', strip: '#0a1830',
-  blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA', steel: '#8BA3BE',
+  dark: tokensC.dark, navy: tokensC.navy, navyHi: '#13335c', strip: '#0a1830',
+  blue: tokensC.blue, red: tokensC.red, ice: tokensC.ice, steel: tokensC.steel,
   line: 'rgba(46,91,140,0.45)',
 };
 
@@ -582,7 +583,7 @@ export async function composeGamePuckCard(card) {
 //
 // player.name === null → youth-suppressed (the card shows "#jersey").
 
-const GOLD = '#C9A84C';
+const GOLD = tokensC.gold;
 const STAT = {
   W: 1080, H: 1350, pad: 64, topH: 150, botH: 230, wmText: 96, wmImgH: 96, wmSize: 150,
   ghost: 560, nameSize: 104, eyebrow: 33, teamSize: 44, pillSize: 34,

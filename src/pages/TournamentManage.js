@@ -30,11 +30,11 @@ import { tournamentPayoutsReady, startConnectOnboarding } from '../lib/stripeCon
 import { listLinks, createLink, setLinkStatus, removeLink, listGameMaps, confirmMatch, ignoreMatch } from '../lib/gamesheet';
 import { listTournamentTeamJerseys, getTournamentTeamLinks, searchLinkableProfiles, linkTournamentPlayer, unlinkTournamentPlayer } from '../lib/tournamentRoster';
 
-const C = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
-  steel: '#8BA3BE', dark: '#07111F', card: '#0f2847', border: 'rgba(46,91,140,0.4)',
-  green: '#22C55E', amber: '#F59E0B',
-};
+import { C as sharedC, colors } from '../lib/tokens';
+
+// Shared tokens + the two semantic keys this page's ~15 call sites still name
+// green/amber (values converge to the tokens; rename to colors.* in a later pass).
+const C = { ...sharedC, green: colors.success, amber: colors.warning };
 
 const TABS = ['Divisions', 'Teams', 'Schedule', 'Bracket', 'Registrations', 'Scorers', 'Suspensions', 'Sponsors', 'Integrations', 'Settings'];
 
@@ -61,10 +61,10 @@ const DIVISION_FORMAT_PRESETS = {
 };
 
 const REG_STATUS = {
-  pending:    { label: 'Pending',    color: '#F59E0B', bg: 'rgba(245,158,11,0.15)' },
-  approved:   { label: 'Approved',   color: '#22C55E', bg: 'rgba(34,197,94,0.15)' },
-  waitlisted: { label: 'Waitlisted', color: '#8BA3BE', bg: 'rgba(139,163,190,0.15)' },
-  rejected:   { label: 'Rejected',   color: '#D72638', bg: 'rgba(215,38,56,0.15)' },
+  pending:    { label: 'Pending',    color: colors.warning, bg: 'rgba(245,158,11,0.15)' },
+  approved:   { label: 'Approved',   color: colors.success, bg: 'rgba(34,197,94,0.15)' },
+  waitlisted: { label: 'Waitlisted', color: C.steel, bg: 'rgba(139,163,190,0.15)' },
+  rejected:   { label: 'Rejected',   color: C.red, bg: 'rgba(215,38,56,0.15)' },
 };
 const REG_GROUPS = [['pending', 'Pending'], ['approved', 'Approved'], ['waitlisted', 'Waitlisted'], ['rejected', 'Rejected']];
 
@@ -239,9 +239,9 @@ export default function TournamentManagePage({ currentUser, profile }) {
             <div style={{ background: 'rgba(245,158,11,0.12)', border: '0.5px solid rgba(245,158,11,0.4)', borderRadius: 10, padding: '12px 14px', marginBottom: 18, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
               <div style={{ fontSize: 18 }}>🔒</div>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#F59E0B' }}>Activation pending</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: colors.warning }}>Activation pending</div>
                 <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.65)', marginTop: 4, lineHeight: 1.5 }}>
-                  You can set up teams, schedule, and bracket now. Live scoring + auto-recap pushes are locked until Rinkd activates this tournament. Email <a href="mailto:hello@rinkd.app?subject=Tournament Activation Request" style={{ color: '#F59E0B' }}>hello@rinkd.app</a> to activate, or see <a href="/pricing" style={{ color: '#F59E0B' }}>pricing</a>.
+                  You can set up teams, schedule, and bracket now. Live scoring + auto-recap pushes are locked until Rinkd activates this tournament. Email <a href="mailto:hello@rinkd.app?subject=Tournament Activation Request" style={{ color: colors.warning }}>hello@rinkd.app</a> to activate, or see <a href="/pricing" style={{ color: colors.warning }}>pricing</a>.
                 </div>
               </div>
             </div>
@@ -1371,8 +1371,8 @@ function RegistrationsTab({ tournamentId, tournament, reload, flash }) {
   };
   const actBtn = (kind) => ({
     fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 999, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', border: '0.5px solid',
-    ...(kind === 'approve' ? { background: 'rgba(34,197,94,0.15)', borderColor: 'rgba(34,197,94,0.5)', color: '#22C55E' }
-      : kind === 'rejected' ? { background: 'transparent', borderColor: 'rgba(215,38,56,0.45)', color: '#E26B6B' }
+    ...(kind === 'approve' ? { background: 'rgba(34,197,94,0.15)', borderColor: 'rgba(34,197,94,0.5)', color: colors.success }
+      : kind === 'rejected' ? { background: 'transparent', borderColor: 'rgba(215,38,56,0.45)', color: colors.redSoft }
       : { background: 'transparent', borderColor: C.border, color: C.steel }),
   });
 
@@ -1897,7 +1897,7 @@ function SettingsTab({ tournament, currentUser, reload, flash }) {
 
       {/* Recap + Game Puck sponsors moved to the Sponsors tab. */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 16px', marginBottom: 14, fontSize: 12, color: C.steel, lineHeight: 1.5 }}>
-        Recap &amp; Game Puck sponsors moved to the <b style={{ color: '#F4F7FA' }}>Sponsors</b> tab.
+        Recap &amp; Game Puck sponsors moved to the <b style={{ color: C.ice }}>Sponsors</b> tab.
       </div>
 
       {/* GS-6 — USA Hockey compliant scoresheet (set once here; the scorer's
@@ -1908,7 +1908,7 @@ function SettingsTab({ tournament, currentUser, reload, flash }) {
           <input type="checkbox" checked={usahCompliant} onChange={(e) => setUsahCompliant(e.target.checked)}
             style={{ width: 20, height: 20, accentColor: C.red, flexShrink: 0, cursor: 'pointer' }} />
           <span style={{ flex: 1 }}>
-            <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: '#F4F7FA' }}>Produce a USA Hockey official scoresheet</span>
+            <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: C.ice }}>Produce a USA Hockey official scoresheet</span>
             <span style={{ display: 'block', fontSize: 12, color: C.steel, marginTop: 2, lineHeight: 1.4 }}>
               Turns on the printed roster, coaches block, game times, and coach + referee signatures. Leave off for non-USA-Hockey play.
             </span>
@@ -2395,9 +2395,9 @@ function SuspensionsTab({ tournamentId, flash, onPendingCount }) {
 // then mirrors scores in. This tab manages the link + lets the director confirm
 // or ignore the matches the poller queues. (Polling/score-writing is server-side.)
 const GS_MAP_STATUS = {
-  pending:   { label: 'Needs review', color: '#F59E0B', bg: 'rgba(245,158,11,0.15)' },
-  confirmed: { label: 'Synced',       color: '#22C55E', bg: 'rgba(34,197,94,0.15)' },
-  ignored:   { label: 'Ignored',      color: '#8BA3BE', bg: 'rgba(139,163,190,0.15)' },
+  pending:   { label: 'Needs review', color: colors.warning, bg: 'rgba(245,158,11,0.15)' },
+  confirmed: { label: 'Synced',       color: colors.success, bg: 'rgba(34,197,94,0.15)' },
+  ignored:   { label: 'Ignored',      color: C.steel, bg: 'rgba(139,163,190,0.15)' },
 };
 
 // ====================== INTEGRATIONS TAB ======================

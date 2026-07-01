@@ -1,11 +1,13 @@
+import { colors } from './tokens';
+
 export const TIERS = [
-  { name: 'Mite',   min: 0,     max: 99,    color: '#8BA3BE', discount: 0 },
-  { name: 'Squirt', min: 100,   max: 499,   color: '#22C55E', discount: 0 },
+  { name: 'Mite',   min: 0,     max: 99,    color: colors.muted, discount: 0 },
+  { name: 'Squirt', min: 100,   max: 499,   color: colors.success, discount: 0 },
   { name: 'Peewee', min: 500,   max: 1499,  color: '#0EA5E9', discount: 5 },
-  { name: 'Bantam', min: 1500,  max: 3999,  color: '#F59E0B', discount: 10 },
-  { name: 'Midget', min: 4000,  max: 7999,  color: '#8B5CF6', discount: 15 },
-  { name: 'Junior', min: 8000,  max: 14999, color: '#D72638', discount: 20 },
-  { name: 'Pro',    min: 15000, max: Infinity, color: '#F4F7FA', discount: 25 },
+  { name: 'Bantam', min: 1500,  max: 3999,  color: colors.warning, discount: 10 },
+  { name: 'Midget', min: 4000,  max: 7999,  color: colors.premium, discount: 15 },
+  { name: 'Junior', min: 8000,  max: 14999, color: colors.red, discount: 20 },
+  { name: 'Pro',    min: 15000, max: Infinity, color: colors.ice, discount: 25 },
 ];
 
 export function getTier(points) {

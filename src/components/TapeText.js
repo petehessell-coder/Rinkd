@@ -1,4 +1,5 @@
 import React from 'react';
+import { colors } from '../lib/tokens';
 
 const SUPPORTED = /^[A-Z]$/;
 
@@ -47,7 +48,7 @@ export default function TapeText({ children, height = 30, gap, style, className 
         return (
           <span key={i} aria-hidden="true" style={{
             fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic',
-            fontSize: height * 0.92, lineHeight: 1, color: '#F4F7FA', alignSelf: 'center',
+            fontSize: height * 0.92, lineHeight: 1, color: colors.ice, alignSelf: 'center',
           }}>{ch}</span>
         );
       })}

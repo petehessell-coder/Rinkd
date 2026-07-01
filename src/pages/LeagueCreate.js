@@ -9,6 +9,7 @@ import { addCommissionerByInput } from '../lib/leagueCommissioners';
 import { addScorerByInput } from '../lib/leagueScorers';
 import { uploadMedia } from '../lib/posts';
 import { classifyImage } from '../lib/imageModeration';
+import { C, colors } from '../lib/tokens';
 
 // Phase 1 of the league-parity build (May 19, 2026 plan;
 // see ~/Downloads/rinkd_v4/LEAGUE_PARITY_PHASE_1_BUILD.md).
@@ -30,12 +31,12 @@ import { classifyImage } from '../lib/imageModeration';
 // run the season from /league/:id/manage.
 
 const COLORS = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
-  ice: '#F4F7FA', steel: '#8BA3BE', dark: '#07111F',
-  card: '#0f2847', border: 'rgba(46,91,140,0.4)',
+  navy: C.navy, blue: C.blue, red: C.red,
+  ice: C.ice, steel: C.steel, dark: C.dark,
+  card: C.card, border: C.border,
 };
 
-const LOGO_COLORS = ['#D72638','#2E5B8C','#22C55E','#F59E0B','#8B5CF6','#0EA5E9','#EC4899','#0B1F3A'];
+const LOGO_COLORS = [C.red, C.blue, colors.success, colors.warning, colors.premium, '#0EA5E9', '#EC4899', C.navy];
 
 const DEFAULT_SETTINGS = {
   period_length_minutes: 12,
@@ -115,7 +116,7 @@ const FORMAT_PRESETS = {
   },
 };
 
-const inputStyle = { width: '100%', background: '#07111F', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 8, padding: '10px 12px', color: '#F4F7FA', fontFamily: 'Barlow, sans-serif', fontSize: 14, outline: 'none' };
+const inputStyle = { width: '100%', background: C.dark, border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 8, padding: '10px 12px', color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 14, outline: 'none' };
 const selectStyle = { ...inputStyle };
 
 function Field({ label, children }) {
@@ -130,7 +131,7 @@ function Field({ label, children }) {
 function Input({ value, onChange, placeholder, type = 'text', maxLength }) {
   return <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} maxLength={maxLength}
     style={inputStyle}
-    onFocus={e => e.target.style.borderColor = '#2E5B8C'}
+    onFocus={e => e.target.style.borderColor = C.blue}
     onBlur={e => e.target.style.borderColor = 'rgba(46,91,140,0.5)'} />;
 }
 
@@ -146,10 +147,10 @@ function Toggle({ value, onChange, label, sub }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
       <div>
-        <div style={{ fontSize: 13, color: '#F4F7FA' }}>{label}</div>
+        <div style={{ fontSize: 13, color: C.ice }}>{label}</div>
         {sub && <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>{sub}</div>}
       </div>
-      <div onClick={() => onChange(!value)} style={{ width: 36, height: 20, background: value ? '#2E5B8C' : 'rgba(244,247,250,0.15)', borderRadius: 20, position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background 0.15s' }}>
+      <div onClick={() => onChange(!value)} style={{ width: 36, height: 20, background: value ? C.blue : 'rgba(244,247,250,0.15)', borderRadius: 20, position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background 0.15s' }}>
         <div style={{ width: 14, height: 14, background: '#fff', borderRadius: '50%', position: 'absolute', top: 3, transition: 'left 0.15s', left: value ? 19 : 3 }} />
       </div>
     </div>
@@ -236,7 +237,7 @@ function Step1({ data, onChange, onNext }) {
               <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} disabled={uploading} />
             </label>
             {data.logo_url && (
-              <button type="button" onClick={() => onChange('logo_url', '')} style={{ background: 'transparent', border: 'none', color: '#E26B6B', fontSize: 11, cursor: 'pointer', padding: 0 }}>Remove</button>
+              <button type="button" onClick={() => onChange('logo_url', '')} style={{ background: 'transparent', border: 'none', color: colors.redSoft, fontSize: 11, cursor: 'pointer', padding: 0 }}>Remove</button>
             )}
           </div>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(244,247,250,0.4)', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 12, marginBottom: 6 }}>{data.logo_url ? 'Fallback Color' : 'Logo Color'}</div>
@@ -328,7 +329,7 @@ function Step2({ data, onChange, onBack, onNext }) {
           {Object.entries(FORMAT_PRESETS).map(([key, preset]) => (
             <button key={key} onClick={() => applyPreset(key)}
               style={{ flex: '1 1 200px', textAlign: 'left', background: 'rgba(46,91,140,0.15)', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#F4F7FA' }}>{preset.label}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.ice }}>{preset.label}</div>
               <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.45)', marginTop: 2 }}>{preset.sub}</div>
             </button>
           ))}
@@ -378,8 +379,8 @@ function Step2({ data, onChange, onBack, onNext }) {
               <button onClick={() => i > 0 && moveTb(i, i-1)} style={{ background: 'none', border: 'none', color: i>0?'rgba(244,247,250,0.4)':'rgba(244,247,250,0.1)', cursor: i>0?'pointer':'default', fontSize: 12, padding: '0 4px' }}>▲</button>
               <button onClick={() => i < s.tiebreakers.length-1 && moveTb(i, i+1)} style={{ background: 'none', border: 'none', color: i<s.tiebreakers.length-1?'rgba(244,247,250,0.4)':'rgba(244,247,250,0.1)', cursor: i<s.tiebreakers.length-1?'pointer':'default', fontSize: 12, padding: '0 4px' }}>▼</button>
             </div>
-            <span style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(46,91,140,0.4)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'rgba(244,247,250,0.6)', flexShrink: 0 }}>{i+1}</span>
-            <span style={{ fontSize: 13, color: '#F4F7FA' }}>{TIEBREAKER_LABELS[key]}</span>
+            <span style={{ width: 20, height: 20, borderRadius: '50%', background: C.border, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'rgba(244,247,250,0.6)', flexShrink: 0 }}>{i+1}</span>
+            <span style={{ fontSize: 13, color: C.ice }}>{TIEBREAKER_LABELS[key]}</span>
           </div>
         ))}
       </Card>
@@ -438,7 +439,7 @@ function Step3({ data, onChange, onBack, onNext }) {
     onChange('teams', [...(data.teams || []), {
       name,
       team_id: null,
-      logo_color: '#2E5B8C',
+      logo_color: C.blue,
       logo_initials: initials,
       logo_url: null,
       division: newTeamDivision || (divisions[0] || ''),
@@ -477,7 +478,7 @@ function Step3({ data, onChange, onBack, onNext }) {
         </div>
         {divisions.map((d, i) => (
           <div key={d} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
-            <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: 'rgba(46,91,140,0.3)', color: '#8BA3BE', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{d}</span>
+            <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: 'rgba(46,91,140,0.3)', color: C.steel, letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{d}</span>
             <span style={{ flex: 1 }} />
             <button onClick={() => removeDivision(i)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.3)', cursor: 'pointer', fontSize: 16 }}>✕</button>
           </div>
@@ -495,10 +496,10 @@ function Step3({ data, onChange, onBack, onNext }) {
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
             <TeamLogo team={t} size={32} radius={6} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#F4F7FA' }}>{t.name}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>{t.name}</div>
               {t.division && <div style={{ fontSize: 10, color: 'rgba(244,247,250,0.4)' }}>{t.division}</div>}
             </div>
-            {!t.team_id && <span style={{ fontSize: 9, fontWeight: 700, color: '#F59E0B', padding: '2px 6px', borderRadius: 4, background: 'rgba(245,158,11,0.12)', letterSpacing: '0.05em' }}>UNLINKED</span>}
+            {!t.team_id && <span style={{ fontSize: 9, fontWeight: 700, color: colors.warning, padding: '2px 6px', borderRadius: 4, background: 'rgba(245,158,11,0.12)', letterSpacing: '0.05em' }}>UNLINKED</span>}
             <button onClick={() => removeTeam(i)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.3)', cursor: 'pointer', fontSize: 16, padding: '0 4px' }}>✕</button>
           </div>
         ))}
@@ -519,7 +520,7 @@ function Step3({ data, onChange, onBack, onNext }) {
             {searchResults.map(t => (
               <div key={t.id} onClick={() => addExistingTeam(t)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
                 <TeamLogo team={t} size={26} radius={5} />
-                <span style={{ fontSize: 13, color: '#F4F7FA' }}>{t.name}</span>
+                <span style={{ fontSize: 13, color: C.ice }}>{t.name}</span>
                 <span style={{ marginLeft: 'auto', fontSize: 11, color: '#9BB5D6' }}>+ Add</span>
               </div>
             ))}
@@ -604,8 +605,8 @@ export default function LeagueCreate({ profile }) {
     name: '', division: '', level: '', location: '', season: '',
     start_date: '', end_date: '',
     venue_name: '', venue_address: '',
-    logo_color: '#2E5B8C', logo_initials: '', logo_url: '',
-    accent_color: '#D72638',
+    logo_color: C.blue, logo_initials: '', logo_url: '',
+    accent_color: C.red,
     settings: { ...DEFAULT_SETTINGS },
     divisions: [],
     teams: [],
@@ -706,10 +707,10 @@ export default function LeagueCreate({ profile }) {
 
   return (
     <Layout profile={profile}>
-      <div style={{ background: '#07111F', minHeight: '100vh', padding: 20, fontFamily: 'Barlow, sans-serif', color: '#F4F7FA', maxWidth: 600, margin: '0 auto' }}>
+      <div style={{ background: C.dark, minHeight: '100vh', padding: 20, fontFamily: 'Barlow, sans-serif', color: C.ice, maxWidth: 600, margin: '0 auto' }}>
         <button onClick={() => navigate('/leagues')} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.5)', fontSize: 13, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', marginBottom: 16 }}>← Leagues</button>
         <Progress step={step} />
-        {error && <div style={{ background: 'rgba(215,38,56,0.15)', border: '0.5px solid rgba(215,38,56,0.4)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#D72638' }}>{error}</div>}
+        {error && <div style={{ background: 'rgba(215,38,56,0.15)', border: '0.5px solid rgba(215,38,56,0.4)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: C.red }}>{error}</div>}
         {step === 1 && <Step1 data={data} onChange={onChange} onNext={() => { if (!data.name.trim()) { setError('Add a league name to continue.'); return; } setError(null); setStep(2); }} />}
         {step === 2 && <Step2 data={data} onChange={onChange} onBack={() => setStep(1)} onNext={() => setStep(3)} />}
         {step === 3 && <Step3 data={data} onChange={onChange} onBack={() => setStep(2)} onNext={() => setStep(4)} />}

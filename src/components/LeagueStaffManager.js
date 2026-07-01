@@ -3,6 +3,7 @@ import {
   listLeagueStaff, assignLeagueManagerByInput, removeLeagueManager, revokeLeagueManagerInvite,
 } from '../lib/leagueManagers';
 import { useUndoable } from './ui';
+import { C, colors } from '../lib/tokens';
 
 // LEAGUE-MGR-1 — the commissioner-only "Staff" tab. Add/remove league managers
 // (operational staff: teams/schedule/divisions/playoffs/feed + join-requests;
@@ -11,8 +12,8 @@ import { useUndoable } from './ui';
 //
 //   <LeagueStaffManager leagueId={id} leagueName={...} invitedBy={...} />
 
-const C = { ice: '#F4F7FA', steel: '#8BA3BE', dim: '#7C8B9F', card: '#0f2847', panel: '#11253E', border: 'rgba(46,91,140,0.45)', input: '#07111F', blue: '#2E5B8C', red: '#E26B6B', green: '#5BCF8E', amber: '#E0A93B' };
-const inputStyle = { width: '100%', boxSizing: 'border-box', background: C.input, color: C.ice, border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 11px', fontFamily: 'Barlow, sans-serif', fontSize: 14, outline: 'none' };
+const LOCAL = { dim: '#7C8B9F', panel: '#11253E', green: '#5BCF8E', amber: '#E0A93B' };
+const inputStyle = { width: '100%', boxSizing: 'border-box', background: C.dark, color: C.ice, border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 11px', fontFamily: 'Barlow, sans-serif', fontSize: 14, outline: 'none' };
 const label = { fontSize: 11, fontWeight: 700, color: C.steel, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'block', marginBottom: 5 };
 const pillBtn = (bg, fg, brd) => ({ background: bg, color: fg, border: brd || 'none', borderRadius: 999, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' });
 
@@ -93,7 +94,7 @@ export default function LeagueStaffManager({ leagueId, leagueName, invitedBy }) 
         Add managers to help run the league — they can manage teams, the schedule, divisions, playoffs, the feed, and roster join-requests. They <strong>cannot</strong> change league settings, billing, activation, delete the league, or manage staff.
       </div>
 
-      {msg && <div style={{ marginBottom: 12, fontSize: 13, color: msg.kind === 'ok' ? C.green : C.red }}>{msg.text}</div>}
+      {msg && <div style={{ marginBottom: 12, fontSize: 13, color: msg.kind === 'ok' ? LOCAL.green : colors.redSoft }}>{msg.text}</div>}
 
       {/* Add manager */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 18 }}>
@@ -108,7 +109,7 @@ export default function LeagueStaffManager({ leagueId, leagueName, invitedBy }) 
               onKeyDown={(e) => { if (e.key === 'Enter' && !busy) add(); }} style={inputStyle} />
           </div>
         )}
-        <div style={{ fontSize: 11, color: C.dim, marginTop: 8 }}>
+        <div style={{ fontSize: 11, color: LOCAL.dim, marginTop: 8 }}>
           Existing account → added right away. No account yet → we email a one-time magic link (expires in 14 days); they become a manager after signing up with that email and clicking it.
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
@@ -119,17 +120,17 @@ export default function LeagueStaffManager({ leagueId, leagueName, invitedBy }) 
       {/* Current managers */}
       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 8 }}>Managers</div>
       {staff === null ? (
-        <div style={{ color: C.dim, fontSize: 13, padding: '14px 0' }}>Warming up.</div>
+        <div style={{ color: LOCAL.dim, fontSize: 13, padding: '14px 0' }}>Warming up.</div>
       ) : managers.length === 0 ? (
-        <div style={{ color: C.dim, fontSize: 13, padding: '14px 0' }}>No managers yet — add one above to share the workload. You keep full commissioner control either way.</div>
+        <div style={{ color: LOCAL.dim, fontSize: 13, padding: '14px 0' }}>No managers yet — add one above to share the workload. You keep full commissioner control either way.</div>
       ) : managers.map((m) => (
-        <div key={m.user_id} style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: 12, marginBottom: 10, display: 'flex', gap: 12, alignItems: 'center' }}>
+        <div key={m.user_id} style={{ background: LOCAL.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: 12, marginBottom: 10, display: 'flex', gap: 12, alignItems: 'center' }}>
           <div style={{ width: 38, height: 38, borderRadius: 999, background: m.avatar_color || C.blue, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: '#fff', flexShrink: 0 }}>{initials(m)}</div>
           <div style={{ flex: 1, minWidth: 120 }}>
             <div style={{ color: C.ice, fontWeight: 700, fontSize: 14 }}>{m.name || `@${m.handle}`}</div>
-            <div style={{ color: C.dim, fontSize: 12 }}>{m.handle ? `@${m.handle}` : ''} · Manager</div>
+            <div style={{ color: LOCAL.dim, fontSize: 12 }}>{m.handle ? `@${m.handle}` : ''} · Manager</div>
           </div>
-          <button onClick={() => remove(m)} style={pillBtn('transparent', C.red, `1px solid ${C.red}`)}>Remove</button>
+          <button onClick={() => remove(m)} style={pillBtn('transparent', colors.redSoft, `1px solid ${colors.redSoft}`)}>Remove</button>
         </div>
       ))}
 
@@ -138,13 +139,13 @@ export default function LeagueStaffManager({ leagueId, leagueName, invitedBy }) 
         <>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', margin: '18px 0 8px' }}>Pending invites</div>
           {invites.map((inv) => (
-            <div key={inv.id} style={{ background: C.panel, border: `1px dashed ${C.border}`, borderRadius: 10, padding: 12, marginBottom: 10, display: 'flex', gap: 12, alignItems: 'center' }}>
+            <div key={inv.id} style={{ background: LOCAL.panel, border: `1px dashed ${C.border}`, borderRadius: 10, padding: 12, marginBottom: 10, display: 'flex', gap: 12, alignItems: 'center' }}>
               <div style={{ fontSize: 18 }}>✉️</div>
               <div style={{ flex: 1, minWidth: 120 }}>
                 <div style={{ color: C.ice, fontWeight: 700, fontSize: 14 }}>{inv.email}</div>
-                <div style={{ color: C.amber, fontSize: 12 }}>Invited · awaiting signup{inv.expires_at ? ` · expires ${new Date(inv.expires_at).toLocaleDateString()}` : ''}</div>
+                <div style={{ color: LOCAL.amber, fontSize: 12 }}>Invited · awaiting signup{inv.expires_at ? ` · expires ${new Date(inv.expires_at).toLocaleDateString()}` : ''}</div>
               </div>
-              <button onClick={() => revoke(inv)} style={pillBtn('transparent', C.red, `1px solid ${C.red}`)}>Revoke</button>
+              <button onClick={() => revoke(inv)} style={pillBtn('transparent', colors.redSoft, `1px solid ${colors.redSoft}`)}>Revoke</button>
             </div>
           ))}
         </>

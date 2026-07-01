@@ -9,9 +9,10 @@ import { supabase } from './supabase';
 import { buildRecapCardData } from './shareCard';
 import { getGamePuck } from './gamePucks';
 import { areScorersHidden, getRecapSponsor, getGamePuckSponsor } from './publicShare';
+import { colors } from './tokens';
 
-const TOURN_BLUE = '#2E5B8C';
-const TOURN_RED = '#D72638';
+const TOURN_BLUE = colors.blue;
+const TOURN_RED = colors.red;
 
 function roundLabelFor(isLeague, game) {
   if (isLeague) return game.round && game.round !== 'pool' ? titleCase(game.round) : 'Regular season';
@@ -106,8 +107,8 @@ export async function loadGamePuckCardData(gameId, isLeague) {
   const homeId = g.home_team_id, awayId = g.away_team_id;
   const homeName = isLeague ? (g.home_lt?.team?.name || g.home_lt?.team_name) : g.home_team?.team_name;
   const awayName = isLeague ? (g.away_lt?.team?.name || g.away_lt?.team_name) : g.away_team?.team_name;
-  const homeColor = isLeague ? (g.home_lt?.team?.logo_color || g.home_lt?.logo_color) : '#2E5B8C';
-  const awayColor = isLeague ? (g.away_lt?.team?.logo_color || g.away_lt?.logo_color) : '#D72638';
+  const homeColor = isLeague ? (g.home_lt?.team?.logo_color || g.home_lt?.logo_color) : colors.blue;
+  const awayColor = isLeague ? (g.away_lt?.team?.logo_color || g.away_lt?.logo_color) : colors.red;
   const isHome = leader.team_id === homeId;
   const competition = parent?.name || 'Rinkd';
 
@@ -116,7 +117,7 @@ export async function loadGamePuckCardData(gameId, isLeague) {
       name,
       jersey: leader.jersey,
       teamName: isHome ? homeName : awayName,
-      teamColor: (isHome ? homeColor : awayColor) || '#2E5B8C',
+      teamColor: (isHome ? homeColor : awayColor) || colors.blue,
     },
     votes: leader.votes,
     game: { homeName, awayName, homeScore: g.home_score, awayScore: g.away_score, round: roundLabelFor(isLeague, g), competition },

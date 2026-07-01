@@ -2,10 +2,11 @@ import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useUserRole, useIsRinkdAdmin, roleMenuSections } from '../lib/userRole';
 import { Icon } from './ui';
+import { C } from '../lib/tokens';
 
 const B = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
-  ice: '#F4F7FA', steel: '#8BA3BE', dark: '#07111F',
+  navy: C.navy, blue: C.blue, red: C.red,
+  ice: C.ice, steel: C.steel, dark: C.dark,
   card: '#112236', border: '#1E3A5C',
 };
 

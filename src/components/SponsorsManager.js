@@ -8,6 +8,7 @@ import { classifyImage } from '../lib/imageModeration';
 import { supabase } from '../lib/supabase';
 import AdSlot from './AdSlot';
 import { useUndoable } from './ui';
+import { C, colors } from '../lib/tokens';
 
 // ADS-1 · M2 — the Sponsors tab. One home for an event's on-page sponsor
 // inventory. Phase 1 = the event banner (top of the league/tournament page).
@@ -15,8 +16,8 @@ import { useUndoable } from './ui';
 //
 //   <SponsorsManager ownerType="league" ownerId={id} isYouth={…} currentUser={…} />
 
-const C = { ice: '#F4F7FA', steel: '#8BA3BE', dim: '#7C8B9F', card: '#0f2847', panel: '#11253E', border: 'rgba(46,91,140,0.45)', input: '#07111F', blue: '#2E5B8C', red: '#E26B6B' };
-const inputStyle = { width: '100%', boxSizing: 'border-box', background: C.input, color: C.ice, border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 11px', fontFamily: 'Barlow, sans-serif', fontSize: 14, outline: 'none' };
+const localC = { dim: '#7C8B9F', panel: '#11253E', input: C.dark };
+const inputStyle = { width: '100%', boxSizing: 'border-box', background: localC.input, color: C.ice, border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 11px', fontFamily: 'Barlow, sans-serif', fontSize: 14, outline: 'none' };
 const label = { fontSize: 11, fontWeight: 700, color: C.steel, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'block', marginBottom: 5 };
 
 const prettyCat = (c) => c.replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
@@ -111,7 +112,7 @@ export default function SponsorsManager({ ownerType, ownerId, isYouth = false, s
 
       {onSaveSettings && <ShareCardSponsors settings={settings} onSaveSettings={onSaveSettings} />}
 
-      {msg && <div style={{ marginBottom: 12, fontSize: 13, color: msg.kind === 'ok' ? '#5BCF8E' : C.red }}>{msg.text}</div>}
+      {msg && <div style={{ marginBottom: 12, fontSize: 13, color: msg.kind === 'ok' ? '#5BCF8E' : colors.redSoft }}>{msg.text}</div>}
 
       {/* Add sponsor */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 18 }}>
@@ -126,7 +127,7 @@ export default function SponsorsManager({ ownerType, ownerId, isYouth = false, s
                 <input type="file" accept="image/*" onChange={onUpload} style={{ display: 'none' }} disabled={uploading} />
               </label>
             </div>
-            <div style={{ fontSize: 11, color: C.dim, marginTop: 5 }}>Wide image works best (banner). PNG/JPG/WebP/SVG up to 5 MB.</div>
+            <div style={{ fontSize: 11, color: localC.dim, marginTop: 5 }}>Wide image works best (banner). PNG/JPG/WebP/SVG up to 5 MB.</div>
           </div>
           <div><label style={label}>Sponsor name *</label><input value={form.sponsor_name} onChange={(e) => setF('sponsor_name', e.target.value)} maxLength={50} placeholder="e.g. Little Caesars" style={inputStyle} /></div>
           <div><label style={label}>Link (tap-through)</label><input value={form.link_url} onChange={(e) => setF('link_url', e.target.value)} placeholder="https://sponsor.com" style={inputStyle} /></div>
@@ -135,7 +136,7 @@ export default function SponsorsManager({ ownerType, ownerId, isYouth = false, s
             <select value={form.slot} onChange={(e) => setF('slot', e.target.value)} style={inputStyle}>
               {AD_SLOTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
-            <div style={{ fontSize: 11, color: C.dim, marginTop: 5 }}>{AD_SLOTS.find((s) => s.value === form.slot)?.hint}</div>
+            <div style={{ fontSize: 11, color: localC.dim, marginTop: 5 }}>{AD_SLOTS.find((s) => s.value === form.slot)?.hint}</div>
           </div>
           <div>
             <label style={label}>Category</label>
@@ -162,19 +163,19 @@ export default function SponsorsManager({ ownerType, ownerId, isYouth = false, s
       {/* Existing sponsors */}
       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 8 }}>Active sponsors</div>
       {sponsors === null ? (
-        <div style={{ color: C.dim, fontSize: 13, padding: '14px 0' }}>Warming up.</div>
+        <div style={{ color: localC.dim, fontSize: 13, padding: '14px 0' }}>Warming up.</div>
       ) : sponsors.length === 0 ? (
-        <div style={{ color: C.dim, fontSize: 13, padding: '14px 0' }}>No sponsors on the board yet. Add one above and it goes live on your event page.</div>
+        <div style={{ color: localC.dim, fontSize: 13, padding: '14px 0' }}>No sponsors on the board yet. Add one above and it goes live on your event page.</div>
       ) : sponsors.map((s) => {
         const p = (s.placements || [])[0];
         return (
-          <div key={s.id} style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: 12, marginBottom: 10, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div key={s.id} style={{ background: localC.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: 12, marginBottom: 10, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             {s.image_url
               ? <img src={s.image_url} alt="" style={{ height: 44, width: 'auto', maxWidth: 120, borderRadius: 6, objectFit: 'cover' }} />
-              : <div style={{ height: 44, width: 80, borderRadius: 6, background: C.input, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: C.dim }}>text</div>}
+              : <div style={{ height: 44, width: 80, borderRadius: 6, background: localC.input, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: localC.dim }}>text</div>}
             <div style={{ flex: 1, minWidth: 140 }}>
               <div style={{ color: C.ice, fontWeight: 700, fontSize: 14 }}>{s.sponsor_name}</div>
-              <div style={{ color: C.dim, fontSize: 12 }}>{p ? slotLabel(p.slot) : '—'}{s.category ? ` · ${prettyCat(s.category)}` : ''}{p ? ` · weight ${p.weight}` : ''}{p?.ends_at ? ` · ends ${new Date(p.ends_at).toLocaleDateString()}` : ''}</div>
+              <div style={{ color: localC.dim, fontSize: 12 }}>{p ? slotLabel(p.slot) : '—'}{s.category ? ` · ${prettyCat(s.category)}` : ''}{p ? ` · weight ${p.weight}` : ''}{p?.ends_at ? ` · ends ${new Date(p.ends_at).toLocaleDateString()}` : ''}</div>
             </div>
             {p && (
               <>
@@ -184,7 +185,7 @@ export default function SponsorsManager({ ownerType, ownerId, isYouth = false, s
                 <input type="number" min={1} max={20} defaultValue={p.weight} onBlur={(e) => setWeight(p, e.target.value)} title="Weight" style={{ ...inputStyle, width: 60, padding: '6px 8px' }} />
               </>
             )}
-            <button onClick={() => remove(s)} style={{ background: 'transparent', border: `1px solid ${C.red}`, color: C.red, borderRadius: 999, padding: '6px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Remove</button>
+            <button onClick={() => remove(s)} style={{ background: 'transparent', border: `1px solid ${colors.redSoft}`, color: colors.redSoft, borderRadius: 999, padding: '6px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Remove</button>
           </div>
         );
       })}
@@ -199,7 +200,7 @@ export default function SponsorsManager({ ownerType, ownerId, isYouth = false, s
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 8 }}>Preview (as fans see it)</div>
             {activeSlots.map((slot) => (
               <div key={slot} style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 11, color: C.dim, marginBottom: 4 }}>{slotLabel(slot)}</div>
+                <div style={{ fontSize: 11, color: localC.dim, marginBottom: 4 }}>{slotLabel(slot)}</div>
                 <AdSlot key={`${slot}:${nonce}`} slot={slot} targetType={ownerType} targetId={ownerId} />
               </div>
             ))}
@@ -236,13 +237,13 @@ function SponsorReport({ ownerType, ownerId, nonce }) {
     <div style={{ marginTop: 26 }}>
       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 8 }}>Sponsor report · last 30 days</div>
       {rows === null ? (
-        <div style={{ color: C.dim, fontSize: 13, padding: '10px 0' }}>Warming up.</div>
+        <div style={{ color: localC.dim, fontSize: 13, padding: '10px 0' }}>Warming up.</div>
       ) : err ? (
-        <div style={{ color: C.red, fontSize: 13, padding: '10px 0' }}>{err}</div>
+        <div style={{ color: colors.redSoft, fontSize: 13, padding: '10px 0' }}>{err}</div>
       ) : rows.length === 0 ? (
-        <div style={{ color: C.dim, fontSize: 13, padding: '10px 0' }}>No impressions yet. Once a sponsor runs on your public page, delivery shows up here.</div>
+        <div style={{ color: localC.dim, fontSize: 13, padding: '10px 0' }}>No impressions yet. Once a sponsor runs on your public page, delivery shows up here.</div>
       ) : (
-        <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
+        <div style={{ background: localC.panel, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr style={{ background: 'rgba(46,91,140,0.18)' }}>
               <th style={head}>Sponsor</th><th style={head}>Placement</th>
@@ -268,7 +269,7 @@ function SponsorReport({ ownerType, ownerId, nonce }) {
           </table>
         </div>
       )}
-      <div style={{ fontSize: 11, color: C.dim, marginTop: 6 }}>On-page delivery. Pair with your recap-share reach for total “delivered + off-platform” impressions.</div>
+      <div style={{ fontSize: 11, color: localC.dim, marginTop: 6 }}>On-page delivery. Pair with your recap-share reach for total “delivered + off-platform” impressions.</div>
     </div>
   );
 }
@@ -310,7 +311,7 @@ function ShareCardSponsors({ settings = {}, onSaveSettings }) {
       <div style={{ fontSize: 12, color: C.steel, marginBottom: 14, lineHeight: 1.5 }}>
         Shown as “presented by …” on shared recap + Game Puck cards and the public game page. Blank recap → falls back to “presented by Rinkd.” Blank Game Puck → uses the recap sponsor.
       </div>
-      {msg && <div style={{ marginBottom: 10, fontSize: 13, color: msg.kind === 'ok' ? '#5BCF8E' : C.red }}>{msg.text}</div>}
+      {msg && <div style={{ marginBottom: 10, fontSize: 13, color: msg.kind === 'ok' ? '#5BCF8E' : colors.redSoft }}>{msg.text}</div>}
 
       <div style={{ marginBottom: 14 }}>
         <label style={label}>Recap sponsor</label>

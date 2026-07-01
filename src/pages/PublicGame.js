@@ -16,6 +16,7 @@ import { loadGameCardData } from '../lib/gameCardData';
 import {
   isPublicSharingEnabled, areScorersHidden, isParentPublic, gameAppUrl, getRecapSponsor,
 } from '../lib/publicShare';
+import { C as tokensC } from '../lib/tokens';
 
 // GROWTH-SHARE-1 · M1 — the login-less public game/recap page. NO <Layout>, no
 // auth, no writes. Reads game + box score as the anon role (RLS verified open:
@@ -25,7 +26,9 @@ import {
 // Deliberately a SEPARATE component from the protected GameDetail — that page is
 // auth-chromed and adjacent to the frozen pilot surface. This one is additive.
 
-const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', ink:'#030C15', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
+// Local-only key: `ink` (#030C15) has no shared-token match — spread shared C
+// and add it locally rather than collapsing/guessing at a token.
+const C = { ...tokensC, ink: '#030C15' };
 
 // One-time keyframe inject (this page renders outside <Layout>, styles inline).
 //  · pgLiveRing  — the manifesto live indicator: red ring expands 0→16px and
@@ -453,13 +456,13 @@ function TeamSide({ team, score, record, scorerLine, hideScore }) {
   return (
     <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><TeamMark team={team} /></div>
-      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 800, fontSize: 17, color: '#F4F7FA', lineHeight: 1.1, marginBottom: 2, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(team.name || 'TBD').toUpperCase()}</div>
+      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 800, fontSize: 17, color: C.ice, lineHeight: 1.1, marginBottom: 2, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(team.name || 'TBD').toUpperCase()}</div>
       {record && <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 11.5, color: C.steel, marginBottom: 2, fontVariantNumeric: 'tabular-nums' }}>{record}</div>}
       {/* TV score bug — Barlow Condensed 900 italic, 72px. key={score} remounts
           on every score change so pgScorePop fires the hard puck-off-the-post
           bounce. */}
-      {!hideScore && <div key={score ?? 0} className="pg-score-pop" style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 72, color: '#F4F7FA', lineHeight: 1 }}>{score ?? 0}</div>}
-      {scorerLine && <div style={{ fontSize: 12, color: '#8BA3BE', marginTop: 6, lineHeight: 1.4 }}>{scorerLine}</div>}
+      {!hideScore && <div key={score ?? 0} className="pg-score-pop" style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 72, color: C.ice, lineHeight: 1 }}>{score ?? 0}</div>}
+      {scorerLine && <div style={{ fontSize: 12, color: C.steel, marginTop: 6, lineHeight: 1.4 }}>{scorerLine}</div>}
     </div>
   );
 }

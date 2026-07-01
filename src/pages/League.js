@@ -35,7 +35,7 @@ import ShareButton from '../components/ShareButton';
 import RecapCard from '../components/RecapCard';
 import { recapSourceFromPost, getRecapCardWithSponsor } from '../lib/recapCard';
 import { loadGameCardData } from '../lib/gameCardData';
-import { C } from '../lib/tokens';
+import { C, colors } from '../lib/tokens';
 import { Icon, BounceNumber, useExpand, Img, ErrorState } from '../components/ui';
 import { useOnline } from '../lib/useOnline';
 import { prefetchGamePage, prefetchHandlers } from '../lib/prefetch';
@@ -47,8 +47,8 @@ const TABS = ['Schedule', 'Standings', 'Stats', 'Teams', 'Feed', 'Gallery', 'Inf
 // padding is 16px) with a red accent slab. Optional muted `sub`.
 function LowerThird({ label, sub }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, background: '#0f2847', borderLeft: '4px solid #D72638', marginLeft: -16, marginBottom: 12, padding: '8px 14px 8px 16px', borderTopRightRadius: 4, borderBottomRightRadius: 4 }}>
-      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 18, lineHeight: 1, letterSpacing: '0.05em', color: '#F4F7FA', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{label}</span>
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, background: C.card, borderLeft: `4px solid ${C.red}`, marginLeft: -16, marginBottom: 12, padding: '8px 14px 8px 16px', borderTopRightRadius: 4, borderBottomRightRadius: 4 }}>
+      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 18, lineHeight: 1, letterSpacing: '0.05em', color: C.ice, textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{label}</span>
       {sub && <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 11, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.45)', textTransform: 'uppercase', whiteSpace: 'nowrap', flexShrink: 0 }}>{sub}</span>}
     </div>
   );
@@ -59,7 +59,7 @@ function TabEmptyState({ icon = '🏒', title, body }) {
   return (
     <div style={{ textAlign: 'center', padding: '48px 24px' }}>
       <div style={{ fontSize: 40, marginBottom: 12, lineHeight: 1 }}>{icon}</div>
-      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 20, color: '#F4F7FA', textTransform: 'uppercase', marginBottom: 6 }}>{title}</div>
+      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 20, color: C.ice, textTransform: 'uppercase', marginBottom: 6 }}>{title}</div>
       {body && <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.5)', lineHeight: 1.5, maxWidth: 320, margin: '0 auto' }}>{body}</div>}
     </div>
   );
@@ -81,7 +81,7 @@ function LeagueSkeleton() {
           </div>
         </div>
       </div>
-      <div style={{ background: C.navy, display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', borderTop: '0.5px solid rgba(46,91,140,0.4)' }}>
+      <div style={{ background: C.navy, display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', borderTop: `0.5px solid ${C.border}` }}>
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} style={{ padding: '12px 0', textAlign: 'center', borderRight: i < 3 ? '0.5px solid rgba(46,91,140,0.3)' : 'none' }}>
             <div className="rinkd-shimmer" style={{ width: 28, height: 20, borderRadius: 5, margin: '0 auto 6px' }} />
@@ -167,7 +167,7 @@ function GameRow({ game, isCommissioner, navigate, anon = false, records = {} })
             <BounceNumber value={`${game.home_score} – ${game.away_score}`} style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice, fontVariantNumeric: 'tabular-nums' }} />
           </>}
           {!isLive && !isFinal && (
-            <span style={{ background: 'rgba(46,91,140,0.4)', color: C.steel, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>
+            <span style={{ background: C.border, color: C.steel, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>
               {date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
             </span>
           )}
@@ -176,15 +176,15 @@ function GameRow({ game, isCommissioner, navigate, anon = false, records = {} })
 
       {/* Watch with LiveBarn — matches tournament style */}
       {hasStream && !isFinal && (
-        <button onClick={() => window.open(liveBarnUrl, '_blank')} style={{display:'inline-flex',alignItems:'center',gap:7,background:'#FFFFFF',color:'#0B1F3A',border:'none',borderRadius:999,padding:'8px 14px 8px 8px',fontFamily:'Barlow,sans-serif',fontSize:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap',marginTop:10}}>
-          <span style={{width:24,height:24,background:'#07111F',borderRadius:5,border:'1px solid rgba(215,38,56,0.5)',display:'flex',alignItems:'center',justifyContent:'center'}}><LedR size={16}/></span>
+        <button onClick={() => window.open(liveBarnUrl, '_blank')} style={{display:'inline-flex',alignItems:'center',gap:7,background:'#FFFFFF',color:C.navy,border:'none',borderRadius:999,padding:'8px 14px 8px 8px',fontFamily:'Barlow,sans-serif',fontSize:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap',marginTop:10}}>
+          <span style={{width:24,height:24,background:C.dark,borderRadius:5,border:'1px solid rgba(215,38,56,0.5)',display:'flex',alignItems:'center',justifyContent:'center'}}><LedR size={16}/></span>
           Watch with LiveBarn
         </button>
       )}
       {hasStream && !isFinal && (
         <div style={{background:'rgba(215,38,56,0.08)',border:'0.5px solid rgba(215,38,56,0.3)',borderRadius:7,padding:'7px 11px',marginTop:9,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-          <div style={{fontSize:10,color:'rgba(244,247,250,0.5)',lineHeight:1.6}}>Rinkd members save · ✓ Code <strong style={{color:'#D72638'}}>RINKD10</strong> auto-applied</div>
-          <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:14,color:'#D72638',marginLeft:10}}>10% off</div>
+          <div style={{fontSize:10,color:'rgba(244,247,250,0.5)',lineHeight:1.6}}>Rinkd members save · ✓ Code <strong style={{color:C.red}}>RINKD10</strong> auto-applied</div>
+          <div style={{fontFamily:'Barlow Condensed,sans-serif',fontStyle:'italic',fontWeight:900,fontSize:14,color:C.red,marginLeft:10}}>10% off</div>
         </div>
       )}
 
@@ -198,7 +198,7 @@ function GameRow({ game, isCommissioner, navigate, anon = false, records = {} })
                             : streamPlatform === 'twitch'   ? '#9146FF'
                             : streamPlatform === 'facebook' ? '#1877F2'
                             : streamPlatform === 'vimeo'    ? '#1AB7EA'
-                            : '#0B1F3A';
+                            : C.navy;
         return (
           <button onClick={() => window.open(streamUrl, '_blank', 'noopener,noreferrer')}
             style={{display:'inline-flex',alignItems:'center',gap:7,background:platformColor,color:'#FFFFFF',border:'none',borderRadius:999,padding:'8px 16px',fontFamily:'Barlow,sans-serif',fontSize:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap',marginTop:10,marginLeft:hasStream ? 8 : 0}}>
@@ -211,9 +211,9 @@ function GameRow({ game, isCommissioner, navigate, anon = false, records = {} })
       {/* Scorer View */}
       {isCommissioner && !isFinal && (
         <button onClick={() => navigate('/league-scorer/' + game.id + '?type=league')}
-          style={{ marginTop: 8, width: '100%', padding: '8px', background: 'rgba(46,91,140,0.2)', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 8, color: '#F4F7FA', fontFamily: 'Barlow,sans-serif', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}
-          onMouseEnter={e => { e.currentTarget.style.background = '#F4F7FA'; e.currentTarget.style.color = '#0B1F3A'; }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(46,91,140,0.2)'; e.currentTarget.style.color = '#F4F7FA'; }}>
+          style={{ marginTop: 8, width: '100%', padding: '8px', background: 'rgba(46,91,140,0.2)', border: '0.5px solid rgba(46,91,140,0.5)', borderRadius: 8, color: C.ice, fontFamily: 'Barlow,sans-serif', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}
+          onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(46,91,140,0.2)'; e.currentTarget.style.color = C.ice; }}>
           <Icon name="scorer" size={14} /> Open Scorer View
         </button>
       )}
@@ -611,7 +611,7 @@ export default function LeaguePage({ currentUser, profile }) {
               </div>
               {league.is_activated === false && (
                 <span title="Live scoring + push notifications are locked until a Rinkd admin activates this league."
-                  style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, marginTop: 6, marginLeft: 6, background: 'rgba(245,158,11,0.18)', color: '#F59E0B', letterSpacing: '0.06em' }}>
+                  style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, marginTop: 6, marginLeft: 6, background: 'rgba(245,158,11,0.18)', color: colors.warning, letterSpacing: '0.06em' }}>
                   🔒 Activation pending
                 </span>
               )}
@@ -655,7 +655,7 @@ export default function LeaguePage({ currentUser, profile }) {
         {/* Stat bar + tabs sit on solid navy below the photographic hero. */}
         <div style={{ background: C.navy }}>
           {/* Stats bar */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', borderTop: '0.5px solid rgba(46,91,140,0.4)', background: C.navy }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', borderTop: `0.5px solid ${C.border}`, background: C.navy }}>
             {[
               { num: teams.length, label: 'Teams' },
               { num: games.length, label: 'Games' },
@@ -677,7 +677,7 @@ export default function LeaguePage({ currentUser, profile }) {
               const on = activeTab === tab;
               return (
                 <button key={tab} onClick={() => setActiveTab(tab)}
-                  style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 700, fontSize: 15, letterSpacing: '0.04em', textTransform: 'uppercase', padding: '10px 14px', minHeight: 44, display: 'inline-flex', alignItems: 'center', background: 'transparent', border: 'none', borderBottom: on ? `3px solid ${accent}` : '3px solid transparent', marginBottom: -1, cursor: 'pointer', whiteSpace: 'nowrap', color: on ? '#F4F7FA' : '#8BA3BE', transition: 'color 0.15s' }}>
+                  style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 700, fontSize: 15, letterSpacing: '0.04em', textTransform: 'uppercase', padding: '10px 14px', minHeight: 44, display: 'inline-flex', alignItems: 'center', background: 'transparent', border: 'none', borderBottom: on ? `3px solid ${accent}` : '3px solid transparent', marginBottom: -1, cursor: 'pointer', whiteSpace: 'nowrap', color: on ? C.ice : C.steel, transition: 'color 0.15s' }}>
                   {tab}
                 </button>
               );
@@ -693,7 +693,7 @@ export default function LeaguePage({ currentUser, profile }) {
             <div style={{ background: 'rgba(245,158,11,0.1)', border: '0.5px solid rgba(245,158,11,0.4)', borderRadius: 10, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 18 }}>⏳</span>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#F59E0B' }}>League activation pending</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: colors.warning }}>League activation pending</div>
                 <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.5)', marginTop: 2 }}>The commissioner is still setting up the schedule. You'll be notified when the season goes live.</div>
               </div>
             </div>
@@ -728,7 +728,7 @@ export default function LeaguePage({ currentUser, profile }) {
                     <>
                       <LowerThird label="Live Now" />
                       {/* Card-hero: live games float on an elevated surface with a red glow. */}
-                      <div style={{ background: '#162f55', border: '1px solid rgba(215,38,56,0.6)', boxShadow: '0 8px 32px rgba(215,38,56,0.2)', borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>{liveGames.map(g => <GameRow key={g.id} game={g} isCommissioner={isCommissioner} navigate={navigate} anon={!currentUser} records={recordByLt} />)}</div>
+                      <div style={{ background: colors.surfaceElevated, border: '1px solid rgba(215,38,56,0.6)', boxShadow: '0 8px 32px rgba(215,38,56,0.2)', borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>{liveGames.map(g => <GameRow key={g.id} game={g} isCommissioner={isCommissioner} navigate={navigate} anon={!currentUser} records={recordByLt} />)}</div>
                     </>
                   )}
                   {upcomingGames.length > 0 && (
@@ -746,7 +746,7 @@ export default function LeaguePage({ currentUser, profile }) {
                   {scopedGames.length === 0 && <TabEmptyState icon="🗓️" title="Schedule drops soon" body="No games on the board yet. They'll show up here the moment the commissioner posts the slate." />}
                   {scopedGames.length > 0 && (
                     <button onClick={() => setShowAll(true)}
-                      style={{ width: '100%', padding: 12, background: 'rgba(46,91,140,0.15)', border: '0.5px solid rgba(46,91,140,0.4)', borderRadius: 10, color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', marginTop: 4 }}
+                      style={{ width: '100%', padding: 12, background: 'rgba(46,91,140,0.15)', border: `0.5px solid ${C.border}`, borderRadius: 10, color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', marginTop: 4 }}
                       onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
                       onMouseLeave={e => { e.currentTarget.style.background = 'rgba(46,91,140,0.15)'; e.currentTarget.style.color = C.ice; }}>
                       View Full Season Schedule ({scopedGames.length} games)
@@ -834,7 +834,7 @@ export default function LeaguePage({ currentUser, profile }) {
                  the picker; Teams is intentionally the league-wide directory. */
               <>
                 <input value={teamSearch} onChange={e => setTeamSearch(e.target.value)} placeholder="Search teams across all divisions…"
-                  style={{ width: '100%', boxSizing: 'border-box', background: '#0f2847', border: '0.5px solid rgba(46,91,140,0.4)', color: C.ice, borderRadius: 10, padding: '10px 12px', fontSize: 13, outline: 'none', marginBottom: 12, fontFamily: 'Barlow, sans-serif' }} />
+                  style={{ width: '100%', boxSizing: 'border-box', background: C.card, border: `0.5px solid ${C.border}`, color: C.ice, borderRadius: 10, padding: '10px 12px', fontSize: 13, outline: 'none', marginBottom: 12, fontFamily: 'Barlow, sans-serif' }} />
                 {teams.length === 0 && <div style={{ padding: 16, fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center' }}>No teams yet</div>}
                 {divisions.map(d => {
                   const term = teamSearch.trim().toLowerCase();
@@ -889,7 +889,7 @@ export default function LeaguePage({ currentUser, profile }) {
                   this is a real paying customer's page; the lead-gen CTA
                   belongs on demos + draft leagues only. */}
               {league.is_activated === false && (
-                <div style={{ background: 'linear-gradient(135deg,#0f2847 0%,#0B1F3A 100%)', border: '1px solid rgba(46,91,140,0.6)', borderRadius: 14, padding: '22px 18px', marginBottom: 16, textAlign: 'center' }}>
+                <div style={{ background: `linear-gradient(135deg,${C.card} 0%,${C.navy} 100%)`, border: '1px solid rgba(46,91,140,0.6)', borderRadius: 14, padding: '22px 18px', marginBottom: 16, textAlign: 'center' }}>
                   <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 22, textTransform: 'uppercase', marginBottom: 8 }}>Run your league on Rinkd</div>
                   <div style={{ fontSize: 14, color: 'rgba(244,247,250,0.7)', lineHeight: 1.5, maxWidth: 340, margin: '0 auto 18px' }}>Live standings and scoring your whole league can follow from their phone.</div>
                   <a href="mailto:hello@rinkd.app?subject=League Hosting Inquiry" style={{ display: 'inline-block', background: C.red, color: '#fff', borderRadius: 999, padding: '13px 30px', fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 15, letterSpacing: '0.04em', textTransform: 'uppercase', textDecoration: 'none' }}>Get pricing →</a>
@@ -929,7 +929,7 @@ function getWeekLabel(dateStr) {
 }
 
 const secLabel = { fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'rgba(244,247,250,0.3)', textTransform: 'uppercase', marginBottom: 8 };
-const card = { background: '#0f2847', border: '0.5px solid rgba(46,91,140,0.4)', borderRadius: 12, overflow: 'hidden', marginBottom: 14 };
+const card = { background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 14 };
 const recordChip = { flexShrink: 0, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 11, color: 'rgba(244,247,250,0.42)', fontVariantNumeric: 'tabular-nums', letterSpacing: '0.02em' };
 
 // League-scoped feed. Mirror of the Tournament Feed tab pattern shipped
@@ -1087,12 +1087,12 @@ function LeagueFeedTab({ posts, setPosts, loading, error = false, online = true,
             placeholder="Post to the league feed…"
             rows={2}
             maxLength={500}
-            textareaStyle={{ background: '#07111F', color: C.ice, border: '1px solid #1F3553', borderRadius: 6, padding: '8px 10px', fontFamily: 'Barlow, sans-serif', fontSize: 13 }}
+            textareaStyle={{ background: C.dark, color: C.ice, border: '1px solid #1F3553', borderRadius: 6, padding: '8px 10px', fontFamily: 'Barlow, sans-serif', fontSize: 13 }}
           />
           {mediaFile && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#9BB5D6', marginTop: 6 }}>
               <span>📎 {mediaFile.name}</span>
-              <button onClick={() => setMediaFile(null)} style={{ background: 'transparent', border: 'none', color: '#E26B6B', fontSize: 11, cursor: 'pointer' }}>Remove</button>
+              <button onClick={() => setMediaFile(null)} style={{ background: 'transparent', border: 'none', color: colors.redSoft, fontSize: 11, cursor: 'pointer' }}>Remove</button>
             </div>
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
@@ -1106,7 +1106,7 @@ function LeagueFeedTab({ posts, setPosts, loading, error = false, online = true,
               {submitting ? 'Posting…' : 'Post'}
             </button>
           </div>
-          {composerError && <div style={{ color: '#E26B6B', fontSize: 11, marginTop: 6 }}>{composerError}</div>}
+          {composerError && <div style={{ color: colors.redSoft, fontSize: 11, marginTop: 6 }}>{composerError}</div>}
           <div style={{ fontSize: 10, color: '#7C8B9F', marginTop: 4, textAlign: 'right' }}>{draft.length}/500</div>
         </div>
       )}
@@ -1137,7 +1137,7 @@ function LeagueFeedTab({ posts, setPosts, loading, error = false, online = true,
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   {p.tag && (
-                    <div style={{ display: 'inline-block', background: (p.tag_color || '#2E5B8C') + '40', color: p.tag_color || '#9BB5D6', fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', padding: '2px 8px', borderRadius: 4, marginBottom: 6 }}>
+                    <div style={{ display: 'inline-block', background: (p.tag_color || C.blue) + '40', color: p.tag_color || '#9BB5D6', fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', padding: '2px 8px', borderRadius: 4, marginBottom: 6 }}>
                       {p.tag}
                     </div>
                   )}
@@ -1184,15 +1184,15 @@ function LeagueFeedTab({ posts, setPosts, loading, error = false, online = true,
                   <button
                     onClick={() => onLike(p.id)}
                     disabled={!currentUser}
-                    style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', padding: 0, cursor: currentUser ? 'pointer' : 'default', color: likedPosts.includes(p.id) ? '#D72638' : '#7C8B9F', fontFamily: 'Barlow, sans-serif', fontSize: 12 }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', padding: 0, cursor: currentUser ? 'pointer' : 'default', color: likedPosts.includes(p.id) ? C.red : '#7C8B9F', fontFamily: 'Barlow, sans-serif', fontSize: 12 }}
                   >
-                    <Icon name="like" size={14} fill={likedPosts.includes(p.id) ? '#D72638' : 'none'} />
+                    <Icon name="like" size={14} fill={likedPosts.includes(p.id) ? C.red : 'none'} />
                     <span style={{ fontWeight: likedPosts.includes(p.id) ? 700 : 400 }}>{p.likes || 0}</span>
                   </button>
                   <button
                     onClick={() => toggleComments(p.id)}
                     aria-label="Comments" aria-expanded={!!openComments[p.id]}
-                    style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: openComments[p.id] ? '#F4F7FA' : '#7C8B9F', fontFamily: 'Barlow, sans-serif', fontSize: 12 }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: openComments[p.id] ? C.ice : '#7C8B9F', fontFamily: 'Barlow, sans-serif', fontSize: 12 }}
                   >
                     <Icon name="comment" size={14} /><span>{p.comment_count || 0}</span>
                   </button>
@@ -1210,7 +1210,7 @@ function LeagueFeedTab({ posts, setPosts, loading, error = false, online = true,
                 )}
                 {p.gamepuck_reveal_game_id && (
                   <button {...prefetchHandlers(prefetchGamePage)} onClick={() => navigate(gameHrefFor(p.gamepuck_reveal_game_id))}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(215,38,56,0.15)', border: '1px solid #D72638', color: '#F4F7FA', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '6px 12px', borderRadius: 999 }}>
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(215,38,56,0.15)', border: `1px solid ${C.red}`, color: C.ice, fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '6px 12px', borderRadius: 999 }}>
                     🏒 Peel to reveal →
                   </button>
                 )}
@@ -1239,7 +1239,7 @@ function LeagueFeedTab({ posts, setPosts, loading, error = false, online = true,
 //
 // Direct mirror of PublicTournamentLanding in Tournament.js.
 function PublicLeagueLanding({ league, teams, games, navigate }) {
-  const accent = league?.accent_color || '#D72638';
+  const accent = league?.accent_color || C.red;
   const venueLine = [league?.venue_name, league?.venue_address].filter(Boolean).join(' · ');
   const dateLine = [league?.start_date, league?.end_date].filter(Boolean).join(' – ');
   const seasonLine = [league?.season, league?.division, league?.level, league?.location].filter(Boolean).join(' · ');
@@ -1251,7 +1251,7 @@ function PublicLeagueLanding({ league, teams, games, navigate }) {
     <div style={{ background: C.dark, minHeight: '100vh', fontFamily: 'Barlow, sans-serif', color: C.ice }}>
       {/* ADS-1 M5 — sponsor banner also shows to anon spectators (null when no sponsor) */}
       <AdSlot slot="event_banner" targetType="league" targetId={league.id} style={{ margin: '12px 16px 0' }} />
-      <div style={{ background: C.navy, padding: '16px 18px 0', borderTop: `3px solid ${accent}`, borderBottom: '0.5px solid rgba(46,91,140,0.4)' }}>
+      <div style={{ background: C.navy, padding: '16px 18px 0', borderTop: `3px solid ${accent}`, borderBottom: `0.5px solid ${C.border}` }}>
         <button onClick={() => navigate('/leagues')} style={{ color: 'rgba(244,247,250,0.6)', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Barlow, sans-serif', marginBottom: 8 }}>← All leagues</button>
         {league?.logo_url && (
           <img src={league.logo_url} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }}

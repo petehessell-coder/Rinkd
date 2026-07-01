@@ -2,11 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { Link } from 'react-router-dom';
 import { Avatar } from './Logos';
 import { searchMentionable, HANDLE_RE } from '../lib/mentions';
-
-const C = {
-  card: '#0f2847', navy: '#07111F', ice: '#F4F7FA', steel: '#8BA3BE',
-  blue: '#5B9FE2', border: 'rgba(46,91,140,0.5)',
-};
+import { C } from '../lib/tokens';
 
 // Find the @token the caret is currently sitting inside (if any). Returns the
 // partial query (without '@') and the index of the '@' so we can splice a

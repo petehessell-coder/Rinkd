@@ -6,7 +6,7 @@ import SEO from '../components/SEO';
 import { RinkdLogo } from '../components/Logos';
 import TapeText from '../components/TapeText';
 import { track } from '../lib/analytics';
-import { C } from '../lib/tokens';
+import { C, colors } from '../lib/tokens';
 
 /**
  * Landing — the front door for rinkd.app.
@@ -99,7 +99,7 @@ export default function LandingPage() {
       zIndex: 10000, maxWidth: 360, textAlign: 'center',
       boxShadow: '0 10px 24px rgba(0,0,0,0.45)',
     }}>
-      <strong style={{ color: '#22C55E' }}>Account deleted.</strong>{' '}
+      <strong style={{ color: colors.success }}>Account deleted.</strong>{' '}
       Your personal data has been removed from Rinkd.
     </div>
   ) : null;
@@ -113,7 +113,7 @@ export default function LandingPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#0A1E38',
+      background: C.navy,
       color: C.ice, fontFamily: "'Barlow', sans-serif",
       padding: '24px 18px 60px',
       display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -208,7 +208,7 @@ export default function LandingPage() {
           { tag: 'The Premium', body: 'Original long-form shows — launching soon.' },
         ].map(({ tag, body }) => (
           <div key={tag} style={{ marginBottom: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', background: '#0f2847', borderLeft: `4px solid ${C.red}`, borderTopRightRadius: 4, borderBottomRightRadius: 4, padding: '7px 14px', marginBottom: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', background: C.card, borderLeft: `4px solid ${C.red}`, borderTopRightRadius: 4, borderBottomRightRadius: 4, padding: '7px 14px', marginBottom: 6 }}>
               <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 16, letterSpacing: '0.05em', textTransform: 'uppercase', color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tag}</span>
             </div>
             <div style={{ fontSize: 13, color: C.steel, lineHeight: 1.45, paddingLeft: 14 }}>{body}</div>

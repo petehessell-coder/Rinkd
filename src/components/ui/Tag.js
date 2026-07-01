@@ -1,5 +1,5 @@
 import React from 'react';
-import { C, radii, font } from '../../lib/tokens';
+import { C, colors, radii, font } from '../../lib/tokens';
 
 // =============================================================================
 // Tag — the chip. Manifesto "Design Tokens › Corner Philosophy": badges/chips
@@ -68,5 +68,5 @@ function readableOn(hex) {
   if (Number.isNaN(n)) return C.ice;
   const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
   const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return lum > 0.6 ? '#0B1F3A' : C.ice;
+  return lum > 0.6 ? colors.bg : C.ice;
 }

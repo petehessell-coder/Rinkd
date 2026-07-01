@@ -1,11 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-
-const C = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
-  ice: '#F4F7FA', steel: '#8BA3BE', dark: '#07111F',
-  card: '#112236', border: '#1E3A5C',
-};
+import { C } from '../lib/tokens';
 
 /**
  * 404 page — "this rink doesn't exist." Hosted at the catch-all React Router

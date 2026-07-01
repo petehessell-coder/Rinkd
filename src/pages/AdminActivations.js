@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { TeamLogo } from '../components/Logos';
 import { useIsRinkdAdmin } from '../lib/userRole';
 import { deleteTournamentAsAdmin, deleteLeagueAsAdmin, deleteTeamAsAdmin } from '../lib/adminDelete';
+import { C, colors } from '../lib/tokens';
 
 // Admin activation console. Rinkd staff only.
 //
@@ -20,18 +21,12 @@ import { deleteTournamentAsAdmin, deleteLeagueAsAdmin, deleteTeamAsAdmin } from 
 // purely a convenience for the toggle — the column is also editable from
 // any Postgres client with the right perms.
 
-const C = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
-  steel: '#8BA3BE', dark: '#07111F', card: '#0f2847', border: 'rgba(46,91,140,0.4)',
-  green: '#22C55E', amber: '#F59E0B',
-};
-
 function Toggle({ value, onChange, busy }) {
   return (
     <div onClick={busy ? undefined : () => onChange(!value)}
       style={{
         width: 44, height: 24,
-        background: value ? C.green : 'rgba(244,247,250,0.15)',
+        background: value ? colors.success : 'rgba(244,247,250,0.15)',
         borderRadius: 24, position: 'relative',
         cursor: busy ? 'wait' : 'pointer',
         flexShrink: 0,
@@ -52,7 +47,7 @@ function StatusPill({ value }) {
     <span style={{
       display: 'inline-block', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
       background: value ? 'rgba(34,197,94,0.18)' : 'rgba(245,158,11,0.18)',
-      color: value ? C.green : C.amber,
+      color: value ? colors.success : colors.warning,
       letterSpacing: '0.06em', textTransform: 'uppercase',
     }}>
       {value ? '● Activated' : '○ Pending'}
@@ -130,7 +125,7 @@ function DeleteModal({ target, onCancel, onConfirm, busy, error }) {
         </div>
         <div style={{ fontSize: 12, color: C.steel, marginTop: 14, marginBottom: 6 }}>Type the exact name to confirm:</div>
         <input autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder={item.name} disabled={busy}
-          style={{ width: '100%', background: '#07111F', border: `0.5px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+          style={{ width: '100%', background: C.dark, border: `0.5px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
         {error && <div style={{ color: C.red, fontSize: 12, marginTop: 10 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 10, marginTop: 18, justifyContent: 'flex-end' }}>
           <button onClick={onCancel} disabled={busy}
@@ -318,7 +313,7 @@ export default function AdminActivations({ currentUser, profile }) {
           <input
             type="search" placeholder="Search by name or division…"
             value={search} onChange={(e) => setSearch(e.target.value)}
-            style={{ flex: '1 1 220px', minWidth: 180, background: '#07111F', border: `0.5px solid ${C.border}`, borderRadius: 8, padding: '7px 12px', color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 13, outline: 'none' }}
+            style={{ flex: '1 1 220px', minWidth: 180, background: C.dark, border: `0.5px solid ${C.border}`, borderRadius: 8, padding: '7px 12px', color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 13, outline: 'none' }}
           />
         </div>
 

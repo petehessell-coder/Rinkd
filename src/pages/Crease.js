@@ -4,11 +4,7 @@ import Layout from '../components/Layout';
 import SEO from '../components/SEO';
 import { CardGridSkeleton, EmptyState } from '../components/Skeletons';
 import { listShows, hasCreaseAccess } from '../lib/crease';
-
-const C = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
-  steel: '#8BA3BE', dark: '#07111F', card: '#0f2847', border: 'rgba(46,91,140,0.4)',
-};
+import { C, colors } from '../lib/tokens';
 
 function ShowCard({ show, onOpen }) {
   return (
@@ -104,7 +100,7 @@ export default function CreasePage({ currentUser, profile }) {
               );
             })()}
             {hasAccess && (
-              <div style={{ marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#22C55E', fontWeight: 600 }}>
+              <div style={{ marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: colors.success, fontWeight: 600 }}>
                 ✓ Crease Premium active
               </div>
             )}

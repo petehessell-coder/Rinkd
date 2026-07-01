@@ -3,17 +3,12 @@ import { supabase } from '../lib/supabase';
 import { listTeamSlots, createSlot, deleteSlot, claimSlot, releaseSlot } from '../lib/volunteers';
 import { getTeamGames } from '../lib/teams';
 import { useUndoable } from './ui';
-
-const C = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
-  steel: '#8BA3BE', dark: '#07111F', card: '#0f2847',
-  border: 'rgba(46,91,140,0.4)', green: '#22C55E', amber: '#F59E0B',
-};
+import { C, colors } from '../lib/tokens';
 
 const ROLE_PRESETS = ['Scorekeeper', 'Snack Parent', 'Locker Room Monitor', 'Gear Hauler', 'Statkeeper', 'Off-ice Official', 'Tournament Volunteer'];
 
 const inputStyle = {
-  width: '100%', background: '#07111F', border: `0.5px solid ${C.border}`,
+  width: '100%', background: C.dark, border: `0.5px solid ${C.border}`,
   borderRadius: 8, padding: '9px 11px', color: C.ice,
   fontFamily: "'Barlow', sans-serif", fontSize: 13, outline: 'none',
 };
@@ -63,8 +58,8 @@ export default function TeamVolunteer({ teamId, isManager, currentUser }) {
     <div>
       {/* Stat strip */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-        <StatPill num={openCount}   label="Open"   color={openCount > 0 ? C.amber : undefined} />
-        <StatPill num={filledCount} label="Filled" color={C.green} />
+        <StatPill num={openCount}   label="Open"   color={openCount > 0 ? colors.warning : undefined} />
+        <StatPill num={filledCount} label="Filled" color={colors.success} />
         {past.length > 0 && <StatPill num={past.length} label="Past" color={C.steel} />}
       </div>
 
@@ -173,7 +168,7 @@ function SlotRow({ slot, isManager, currentUser, onChange, onOptimisticRemove, i
             <span style={{ width: 18, height: 18, borderRadius: '50%', background: assigned.avatar_color || C.blue, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 900, color: '#fff', fontFamily: "'Barlow Condensed', sans-serif" }}>
               {assigned.avatar_initials || (assigned.name || '?').slice(0, 2).toUpperCase()}
             </span>
-            <span style={{ fontSize: 11, color: C.green, fontWeight: 600 }}>
+            <span style={{ fontSize: 11, color: colors.success, fontWeight: 600 }}>
               {isClaimedByMe ? "You're signed up" : `${assigned.name} signed up`}
             </span>
           </div>
@@ -196,7 +191,7 @@ function SlotRow({ slot, isManager, currentUser, onChange, onOptimisticRemove, i
             </button>
           )}
           {!assigned && !currentUser && (
-            <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: 'rgba(245,158,11,0.15)', color: C.amber, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Open</span>
+            <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: 'rgba(245,158,11,0.15)', color: colors.warning, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Open</span>
           )}
         </>
       )}

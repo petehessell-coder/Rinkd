@@ -2,14 +2,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { getLeagueTeams } from '../lib/leagues';
 import { bulkInsertLeagueGames } from '../lib/scheduleBuilder';
+import { C, colors } from '../lib/tokens';
 
 // LeagueImportModal — paste teams + schedule from a spreadsheet and stand up a
 // whole league in one shot. Kills the #1 onboarding friction (manual setup).
 // Stupid-proof: paste → preview (every row checked) → import. Tab- or
 // comma-separated, so copy/paste straight from Excel / Google Sheets works.
-const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', dark:'#07111F', steel:'#8BA3BE', border:'#1E3A5C', green:'#22C55E', amber:'#F59E0B' };
-const DEFAULT_TEAM_COLOR = '#2E5B8C';
-const inputStyle = { width:'100%', background:'#07111F', border:`1px solid ${C.border}`, borderRadius:8, padding:'10px 12px', color:C.ice, fontFamily:'Barlow, sans-serif', fontSize:14, outline:'none' };
+const DEFAULT_TEAM_COLOR = colors.blue;
+const inputStyle = { width:'100%', background:colors.surfaceDeep, border:`1px solid ${C.border}`, borderRadius:8, padding:'10px 12px', color:C.ice, fontFamily:'Barlow, sans-serif', fontSize:14, outline:'none' };
 const taStyle = { ...inputStyle, minHeight:120, fontFamily:'ui-monospace, Menlo, monospace', fontSize:13, lineHeight:1.5, resize:'vertical', whiteSpace:'pre' };
 
 const norm = (s) => (s || '').trim().toLowerCase();
@@ -172,7 +172,7 @@ export default function LeagueImportModal({ open, onClose, leagueId, existingTea
           <div style={{ padding:'14px 0' }}>
             <div style={{ background:'rgba(34,197,94,0.1)', border:'1px solid rgba(34,197,94,0.4)', borderRadius:12, padding:'16px', textAlign:'center', marginBottom:16 }}>
               <div style={{ fontSize:28, marginBottom:6 }}>✅</div>
-              <div style={{ fontSize:15, fontWeight:700, color:C.green }}>Imported {done.teams} team{done.teams===1?'':'s'} and {done.games} game{done.games===1?'':'s'}</div>
+              <div style={{ fontSize:15, fontWeight:700, color:colors.success }}>Imported {done.teams} team{done.teams===1?'':'s'} and {done.games} game{done.games===1?'':'s'}</div>
               <div style={{ fontSize:12.5, color:C.steel, marginTop:6 }}>Your schedule and teams are live. Assign scorekeepers and you're ready to drop the puck.</div>
             </div>
             <button onClick={onClose} style={{ width:'100%', padding:13, borderRadius:999, background:C.red, border:'none', color:'#fff', fontSize:15, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>Done</button>
@@ -187,7 +187,7 @@ export default function LeagueImportModal({ open, onClose, leagueId, existingTea
             <div style={{ fontSize:11, fontWeight:700, letterSpacing:'0.1em', color:C.steel, textTransform:'uppercase', marginBottom:6 }}>1 · Teams — one per line</div>
             <div style={{ fontSize:12, color:C.steel, marginBottom:6 }}>Just the team names. (Optional 2nd column = division.) Teams you already added are reused automatically.</div>
             <textarea value={teamsText} onChange={e => setTeamsText(e.target.value)} placeholder={'Red Wings\nBlue Jackets\nIce Hogs\nSharks'} style={taStyle} />
-            <div style={{ fontSize:11.5, color: newTeams.length ? C.green : C.steel, margin:'6px 0 16px' }}>
+            <div style={{ fontSize:11.5, color: newTeams.length ? colors.success : C.steel, margin:'6px 0 16px' }}>
               {parsedTeams.length === 0 ? 'No teams yet.' : `${parsedTeams.length} team${parsedTeams.length===1?'':'s'} pasted · ${newTeams.length} new to create · ${parsedTeams.length - newTeams.length} already exist`}
             </div>
 
@@ -208,18 +208,18 @@ export default function LeagueImportModal({ open, onClose, leagueId, existingTea
 
             {/* PREVIEW */}
             {parsedGames.length > 0 && (
-              <div style={{ margin:'14px 0', background:C.dark, border:`1px solid ${C.border}`, borderRadius:10, overflow:'hidden' }}>
+              <div style={{ margin:'14px 0', background:colors.surfaceDeep, border:`1px solid ${C.border}`, borderRadius:10, overflow:'hidden' }}>
                 <div style={{ padding:'8px 12px', fontSize:12, fontWeight:700, color:C.ice, borderBottom:`1px solid ${C.border}` }}>
-                  Preview · <span style={{ color:C.green }}>{goodGames.length} ready</span>{badGames.length > 0 && <> · <span style={{ color:C.amber }}>{badGames.length} need a fix</span></>}
+                  Preview · <span style={{ color:colors.success }}>{goodGames.length} ready</span>{badGames.length > 0 && <> · <span style={{ color:colors.warning }}>{badGames.length} need a fix</span></>}
                 </div>
                 <div style={{ maxHeight:200, overflowY:'auto' }}>
                   {parsedGames.map((g, i) => (
                     <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:8, padding:'7px 12px', borderBottom:'0.5px solid rgba(244,247,250,0.06)', fontSize:12.5 }}>
-                      <span style={{ color: g.ok ? C.green : C.amber, fontWeight:700, flexShrink:0 }}>{g.ok ? '✓' : '⚠'}</span>
+                      <span style={{ color: g.ok ? colors.success : colors.warning, fontWeight:700, flexShrink:0 }}>{g.ok ? '✓' : '⚠'}</span>
                       <span style={{ flex:1, color: g.ok ? C.ice : C.steel }}>
                         {g.home || '—'} vs {g.away || '—'} <span style={{ color:C.steel }}>{g.iso ? `· ${new Date(g.iso).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}` : ''}</span>
                         {g.ok && g.rinkNote && <span style={{ display:'block', color:C.steel, fontSize:11 }}>{g.rinkNote}</span>}
-                        {!g.ok && <span style={{ display:'block', color:C.amber, fontSize:11 }}>row {g.rowNum}: {g.problems.join(', ')}</span>}
+                        {!g.ok && <span style={{ display:'block', color:colors.warning, fontSize:11 }}>row {g.rowNum}: {g.problems.join(', ')}</span>}
                       </span>
                     </div>
                   ))}

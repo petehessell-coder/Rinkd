@@ -1,14 +1,15 @@
 import React from 'react';
 import ReactDatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
+import { C } from '../lib/tokens';
 
 const inputStyle = {
   width: '100%',
-  background: '#07111F',
+  background: C.dark,
   border: '0.5px solid rgba(46,91,140,0.5)',
   borderRadius: 8,
   padding: '10px 12px',
-  color: '#F4F7FA',
+  color: C.ice,
   fontFamily: 'Barlow, sans-serif',
   fontSize: 14,
   outline: 'none',

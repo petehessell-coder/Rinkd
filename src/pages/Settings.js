@@ -7,12 +7,7 @@ import { supabase } from '../lib/supabase';
 import { signOut, updateProfile, PROFILE_SELECT } from '../lib/auth';
 import { track } from '../lib/analytics';
 import { listMyBlocks, unblockUser } from '../lib/blocks';
-
-const C = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
-  steel: '#8BA3BE', dark: '#07111F', card: '#0f2847', border: 'rgba(46,91,140,0.4)',
-  amber: '#F59E0B',
-};
+import { C, colors } from '../lib/tokens';
 
 /**
  * /settings — account management surface.
@@ -299,7 +294,7 @@ export default function SettingsPage({ currentUser, profile }) {
                       <div style={{ fontSize: 14, color: C.ice, fontWeight: 600, marginBottom: 2 }}>{title}</div>
                       <div style={{ fontSize: 12, color: C.steel, lineHeight: 1.5 }}>{body}</div>
                       {warn && !on && (
-                        <div style={{ fontSize: 12, color: C.amber, marginTop: 6, lineHeight: 1.5 }}>{warn}</div>
+                        <div style={{ fontSize: 12, color: colors.warning, marginTop: 6, lineHeight: 1.5 }}>{warn}</div>
                       )}
                     </div>
                     <button onClick={() => flipNotif(k)} disabled={busy}
@@ -307,7 +302,7 @@ export default function SettingsPage({ currentUser, profile }) {
                       style={{
                         flexShrink: 0,
                         width: 46, height: 26, borderRadius: 999,
-                        background: on ? '#22C55E' : C.border,
+                        background: on ? colors.success : C.border,
                         border: 'none', cursor: busy ? 'wait' : 'pointer',
                         position: 'relative', transition: 'background 0.15s',
                         opacity: busy ? 0.6 : 1,
@@ -406,7 +401,7 @@ export default function SettingsPage({ currentUser, profile }) {
               <strong style={{ color: C.ice }}>What survives:</strong> leagues, teams, tournaments, and articles you created
               stay alive (so other members aren't affected), but with your name removed from them.
               <br /><br />
-              <strong style={{ color: C.amber }}>This cannot be undone.</strong>
+              <strong style={{ color: colors.warning }}>This cannot be undone.</strong>
             </p>
 
             {!showConfirm ? (
@@ -416,7 +411,7 @@ export default function SettingsPage({ currentUser, profile }) {
             ) : (
               <div style={{ background: 'rgba(215,38,56,0.08)', border: '1px solid rgba(215,38,56,0.3)', borderRadius: 10, padding: 14 }}>
                 <div style={{ fontSize: 13, color: C.ice, marginBottom: 10, lineHeight: 1.55 }}>
-                  Type <code style={{ background: '#07111F', padding: '2px 8px', borderRadius: 4, color: C.red, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>DELETE MY ACCOUNT</code> below to confirm.
+                  Type <code style={{ background: C.dark, padding: '2px 8px', borderRadius: 4, color: C.red, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>DELETE MY ACCOUNT</code> below to confirm.
                 </div>
                 <input value={confirmText} onChange={(e) => setConfirmText(e.target.value)} autoFocus
                   placeholder="DELETE MY ACCOUNT"

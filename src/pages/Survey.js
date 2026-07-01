@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { C } from '../lib/tokens';
 
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxMNu_eWI24uulRNN_DkXBJElrqeqk__gH3a4mK87xo4HFDy9ENZdpFixW-5MqlgiqqDA/exec';
 
@@ -575,9 +576,9 @@ export default function Survey() {
           <div className="sv-footer-brands">
             <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:12,letterSpacing:'0.12em',textTransform:'uppercase',color:'#fff'}}>RINKD</span>
             <span style={{color:'#1E3A5C'}}>·</span>
-            <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:12,letterSpacing:'0.12em',textTransform:'uppercase',color:'#2E5B8C'}}>RINKSIDE</span>
+            <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:12,letterSpacing:'0.12em',textTransform:'uppercase',color:C.blue}}>RINKSIDE</span>
             <span style={{color:'#1E3A5C'}}>·</span>
-            <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:12,letterSpacing:'0.12em',textTransform:'uppercase',color:'#D72638'}}>CREASE</span>
+            <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:12,letterSpacing:'0.12em',textTransform:'uppercase',color:C.red}}>CREASE</span>
           </div>
           <div className="sv-footer-copy">Pete@rinkd.app · rinkd.app · © 2026 Rinkd LLC</div>
         </footer>
@@ -606,7 +607,7 @@ export default function Survey() {
               )))}
               {/* ON dots — R shape */}
               {[[4,4],[9,4],[14,4],[19,4],[24,4],[4,9],[29,9],[4,14],[29,14],[4,19],[9,19],[14,19],[19,19],[24,19],[4,24],[19,24],[4,29],[24,29],[4,34],[29,34],[4,39],[34,39]].map(([x,y]) => (
-                <circle key={`on-${x}-${y}`} cx={x} cy={y} r="1.8" fill="#D72638" filter="url(#ledglow2)"/>
+                <circle key={`on-${x}-${y}`} cx={x} cy={y} r="1.8" fill={C.red} filter="url(#ledglow2)"/>
               ))}
             </svg>
           </div>
@@ -773,14 +774,14 @@ export default function Survey() {
               <div style={{
                 background: 'rgba(215,38,56,0.12)',
                 border: '1px solid rgba(215,38,56,0.4)',
-                color: '#F4F7FA',
+                color: C.ice,
                 padding: '12px 14px',
                 borderRadius: 10,
                 marginBottom: 12,
                 fontSize: 14,
                 lineHeight: 1.5,
               }}>
-                <strong style={{ color: '#D72638' }}>Couldn't submit.</strong>{' '}
+                <strong style={{ color: C.red }}>Couldn't submit.</strong>{' '}
                 We couldn't reach the server ({submitError}). Check your connection and tap Submit again — your answers are still here.
               </div>
             )}
@@ -796,9 +797,9 @@ export default function Survey() {
         <div className="sv-footer-brands">
           <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:12,letterSpacing:'0.12em',textTransform:'uppercase',color:'#fff'}}>RINKD</span>
           <span style={{color:'#1E3A5C'}}>·</span>
-          <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:12,letterSpacing:'0.12em',textTransform:'uppercase',color:'#2E5B8C'}}>RINKSIDE</span>
+          <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:12,letterSpacing:'0.12em',textTransform:'uppercase',color:C.blue}}>RINKSIDE</span>
           <span style={{color:'#1E3A5C'}}>·</span>
-          <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:12,letterSpacing:'0.12em',textTransform:'uppercase',color:'#D72638'}}>CREASE</span>
+          <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:12,letterSpacing:'0.12em',textTransform:'uppercase',color:C.red}}>CREASE</span>
         </div>
         <div className="sv-footer-copy">Pete@rinkd.app · rinkd.app · © 2026 Rinkd LLC</div>
       </footer>

@@ -11,6 +11,7 @@ import { track } from '../lib/analytics';
 import { followUser, unfollowUser, timeAgo } from '../lib/posts';
 import { getBlockedIds } from '../lib/blocks';
 import { getTier } from '../lib/tiers';
+import { C, colors } from '../lib/tokens';
 
 // Escape characters that have special meaning inside a PostgREST .or() clause
 // — a raw `,` or `)` in a user's search query would break the OR-list parser
@@ -19,12 +20,6 @@ import { getTier } from '../lib/tiers';
 function safeIlikeFragment(s) {
   return String(s || '').replace(/[,()*]/g, ' ').trim();
 }
-
-const C = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
-  steel: '#8BA3BE', dark: '#07111F', card: '#0f2847', border: 'rgba(46,91,140,0.4)',
-  amber: '#F59E0B',
-};
 
 const TABS = [
   { id: 'players',  label: 'Players' },
@@ -428,7 +423,7 @@ export default function Discover({ currentUser, profile }) {
               <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
                 {leagues.map((l, i) => (
                   <div key={l.id} onClick={() => navigate(`/league/${l.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none', cursor: 'pointer' }}>
-                    <div style={{ width: 42, height: 42, borderRadius: 10, background: l.logo_color || C.amber, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🏆</div>
+                    <div style={{ width: 42, height: 42, borderRadius: 10, background: l.logo_color || colors.warning, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🏆</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{l.name}</div>
                       <div style={{ fontSize: 12, color: C.steel }}>{[l.division, l.season].filter(Boolean).join(' · ')}</div>

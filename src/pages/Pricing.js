@@ -7,10 +7,7 @@ import { track } from '../lib/analytics';
 // Canonical source: docs/Rinkd_Pricing_Guide.docx. Keep these in sync with
 // that file — it's the contract. BLPA Cleveland is intentionally OUT of this
 // ladder (custom deal) and must never appear here.
-const C = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
-  steel: '#8BA3BE', dark: '#07111F', card: '#112236', border: '#1E3A5C',
-};
+import { C } from '../lib/tokens';
 
 const LEAGUE_TIERS = [
   { tier: 'Starter', teams: 'Up to 6 teams', price: '$299', unit: '/ season' },

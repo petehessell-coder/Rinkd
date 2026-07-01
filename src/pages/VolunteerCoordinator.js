@@ -6,11 +6,12 @@ import { listSlotsForTeams, listMyAssignedSlots, createSlot, updateSlot, deleteS
 import { getTeamGames } from '../lib/teams';
 import { useUndoable } from '../components/ui';
 import { TeamLogo } from '../components/Logos';
+import { colors } from '../lib/tokens';
 
 const ROLE_PRESETS = ['Scorekeeper', 'Snack Parent', 'Locker Room Monitor', 'Gear Hauler', 'Statkeeper', 'Off-ice Official', 'Tournament Volunteer'];
 
 const inputStyle = {
-  width: '100%', background: '#07111F', border: `0.5px solid ${C.border}`,
+  width: '100%', background: C.dark, border: `0.5px solid ${C.border}`,
   borderRadius: 8, padding: '9px 11px', color: C.ice,
   fontFamily: "'Barlow', sans-serif", fontSize: 13, outline: 'none',
 };
@@ -95,8 +96,8 @@ export default function VolunteerCoordinator({ profile }) {
             <>
               {/* Stat cards */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 20 }}>
-                <StatCard num={counts.open}   label="Open slots"  color={counts.open > 0 ? '#F59E0B' : undefined} />
-                <StatCard num={counts.filled} label="Filled"      color="#22C55E" />
+                <StatCard num={counts.open}   label="Open slots"  color={counts.open > 0 ? colors.warning : undefined} />
+                <StatCard num={counts.filled} label="Filled"      color={colors.success} />
                 <StatCard num={counts.past}   label="Past"        color={C.steel} />
                 <StatCard num={mySlots.length} label="Yours"      color={C.ice} />
               </div>
@@ -208,7 +209,7 @@ function SlotRow({ slot, teams, onChange, onOptimisticRemove, profile }) {
             <span style={{ width: 18, height: 18, borderRadius: '50%', background: assigned.avatar_color || C.blue, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 900, color: '#fff', fontFamily: "'Barlow Condensed', sans-serif" }}>
               {assigned.avatar_initials || (assigned.name || '?').slice(0, 2).toUpperCase()}
             </span>
-            <span style={{ fontSize: 11, color: '#22C55E', fontWeight: 600 }}>{assigned.name} signed up</span>
+            <span style={{ fontSize: 11, color: colors.success, fontWeight: 600 }}>{assigned.name} signed up</span>
           </div>
         )}
       </div>
@@ -218,7 +219,7 @@ function SlotRow({ slot, teams, onChange, onOptimisticRemove, profile }) {
           Open up
         </button>
       ) : (
-        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: 'rgba(245,158,11,0.15)', color: '#F59E0B', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Open</span>
+        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: 'rgba(245,158,11,0.15)', color: colors.warning, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Open</span>
       )}
       <button onClick={handleDelete} disabled={busy}
         style={{ background: 'transparent', border: 'none', color: 'rgba(244,247,250,0.3)', fontSize: 16, cursor: 'pointer', padding: 4 }} title="Delete">🗑</button>

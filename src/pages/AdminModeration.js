@@ -6,12 +6,7 @@ import { useIsRinkdAdmin } from '../lib/userRole';
 import { timeAgo } from '../lib/posts';
 import { Avatar } from '../components/Logos';
 import { ListRowSkeleton, EmptyState } from '../components/Skeletons';
-
-const C = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
-  steel: '#8BA3BE', dark: '#07111F', card: '#0f2847', border: 'rgba(46,91,140,0.4)',
-  green: '#22C55E', amber: '#F59E0B',
-};
+import { C, colors } from '../lib/tokens';
 
 /**
  * /admin/moderation — commissioner-only flagged content queue.
@@ -202,7 +197,7 @@ export default function AdminModerationPage({ currentUser, profile }) {
               ) : (
                 <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
                   {blocklist.map((w, i) => {
-                    const sevColor = w.severity === 'high' ? C.red : w.severity === 'medium' ? C.amber : C.steel;
+                    const sevColor = w.severity === 'high' ? C.red : w.severity === 'medium' ? colors.warning : C.steel;
                     return (
                       <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none' }}>
                         <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 13, color: C.ice, flex: 1 }}>{w.word}</span>
@@ -246,7 +241,7 @@ export default function AdminModerationPage({ currentUser, profile }) {
                   )}
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     <button onClick={() => approve(tab, it.id)}
-                      style={{ background: C.green, color: '#fff', border: 'none', padding: '7px 14px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
+                      style={{ background: colors.success, color: '#fff', border: 'none', padding: '7px 14px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
                       ✓ Approve (unhide)
                     </button>
                     <button onClick={() => remove(tab, it.id)}

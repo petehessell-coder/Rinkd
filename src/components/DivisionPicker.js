@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { C } from '../lib/tokens';
 
-const C = {
-  ice: '#F4F7FA', steel: 'rgba(244,247,250,0.5)', navy: '#0B1F3A',
-  card: '#0f2847', border: 'rgba(46,91,140,0.4)',
-};
+// Local drift: not in shared C/colors (steel there is solid '#8BA3BE'); this is
+// a translucent ice — no exact token match, kept inline per migration rules.
+const STEEL_TRANSLUCENT = 'rgba(244,247,250,0.5)';
 
 /**
  * Adaptive division selector (LEAGUE-DIV-1, Decision #6). Scales by count:
@@ -15,7 +15,7 @@ const C = {
  * Shared by the public League page and the LeagueManage scope selector (M3).
  * Divisions arrive pre-ordered by sort_order.
  */
-export default function DivisionPicker({ divisions, selectedId, onSelect, accent = '#D72638' }) {
+export default function DivisionPicker({ divisions, selectedId, onSelect, accent = C.red }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const rootRef = useRef(null);
@@ -66,9 +66,9 @@ export default function DivisionPicker({ divisions, selectedId, onSelect, accent
           borderRadius: 10, border: `1px solid ${C.border}`, background: C.card, color: C.ice,
           cursor: 'pointer', fontFamily: "'Barlow', sans-serif", fontSize: 14, fontWeight: 700,
         }}>
-        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.steel }}>Division</span>
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: STEEL_TRANSLUCENT }}>Division</span>
         <span>{selected?.name}</span>
-        <span style={{ color: C.steel }}>▾</span>
+        <span style={{ color: STEEL_TRANSLUCENT }}>▾</span>
       </button>
       {open && (
         <div style={{
@@ -86,7 +86,7 @@ export default function DivisionPicker({ divisions, selectedId, onSelect, accent
           </div>
           <div style={{ maxHeight: 280, overflowY: 'auto' }}>
             {filtered.length === 0 && (
-              <div style={{ padding: 14, fontSize: 13, color: C.steel, textAlign: 'center' }}>No match</div>
+              <div style={{ padding: 14, fontSize: 13, color: STEEL_TRANSLUCENT, textAlign: 'center' }}>No match</div>
             )}
             {filtered.map((d) => {
               const on = d.id === selectedId;

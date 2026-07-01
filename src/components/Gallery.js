@@ -7,11 +7,14 @@ import { MentionText } from './Mentions';
 import { mentionMapFromRows } from '../lib/mentions';
 import ShareButton from './ShareButton';
 import { absoluteShareUrl } from '../lib/share';
+import { C, colors } from '../lib/tokens';
 
-const C = {
-  ice: '#F4F7FA', steel: '#9BB5D6', dim: '#7C8B9F', panel: '#11253E',
-  input: '#07111F', border: '#1F3553', blue: '#5B9FE2', red: '#E26B6B',
-};
+// Local drift: no exact token match, kept inline per migration rules.
+const GAL_STEEL = '#9BB5D6';
+const GAL_DIM = '#7C8B9F';
+const GAL_PANEL = '#11253E';
+const GAL_BORDER = '#1F3553';
+const GAL_BLUE = '#5B9FE2';
 
 /**
  * Photo/video gallery for a tournament or league (GALLERY-1). A media-only grid
@@ -129,7 +132,7 @@ export default function Gallery({ tournamentId = null, leagueId = null, currentU
             onClick={() => setAddOpen(true)}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
-              background: C.blue, color: C.ice, border: 'none', borderRadius: 8,
+              background: GAL_BLUE, color: C.ice, border: 'none', borderRadius: 8,
               padding: '8px 14px', fontWeight: 700, fontSize: 13, cursor: 'pointer',
             }}>
             <span style={{ fontSize: 15 }}>＋</span> Add Photo
@@ -138,9 +141,9 @@ export default function Gallery({ tournamentId = null, leagueId = null, currentU
       </div>
 
       {posts === null ? (
-        <div style={{ textAlign: 'center', color: C.dim, fontSize: 13, padding: '40px 16px' }}>Getting the ice ready.</div>
+        <div style={{ textAlign: 'center', color: GAL_DIM, fontSize: 13, padding: '40px 16px' }}>Getting the ice ready.</div>
       ) : posts.length === 0 ? (
-        <div style={{ textAlign: 'center', color: C.dim, fontSize: 13, padding: '48px 16px', lineHeight: 1.6 }}>
+        <div style={{ textAlign: 'center', color: GAL_DIM, fontSize: 13, padding: '48px 16px', lineHeight: 1.6 }}>
           <div style={{ fontSize: 36, marginBottom: 8 }}>📸</div>
           {teamFilter ? 'This team’s gallery is wide open.' : 'The gallery’s wide open.'}<br />
           {currentUser ? 'Drop the first shot — tap Add Photo.' : `Sign in to share shots from the ${scopeLabel}.`}
@@ -154,7 +157,7 @@ export default function Gallery({ tournamentId = null, leagueId = null, currentU
               onClick={() => setLightbox(p)}
               style={{
                 position: 'relative', padding: 0, border: 'none', cursor: 'pointer',
-                aspectRatio: '1 / 1', borderRadius: 8, overflow: 'hidden', background: C.input,
+                aspectRatio: '1 / 1', borderRadius: 8, overflow: 'hidden', background: C.dark,
               }}>
               {p.media_type === 'video' ? (
                 <>
@@ -211,8 +214,8 @@ function Chip({ active, onClick, children }) {
       onClick={onClick}
       style={{
         background: active ? 'rgba(91,159,226,0.22)' : 'rgba(11,31,58,0.6)',
-        border: `1px solid ${active ? C.blue : C.border}`,
-        color: active ? C.ice : C.steel, borderRadius: 999,
+        border: `1px solid ${active ? GAL_BLUE : GAL_BORDER}`,
+        color: active ? C.ice : GAL_STEEL, borderRadius: 999,
         padding: '4px 12px', fontSize: 12, fontWeight: active ? 700 : 500,
         cursor: 'pointer', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap',
       }}>
@@ -279,26 +282,26 @@ function AddPhotoModal({ scopeLabel, teams, currentUser, tournamentId, leagueId,
     <Backdrop onClose={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{
         width: 'min(440px, 92vw)', maxHeight: '88vh', overflowY: 'auto',
-        background: C.panel, borderRadius: 14, padding: 16,
+        background: GAL_PANEL, borderRadius: 14, padding: 16,
         boxShadow: '0 12px 40px rgba(0,0,0,0.5)', fontFamily: 'Barlow, sans-serif',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div style={{ color: C.ice, fontWeight: 700, fontSize: 16 }}>Add Photo</div>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: C.dim, fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>×</button>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: GAL_DIM, fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>×</button>
         </div>
 
         <label style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           aspectRatio: previewUrl ? 'auto' : '4 / 3', minHeight: 140,
-          border: `2px dashed ${C.border}`, borderRadius: 10, cursor: 'pointer',
-          overflow: 'hidden', background: C.input, marginBottom: 12,
+          border: `2px dashed ${GAL_BORDER}`, borderRadius: 10, cursor: 'pointer',
+          overflow: 'hidden', background: C.dark, marginBottom: 12,
         }}>
           {previewUrl ? (
             file?.type?.startsWith('video')
               ? <video src={previewUrl} controls style={{ width: '100%', display: 'block' }} />
               : <img src={previewUrl} alt="preview" style={{ width: '100%', display: 'block' }} />
           ) : (
-            <span style={{ color: C.steel, fontSize: 13, textAlign: 'center', padding: 16 }}>
+            <span style={{ color: GAL_STEEL, fontSize: 13, textAlign: 'center', padding: 16 }}>
               📷 Tap to pick a photo or video
             </span>
           )}
@@ -313,8 +316,8 @@ function AddPhotoModal({ scopeLabel, teams, currentUser, tournamentId, leagueId,
           rows={2}
           maxLength={500}
           style={{
-            width: '100%', boxSizing: 'border-box', background: C.input, color: C.ice,
-            border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px',
+            width: '100%', boxSizing: 'border-box', background: C.dark, color: C.ice,
+            border: `1px solid ${GAL_BORDER}`, borderRadius: 8, padding: '8px 10px',
             fontFamily: 'Barlow, sans-serif', fontSize: 13, resize: 'vertical', marginBottom: 12,
           }} />
 
@@ -323,8 +326,8 @@ function AddPhotoModal({ scopeLabel, teams, currentUser, tournamentId, leagueId,
             value={teamTag}
             onChange={(e) => setTeamTag(e.target.value)}
             style={{
-              width: '100%', boxSizing: 'border-box', background: C.input, color: C.ice,
-              border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px',
+              width: '100%', boxSizing: 'border-box', background: C.dark, color: C.ice,
+              border: `1px solid ${GAL_BORDER}`, borderRadius: 8, padding: '8px 10px',
               fontFamily: 'Barlow, sans-serif', fontSize: 13, marginBottom: 12,
             }}>
             <option value="">Tag a team (optional)</option>
@@ -332,15 +335,15 @@ function AddPhotoModal({ scopeLabel, teams, currentUser, tournamentId, leagueId,
           </select>
         )}
 
-        {error && <div style={{ color: C.red, fontSize: 12, marginBottom: 10 }}>{error}</div>}
+        {error && <div style={{ color: colors.redSoft, fontSize: 12, marginBottom: 10 }}>{error}</div>}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button onClick={onClose} style={{ background: 'transparent', border: `1px solid ${C.border}`, color: C.steel, borderRadius: 8, padding: '8px 14px', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={onClose} style={{ background: 'transparent', border: `1px solid ${GAL_BORDER}`, color: GAL_STEEL, borderRadius: 8, padding: '8px 14px', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Cancel</button>
           <button
             onClick={submit}
             disabled={!file || submitting}
             style={{
-              background: (!file || submitting) ? C.border : C.blue, color: C.ice, border: 'none',
+              background: (!file || submitting) ? GAL_BORDER : GAL_BLUE, color: C.ice, border: 'none',
               borderRadius: 8, padding: '8px 16px', fontWeight: 700, fontSize: 13,
               cursor: (!file || submitting) ? 'default' : 'pointer',
             }}>
@@ -372,7 +375,7 @@ function Lightbox({ post, isTournament, scopeId, currentUser, reactionInitial, o
     <Backdrop onClose={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{
         width: 'min(560px, 94vw)', maxHeight: '92vh', overflowY: 'auto',
-        background: C.panel, borderRadius: 14, overflow: 'hidden',
+        background: GAL_PANEL, borderRadius: 14, overflow: 'hidden',
         boxShadow: '0 12px 40px rgba(0,0,0,0.5)', fontFamily: 'Barlow, sans-serif',
       }}>
         <div style={{ position: 'relative', background: '#000' }}>
@@ -389,9 +392,9 @@ function Lightbox({ post, isTournament, scopeId, currentUser, reactionInitial, o
         </div>
 
         <div style={{ padding: 14, color: C.ice }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: C.dim, marginBottom: post.content ? 8 : 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: GAL_DIM, marginBottom: post.content ? 8 : 10 }}>
             {teamName && (
-              <span style={{ background: 'rgba(91,159,226,0.18)', color: C.blue, borderRadius: 999, padding: '2px 8px', fontWeight: 700 }}>{teamName}</span>
+              <span style={{ background: 'rgba(91,159,226,0.18)', color: GAL_BLUE, borderRadius: 999, padding: '2px 8px', fontWeight: 700 }}>{teamName}</span>
             )}
             <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {author ? `${author} · ` : ''}{timeAgo(post.created_at)} ago

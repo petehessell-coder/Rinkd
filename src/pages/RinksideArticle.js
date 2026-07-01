@@ -5,11 +5,7 @@ import { getArticleBySlug, incrementView, renderMarkdown } from '../lib/rinkside
 import { useIsRinkdAdmin } from '../lib/userRole';
 import { track } from '../lib/analytics';
 import SEO from '../components/SEO';
-
-const C = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
-  steel: '#8BA3BE', dark: '#07111F', card: '#0f2847', border: 'rgba(46,91,140,0.4)',
-};
+import { C } from '../lib/tokens';
 
 function fmtDate(iso) {
   if (!iso) return '';

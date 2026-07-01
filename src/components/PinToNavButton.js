@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { isPinned, setNavPin, clearNavPin } from '../lib/navPins';
+import { C } from '../lib/tokens';
 
 // NAV-PIN-2 — the 📌 "Pin to nav" toggle shown on a League / Team / Tournament
 // page header. Pins this entity to the user's nav (up to 3, one per type;
@@ -48,8 +49,8 @@ export default function PinToNavButton({ userId, pinType, targetId }) {
         letterSpacing: '0.05em', textTransform: 'uppercase', whiteSpace: 'nowrap',
         opacity: busy ? 0.6 : 1,
         background: pinned ? 'rgba(215,38,56,0.16)' : 'rgba(46,91,140,0.25)',
-        border: `1px solid ${pinned ? '#D72638' : 'rgba(46,91,140,0.5)'}`,
-        color: '#F4F7FA',
+        border: `1px solid ${pinned ? C.red : 'rgba(46,91,140,0.5)'}`,
+        color: C.ice,
       }}
     >
       {pinned ? '📌 Pinned' : '📌 Pin'}

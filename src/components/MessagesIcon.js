@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getDmUnreadCount, subscribeInbox } from '../lib/messages';
-
-const C = { ice: '#F4F7FA', red: '#D72638' };
+import { C } from '../lib/tokens';
 
 /**
  * Speech-bubble icon with an unread-DM badge. Mirrors NotificationBell: polls
@@ -57,7 +56,7 @@ export default function MessagesIcon({ userId, size = 22, color }) {
           minWidth: 16, height: 16, borderRadius: 999,
           padding: '0 4px', fontSize: 10, fontWeight: 700,
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          border: '2px solid #0B1F3A', lineHeight: 1,
+          border: `2px solid ${C.navy}`, lineHeight: 1,
           fontFamily: 'Barlow, sans-serif',
         }}>
           {count > 99 ? '99+' : count}

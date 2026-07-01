@@ -16,8 +16,7 @@ import GamePuckCard from '../components/GamePuckCard';
 import ShareButton from '../components/ShareButton';
 import { loadGameCardData } from '../lib/gameCardData';
 import { useOnline } from '../lib/useOnline';
-
-const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
+import { C, colors } from '../lib/tokens';
 
 function LiveBarnWordmark({ dark = false }) {
   const liveColor = dark ? '#2E6DB4' : '#5a9fd4';
@@ -272,7 +271,7 @@ export default function GameDetail({ profile }) {
   const watching = game.live_watching != null ? game.live_watching : null;
   const teamName = (id) => id === homeTeam.id ? homeTeam.name : awayTeam.name;
   const teamColor = (id) => id === homeTeam.id ? (homeTeam.logo_color || '#1a4a7a') : (awayTeam.logo_color || '#6b1520');
-  const severityColor = (s) => s?.includes('Major') || s?.includes('Match') ? C.red : '#F59E0B';
+  const severityColor = (s) => s?.includes('Major') || s?.includes('Match') ? C.red : colors.warning;
   const severityLabel = (s) => s?.includes('Major') || s?.includes('Match') ? 'MAJOR' : s?.includes('Double') ? 'DBL MIN' : 'MINOR';
   // "#11" → "Gus Beck (#11)" when we know the player from the game lineup;
   // falls back to just the number when the lineup row is missing or unnamed.
@@ -374,14 +373,14 @@ export default function GameDetail({ profile }) {
                 {isLive && <span style={{ background: C.red, color: '#fff', fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20, letterSpacing: '0.06em' }}>● LIVE · {periodLabel(game.period)}{liveClock ? ` · ${liveClock}` : ''}</span>}
                 {isLive && watching != null && <span style={{ marginLeft: 8, fontSize: 11, color: C.steel }}>· {watching.toLocaleString()} watching</span>}
                 {isFinal && <span style={{ background: 'rgba(244,247,250,0.08)', color: 'rgba(244,247,250,0.4)', fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>FINAL</span>}
-                {!isLive && !isFinal && <span style={{ background: 'rgba(46,91,140,0.4)', color: C.steel, fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>SCHEDULED</span>}
+                {!isLive && !isFinal && <span style={{ background: C.border, color: C.steel, fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>SCHEDULED</span>}
               </div>
               {/* GS-5 — pre-game roster check attestation (verify_game_rosters).
                   Team-level signal only: it says the lineups were checked
                   against the suspension list, never who was on it. */}
               {isTournamentGame && game.rosters_verified_at && (
                 <div style={{ textAlign: 'center', marginTop: 6 }}>
-                  <span style={{ background: 'rgba(34,197,94,0.12)', border: '0.5px solid rgba(34,197,94,0.4)', color: '#22C55E', fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>
+                  <span style={{ background: 'rgba(34,197,94,0.12)', border: '0.5px solid rgba(34,197,94,0.4)', color: colors.success, fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>
                     ✓ Rosters verified
                   </span>
                 </div>
@@ -452,7 +451,7 @@ export default function GameDetail({ profile }) {
                 style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: C.navy, border: `0.5px solid ${C.border}`, borderRadius: 10, padding: '12px 16px', cursor: 'pointer', transition: 'all 0.15s', marginBottom: 8 }}
                 onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.querySelector('.watch-text').style.color = C.navy; e.currentTarget.querySelector('.led-wrap').style.borderColor = 'rgba(215,38,56,0.5)'; }}
                 onMouseLeave={e => { e.currentTarget.style.background = C.navy; e.currentTarget.querySelector('.watch-text').style.color = C.ice; }}>
-                <span className="led-wrap" style={{ width: 28, height: 28, background: '#07111F', borderRadius: 6, border: `1px solid rgba(215,38,56,0.5)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <span className="led-wrap" style={{ width: 28, height: 28, background: C.dark, borderRadius: 6, border: `1px solid rgba(215,38,56,0.5)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <LedR size={16} />
                 </span>
                 <span className="watch-text" style={{ fontSize: 13, fontWeight: 700, color: C.ice, transition: 'color 0.15s' }}>Watch with</span>

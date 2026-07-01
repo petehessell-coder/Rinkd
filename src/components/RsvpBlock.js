@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { getGameRsvps, upsertRsvp, deleteRsvp } from '../lib/rsvp';
+import { colors } from '../lib/tokens';
 
 const B = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
-  ice: '#F4F7FA', steel: '#8BA3BE', dark: '#07111F',
-  green: '#22C55E', amber: '#F59E0B',
+  navy: colors.bg, blue: colors.blue, red: colors.red,
+  ice: colors.ice, steel: colors.muted, dark: colors.surfaceDeep,
+  green: colors.success, amber: colors.warning,
   card: '#112236', border: '#1E3A5C',
 };
 

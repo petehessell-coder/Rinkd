@@ -5,11 +5,7 @@ import SEO from '../components/SEO';
 import { listArticles, listCategories } from '../lib/rinkside';
 import { useIsRinkdAdmin } from '../lib/userRole';
 import { CardGridSkeleton, EmptyState } from '../components/Skeletons';
-
-const C = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638', ice: '#F4F7FA',
-  steel: '#8BA3BE', dark: '#07111F', card: '#0f2847', border: 'rgba(46,91,140,0.4)',
-};
+import { C } from '../lib/tokens';
 
 function fmtDate(iso) {
   if (!iso) return '';
@@ -129,7 +125,7 @@ export default function Rinkside({ currentUser, profile }) {
           <div style={{ textAlign: 'center', marginBottom: 28, paddingTop: 12 }}>
             <img src="/rinkside-logo.png" alt="Rinkside"
               style={{ width: 100, height: 100, borderRadius: 22, marginBottom: 12, boxShadow: '0 14px 30px rgba(0,0,0,0.45)' }} />
-            <div style={{ display: 'block', background: 'rgba(46,91,140,0.18)', color: '#5a9cdc', fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', padding: '4px 12px', borderRadius: 999, marginBottom: 10, border: '1px solid rgba(46,91,140,0.4)', width: 'fit-content', marginLeft: 'auto', marginRight: 'auto' }}>
+            <div style={{ display: 'block', background: 'rgba(46,91,140,0.18)', color: '#5a9cdc', fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', padding: '4px 12px', borderRadius: 999, marginBottom: 10, border: `1px solid ${C.border}`, width: 'fit-content', marginLeft: 'auto', marginRight: 'auto' }}>
               The Content
             </div>
             <div style={{ fontSize: 14, color: C.steel, maxWidth: 480, margin: '0 auto', lineHeight: 1.55 }}>

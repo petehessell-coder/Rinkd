@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { getActivePlacements, pickByWeight } from '../lib/ads';
 import { adImpression, adTap } from '../lib/adBeacon';
+import { C } from '../lib/tokens';
 
 // ADS-1 · M1 — renders one sponsor slot for a page. Picks a weighted placement
 // once on mount, renders a plain <a><img> (or a "Presented by" text lockup when
@@ -50,8 +51,8 @@ export default function AdSlot({ slot, targetType, targetId, style, radius = 10 
 
   const inner = c.image_url
     ? <img src={c.image_url} alt={c.sponsor_name || 'Sponsor'} loading="lazy" style={{ display: 'block', width: '100%', height: 'auto' }} />
-    : <div style={{ padding: '10px 14px', textAlign: 'center', color: '#8BA3BE', fontSize: 12, fontFamily: "'Barlow', sans-serif" }}>
-        Presented by <span style={{ color: '#F4F7FA', fontWeight: 700 }}>{c.sponsor_name}</span>
+    : <div style={{ padding: '10px 14px', textAlign: 'center', color: C.steel, fontSize: 12, fontFamily: "'Barlow', sans-serif" }}>
+        Presented by <span style={{ color: C.ice, fontWeight: 700 }}>{c.sponsor_name}</span>
       </div>;
 
   const body = c.link_url

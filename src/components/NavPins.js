@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getMyNavPins } from '../lib/navPins';
-
-const C = { ice: '#F4F7FA', steel: '#8BA3BE', blue: '#2E5B8C', border: '#1E3A5C' };
+import { C } from '../lib/tokens';
 const TYPE_LABEL = { league: 'League', team: 'Team', tournament: 'Tournament' };
 
 // NAV-PIN-2 — the user's explicit nav pins (up to 3: league / team / tournament),
@@ -60,7 +59,7 @@ export default function NavPins({ userId, size = 26, variant = 'icon' }) {
               padding: '8px', background: 'transparent', border: 'none',
               borderRadius: 10, cursor: 'pointer', color: C.ice, textAlign: 'left', fontFamily: 'inherit',
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = C.border + '66'; }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = C.border; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
             <Avatar pin={pin} size={size} />
             <div style={{ flex: 1, minWidth: 0 }}>

@@ -1,8 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { REACTION_EMOJIS, toggleReaction } from '../lib/reactions';
 import { haptics } from '../lib/haptics';
-
-const C = { ice: '#F4F7FA', steel: '#8BA3BE', blue: '#5B9FE2', border: 'rgba(46,91,140,0.5)' };
+import { C } from '../lib/tokens';
 
 // Inject the reaction micro-interaction keyframes once (the app styles inline,
 // so there's no global stylesheet to drop these in). `rinkdReactPop` springs
@@ -144,7 +143,7 @@ export default function PostReactions({ postId, currentUserId, initial }) {
         <div style={{
           position: 'absolute', bottom: '100%', left: 0, marginBottom: 6, zIndex: 60,
           display: 'flex', gap: 4, padding: 6,
-          background: '#0f2847', border: `1px solid ${C.border}`, borderRadius: 999,
+          background: C.card, border: `1px solid ${C.border}`, borderRadius: 999,
           boxShadow: '0 6px 18px rgba(0,0,0,0.35)',
         }}>
           {REACTION_EMOJIS.map((emoji) => (

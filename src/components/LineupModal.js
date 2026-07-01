@@ -10,11 +10,12 @@ import {
 // the same set_lineup RPC, so Migration H's minor gate applies unchanged
 // (adult subs pass; a minor anchored only to the pool is blocked by design).
 import { listSubPoolsForTeam, sendSubNeededAlert } from '../lib/subPools';
+import { C, colors } from '../lib/tokens';
 
 const B = {
-  navy: '#0B1F3A', blue: '#2E5B8C', red: '#D72638',
-  ice: '#F4F7FA', steel: '#8BA3BE',
-  card: '#112236', border: '#1E3A5C', amber: '#F59E0B', green: '#22C55E',
+  navy: C.navy, blue: C.blue, red: C.red,
+  ice: C.ice, steel: C.steel,
+  card: '#112236', border: '#1E3A5C', amber: colors.warning, green: colors.success,
 };
 
 /**
@@ -383,7 +384,7 @@ export default function LineupModal({
                         <span style={{ fontSize: 13, color: B.ice, flex: 1 }}>{s.name}{s.is_goalie ? ' 🥅' : ''}</span>
                         <input value={s.jersey} onChange={e => setSubJersey(s.user_id, e.target.value)} placeholder="#"
                           inputMode="numeric"
-                          style={{ width: 44, background: '#07111F', border: `1px solid ${B.border}`, borderRadius: 6, padding: '5px 6px', color: B.ice, fontSize: 13, textAlign: 'center', fontFamily: 'inherit' }} />
+                          style={{ width: 44, background: C.dark, border: `1px solid ${B.border}`, borderRadius: 6, padding: '5px 6px', color: B.ice, fontSize: 13, textAlign: 'center', fontFamily: 'inherit' }} />
                         <button onClick={() => removeSub(s.user_id)} style={{ background: 'none', border: 'none', color: B.steel, fontSize: 15, cursor: 'pointer' }}>✕</button>
                       </div>
                     ))}

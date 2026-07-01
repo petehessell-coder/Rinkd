@@ -5,8 +5,7 @@ import { CardGridSkeleton } from '../components/Skeletons';
 import { listLeagues } from '../lib/leagues';
 import TapeText from '../components/TapeText';
 import { TeamLogo } from '../components/Logos';
-
-const C = { navy:'#0B1F3A', blue:'#2E5B8C', red:'#D72638', ice:'#F4F7FA', steel:'#8BA3BE', dark:'#07111F', card:'#0f2847', border:'rgba(46,91,140,0.4)' };
+import { C, colors } from '../lib/tokens';
 
 export default function Leagues({ profile }) {
   const navigate = useNavigate();
@@ -71,7 +70,7 @@ export default function Leagues({ profile }) {
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {league.status === 'active' && <span style={{ background: 'rgba(34,197,94,0.15)', color: '#22C55E', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>● ACTIVE</span>}
+              {league.status === 'active' && <span style={{ background: 'rgba(34,197,94,0.15)', color: colors.success, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>● ACTIVE</span>}
               {league.status === 'complete' && <span style={{ background: 'rgba(244,247,250,0.08)', color: 'rgba(244,247,250,0.4)', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>FINAL</span>}
               <div style={{ color: 'rgba(244,247,250,0.25)', fontSize: 18 }}>›</div>
             </div>

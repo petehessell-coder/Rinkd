@@ -5,11 +5,7 @@ import { followUser } from '../lib/posts';
 import { subscribeToPush } from '../lib/push';
 import { track } from '../lib/analytics';
 import { Icon } from './ui';
-
-const C = {
-  navy: '#0B1F3A', red: '#D72638', ice: '#F4F7FA',
-  steel: '#8BA3BE', dark: '#07111F', card: '#0f2847', border: 'rgba(46,91,140,0.4)',
-};
+import { C } from '../lib/tokens';
 
 // Locker Room → Tunnel → Ice (DESIGN_MANIFESTO "Onboarding Narrative").
 // The locker-room photo sits BEHIND the onboarding steps; the tunnel plays once
