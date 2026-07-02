@@ -166,11 +166,10 @@ export default function PostActionMenu({
         aria-label="More actions"
         onClick={(e) => {
           e.stopPropagation();
-          setOpen((v) => {
-            const next = !v;
-            if (next) haptics.tick(); // light confirmation the menu opened
-            return next;
-          });
+          // Haptic OUTSIDE the updater — updaters must stay pure (StrictMode
+          // runs them twice in dev, which double-buzzed).
+          if (!open) haptics.tick(); // light confirmation the menu is opening
+          setOpen((v) => !v);
         }}
         style={{
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',

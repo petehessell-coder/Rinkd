@@ -47,6 +47,11 @@ export default function Card({
   // Tappable cards get the global press state (scale dip on :active, reduced-
   // motion-guarded in index.css) via the .rinkd-pressable hook class.
   const classes = [onClick ? 'rinkd-pressable' : '', className].filter(Boolean).join(' ') || undefined;
+  // D-S09-1 hover lift: the stylesheet's .rinkd-pressable:hover box-shadow
+  // loses to this component's INLINE boxShadow, so tappable cards apply
+  // shadows.hover via state instead. Live cards keep their red ring (it
+  // outranks the lift); touch devices never hover so mobile feel is unchanged.
+  const [hovered, setHovered] = React.useState(false);
   const v = VARIANTS[variant] || VARIANTS.standard;
   // Live games override the hero shadow with the red-ring treatment — manifesto
   // "Live game cards: 0 0 0 1px rgba(215,38,56,0.6), 0 8px 32px ...".
@@ -54,10 +59,14 @@ export default function Card({
     ? { border: '1px solid rgba(215,38,56,0.6)', boxShadow: shadows.live }
     : null;
 
+  const hoverStyle = onClick && !live && hovered ? { boxShadow: shadows.hover } : null;
+
   return (
     <Tag
       onClick={onClick}
       className={classes}
+      onMouseEnter={onClick ? () => setHovered(true) : undefined}
+      onMouseLeave={onClick ? () => setHovered(false) : undefined}
       style={{
         position: 'relative',
         borderRadius: radii.card,
@@ -65,8 +74,10 @@ export default function Card({
         minWidth: 0,
         overflow: 'hidden',
         cursor: onClick ? 'pointer' : undefined,
+        transition: 'box-shadow 150ms ease',
         ...v,
         ...liveStyle,
+        ...hoverStyle,
         ...style,
       }}
       {...rest}
