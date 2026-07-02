@@ -21,6 +21,8 @@ import { buildIcsMulti, downloadIcs } from '../lib/ics';
 import SubscribeCalendarSheet from '../components/SubscribeCalendarSheet';
 import { eventMeta, scheduleTitle } from '../lib/scheduleMeta';
 import { C, colors } from '../lib/tokens';
+import { isFollowingTeam, followTeam, unfollowTeam } from '../lib/teamSubscriptions';
+import { track } from '../lib/analytics';
 
 const TABS = ['Roster', 'Schedule', 'Feed', 'Volunteer', 'Info'];
 
@@ -44,6 +46,10 @@ export default function TeamPage({ currentUser, profile }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('Roster');
+  // S07 D-S07-1 — spectator follow (a fan relationship, distinct from the
+  // roster join-request). Non-optimistic like the league/tournament follows.
+  const [followingTeam, setFollowingTeam] = useState(false);
+  const [followBusy, setFollowBusy] = useState(false);
   const [joinRequested, setJoinRequested] = useState(false);
   const [joinLoading, setJoinLoading] = useState(false);
   const [subscribeOpen, setSubscribeOpen] = useState(false);
@@ -227,6 +233,27 @@ export default function TeamPage({ currentUser, profile }) {
   // approve roster join-requests etc.) even when they don't directly manage the team.
   const canManage = isManager || isLeagueStaff;
   const isMember = !!userRole;
+
+  useEffect(() => {
+    let alive = true;
+    if (!currentUser?.id || !id) { setFollowingTeam(false); return undefined; }
+    isFollowingTeam(currentUser.id, id).then((v) => { if (alive) setFollowingTeam(v); }).catch(() => {});
+    return () => { alive = false; };
+  }, [currentUser?.id, id]);
+
+  const handleFollowTeam = async () => {
+    if (followBusy || !currentUser?.id) return;
+    setFollowBusy(true);
+    if (followingTeam) {
+      const { error: err } = await unfollowTeam(currentUser.id, id);
+      if (!err) setFollowingTeam(false);
+    } else {
+      const { error: err } = await followTeam(currentUser.id, id);
+      // add-path only, mirroring tournament_followed (pilot activation event)
+      if (!err) { setFollowingTeam(true); track('team_followed', { team_id: id }); }
+    }
+    setFollowBusy(false);
+  };
   const goalies = members.filter(m => m.role === 'goalie' || m.position?.toLowerCase().includes('goalie'));
   const defense = members.filter(m => m.position?.toLowerCase().includes('defense') || m.position?.toLowerCase().includes('d'));
   const forwards = members.filter(m => !goalies.includes(m) && !defense.includes(m) && m.role !== 'manager');
@@ -469,6 +496,19 @@ export default function TeamPage({ currentUser, profile }) {
               onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
               onMouseLeave={e => { e.currentTarget.style.background = 'rgba(46,91,140,0.25)'; e.currentTarget.style.color = C.ice; }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="manage" size={16} /> Manage</span>
+            </button>
+          )}
+          {currentUser && !isMember && !canManage && (
+            <button onClick={handleFollowTeam} disabled={followBusy}
+              style={{
+                background: followingTeam ? 'rgba(46,91,140,0.25)' : C.red,
+                border: followingTeam ? '0.5px solid rgba(46,91,140,0.5)' : 'none',
+                borderRadius: 20, padding: '5px 12px', fontSize: 12, fontWeight: 700,
+                color: followingTeam ? C.steel : colors.onAccent, cursor: followBusy ? 'default' : 'pointer',
+                fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap',
+                opacity: followBusy ? 0.7 : 1, transition: 'all 0.15s', minHeight: 30,
+              }}>
+              {followBusy ? 'Following…' : followingTeam ? 'Following ✓' : 'Follow'}
             </button>
           )}
           {currentUser && <PinToNavButton userId={currentUser.id} pinType="team" targetId={id} />}

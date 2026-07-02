@@ -17,6 +17,10 @@ import { getOrCreateDm } from '../lib/messages';
 import { followUser, unfollowUser, isFollowing, getFollowCounts, timeAgo, uploadMedia } from '../lib/posts';
 import { blockUser, unblockUser, isBlockedByMe } from '../lib/blocks';
 import MapLink from '../components/MapLink';
+import ShareButton from '../components/ShareButton';
+import { buildStatCardData } from '../lib/shareCard';
+import { getUserTeams } from '../lib/teams';
+import { absoluteShareUrl } from '../lib/share';
 import { MentionText } from '../components/Mentions';
 import { track } from '../lib/analytics';
 import { classifyImage } from '../lib/imageModeration';
@@ -116,7 +120,15 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
-  const [activeTab, setActiveTab] = useState('posts');
+  // S07 H2: profile tabs honor ?tab= (read-once — this page never writes query
+  // params, so no setSearchParams needed per the S04 lesson). Shared stat cards
+  // deep-link to ?tab=stats.
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const t = (new URLSearchParams(window.location.search).get('tab') || '').toLowerCase();
+      return ['posts', 'stats', 'activity', 'badges'].includes(t) ? t : 'posts';
+    } catch { return 'posts'; }
+  });
   const [following, setFollowing] = useState(false);
   const [followCounts, setFollowCounts] = useState({ followers: 0, following: 0 });
   const [followLoading, setFollowLoading] = useState(false);
@@ -127,6 +139,8 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
   const [tournamentStats, setTournamentStats] = useState([]);
   const [puckCount, setPuckCount] = useState(0);
   const [milestones, setMilestones] = useState([]);
+  const [teams, setTeams] = useState(null); // null=loading, []=none, [...]=rosters
+  const [teamsError, setTeamsError] = useState(false);
 
   const [editName, setEditName] = useState('');
   const [editHandle, setEditHandle] = useState('');
@@ -170,6 +184,29 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
     if (profileId) getPlayerMilestones(profileId).then((m) => { if (alive) setMilestones(m); });
     return () => { alive = false; };
   }, [profileId]);
+
+  // G2 — "My Teams" chips. YOUTH-PRIVACY: when viewing someone else's profile,
+  // fail-closed — show a team only when it is EXPLICITLY non-youth
+  // (is_youth === false). Youth or unknown-status rosters are hidden. (Youth
+  // teams are private at RLS, so a stranger's fetch usually won't return them
+  // at all; this client filter is the belt-and-suspenders backstop.)
+  useEffect(() => {
+    let alive = true;
+    if (!profileId) { setTeams([]); return () => { alive = false; }; }
+    setTeams(null); setTeamsError(false);
+    getUserTeams(profileId)
+      .then((rows) => {
+        if (!alive) return;
+        const seen = new Set();
+        const list = (rows || [])
+          .filter((r) => r?.team && (isOwnProfile || r.team.is_youth === false))
+          .map((r) => r.team)
+          .filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)));
+        setTeams(list);
+      })
+      .catch((e) => { if (alive) { console.error('[Profile] teams load failed', e); setTeamsError(true); } });
+    return () => { alive = false; };
+  }, [profileId, isOwnProfile]);
 
   const loadProfile = useCallback(async () => {
     try {
@@ -557,11 +594,12 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                 {!blocked && (
                   <button onClick={handleFollow} disabled={followLoading} style={{
                     flex: 1, minWidth: 120,
-                    padding: '8px 20px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: 'none', cursor: 'pointer',
+                    padding: '8px 20px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: 'none',
+                    cursor: followLoading ? 'default' : 'pointer', opacity: followLoading ? 0.7 : 1,
                     background: following ? C.border : C.red, color: 'white',
                     fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 14,
                     letterSpacing: '0.05em',
-                  }}>{followLoading ? '...' : following ? 'Following' : 'Follow'}</button>
+                  }}>{followLoading ? (following ? 'Unfollowing…' : 'Following…') : following ? 'Following' : 'Follow'}</button>
                 )}
                 <button onClick={handleBlock} disabled={blockLoading} title={blocked ? 'Unblock this user' : 'Block this user'} style={{
                   flex: '0 0 auto',
@@ -610,6 +648,41 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                 </div>
               );
             })()}
+
+            {/* G2 — "My Teams" chips. Loading → 2 skeleton chips; loaded → chip
+                row (→ /team/:id); empty → an invitation to find a team; error →
+                the section is omitted silently. YOUTH-PRIVACY filtering happens
+                upstream in the teams effect. */}
+            {!editing && !teamsError && teams !== null && teams.length === 0 && isOwnProfile ? (
+              <button onClick={() => navigate('/discover')} style={{
+                marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'transparent',
+                border: `1px dashed ${C.border}`, borderRadius: 999, padding: '8px 14px', minHeight: 44, cursor: 'pointer',
+                color: C.steel, fontFamily: "'Barlow', sans-serif", fontWeight: 600, fontSize: 13,
+              }}>Not on a roster yet — find your team →</button>
+            ) : !editing && !teamsError && (teams === null || teams.length > 0) ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+                {teams === null ? (
+                  [0, 1].map((i) => (
+                    <div key={i} style={{ height: 34, width: i === 0 ? 128 : 104, borderRadius: 999, background: C.card, border: `1px solid ${C.border}` }} />
+                  ))
+                ) : (
+                  teams.map((t) => (
+                    <button key={t.id} onClick={() => navigate(`/team/${t.id}`)} title={t.name} style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 8, maxWidth: '100%',
+                      background: C.card, border: `1px solid ${C.border}`, borderRadius: 999,
+                      padding: '5px 12px 5px 6px', minHeight: 34, cursor: 'pointer',
+                    }}>
+                      {t.logo_url ? (
+                        <Img src={t.logo_url} alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                      ) : (
+                        <span style={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, background: t.logo_color || C.navy, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontStyle: 'italic', fontSize: 11 }}>{(t.logo_initials || t.name || '?').slice(0, 2).toUpperCase()}</span>
+                      )}
+                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: "'Barlow', sans-serif", fontWeight: 700, fontSize: 13, color: C.ice }}>{t.name}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            ) : null}
 
             {editing && (
               <form onSubmit={saveEdit} style={{ marginTop: 12 }}>
@@ -660,11 +733,33 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
             ? `League Season · ${plural(leagueStats.length, 'League')}`
             : `Tournament Play · ${plural(tournamentStats.length, 'Event')}`;
           const sub = [profile.position, profile.level].filter(Boolean).join(' · ');
+          // H1 — YOUTH-PRIVACY: put the name on the shareable card ONLY when the
+          // profile is EXPLICITLY an adult account. Any other value (minor, or an
+          // unknown/absent account_type) fails closed → name:null, and the card
+          // composer falls back to a jersey number (none on a bare profile → no
+          // name at all). Never surface a minor's name on a shareable graphic.
+          const shareName = profile.account_type === 'adult' ? profile.name : null;
+          const heroTeamName = (Array.isArray(teams) && teams[0]?.name) || '';
+          const getStatCard = () => buildStatCardData({
+            player: { name: shareName, teamName: heroTeamName, teamColor: C.red, position: profile.position || null },
+            league: fromLeague ? 'League Season' : 'Tournament Play',
+            subtitle: sub || null,
+            headline: { label: 'PTS', value: tot.points },
+            stats: [
+              { label: 'G', value: tot.goals },
+              { label: 'A', value: tot.assists },
+              { label: 'GP', value: tot.gp },
+              { label: 'PIM', value: tot.pim },
+            ],
+          });
           return (
             <div style={{ position: 'relative', overflow: 'hidden', background: `linear-gradient(135deg, ${colors.surfaceElevated} 0%, ${C.navy} 100%)`, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px 18px', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                 <span style={{ width: 3, height: 14, background: C.red, borderRadius: 2, flexShrink: 0 }} />
-                <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.steel, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{kicker}</span>
+                <span style={{ flex: 1, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.steel, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{kicker}</span>
+                <div style={{ flexShrink: 0, margin: '-8px -8px -8px 0' }}>
+                  <ShareButton compact cardType="stat" label="" shareUrl={absoluteShareUrl(`/profile/${profileId}?tab=stats`)} getCard={getStatCard} />
+                </div>
               </div>
               <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 32, lineHeight: 1, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.name}</div>
               {sub && <div style={{ fontSize: 12, color: C.steel, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</div>}

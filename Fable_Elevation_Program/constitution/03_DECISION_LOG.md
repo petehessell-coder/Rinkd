@@ -133,3 +133,15 @@ horn/haptic + TIED IT/LEAD CHANGE, state line + final beat, period pulse);
 kills the 20-push Saturday; milestone added to the push allowlist).
 `game_final` push kind DEFERRED to its own follow-up. Loss handling stays
 restrained (verified correct) — never celebration, never shame.
+
+### 2026-07-02 · S07 Gate-1 decisions (Pete sign-off)
+Bundles F/G/H approved (manifesto like-physics, honest failure toasts,
+optimistic post-create, My Teams on Profile, notification clamp, reciprocity
+unread-filter, Profile stat-card share + youth suppression, stat links →
+?tab=stats). **D-S07-1:** team spectator follow SHIPS NOW — `team_subscriptions`
+mirroring league_subscriptions; the follow must be REAL (followed teams' games
+surface on Home), not a hollow affordance; wires the reserved `team_followed`
+pilot-activation event. **D-S07-2:** ❤️ Like + 🔥 reactions BOTH stay; revisit
+with Oakland pilot engagement data (both are tracked separately now).
+Deferred: per-object OG for event pages, /photo/:id route, milestone composer,
+Profile badges rebuild.

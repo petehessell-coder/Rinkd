@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { REACTION_EMOJIS, toggleReaction } from '../lib/reactions';
 import { haptics } from '../lib/haptics';
 import { C } from '../lib/tokens';
+import { useToast } from './ui';
 
 // Preserved local drift (C01): the "mine" chip border is the bright sky-blue
 // matching its rgba(91,159,226,...) fill, and borders here run a hair heavier
@@ -34,6 +35,7 @@ if (typeof document !== 'undefined' && !document.getElementById('rinkd-reaction-
 export default function PostReactions({ postId, currentUserId, initial }) {
   const [reactions, setReactions] = useState(initial || {});
   const [pickerOpen, setPickerOpen] = useState(false);
+  const { toast } = useToast();
   const rootRef = useRef(null);
   const inFlight = useRef(new Set());
   // Transient "just reacted" marker that drives the pop + float animation.
@@ -85,7 +87,12 @@ export default function PostReactions({ postId, currentUserId, initial }) {
     inFlight.current.add(emoji);
     (async () => {
       const { error } = await toggleReaction(postId, currentUserId, emoji);
-      if (error) setReactions((prev) => applyToggle(prev, emoji)); // toggle is its own inverse
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.warn('[PostReactions] toggle failed, rolling back:', error?.message || error);
+        setReactions((prev) => applyToggle(prev, emoji)); // toggle is its own inverse
+        toast({ message: "That didn't send — check your connection and try again.", tone: 'alert' });
+      }
       inFlight.current.delete(emoji);
     })();
   };
@@ -129,6 +136,15 @@ export default function PostReactions({ postId, currentUserId, initial }) {
           </button>
         );
       })}
+
+      {/* F3 — zero-reaction nudge: a muted "React" label beside the ＋ so the
+          picker reads as an invitation, not a bare glyph. Vanishes the moment any
+          reaction lands. Meta type + steel, matching the action row. */}
+      {active.length === 0 && (
+        <span title="React" style={{ color: C.steel, fontSize: 12, fontFamily: "'Barlow', sans-serif", lineHeight: 1.4 }}>
+          React
+        </span>
+      )}
 
       {currentUserId && (
         <button

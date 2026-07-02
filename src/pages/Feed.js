@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { C, colors } from '../lib/tokens';
-import { Icon, useExpand, Img, ErrorState } from '../components/ui';
+import { Icon, useExpand, Img, ErrorState, useToast } from '../components/ui';
 import { useOnline } from '../lib/useOnline';
 import { staggerStyle, useDelayedFlag } from '../lib/motion';
 import TapeText from '../components/TapeText';
@@ -68,9 +68,16 @@ if (typeof document !== 'undefined' && !document.getElementById('rinkd-feed-anim
   el.textContent =
     '@keyframes rinkdStarterFade{0%{opacity:0;transform:translateY(3px)}100%{opacity:1;transform:translateY(0)}}'
     + '@keyframes rinkdLivePulse{0%{box-shadow:0 0 0 0 rgba(215,38,56,0.55)}70%{box-shadow:0 0 0 7px rgba(215,38,56,0)}100%{box-shadow:0 0 0 0 rgba(215,38,56,0)}}'
+    // Manifesto like physics — on the ADD only: the heart springs 1.0→1.3→1.0
+    // with the red fill landing during the bounce (color is applied on the same
+    // tick the class mounts). The count slides up from -4px→0 as it increments.
+    + '@keyframes rinkdLikePop{0%{transform:scale(1)}45%{transform:scale(1.3)}100%{transform:scale(1)}}'
+    + '@keyframes rinkdLikeCount{0%{transform:translateY(-4px)}100%{transform:translateY(0)}}'
+    + '.rinkd-like-pop{animation:rinkdLikePop 300ms cubic-bezier(0.34,1.56,0.64,1)}'
+    + '.rinkd-like-count{animation:rinkdLikeCount 300ms ease-out}'
     + '.rinkd-live-dot{animation:rinkdLivePulse 1.5s ease-out infinite}'
     + '.rinkd-starter-fade{animation:rinkdStarterFade .5s ease}'
-    + '@media (prefers-reduced-motion: reduce){.rinkd-live-dot,.rinkd-starter-fade{animation:none}}';
+    + '@media (prefers-reduced-motion: reduce){.rinkd-live-dot,.rinkd-starter-fade,.rinkd-like-pop,.rinkd-like-count{animation:none}}';
   document.head.appendChild(el);
 }
 
@@ -190,6 +197,18 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
   const [showComments, setShowComments] = useState(false);
   const isLiked = likedPosts.includes(post.id);
   const profile = post.profiles;
+
+  // F1 — manifesto like physics on the ADD transition only. We detect the
+  // not-liked → liked flip and stamp a one-shot animation key so the heart
+  // springs + the count slides. Un-like (liked → not) leaves `liked` false so
+  // nothing animates — the color just snaps back. `keyof React` re-mounting the
+  // animated nodes via `key` restarts the CSS animation on every fresh add.
+  const wasLiked = useRef(isLiked);
+  const [likeAnim, setLikeAnim] = useState(0);
+  useEffect(() => {
+    if (isLiked && !wasLiked.current) setLikeAnim((n) => n + 1);
+    wasLiked.current = isLiked;
+  }, [isLiked]);
   const postMentionMap = mentionMapFromRows(post.post_mentions);
 
   // Card-hero "live" treatment. Reserved for genuinely red-earning moments so
@@ -280,8 +299,10 @@ function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, react
         )}
         <div style={{ display: 'flex', gap: 16, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
           <button onClick={() => onLike(post.id)} aria-label="Like" style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: isLiked ? C.red : C.steel, fontSize: 13, fontFamily: "'Barlow', sans-serif", padding: '0 4px', minHeight: 44 }}>
-            <Icon name="like" size={16} fill={isLiked ? C.red : 'none'} />
-            <span style={{ fontWeight: isLiked ? 600 : 400 }}>{post.likes || 0}</span>
+            <span key={`h${likeAnim}`} className={likeAnim ? 'rinkd-like-pop' : undefined} style={{ display: 'inline-flex', transformOrigin: 'center' }}>
+              <Icon name="like" size={16} fill={isLiked ? C.red : 'none'} />
+            </span>
+            <span key={`c${likeAnim}`} className={likeAnim ? 'rinkd-like-count' : undefined} style={{ display: 'inline-block', fontWeight: isLiked ? 600 : 400 }}>{post.likes || 0}</span>
           </button>
           <button onClick={loadComments} aria-label="Comments" style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: showComments ? C.ice : C.steel, fontSize: 13, fontFamily: "'Barlow', sans-serif", padding: '0 4px', minHeight: 44 }}>
             <Icon name="comment" size={16} /><span>{post.comment_count || 0}</span>
@@ -405,6 +426,7 @@ function ProfileNudgeBanner() {
 
 export default function Feed({ currentUser, profile }) {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [posts, setPosts] = useState([]);
   const [likedPosts, setLikedPosts] = useState([]);
   const [reactionMap, setReactionMap] = useState({});
@@ -572,11 +594,27 @@ export default function Feed({ currentUser, profile }) {
     const { data: newPost, error: postError } = await createPost(currentUser.id, { content: content.trim(), tag: selectedTag?.label || null, tagColor: selectedTag?.color || null, mediaUrl, mediaType });
     if (postError) {
       // The insert failed — don't clear the composer or fire analytics, or the
-      // user loses their text and we log a chirp that never landed.
+      // user loses their text and we log a chirp that never landed. The composer
+      // stays open with the typed content intact (it's only cleared on success).
       setPosting(false); setUploadProgress(0);
-      // eslint-disable-next-line no-alert
-      alert("Couldn't post that chirp. Check your connection and try again.");
+      // eslint-disable-next-line no-console
+      console.warn('[handlePost] createPost failed:', postError?.message || postError);
+      toast({ message: "That didn't send — check your connection and try again.", tone: 'alert' });
       return;
+    }
+    // F5 — optimistic prepend. The author's own chirp appears at the top of the
+    // feed the instant the insert confirms, instead of waiting on a full reload.
+    // createPost's row has no `profiles` embed (it's a bare insert().select()),
+    // so we graft the author embed from the current viewer's profile and default
+    // the mention embed — otherwise PostCard's `post.profiles` / `post.post_mentions`
+    // reads would render a nameless avatar and crash the mention map.
+    if (newPost?.id) {
+      const optimisticPost = {
+        ...newPost,
+        profiles: newPost.profiles || profile || null,
+        post_mentions: newPost.post_mentions || [],
+      };
+      setPosts(prev => (prev.some(p => p.id === optimisticPost.id) ? prev : [optimisticPost, ...prev]));
     }
     // Persist resolved @-mentions (best-effort — the post already landed).
     if (newPost?.id && postMentionIds.length) {
@@ -590,7 +628,11 @@ export default function Feed({ currentUser, profile }) {
     track('post_created', eventProps);
     track('chirp_created', eventProps);
     setContent(''); setPostMentionIds([]); setSelectedTag(null); removeMedia(); setComposerOpen(false); setUploadProgress(0);
-    await load(); setPosting(false);
+    setPosting(false);
+    // Reconcile in the background (no await) — swaps the grafted row for the
+    // canonical one (real embeds, server counts) without making the author stare
+    // at a spinner. If it fails the optimistic row already stands on its own.
+    load();
   };
 
   // 4E-1 · Optimistic UI on likes (v2 — race-safe)
@@ -645,6 +687,9 @@ export default function Feed({ currentUser, profile }) {
           ? { ...p, likes: nextLiked ? Math.max(0, (p.likes || 0) - 1) : (p.likes || 0) + 1 }
           : p
         ));
+        // eslint-disable-next-line no-console
+        console.warn('[Feed] like toggle failed, rolled back:', _e?.message || _e);
+        toast({ message: "That didn't send — check your connection and try again.", tone: 'alert' });
       } finally {
         likeInFlightRef.current.delete(postId);
       }

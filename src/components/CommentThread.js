@@ -5,6 +5,7 @@ import { MentionInput, MentionText } from './Mentions';
 import { mentionMapFromRows, saveCommentMentions } from '../lib/mentions';
 import { getComments, createComment, timeAgo } from '../lib/posts';
 import { C } from '../lib/tokens';
+import { useToast } from './ui';
 
 // ===========================================================================
 // CommentThread — the ONE comment list + composer shared by every feed
@@ -25,6 +26,7 @@ export default function CommentThread({ open, postId, currentUser, viewerProfile
   const [commentText, setCommentText] = useState('');
   const [commentMentionIds, setCommentMentionIds] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+  const { toast } = useToast();
 
   // Lazy load on first open (manifesto: comment threads don't load until needed).
   useEffect(() => {
@@ -68,6 +70,7 @@ export default function CommentThread({ open, postId, currentUser, viewerProfile
       setComments((prev) => prev.filter((c) => c.id !== tempId));
       setCommentText(trimmed);
       setCommentMentionIds(mentionIds);
+      toast({ message: "That didn't send — check your connection and try again.", tone: 'alert' });
       return;
     }
 
@@ -131,6 +134,13 @@ export default function CommentThread({ open, postId, currentUser, viewerProfile
           </div>
         </div>
       ))}
+      {/* F4 — open + loaded + empty: an invitation, not a dead end (manifesto:
+          empty states are invitations). Sits above the composer, muted + centered. */}
+      {loaded && comments.length === 0 && (
+        <div style={{ textAlign: 'center', color: C.steel, fontSize: 13, fontFamily: "'Barlow', sans-serif", padding: '4px 0 10px' }}>
+          Be the first to chirp back 🏒
+        </div>
+      )}
       {currentUser && (
         <form onSubmit={submitComment} style={{ display: 'flex', gap: 8, marginTop: 8 }}>
           <Avatar profile={viewerProfile || currentUser} size={28} />
