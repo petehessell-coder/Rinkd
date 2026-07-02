@@ -67,7 +67,7 @@ function PlayerRow({ p, currentUser, onOpen, isFollowingProp = false }) {
   };
 
   return (
-    <div onClick={onOpen} style={{
+    <div onClick={onOpen} className="rinkd-pressable" style={{
       display: 'flex', alignItems: 'center', gap: 12, padding: 12,
       cursor: 'pointer', transition: 'background 0.15s',
     }} onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(46,91,140,0.12)'}
@@ -141,7 +141,7 @@ function TrendingRail({ navigate }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
       {trend.map((p) => (
-        <div key={p.id} onClick={() => navigate(`/profile/${p.profiles?.id}`)} style={{
+        <div key={p.id} onClick={() => navigate(`/profile/${p.profiles?.id}`)} className="rinkd-pressable" style={{
           background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
           padding: 14, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 8,
         }}>
@@ -405,7 +405,7 @@ export default function Discover({ currentUser, profile }) {
               teams.length === 0 ? <EmptyState icon="🏒" title={search$ ? `No teams match "${search$}"` : 'No teams on the ice yet'} body={search$ ? 'Try a different name or location.' : 'Be the first — spin up your team and it shows up here.'} cta={{ label: 'Create a Team', onClick: () => navigate('/team/create') }} /> :
               <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
                 {teams.map((t, i) => (
-                  <div key={t.id} onClick={() => navigate(`/team/${t.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none', cursor: 'pointer' }}>
+                  <div key={t.id} onClick={() => navigate(`/team/${t.id}`)} className="rinkd-pressable" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none', cursor: 'pointer' }}>
                     <TeamLogo team={t} size={42} radius={10} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{t.name}</div>
@@ -422,7 +422,7 @@ export default function Discover({ currentUser, profile }) {
               leagues.length === 0 ? <EmptyState icon="🏆" title={search$ ? `No leagues match "${search$}"` : 'No leagues running yet'} body={search$ ? 'Try a different name.' : 'Be the first — start your league and it shows up here.'} cta={{ label: 'Create a League', onClick: () => navigate('/league/create') }} /> :
               <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
                 {leagues.map((l, i) => (
-                  <div key={l.id} onClick={() => navigate(`/league/${l.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none', cursor: 'pointer' }}>
+                  <div key={l.id} onClick={() => navigate(`/league/${l.id}`)} className="rinkd-pressable" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none', cursor: 'pointer' }}>
                     <div style={{ width: 42, height: 42, borderRadius: 10, background: l.logo_color || colors.warning, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🏆</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{l.name}</div>
@@ -439,7 +439,7 @@ export default function Discover({ currentUser, profile }) {
               articles.length === 0 ? <EmptyState icon="📰" title={search$ ? `No articles match "${search$}"` : 'Fresh off the press soon'} body="Rinkside features are dropping soon." cta={{ label: 'Visit Rinkside', onClick: () => navigate('/rinkside') }} /> :
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
                 {articles.map((a) => (
-                  <div key={a.id} onClick={() => navigate(`/rinkside/${a.slug}`)} style={{
+                  <div key={a.id} onClick={() => navigate(`/rinkside/${a.slug}`)} className="rinkd-pressable" style={{
                     background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
                     overflow: 'hidden', cursor: 'pointer',
                   }}>

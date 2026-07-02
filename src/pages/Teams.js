@@ -65,7 +65,7 @@ export default function Teams({ profile }) {
         )}
 
         {teams.map(team => (
-          <div key={team.id} onClick={() => navigate('/team/' + team.id)}
+          <div key={team.id} onClick={() => navigate('/team/' + team.id)} className="rinkd-pressable"
             style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: '14px 16px', marginBottom: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14, transition: 'border 0.15s' }}
             onMouseEnter={e => e.currentTarget.style.border = '0.5px solid rgba(46,91,140,0.8)'}
             onMouseLeave={e => e.currentTarget.style.border = `0.5px solid ${C.border}`}>

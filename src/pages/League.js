@@ -39,7 +39,8 @@ import { C, colors } from '../lib/tokens';
 import { Icon, BounceNumber, useExpand, Img, ErrorState } from '../components/ui';
 import { useOnline } from '../lib/useOnline';
 import { prefetchGamePage, prefetchHandlers } from '../lib/prefetch';
-import { staggerStyle } from '../lib/motion';
+import { staggerStyle, useReducedMotion } from '../lib/motion';
+import { motion as motionTokens } from '../lib/tokens';
 const TABS = ['Schedule', 'Standings', 'Stats', 'Teams', 'Feed', 'Gallery', 'Info'];
 
 // S04: tabs are deep-linkable. ?tab= is read once on mount (validated against
@@ -142,7 +143,7 @@ function GameRow({ game, isCommissioner, navigate, anon = false, records = {} })
   const streamPlatform = streamUrl ? detectStreamPlatform(streamUrl) : null;
 
   return (
-    <div {...prefetchHandlers(prefetchGamePage)} onClick={(e) => expand(e, () => navigate(gameHref), { bg: C.card, radius: 0 })} style={{ padding: '12px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)', cursor: 'pointer' }} onMouseEnter={e=>e.currentTarget.style.background='rgba(46,91,140,0.08)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+    <div {...prefetchHandlers(prefetchGamePage)} onClick={(e) => expand(e, () => navigate(gameHref), { bg: C.card, radius: 0 })} className="rinkd-pressable" style={{ padding: '12px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)', cursor: 'pointer' }} onMouseEnter={e=>e.currentTarget.style.background='rgba(46,91,140,0.08)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {/* Date */}
         <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(244,247,250,0.4)', width: 44, flexShrink: 0, lineHeight: 1.5 }}>
@@ -238,6 +239,7 @@ export default function LeaguePage({ currentUser, profile }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const reducedMotion = useReducedMotion();
   const [league, setLeague] = useState(null);
   const [teams, setTeams] = useState([]);
   const [games, setGames] = useState([]);
@@ -252,6 +254,39 @@ export default function LeaguePage({ currentUser, profile }) {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState(() => initialTabFromUrl('Schedule'));
   const [showAll, setShowAll] = useState(false);
+  // S09 M2 — one sliding tab indicator. Measure the active button (relative to
+  // the scrollable strip content, so it tracks under horizontal scroll) and
+  // drive an absolutely-positioned bar via transform+width. First paint has no
+  // transition (snaps into place); later changes animate. Re-measures on tab
+  // change, mount, resize, and font load (widths shift once Barlow Condensed
+  // lands). Reduced motion → the bar jumps (transition:none, see JSX).
+  const tabStripRef = useRef(null);
+  const tabBtnRefs = useRef({});
+  const tabAnimReady = useRef(false); // false on first measure → no animation
+  const [tabInd, setTabInd] = useState({ left: 0, width: 0, animate: false });
+  const measureTab = useCallback(() => {
+    const btn = tabBtnRefs.current[activeTab];
+    if (!btn) return;
+    setTabInd({ left: btn.offsetLeft, width: btn.offsetWidth, animate: tabAnimReady.current });
+    tabAnimReady.current = true; // subsequent measures may animate
+  }, [activeTab]);
+  useEffect(() => { measureTab(); }, [measureTab]);
+  useEffect(() => {
+    const onResize = () => measureTab();
+    window.addEventListener('resize', onResize);
+    window.addEventListener('load', onResize);
+    let ro;
+    if (typeof ResizeObserver !== 'undefined' && tabStripRef.current) {
+      ro = new ResizeObserver(onResize);
+      ro.observe(tabStripRef.current);
+    }
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(onResize).catch(() => {});
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('load', onResize);
+      if (ro) ro.disconnect();
+    };
+  }, [measureTab]);
   const [subscribeOpen, setSubscribeOpen] = useState(false);
   // Additional commissioner granted via league_roles — mirror of the
   // multi-director pattern. Loaded once after league + currentUser resolve;
@@ -465,7 +500,7 @@ export default function LeaguePage({ currentUser, profile }) {
 
   // Shared team-row renderer for the Teams tab (flat list + grouped-by-division).
   const renderLeagueTeamRow = (lt) => (
-    <div key={lt.id} onClick={() => navigate('/team/' + lt.team_id)}
+    <div key={lt.id} onClick={() => navigate('/team/' + lt.team_id)} className="rinkd-pressable"
       style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)', cursor: 'pointer' }}
       onMouseEnter={e => e.currentTarget.style.background = 'rgba(46,91,140,0.1)'}
       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
@@ -696,16 +731,26 @@ export default function LeaguePage({ currentUser, profile }) {
           {/* Tabs */}
           {/* Scoreboard tab strip — red underline on the active tab, muted steel
               when inactive. No box shadow, no Material hover. */}
-          <div style={{ display: 'flex', borderBottom: '1px solid rgba(46,91,140,0.3)', overflowX: 'auto' }}>
+          <div ref={tabStripRef} style={{ position: 'relative', display: 'flex', borderBottom: '1px solid rgba(46,91,140,0.3)', overflowX: 'auto' }}>
             {TABS.map(tab => {
               const on = activeTab === tab;
               return (
-                <button key={tab} onClick={() => selectTab(tab)}
-                  style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 700, fontSize: 15, letterSpacing: '0.04em', textTransform: 'uppercase', padding: '10px 14px', minHeight: 44, display: 'inline-flex', alignItems: 'center', background: 'transparent', border: 'none', borderBottom: on ? `3px solid ${accent}` : '3px solid transparent', marginBottom: -1, cursor: 'pointer', whiteSpace: 'nowrap', color: on ? C.ice : C.steel, transition: 'color 0.15s' }}>
+                <button key={tab} ref={el => { tabBtnRefs.current[tab] = el; }} onClick={() => selectTab(tab)}
+                  style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 700, fontSize: 15, letterSpacing: '0.04em', textTransform: 'uppercase', padding: '10px 14px', minHeight: 44, display: 'inline-flex', alignItems: 'center', background: 'transparent', border: 'none', borderBottom: '3px solid transparent', marginBottom: -1, cursor: 'pointer', whiteSpace: 'nowrap', color: on ? C.ice : C.steel, transition: 'color 0.15s' }}>
                   {tab}
                 </button>
               );
             })}
+            {/* S09 M2 — single sliding indicator bar, positioned relative to the
+                scrollable strip content. transform+width only (60fps). */}
+            <div aria-hidden style={{
+              position: 'absolute', left: 0, bottom: -1, height: 3, width: tabInd.width,
+              background: accent, borderRadius: '3px 3px 0 0',
+              transform: `translateX(${tabInd.left}px)`,
+              transition: (reducedMotion || !tabInd.animate) ? 'none'
+                : `transform ${motionTokens.duration.tab}ms ${motionTokens.easing.inOut}, width ${motionTokens.duration.tab}ms ${motionTokens.easing.inOut}`,
+              pointerEvents: 'none',
+            }} />
           </div>
         </div>
 

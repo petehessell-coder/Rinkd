@@ -33,7 +33,8 @@ import { C, colors } from '../lib/tokens';
 import { Icon, BounceNumber, useExpand, Img, ErrorState } from '../components/ui';
 import { useOnline } from '../lib/useOnline';
 import { prefetchGamePage, prefetchHandlers } from '../lib/prefetch';
-import { staggerStyle } from '../lib/motion';
+import { staggerStyle, useReducedMotion } from '../lib/motion';
+import { motion as motionTokens } from '../lib/tokens';
 
 
 const TABS = ['Standings','Schedule','Bracket','Stats','Feed','Gallery','Info'];
@@ -143,7 +144,36 @@ function TabEmptyState({ icon = '🏒', title, body }) {
 export default function TournamentPage({ currentUser }) {
   const { id } = useParams();
   const navigate = useNavigate();
+  const reducedMotion = useReducedMotion();
   const [activeTab, setActiveTab] = useState(() => initialTabFromUrl('Standings'));
+  // S09 M2 — single sliding tab indicator (see League.js for the full rationale).
+  const tabStripRef = useRef(null);
+  const tabBtnRefs = useRef({});
+  const tabAnimReady = useRef(false);
+  const [tabInd, setTabInd] = useState({ left: 0, width: 0, animate: false });
+  const measureTab = useCallback(() => {
+    const btn = tabBtnRefs.current[activeTab];
+    if (!btn) return;
+    setTabInd({ left: btn.offsetLeft, width: btn.offsetWidth, animate: tabAnimReady.current });
+    tabAnimReady.current = true;
+  }, [activeTab]);
+  useEffect(() => { measureTab(); }, [measureTab]);
+  useEffect(() => {
+    const onResize = () => measureTab();
+    window.addEventListener('resize', onResize);
+    window.addEventListener('load', onResize);
+    let ro;
+    if (typeof ResizeObserver !== 'undefined' && tabStripRef.current) {
+      ro = new ResizeObserver(onResize);
+      ro.observe(tabStripRef.current);
+    }
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(onResize).catch(() => {});
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('load', onResize);
+      if (ro) ro.disconnect();
+    };
+  }, [measureTab]);
   const [tournament, setTournament] = useState(null);
   const [games, setGames] = useState([]);
   // MULTIDIV-1: raw standings rows for ALL divisions; the grouped, division-
@@ -658,20 +688,29 @@ export default function TournamentPage({ currentUser }) {
         )}
         {/* Scoreboard tab strip — red underline on the active tab, muted steel
             when inactive. No box shadow, no Material hover. */}
-        <div style={{display:'flex',overflowX:'auto',borderBottom:'1px solid rgba(46,91,140,0.3)'}}>
+        <div ref={tabStripRef} style={{position:'relative',display:'flex',overflowX:'auto',borderBottom:'1px solid rgba(46,91,140,0.3)'}}>
           {TABS.map(tab => {
             const on = activeTab === tab;
             return (
-              <button key={tab} onClick={() => { setActiveTab(tab); writeTabToUrl(tab); }}
+              <button key={tab} ref={el => { tabBtnRefs.current[tab] = el; }} onClick={() => { setActiveTab(tab); writeTabToUrl(tab); }}
                 style={{fontFamily:"'Barlow Condensed', sans-serif",fontStyle:'italic',fontWeight:700,fontSize:15,letterSpacing:'0.04em',textTransform:'uppercase',
                   padding:'10px 14px',minHeight:44,display:'inline-flex',alignItems:'center',background:'transparent',border:'none',
-                  borderBottom: on ? `3px solid ${accent}` : '3px solid transparent',
+                  borderBottom:'3px solid transparent',
                   marginBottom:-1,cursor:'pointer',whiteSpace:'nowrap',
                   color: on ? C.ice : C.steel,transition:'color 0.15s'}}>
                 {tab}
               </button>
             );
           })}
+          {/* S09 M2 — single sliding indicator bar (transform+width only). */}
+          <div aria-hidden style={{
+            position:'absolute', left:0, bottom:-1, height:3, width:tabInd.width,
+            background:accent, borderRadius:'3px 3px 0 0',
+            transform:`translateX(${tabInd.left}px)`,
+            transition:(reducedMotion || !tabInd.animate) ? 'none'
+              : `transform ${motionTokens.duration.tab}ms ${motionTokens.easing.inOut}, width ${motionTokens.duration.tab}ms ${motionTokens.easing.inOut}`,
+            pointerEvents:'none',
+          }} />
         </div>
         </div>{/* /header content over cover */}
       </div>
