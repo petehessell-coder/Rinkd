@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase';
 import { getGameRsvps, upsertRsvp, deleteRsvp } from '../lib/rsvp';
 import { colors } from '../lib/tokens';
+import { haptics } from '../lib/haptics';
 
 const B = {
   navy: colors.bg, blue: colors.blue, red: colors.red,
@@ -77,6 +78,10 @@ export default function RsvpBlock({ gameId, compact = false }) {
     const prevRsvps = rsvps;
     const currentStatus = myRsvp?.status;
     const togglingOff = currentStatus === status;
+
+    // A committed "I'm in" earns a confirmation buzz (no-op on iOS/desktop by
+    // design). Only the opt-in tap thumps — not out, not maybe, not toggling off.
+    if (status === 'in' && !togglingOff) haptics.success();
 
     // Optimistic update — always operate by user_id, then dedupe.
     if (togglingOff) {
@@ -179,9 +184,11 @@ export default function RsvpBlock({ gameId, compact = false }) {
             ))}
           </div>
           <span style={{ fontSize: 11, color: B.steel }}>
-            {inCount === 1
-              ? `${rsvps.find(r => r.status === 'in')?.profile?.name?.split(' ')[0] || 'Someone'} is in`
-              : `${inCount} players in`}
+            {myRsvp?.status === 'in'
+              ? (inCount > 1 ? `You + ${inCount - 1} in` : `You're in`)
+              : (inCount === 1
+                  ? `${rsvps.find(r => r.status === 'in')?.profile?.name?.split(' ')[0] || 'Someone'} is in`
+                  : `${inCount} players in`)}
             {outCount > 0 && ` · ${outCount} out`}
             {maybeCount > 0 && ` · ${maybeCount} maybe`}
           </span>

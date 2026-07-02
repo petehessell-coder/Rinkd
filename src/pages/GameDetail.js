@@ -18,6 +18,9 @@ import { loadGameCardData } from '../lib/gameCardData';
 import { useOnline } from '../lib/useOnline';
 import { C, colors } from '../lib/tokens';
 import { areScorersHidden } from '../lib/publicShare';
+import { useGoalMoment, GoalSweep, usePeriodChange } from '../lib/goalMoment';
+import { haptics } from '../lib/haptics';
+import SoundToggle from '../components/SoundToggle';
 
 function LiveBarnWordmark({ dark = false }) {
   const liveColor = dark ? '#2E6DB4' : '#5a9fd4';
@@ -30,6 +33,22 @@ function LiveBarnWordmark({ dark = false }) {
       <text x="48" y="17" fontFamily="Arial Black,sans-serif" fontWeight="900" fontSize="14" fill={barnColor}>Barn</text>
     </svg>
   );
+}
+
+// S06 · Bundle L — one-time keyframe for the period-change border pulse. The
+// goal glow class (.rinkd-goal-glow) is injected by GoalSweep/ensureGoalKeyframes
+// on its own; this only adds the period pulse. No-op under reduced motion.
+let gdAnimInjected = false;
+function ensureGdAnim() {
+  if (gdAnimInjected || typeof document === 'undefined') return;
+  gdAnimInjected = true;
+  const el = document.createElement('style');
+  el.id = 'rinkd-gd-anim';
+  el.textContent =
+    '@keyframes gdPeriodPulse{0%{box-shadow:inset 0 0 0 0 rgba(46,91,140,0)}30%{box-shadow:inset 0 0 0 2px rgba(46,91,140,0.9)}100%{box-shadow:inset 0 0 0 0 rgba(46,91,140,0)}}'
+    + '.gd-period-pulse{animation:gdPeriodPulse 900ms ease-out}'
+    + '@media (prefers-reduced-motion: reduce){.gd-period-pulse{animation:none}}';
+  document.head.appendChild(el);
 }
 
 function SecLabel({ children }) {
@@ -202,6 +221,36 @@ export default function GameDetail({ profile }) {
     }
   }, [game?.status, gameId, isLeague, isTeamGame]);
 
+  // S06 · Bundle L — the live-moment stack (mirrors PublicGame). Hooks sit above
+  // the early returns (rules of hooks).
+  //
+  // myTeamSide: GameDetail has no cheap already-loaded rooting signal — the team
+  // ids here are event-scoped (league_teams / tournament_teams) and `profile`
+  // carries no favorite-team field — so we pass null (neutral viewer). That keeps
+  // behavior identical to the anon share link; wiring a real side would need an
+  // extra membership lookup, out of scope for a cheap hint.
+  const goal = useGoalMoment(game?.home_score, game?.away_score, {
+    ready: !loading && !!game,
+    enabled: game?.status === 'live',
+    myTeamSide: null,
+  });
+  const periodPulse = usePeriodChange(game?.period, {
+    ready: !loading && !!game && game?.status === 'live',
+  });
+
+  // L3 — the final beat: one success buzz on the live→final transition. Skips
+  // the first ready read as the baseline (change-only discipline).
+  const finalBeat = useRef({ status: game?.status, init: false });
+  useEffect(() => {
+    const st = game?.status;
+    const ready = !loading && !!game;
+    if (!ready) { finalBeat.current = { status: st, init: false }; return; }
+    const p = finalBeat.current;
+    if (!p.init) { finalBeat.current = { status: st, init: true }; return; }
+    if (p.status !== 'final' && st === 'final') haptics.success();
+    finalBeat.current = { status: st, init: true };
+  }, [game?.status, loading, game]);
+
   if (loading) return (
     <Layout profile={profile}>
       <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Getting the ice ready.</div>
@@ -306,6 +355,21 @@ export default function GameDetail({ profile }) {
   const awayShots = (realHomeShots + realAwayShots > 0) ? realAwayShots : (game.shots_away ?? 0);
   const maxShots = Math.max(homeShots, awayShots, 1);
 
+  // L3 — contextual state line, derived ONLY from real fields (scores + status).
+  // No clock exists, so we never fabricate a "final minute" / time remaining.
+  ensureGdAnim();
+  const hScore = game.home_score ?? 0;
+  const aScore = game.away_score ?? 0;
+  const stateLine = (() => {
+    if (isFinal) {
+      if (hScore === aScore) return 'FINAL · TIE';
+      const winner = hScore > aScore ? homeTeam.name : awayTeam.name;
+      return `FINAL · ${winner || (hScore > aScore ? 'Home' : 'Away')} wins`;
+    }
+    if (isLive && hScore === aScore) return `TIED ${hScore}–${aScore}`;
+    return null;
+  })();
+
   return (
     <Layout profile={profile}>
       <div style={{ background: C.dark, minHeight: '100vh', fontFamily: 'Barlow, sans-serif', color: C.ice, maxWidth: 600, margin: '0 auto', paddingBottom: 40 }}>
@@ -348,7 +412,15 @@ export default function GameDetail({ profile }) {
         </div>
 
         {/* SCORE BOX */}
-        <div style={{ background: 'linear-gradient(135deg,#0B1F3A 0%,#112236 100%)', padding: '24px 16px 0' }}>
+        <div className={`${goal ? 'rinkd-goal-glow' : ''}${periodPulse ? ' gd-period-pulse' : ''}`.trim() || undefined} style={{ position: 'relative', overflow: 'hidden', background: 'linear-gradient(135deg,#0B1F3A 0%,#112236 100%)', padding: '24px 16px 0' }}>
+          {goal && <GoalSweep key={goal.key} side={goal.side} label={goal.label} muted={goal.muted} />}
+          {/* Opt-in goal horn — the live surface (mirrors PublicGame). Anchored
+              top-right so it never collides with the round-label chip. */}
+          {isLive && (
+            <div style={{ position: 'absolute', top: 4, right: 8, zIndex: 5 }}>
+              <SoundToggle />
+            </div>
+          )}
           {tournamentRoundLabel && (
             <div style={{ textAlign: 'center', marginBottom: 16 }}>
               <span style={{
@@ -417,6 +489,13 @@ export default function GameDetail({ profile }) {
               )}
             </div>
           </div>
+
+          {/* L3 — contextual state line (real fields only; no fabricated clock). */}
+          {stateLine && (
+            <div style={{ textAlign: 'center', marginBottom: 16, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 800, fontSize: 14, letterSpacing: '0.06em', textTransform: 'uppercase', color: isFinal ? C.steel : C.ice }}>
+              {stateLine}
+            </div>
+          )}
 
           {/* Stats bar — only shown for league/tournament games where we track shots+goals */}
           {!isTeamGame && (

@@ -10,6 +10,7 @@
 // share size. team-source games render score-only (no goals/stats captured).
 
 import { useEffect, useState } from 'react';
+import ShareButton from './ShareButton';
 import { getRecapCardWithSponsor } from '../lib/recapCard';
 import { C } from '../lib/tokens';
 
@@ -44,6 +45,64 @@ function fmtDate(iso) {
   if (isNaN(d.getTime())) return '';
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
+function truncName(name, max = 22) {
+  const s = (name || '').trim();
+  return s.length > max ? s.slice(0, max - 1).trimEnd() + '…' : s;
+}
+// D5 — the outcome divider. Winner is named (never the loser); a tie is neutral.
+// Never negative framing.
+function resultLabel(card) {
+  const a = card.away_score ?? 0;
+  const h = card.home_score ?? 0;
+  if (a === h) return { text: 'FINAL · TIE' };
+  const winner = a > h ? card.away : card.home;
+  const name = (winner?.name || (a > h ? 'Away' : 'Home')).toUpperCase();
+  return { text: `${truncName(name)} WIN` };
+}
+// D6 — derive the game-winning goal + multi-goal counts by replaying the ordered
+// goals array (chronological box-score order, same order both renderers display).
+// GWG = the (losing_score + 1)th goal scored by the WINNER — the goal that put
+// them permanently ahead (standard hockey definition). Correctness-first: we only
+// tag a GWG when the goal rows fully reconcile with the final score (each side's
+// counted goals equal its final score). If they don't reconcile — a tie, an
+// unlogged/shootout goal, or any ambiguity — we SKIP the tag rather than guess.
+// Returns { gwgIndex, lastByName } where gwgIndex is -1 when not derivable.
+function deriveGoalTags(card) {
+  const goals = card.goals || [];
+  const out = { gwgIndex: -1, lastByName: {} };
+  // Multi-goal: mark each scorer's LAST row with their running total. Name-keyed
+  // per side so two players sharing a name on opposite teams don't merge.
+  const seen = {};
+  goals.forEach((g, i) => {
+    const key = `${g.side}|${g.name}`;
+    seen[key] = (seen[key] || 0) + 1;
+    out.lastByName[key] = { index: i, count: seen[key] };
+  });
+
+  const a = card.away_score ?? 0;
+  const h = card.home_score ?? 0;
+  if (a === h) return out;                       // tie → no GWG
+  const winnerSide = a > h ? 'A' : 'H';
+  const winnerFinal = Math.max(a, h);
+  const loserFinal = Math.min(a, h);
+
+  // Reconcile: the array must fully explain the final score. If counts drift
+  // (shootout deciders, empty-net/own-goal quirks, unlogged goals), skip.
+  let winnerCount = 0, loserCount = 0;
+  goals.forEach((g) => { (g.side === winnerSide ? (winnerCount++) : (loserCount++)); });
+  if (winnerCount !== winnerFinal || loserCount !== loserFinal) return out;
+
+  // The GWG is the winner's (loserFinal + 1)th goal in chronological order.
+  const target = loserFinal + 1;
+  let n = 0;
+  for (let i = 0; i < goals.length; i++) {
+    if (goals[i].side === winnerSide) {
+      n++;
+      if (n === target) { out.gwgIndex = i; break; }
+    }
+  }
+  return out;
+}
 
 const CSS = `
 .rcap{container-type:inline-size;position:relative;width:100%;border-radius:14px;overflow:hidden;
@@ -69,6 +128,10 @@ const CSS = `
 .rcap .gl .dot{width:1.8cqw;height:1.8cqw;border-radius:.4cqw;flex:none}
 .rcap .gl .who span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rcap .gl .t{color:#8BA3BE;font-variant-numeric:tabular-nums;font-size:2.7cqw;flex:none}
+.rcap .gl .chip{flex:none;display:inline-flex;align-items:center;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-style:italic;font-size:2.1cqw;letter-spacing:.06em;line-height:1;padding:.5cqw .9cqw;border-radius:1cqw}
+.rcap .gl .chip.gwg{color:${C.gold};border:.35cqw solid ${C.gold};background:rgba(201,168,76,.12)}
+.rcap .gl .chip.mult{color:#cdd9e6;border:.35cqw solid rgba(46,91,140,.5)}
+.rcap .gl .tags{display:flex;align-items:center;gap:1.2cqw;flex:none}
 .rcap .st{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:2cqw;padding:1.5cqw 0;border-bottom:1px solid rgba(46,91,140,.22)}
 .rcap .st:last-child{border-bottom:none}
 .rcap .st .v{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:4.4cqw;color:#4a93e6}
@@ -87,6 +150,7 @@ const CSS = `
 .rcap .foot .rkimg{height:7cqw;width:auto;display:block}
 .rcap .foot .url{color:#8BA3BE;font-weight:700;font-size:2.8cqw;margin-top:.8cqw}
 .rcap .foot .mid{flex:1;text-align:center;color:#8BA3BE;font-weight:700;font-size:2.1cqw;letter-spacing:.12em;line-height:1.5}
+.rcap .share{display:flex;justify-content:flex-end;margin-top:3cqw;padding-top:3cqw;border-top:1px solid rgba(46,91,140,.4)}
 `;
 
 export default function RecapCard({ gameId, source }) {
@@ -108,6 +172,14 @@ export default function RecapCard({ gameId, source }) {
 
   const homeC = teamColor(card.home, C.blue);
   const awayC = teamColor(card.away, C.red);
+  const outcome = resultLabel(card);
+  const goalTags = deriveGoalTags(card);
+  // The recap OG/share card reuses the same RPC payload keyed by game_id + source.
+  const shareIsLeague = source === 'league';
+  const getShareCard = async () => {
+    const { data } = await getRecapCardWithSponsor(gameId, source);
+    return data;
+  };
 
   return (
     <div className="rcap">
@@ -132,22 +204,31 @@ export default function RecapCard({ gameId, source }) {
           <div className="dh">–</div>
           <div className="n">{card.home_score ?? 0}</div>
         </div>
-        <div className="fin">FINAL SCORE</div>
+        <div className="fin">{outcome.text}</div>
 
         {card.stats_available && (
           <div className="cols">
             <div>
               <h3>GOALS</h3>
               {(card.goals || []).length === 0 && <div className="gl"><span style={{ color: C.steel, fontSize: '2.7cqw' }}>No goals logged</span></div>}
-              {(card.goals || []).map((g, i) => (
-                <div className="gl" key={i}>
-                  <div className="who">
-                    <span className="dot" style={{ background: g.side === 'H' ? homeC : awayC }} />
-                    <span>{g.name}</span>
+              {(card.goals || []).map((g, i) => {
+                const isGwg = i === goalTags.gwgIndex;
+                const last = goalTags.lastByName[`${g.side}|${g.name}`];
+                const mult = last && last.index === i && last.count > 1 ? `×${last.count}` : null;
+                return (
+                  <div className="gl" key={i}>
+                    <div className="who">
+                      <span className="dot" style={{ background: g.side === 'H' ? homeC : awayC }} />
+                      <span>{g.name}</span>
+                    </div>
+                    <div className="tags">
+                      {mult && <span className="chip mult">{mult}</span>}
+                      {isGwg && <span className="chip gwg" title="Game-winning goal">GWG</span>}
+                      <div className="t">P{g.period} {g.time}</div>
+                    </div>
                   </div>
-                  <div className="t">P{g.period} {g.time}</div>
-                </div>
-              ))}
+                );
+              })}
             </div>
             <div>
               <h3>GAME STATS</h3>
@@ -178,6 +259,19 @@ export default function RecapCard({ gameId, source }) {
           </div>
           <div className="mid">EVERY SHIFT.<br />EVERY GAME.<br />EVERY PLAYER.</div>
         </div>
+
+        {gameId && source && (
+          <div className="share">
+            <ShareButton
+              gameId={gameId}
+              isLeague={shareIsLeague}
+              cardType="recap"
+              variant="ghost"
+              label="Share recap"
+              getCard={getShareCard}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
