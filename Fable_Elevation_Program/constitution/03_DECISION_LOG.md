@@ -109,3 +109,14 @@ row is reframed as the cold-operator on-ramp — "Run your league or tournament"
 → /pricing (visible to all; no Home clutter; same destination, operator
 framing). Tab-order divergence (League leads Schedule, Tournament leads
 Standings) confirmed INTENTIONAL — do not unify.
+
+### 2026-07-01 · S05 Gate-1 decisions (Pete sign-off)
+All three bundles approved: **A** correctness guards (schedule-wizard dupe
+confirm, playoff double-generate guard, mid-season seeding warning, pool
+select-not-freetext); **B** ScorerView tap-surface (pinned/scrollable goal
+sheet, prominent Save on scorer pick, name truncation, 44px recovery targets,
+goalie-change undo) — the offline core is untouched; **C** operator bulk
+(post-create scorer management, paste team list, reg→team promotion, approve
+all paid, register form survives Stripe cancel). Premium-finish sweep
+(skeletons/emoji/confirm-dialogs) DEFERRED to S10. Rink-picker scoping +
+wizard division handoff spun out separately.

@@ -313,7 +313,7 @@ export default function TournamentManagePage({ currentUser, profile }) {
           {tab === 'Teams' && <TeamsTab tournamentId={id} teams={divisionTeams} divisionId={selectedDivisionId} standingsByTeam={standingsByTeam} reload={load} flash={showFlash} />}
           {tab === 'Schedule' && <ScheduleTab tournamentId={id} tournament={tournament} teams={divisionTeams} games={divisionGames} divisionId={selectedDivisionId} rinks={rinks} reload={load} flash={showFlash} />}
           {tab === 'Bracket' && <BracketTab tournamentId={id} tournament={tournament} divSettings={divSettings} teams={divisionTeams} games={divisionGames} divisionId={selectedDivisionId} rinks={rinks} reload={load} flash={showFlash} />}
-          {tab === 'Registrations' && <RegistrationsTab tournamentId={id} tournament={tournament} reload={load} flash={showFlash} />}
+          {tab === 'Registrations' && <RegistrationsTab tournamentId={id} tournament={tournament} divisionId={selectedDivisionId} reload={load} flash={showFlash} />}
           {tab === 'Scorers' && <ScorersTab tournamentId={id} tournamentName={tournament.name} originalDirectorId={tournament.director_id} profile={profile} flash={showFlash} />}
           {tab === 'Suspensions' && <SuspensionsTab tournamentId={id} flash={showFlash} onPendingCount={setPendingSuspCount} />}
           {tab === 'Sponsors' && <SponsorsManager ownerType="tournament" ownerId={id} isYouth={tournament.settings?.feature_profile === 'youth_competitive'}
@@ -715,19 +715,67 @@ function TeamPlayerLinks({ tournamentId, team, flash }) {
   );
 }
 
+// S05 C2a — split a pasted multi-line/comma-separated blob into individual team
+// names. Supports newlines, commas, and semicolons as separators (captains often
+// paste from a spreadsheet column or a comma list); blank entries are dropped.
+function splitTeamNames(raw) {
+  return (raw || '')
+    .split(/[\n,;]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 function TeamForm({ tournamentId, divisionId = null, team, pools, flash, onDone, onCancel }) {
   const [teamName, setTeamName] = useState(team?.team_name || '');
-  const [pool, setPool] = useState(team?.pool || (pools[0] || ''));
+  // S05 A4 — pool is now a select of existing pools + "New pool…". `poolChoice`
+  // drives the <select>; `newPool` holds the free-text value while "__new__" is
+  // selected. Editing an existing team whose pool isn't in `pools` (shouldn't
+  // happen since `pools` is derived from all teams, but stay defensive) falls
+  // back to the "New pool…" text input pre-filled with that value.
+  const initialPool = team?.pool || (pools[0] || '');
+  const initialIsKnown = !initialPool || pools.includes(initialPool);
+  const [poolChoice, setPoolChoice] = useState(initialIsKnown ? initialPool : '__new__');
+  const [newPool, setNewPool] = useState(initialIsKnown ? '' : initialPool);
   const [seed, setSeed] = useState(team?.seed || '');
   const [contactEmail, setContactEmail] = useState(team?.contact_email || '');
   const [logoUrl, setLogoUrl] = useState(team?.logo_url || '');
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState('');
+  const [progress, setProgress] = useState(''); // "Adding 2/5…" during bulk add
+
+  const pool = poolChoice === '__new__' ? newPool.trim() : poolChoice;
+
+  // S05 C2a — detect a pasted multi-name list. Single name (today's path) is
+  // untouched; >1 name switches the Save button into bulk-add mode.
+  const names = useMemo(() => splitTeamNames(teamName), [teamName]);
+  const isBulk = !team && names.length > 1;
 
   const save = async () => {
     if (!teamName.trim()) { setLocalError('Add a team name to continue.'); return; }
     setLocalError('');
     setBusy(true);
+
+    if (isBulk) {
+      // Loop createTeam for each pasted name, same pool/division. Report
+      // successes/failures via flash rather than blocking on the first error —
+      // one bad row shouldn't stop the rest of a roster import.
+      let ok = 0;
+      const failures = [];
+      for (let i = 0; i < names.length; i++) {
+        const n = names[i];
+        setProgress(`Adding ${i + 1}/${names.length}…`);
+        const res = await createTeam(tournamentId, { teamName: n, pool, seed: '', contactEmail: '', logoUrl: '', divisionId });
+        if (res.error) failures.push(`${n} (${res.error.message})`);
+        else ok++;
+      }
+      setBusy(false);
+      setProgress('');
+      if (ok > 0) flash?.('success', `Added ${ok} team${ok === 1 ? '' : 's'}.${failures.length ? ` ${failures.length} failed.` : ''}`);
+      if (failures.length > 0) flash?.('error', `Some teams didn't save — ${failures.join('; ')}`);
+      if (ok > 0) onDone();
+      return;
+    }
+
     const fields = { teamName, pool, seed, contactEmail, logoUrl };
     const res = team ? await updateTeam(team.id, fields) : await createTeam(tournamentId, { ...fields, divisionId });
     setBusy(false);
@@ -749,24 +797,40 @@ function TeamForm({ tournamentId, divisionId = null, team, pools, flash, onDone,
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 14 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 12 }}>
         <div>
-          <label style={labelStyle}>Team Name</label>
-          <input value={teamName} onChange={(e) => setTeamName(e.target.value)} placeholder="e.g. Beer Necessities" style={inputStyle}/>
+          <label style={labelStyle}>Team Name{isBulk ? `s (${names.length})` : ''}</label>
+          {team ? (
+            <input value={teamName} onChange={(e) => setTeamName(e.target.value)} placeholder="e.g. Beer Necessities" style={inputStyle}/>
+          ) : (
+            // S05 C2a — textarea so a pasted multi-line list is visible + editable.
+            // Single-name typing behaves identically to a plain input.
+            <textarea value={teamName} onChange={(e) => setTeamName(e.target.value)}
+              placeholder="e.g. Beer Necessities — or paste a list, one per line" rows={isBulk ? Math.min(names.length + 1, 6) : 1}
+              style={{ ...inputStyle, resize: 'vertical', fontFamily: 'Barlow, sans-serif', lineHeight: 1.4 }}/>
+          )}
+          {isBulk && <div style={{ fontSize: 11, color: C.steel, marginTop: 4 }}>Detected {names.length} team names — they'll all be added to the same pool.</div>}
         </div>
         <div>
           <label style={labelStyle}>Pool</label>
-          <input value={pool} onChange={(e) => setPool(e.target.value)} placeholder="A / B / C…" style={inputStyle}/>
+          <select value={poolChoice} onChange={(e) => setPoolChoice(e.target.value)} style={inputStyle}>
+            <option value="">— No pool —</option>
+            {pools.map((p) => <option key={p} value={p}>{p}</option>)}
+            <option value="__new__">+ New pool…</option>
+          </select>
+          {poolChoice === '__new__' && (
+            <input value={newPool} onChange={(e) => setNewPool(e.target.value)} placeholder="A / B / C…" style={{ ...inputStyle, marginTop: 6 }} autoFocus />
+          )}
         </div>
         <div>
           <label style={labelStyle}>Seed</label>
-          <input type="number" value={seed} onChange={(e) => setSeed(e.target.value)} placeholder="1" style={inputStyle}/>
+          <input type="number" value={seed} onChange={(e) => setSeed(e.target.value)} placeholder="1" style={inputStyle} disabled={isBulk} />
         </div>
         <div>
           <label style={labelStyle}>Contact Email</label>
-          <input value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="captain@team.com" style={inputStyle}/>
+          <input value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="captain@team.com" style={inputStyle} disabled={isBulk} />
         </div>
         <div style={{ gridColumn: '1 / -1' }}>
           <label style={labelStyle}>Logo URL (optional)</label>
-          <input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="https://…" style={inputStyle}/>
+          <input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="https://…" style={inputStyle} disabled={isBulk} />
         </div>
       </div>
       {localError && (
@@ -774,11 +838,12 @@ function TeamForm({ tournamentId, divisionId = null, team, pools, flash, onDone,
           {localError}
         </div>
       )}
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>{team && <button onClick={remove} style={{ ...btnGhost, color: C.red, borderColor: C.red }}>Delete</button>}</div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {progress && <span style={{ fontSize: 12, color: C.steel }}>{progress}</span>}
           <button onClick={onCancel} style={btnGhost}>Cancel</button>
-          <button onClick={save} disabled={busy} style={btnPrimary}>{busy ? 'Saving…' : team ? 'Save' : 'Add Team'}</button>
+          <button onClick={save} disabled={busy} style={btnPrimary}>{busy ? (progress || 'Saving…') : team ? 'Save' : isBulk ? `Add ${names.length} teams` : 'Add Team'}</button>
         </div>
       </div>
     </div>
@@ -1278,7 +1343,7 @@ function PlayoffBracketBuilder({ tournamentId, divisionId = null, games, bracket
 // ====================== SETTINGS TAB ======================
 // --- Registrations tab: payouts (optional Connect) + config + submissions list.
 //     Mirrors the league RegistrationsTab; same Stripe checkout/webhook back it. ---
-function RegistrationsTab({ tournamentId, tournament, reload, flash }) {
+function RegistrationsTab({ tournamentId, tournament, divisionId = null, reload, flash }) {
   const [regs, setRegs] = useState([]);
   const [open, setOpen] = useState(!!tournament.registration_open);
   const [feeDollars, setFeeDollars] = useState(tournament.registration_fee_cents ? String(tournament.registration_fee_cents / 100) : '');
@@ -1290,6 +1355,14 @@ function RegistrationsTab({ tournamentId, tournament, reload, flash }) {
   const [payoutsReady, setPayoutsReady] = useState(null);
   const [isFounder, setIsFounder] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  // S05 C2b — registrations promoted to a tournament_teams row THIS session, so
+  // the "Add as team" button disables itself without needing a schema link back
+  // from tournament_teams to tournament_registrations. Resets on remount/tab
+  // switch, which is fine — a re-promote would just create a second team, so we
+  // only need to guard the common double-click case within one sitting.
+  const [promotedIds, setPromotedIds] = useState({});
+  // S05 C3 — "Approve all paid" progress text, e.g. "Approving 3/12…".
+  const [approvingAll, setApprovingAll] = useState(null);
   const connectReturn = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('connect') === 'done';
   const regLink = `${window.location.origin}/tournament/${tournamentId}/register`;
 
@@ -1344,6 +1417,55 @@ function RegistrationsTab({ tournamentId, tournament, reload, flash }) {
       await loadRegs();
     } catch (e) { flash('err', e.message || "That didn't go through — check your connection and try again."); }
     finally { setBusyId(null); }
+  };
+
+  // S05 C2b — approved registrations never auto-promote to a tournament_teams
+  // row (only the Stripe webhook / approveTournamentRegistration's own insert
+  // does that, and only when it created the team itself). This gives directors
+  // a manual "Add as team" for approved rows that still need a roster/pool
+  // entry. Uses the registration's own fields + sensible fallbacks for what
+  // createTeam wants but the registration doesn't carry (pool, seed, logo —
+  // registrations have no pool concept, so we drop the team into the tab's
+  // current division scope with no pool assigned).
+  const promoteToTeam = async (reg) => {
+    setBusyId(reg.id);
+    try {
+      const res = await createTeam(tournamentId, {
+        teamName: reg.team_name || 'Unnamed team',
+        contactEmail: reg.contact_email || '',
+        pool: '',
+        seed: '',
+        logoUrl: '',
+        divisionId,
+      });
+      if (res.error) { flash('error', `That didn't add as a team — ${res.error.message}`); return; }
+      setPromotedIds((m) => ({ ...m, [reg.id]: true }));
+      flash('success', `Added ${reg.team_name || 'the team'} to Teams.`);
+    } catch (e) {
+      flash('error', e.message || "That didn't add as a team — check your connection and try again.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // S05 C3 — bulk-approve every pending registration that's already paid.
+  // Sequential (not Promise.all) so the progress counter is meaningful and we
+  // don't hammer the DB with N simultaneous inserts; failures don't stop the
+  // rest of the batch, they're collected and flashed at the end.
+  const pendingPaid = regs.filter((r) => r.status === 'pending' && !!r.paid_at);
+  const approveAllPaid = async () => {
+    if (pendingPaid.length < 2) return;
+    const failures = [];
+    let done = 0;
+    for (const reg of pendingPaid) {
+      setApprovingAll(`Approving ${done + 1}/${pendingPaid.length}…`);
+      try { await approveTournamentRegistration(reg.id); done++; }
+      catch (e) { failures.push(`${reg.team_name || 'team'} (${e.message || 'failed'})`); }
+    }
+    setApprovingAll(null);
+    await loadRegs();
+    if (done > 0) flash('success', `Approved ${done} paid registration${done === 1 ? '' : 's'}.`);
+    if (failures.length > 0) flash('error', `Some approvals failed — ${failures.join('; ')}`);
   };
 
   const exportCsv = () => {
@@ -1457,8 +1579,18 @@ function RegistrationsTab({ tournamentId, tournament, reload, flash }) {
           if (!group.length) return null;
           return (
             <div key={status} style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: REG_STATUS[status].color, marginBottom: 6 }}>{gLabel} · {group.length}</div>
-              {group.map(r => (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: REG_STATUS[status].color }}>{gLabel} · {group.length}</div>
+                {/* S05 C3 — bulk-approve when ≥2 pending rows have already paid. */}
+                {status === 'pending' && pendingPaid.length >= 2 && (
+                  <button onClick={approveAllPaid} disabled={!!approvingAll} style={{ ...actBtn('approve'), opacity: approvingAll ? 0.7 : 1 }}>
+                    {approvingAll || `✓ Approve all paid (${pendingPaid.length})`}
+                  </button>
+                )}
+              </div>
+              {group.map(r => {
+                const promoted = !!promotedIds[r.id] || !!r.tournament_team_id;
+                return (
                 <div key={r.id} style={{ ...card, marginBottom: 8 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                     <div>
@@ -1470,15 +1602,21 @@ function RegistrationsTab({ tournamentId, tournament, reload, flash }) {
                     </div>
                     <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 20, background: REG_STATUS[status].bg, color: REG_STATUS[status].color, textTransform: 'uppercase', flexShrink: 0 }}>{REG_STATUS[status].label}</span>
                   </div>
-                  {actionsFor(status).length > 0 && (
+                  {(actionsFor(status).length > 0 || status === 'approved') && (
                     <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
                       {actionsFor(status).map(([action, lbl]) => (
                         <button key={action} disabled={busyId === r.id} onClick={() => act(r, action)} style={actBtn(action)}>{lbl}</button>
                       ))}
+                      {/* S05 C2b — promote an approved registration to a tournament_teams row. */}
+                      {status === 'approved' && (
+                        <button disabled={busyId === r.id || promoted} onClick={() => promoteToTeam(r)} style={{ ...actBtn('approve'), opacity: promoted ? 0.5 : 1 }}>
+                          {promoted ? '✓ Added as team' : busyId === r.id ? 'Adding…' : '+ Add as team'}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
-              ))}
+              );})}
             </div>
           );
         })
