@@ -166,7 +166,22 @@ shared pressable class (vocabulary-intended; desktop-only effect). Noted, no
 action: numberChange token stays dormant; like-bounce 300ms stays; bare-disabled
 buttons in hand-rolled modals fold into S10's component adoption.
 
-### 2026-07-02 · C08 P0 wave SHIPPED (PRs #34–#37 merged + applied)
+### 2026-07-02 · C08 COMPLETE — P1 wave shipped (PRs #38–#39), collection closed
+Gate-2 "go do it": PR-E RLS consolidation merged + APPLIED to prod (QA
+reconciled every drop/create against live pg_policies; anon feed reads /
+hidden-content shield / write-block verified live post-apply). Truth found
+during E: the advisor's 15× on posts/likes/comments was per-role
+double-counting — real duplication was byte-identical legacy+machine-named
+policy pairs, plus 2 genuine merges (game_goals INSERT, games UPDATE).
+`follows` skipped by design (FOR-ALL policy split = more surface, no win).
+PR-F merged with its 3 Gate-2 fixes (hasMore off raw pre-filter count; Team
+channel keyed on stable id-string; Discover compound cursors) +
+`list_my_conversations(p_limit default 50)` applied (old overload dropped).
+**Advisor deltas: multiple_permissive 112→57 (posts/likes/comments/games/
+game_goals CLEARED; remainder = cold tables out of scope), auth_rls_initplan
+3→0, unindexed FKs 14→10.** All 6 C08 PRs (#34–#39) shipped before the
+Jul 24 / Aug 1 pilots. Still deferred: the env-gated broadcast flip
+(Black-Bear-scale project), cold-table policy dupes, unused-index cleanup.
 Adversarial QA (`audits/C08_qa.md`): ZERO must-fix across A/B/D; C reviewed
 inline. One should-fix applied pre-merge (PR-A header: grants are TIGHTENED —
 public execute deliberately dropped — not "preserved"). Merged A→B→C→D;
