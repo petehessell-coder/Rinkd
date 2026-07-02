@@ -4,7 +4,7 @@ import Layout from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { useIsRinkdAdmin } from '../lib/userRole';
 import { timeAgo } from '../lib/posts';
-import { ListRowSkeleton, EmptyState } from '../components/Skeletons';
+import { Icon, Skeleton, EmptyState, useToast } from '../components/ui';
 import { C, colors } from '../lib/tokens';
 
 const STATUS_META = {
@@ -23,6 +23,7 @@ const CATEGORY_META = {
 
 export default function AdminFeedbackPage({ currentUser, profile }) {
   const navigate = useNavigate();
+  const { toast } = useToast();
   // Platform-level bug queue: Rinkd staff only. Per-league commissioners
   // don't need to see other leagues' bug reports.
   const isAdmin = useIsRinkdAdmin(currentUser?.id);
@@ -53,18 +54,22 @@ export default function AdminFeedbackPage({ currentUser, profile }) {
     const { error } = await supabase.from('bug_reports').update({ status }).eq('id', id);
     if (error) {
       setItems((prev) => prev.map((r) => r.id === id ? { ...r, status: prevStatus } : r));
-      // eslint-disable-next-line no-alert
-      alert("That status didn't save — check your connection and try again.");
+      toast({ message: "That status didn't save — check your connection and try again.", tone: 'alert' });
     }
   };
 
   // isAdmin === null means useIsRinkdAdmin is still resolving. Render a
-  // neutral spinner so a real staff member doesn't see "staff only" flash.
+  // geometric skeleton (not a bare spinner) so a real staff member doesn't
+  // see "staff only" flash while the role lookup is in flight.
   if (isAdmin === null) {
     return (
       <Layout profile={profile}>
-        <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.steel, fontFamily: 'Barlow, sans-serif', fontSize: 14 }}>
-          Getting the ice ready.
+        <div style={{ background: C.dark, minHeight: '100vh', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>
+          <div style={{ maxWidth: 900, margin: '0 auto', padding: '20px 16px 80px' }}>
+            <Skeleton width={220} height={28} style={{ marginBottom: 8 }} />
+            <Skeleton width={160} height={13} style={{ marginBottom: 20 }} />
+            <ListSkeleton />
+          </div>
         </div>
       </Layout>
     );
@@ -74,7 +79,7 @@ export default function AdminFeedbackPage({ currentUser, profile }) {
     return (
       <Layout profile={profile}>
         <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.ice, gap: 12, padding: 24, textAlign: 'center' }}>
-          <div style={{ fontSize: 40 }}>🔒</div>
+          <Icon name="privacy" size={40} color={C.steel} />
           <div>The feedback queue is Rinkd staff only.</div>
           <button onClick={() => navigate('/home')} style={{ background: C.red, color: '#fff', border: 'none', padding: '10px 18px', borderRadius: 999, cursor: 'pointer' }}>Back to Home</button>
         </div>
@@ -114,7 +119,7 @@ export default function AdminFeedbackPage({ currentUser, profile }) {
           </div>
 
           {loading ? (
-            <ListRowSkeleton rows={6} />
+            <ListSkeleton rows={6} />
           ) : items.length === 0 ? (
             <EmptyState icon="📬" title="Inbox zero" body={filter === 'new' ? 'No new reports — you’re all caught up.' : 'No feedback in this view yet.'} />
           ) : (
@@ -156,5 +161,25 @@ export default function AdminFeedbackPage({ currentUser, profile }) {
         </div>
       </div>
     </Layout>
+  );
+}
+
+// Geometric stand-in for the feedback-card list — matches the real card shape
+// (category/status row, description lines, action row) instead of a spinner.
+function ListSkeleton({ rows = 6 }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <Skeleton width={60} height={11} />
+            <Skeleton width={70} height={16} radius={4} />
+          </div>
+          <Skeleton width="95%" height={13} style={{ marginBottom: 6 }} />
+          <Skeleton width="70%" height={13} style={{ marginBottom: 12 }} />
+          <Skeleton width={120} height={11} />
+        </div>
+      ))}
+    </div>
   );
 }
