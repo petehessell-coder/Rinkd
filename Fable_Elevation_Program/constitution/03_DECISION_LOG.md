@@ -165,3 +165,16 @@ Feed's fake 30→80% steps). **D-S09-1:** shadows.hover APPLIED app-wide via the
 shared pressable class (vocabulary-intended; desktop-only effect). Noted, no
 action: numberChange token stays dormant; like-bounce 300ms stays; bare-disabled
 buttons in hand-rolled modals fold into S10's component adoption.
+
+### 2026-07-02 · S10 Gate-1 decisions (Pete sign-off)
+All three waves approved (finish: skeletons/emoji→Icon/targets/contrast/
+focus-ring/animation gates/lazy share pipeline; honesty: alert→toast,
+ErrorState+retry, Button primitive + form hardening on the paid path;
+adoption: EmptyState consolidation + SectionHeader on single-use screens).
+**D-S10-1:** all 14 native dialogs die — reversible deletes → Undo toast
+(per-RPC reversibility verified first, downgrade to confirm when not),
+irreversible actions → the new ui/ConfirmSheet primitive (built this sprint
+so every screen shares one confirm). Six named follow-up tickets carry the
+below-A+ residue (League/Tournament SectionHeader + subtitle affordance,
+StatNumber, app-wide Button, Gallery drift, analytics cohort RPC, bundle
+regen for the diligence packet).

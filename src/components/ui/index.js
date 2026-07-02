@@ -15,3 +15,4 @@ export { ToastProvider, useToast, useUndoable } from './ToastHost';
 export { default as BounceNumber } from './BounceNumber';
 export { default as RouteTransition } from './RouteTransition';
 export { MotionProvider, useExpand } from './MotionProvider';
+export { default as ConfirmSheet, useConfirm, ConfirmSheetHost } from './ConfirmSheet';
