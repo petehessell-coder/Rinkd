@@ -17,6 +17,7 @@ import ShareButton from '../components/ShareButton';
 import { loadGameCardData } from '../lib/gameCardData';
 import { useOnline } from '../lib/useOnline';
 import { C, colors } from '../lib/tokens';
+import { areScorersHidden } from '../lib/publicShare';
 
 function LiveBarnWordmark({ dark = false }) {
   const liveColor = dark ? '#2E6DB4' : '#5a9fd4';
@@ -55,6 +56,9 @@ export default function GameDetail({ profile }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isOrganizer, setIsOrganizer] = useState(false);
+  // YOUTH-PRIVACY (S06 P0): youth events render every player name jersey-only
+  // on this page's Game Puck surfaces, mirroring the public page's rule.
+  const [scorersHidden, setScorersHidden] = useState(false);
   // jersey # → player name lookup, keyed by team_id. Populated from
   // game_lineups (and only for tournament/league games where lineups exist).
   // Built once on load and consulted by the goal & penalty renderers.
@@ -85,6 +89,17 @@ export default function GameDetail({ profile }) {
 
       if (!g) { setLoading(false); return; }
       setGame(g);
+
+      // Parent event youth flag (fail-closed on error) — one bounded read.
+      if (!isTeamGame) {
+        try {
+          const evId = isLeague ? (g.league_id || g.home_lt?.league_id) : g.tournament_id;
+          const { data: ev, error: evErr } = isLeague
+            ? await supabase.from('leagues').select('settings').eq('id', evId).maybeSingle()
+            : await supabase.from('tournaments').select('settings, is_youth').eq('id', evId).maybeSingle();
+          setScorersHidden(evErr ? true : (areScorersHidden(ev?.settings) || ev?.is_youth === true));
+        } catch { setScorersHidden(true); }
+      }
 
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
@@ -441,6 +456,7 @@ export default function GameDetail({ profile }) {
               goals={goals}
               canVote={!!profile}
               accent={C.red}
+              hideNames={scorersHidden}
             />
           )}
 

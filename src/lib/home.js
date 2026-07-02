@@ -174,7 +174,7 @@ export async function getLiveTicker(limit = 12) {
 export async function getLiveHeroExtras(game) {
   if (!game || game.source !== 'league' || !game.eventId) return null;
   try {
-    const [standings, goalsRes, lineupRes] = await Promise.all([
+    const [standings, goalsRes, lineupRes, leagueRes] = await Promise.all([
       getLeagueStandings(game.eventId).catch(() => []),
       supabase.from('game_goals')
         .select('team_id,scorer_number,period,time_in_period,empty_net,created_at')
@@ -184,7 +184,14 @@ export async function getLiveHeroExtras(game) {
         .order('created_at', { ascending: false })
         .limit(1),
       supabase.from('game_lineups').select('team_id,jersey_number,invite_name').eq('game_id', game.id),
+      supabase.from('leagues').select('settings').eq('id', game.eventId).maybeSingle(),
     ]);
+    // YOUTH-PRIVACY: the public game page renders scorers jersey-only on youth
+    // events (areScorersHidden); this in-app tile must match — a minor's name
+    // never rides the LAST GOAL line. Fail-closed on an unreadable settings row.
+    const youth = leagueRes?.error
+      ? true
+      : leagueRes?.data?.settings?.feature_profile === 'youth_competitive';
     const recFor = (ltId) => {
       const r = (standings || []).find((s) => s.lt_id === ltId);
       if (!r) return null;
@@ -194,7 +201,7 @@ export async function getLiveHeroExtras(game) {
     const lg = goalsRes.data?.[0];
     if (lg) {
       const lu = (lineupRes.data || []).find((x) => x.team_id === lg.team_id && x.jersey_number === lg.scorer_number);
-      lastGoal = { jersey: lg.scorer_number, name: lu?.invite_name || null, period: lg.period, time: lg.time_in_period || null, en: !!lg.empty_net };
+      lastGoal = { jersey: lg.scorer_number, name: youth ? null : (lu?.invite_name || null), period: lg.period, time: lg.time_in_period || null, en: !!lg.empty_net };
     }
     return { homeRecord: recFor(game.home?.id), awayRecord: recFor(game.away?.id), lastGoal };
   } catch (e) {

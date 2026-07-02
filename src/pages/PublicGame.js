@@ -415,6 +415,7 @@ export default function PublicGame({ league }) {
             goals={goals}
             canVote={false}
             accent={accent}
+            hideNames={scorersHidden}
           />
         )}
 

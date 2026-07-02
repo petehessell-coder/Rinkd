@@ -120,3 +120,16 @@ goalie-change undo) — the offline core is untouched; **C** operator bulk
 all paid, register form survives Stripe cancel). Premium-finish sweep
 (skeletons/emoji/confirm-dialogs) DEFERRED to S10. Rink-picker scoping +
 wizard division handoff spun out separately.
+
+### 2026-07-01 · S06 Gate-1 decisions (Pete sign-off)
+P0 youth-privacy leaks (Game Puck reveal winner_name on-screen; Home live-hero
+LAST GOAL name) fixed FIRST, jersey-only per the Never-Do rule. All three
+bundles approved: **D** game-day/post-game delight (GAME DAY row, tappable
+rink, season-series from the already-written getHeadToHead, RSVP warmth,
+"[TEAM] WIN" recap label, GWG/×2 tags, Share ON the recap card, reveal onward
+path); **L** live moments (goal-moment stack into GameDetail, us-vs-them
+horn/haptic + TIED IT/LEAD CHANGE, state line + final beat, period pulse);
+**N** notification honesty (hype-push audience scoped to rostered teams —
+kills the 20-push Saturday; milestone added to the push allowlist).
+`game_final` push kind DEFERRED to its own follow-up. Loss handling stays
+restrained (verified correct) — never celebration, never shame.
