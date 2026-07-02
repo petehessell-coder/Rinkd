@@ -278,3 +278,230 @@ is RLS-correct and fail-closed. No MUST-FIX.
 | **A** #34 stats bounds | ✅ mergeable | 0 | 1 (grant claim) | 1 |
 | **B** #35 event-page cache | ✅ mergeable | 0 | 0 | 2 |
 | **D** #37 realtime + push | ✅ mergeable | 0 | 0 | 2 |
+
+---
+
+# P1 QA (PR-E #38, PR-F #39)
+
+**Reviewer:** Opus 4.8 (fresh session, did not build these). **Date:** 2026-07-02.
+**Method:** hostile `git diff main...<branch>` review; independent live prod policy
++ function fetch via read-only Supabase MCP (`pg_policies`, `pg_get_functiondef`,
+`information_schema`); ran the PR-E PGlite equivalence harness; audited the harness's
+own branch coverage; anon browser smoke of PR-F on the Black Bears demo league Feed +
+CommentThread (Discover/Team/Messages/Notifications are auth-gated → code review only).
+Restored `main`; no git writes beyond checkout; no prod writes.
+
+---
+
+## PR-E · `perf/c08-e-rls-consolidation` (#38) — **PASS (mergeable), 0 MUST-FIX**
+
+### 1. Prod-policy reconciliation (independent `pg_policies` fetch, 2026-07-02)
+Fetched every policy on the 7 tables and diffed each DROP/CREATE against prod:
+- **posts** (prod 9): SELECT `posts_select_all` KEPT untouched; DELETE ×3
+  (`Users can delete their own posts` / `Users delete their own posts` / `posts_delete_own`)
+  → 1; INSERT ×3 → 1; UPDATE ×2 (`Users update their own posts` w/ CHECK null +
+  `posts_update_own`) → 1. Every dropped name **exists on prod**; all predicates
+  `(select current_profile_id()) = author_id`. ✅
+- **likes** (prod 6): SELECT ×2, DELETE ×2, INSERT ×2 → 1 each. All present. ✅
+- **comments** (prod 9): same shape as posts; SELECT `comments_select_all` KEPT. ✅
+- **game_goals** (prod 4): INSERT ×2 merged; SELECT + DELETE untouched. ✅
+- **games** (prod 5): UPDATE ×2 merged; SELECT/INSERT/DELETE untouched. ✅
+- **integration_authorizations** (prod 3): all 3 rewritten (bare `auth.uid()` →
+  `(select auth.uid())`), role `authenticated` preserved. ✅
+- **follows** (prod 2): SKIPPED by design — migration touches neither. ✅
+**No policy named in a DROP is absent from prod; no prod policy on the 7 tables is
+left unaccounted (each is dropped-and-recreated, or explicitly kept, or skipped).**
+Prod `relrowsecurity=true, relforcerowsecurity=false` on all 7 — unchanged.
+
+### 2. Genuine-merge equivalence (NULL semantics)
+- **games UPDATE** — prod `games_director_update` (USING=D, CHECK=D) +
+  `games_scorer_update` (USING=S, **CHECK=NULL**). For a permissive UPDATE, a NULL
+  WITH CHECK folds to its USING, so scorer's effective check = S. Two-policy eval =
+  `USING(D OR S)`, `CHECK(D OR S)`. Merged policy = same OR, pasted **verbatim** from
+  prod `pg_policies` output (byte-compared the `is_tournament_director` / scorekeeper /
+  tournament_roles / `is_activated` arms). ✅ Exactly equivalent.
+- **game_goals INSERT** — `(activated-tournament OR activated-league OR pickup)` OR
+  `(current_profile_id() IS NOT NULL)`. Both arms are strict booleans (EXISTS never
+  returns NULL; `IS NOT NULL` never returns NULL), so `p1 OR p2` in one policy ≡ the
+  two-policy OR with no three-valued-logic subtlety (truth-table verified on prod). ✅
+- **Youth privacy (check 6):** `posts_select_all` and `comments_select_all` are NOT in
+  any DROP — SELECT visibility on posts/comments is provably untouched. The harness's
+  full SELECT matrix confirms anon/stranger cannot see the team-private (youth) post,
+  member/commish/author can — **identical pre/post**. ✅
+
+### 3. Harness run + coverage audit
+`node scripts/c08-e-smoke/pglite-migrations.mjs` → **all 33 checks GREEN** (2 idempotent
+applies; SELECT + WRITE matrices byte-identical pre/post; explicit youth/hidden/insider
+spot-asserts; policy-count 3→1 / 2→1 confirmed). Coverage audit of the persona×content
+matrix against every predicate branch:
+- Covered: activation gate (active vs inactive tournament, director blocked on
+  inactive), scorer path (scorekeeper match), director path, pickup/`tournament_id
+  null`, commissioner (hidden-post visibility), team-insider (youth post), author,
+  anon fail-closed, stranger 0-row RLS filter.
+- **Uncovered branches (non-load-bearing — see SHOULD/NOTED):** (a) the **activated-
+  LEAGUE arm** of game_goals INSERT (`league_games JOIN leagues`) — no probe inserts a
+  goal against a `league_games` id; (b) the **`tournament_roles` non-scorekeeper**
+  sub-path of the scorer arm on games UPDATE — the only scorer persona is *also* the
+  scorekeeper, masking the roles-EXISTS disjunct. Both arms are copied byte-verbatim
+  from prod and OR'd with strict booleans, so equivalence holds regardless; the harness
+  simply doesn't *exercise* them.
+
+### 4. Idempotency & failure-path
+Single `begin;…commit;`. Every CREATE is preceded by DROP-IF-EXISTS of all legacy names
+**and** the new canonical name → re-apply is a clean no-op (harness pass 2/2 green). Any
+statement failure rolls the whole transaction back → **no path drops a policy without
+recreating it**; concurrent readers see all-old or all-new (DDL is transactional). ✅
+
+### 5. Post-apply plan
+Runbook §APPLY steps (harness green → apply → re-pull advisors expecting
+`multiple_permissive_policies`→0 on the 5 tables + `auth_rls_initplan`→0 on
+integration_authorizations → live REST matrix) are sufficient. Recommend the runbook
+also assert the final policy count per (table,cmd) = 1 (the harness already does this).
+
+### SHOULD-FIX (PR-E)
+- **Grant tightening vs claim (same as PR-A NOTED).** The migration only re-grants
+  integration_auth via `create policy` (no function grants there), but for consistency
+  with the C08_qa PR-A finding: no explicit grant statements exist in this migration
+  (RLS policies carry no ACL), so **no grant drift here** — the PR-A caveat does not
+  recur in PR-E. (Recorded to preempt the question.)
+
+### NOTED (PR-E)
+- Harness does not exercise the activated-**league** INSERT arm nor the non-scorekeeper
+  `tournament_roles` UPDATE arm (§3). Add a `league_games`-backed goal probe + a
+  scorer-not-scorekeeper persona to make the equivalence proof exhaustive. Equivalence
+  is not at risk (verbatim + strict-boolean OR); this is proof-completeness only.
+
+**Verdict: mergeable.** Every prod policy is accounted for, both genuine merges are
+NULL-safe and byte-verbatim, youth SELECT paths are provably untouched, the harness is
+green + idempotent, and the diff touches only the 7 approved tables. No MUST-FIX.
+
+---
+
+## PR-F · `perf/c08-f-freshness-pagination` (#39) — **PASS (mergeable), 3 SHOULD-FIX**
+
+**Build:** `CI=false GENERATE_SOURCEMAP=false npm run build` → **clean** (only the
+pre-existing react-datepicker critical-dependency warning). **Diff discipline:** exactly
+the 10 approved files, nothing else.
+
+### Anon browser smoke (Black Bears demo league `bbbb0001-…a1`)
+- League **Feed tab** renders (Game Puck, Chirps, recap posts); **zero console errors**.
+- **CommentThread opens** on a 0-comment post → empty state, **no premature "Load
+  earlier"** button (correct `hasMore=false` gating). Network shows `getComments` firing
+  with the **new keyset shape** `comments?…order=created_at.desc&limit=50 → 200` against
+  prod — the DESC+reverse pagination works live.
+- Discover/Team/Messages/Notifications redirect to auth (login-gated) → **code review
+  only** per prompt. Turnstile blocks self-login; not browser-tested.
+
+### 1. `getTeamGames` non-enumerable metadata — all 5 call sites verified
+`withPageMeta` attaches `moreFinals`/`oldestFinalCursor` as **non-enumerable** props on
+the returned array. Traced every caller:
+- **Team.js** (only paginating caller): reads `.moreFinals`/`.oldestFinalCursor`. ✅
+- **TeamManage.js** (`setGames(g)`), **TeamVolunteer.js** / **VolunteerCoordinator.js**
+  (`.filter(status==='scheduled').slice(0,30)`), **lib/home.js** (`.filter`/`.map`/
+  `.slice` by status) — all treat it as a plain array; none read the metadata; none
+  `JSON.stringify` it (non-enumerable would drop silently, but no site serializes it).
+  `.filter/.map/.slice` return fresh arrays without the metadata — **no downstream reads
+  it off a derived array.** ✅
+- **Data-equivalence for bare callers:** defaults stay `finalCap=200/upcomingCap=200`,
+  so each bare caller gets ≥ the games it got before. Filter-to-scheduled callers get an
+  identical-or-better set (upcoming is now fetched as its own ASC window instead of being
+  crowded out by 200 finals). No regression; TeamManage now shows a fuller schedule
+  (intended per its comment). ✅
+
+### 2. Team realtime channel
+Correct intent (was zero subscription → self-inflicted polling). Binds `team_games`
+by `team_id` + `league_games` per `league_teams` row (home/away, capped 20), 1s debounce,
+`removeChannel` on cleanup, unique channel name (no collision). Youth-team RLS: the
+re-query (`getTeamGames`) runs under the viewer's RLS, so events for games it can't read
+resolve to no visible rows — safe. **BUT channel churn (SHOULD-FIX #1):** effect deps
+`[id, leagueTeamIds, reloadGamesOnly]`; `leagueTeamIds` is a `useMemo` over `[games]`
+that returns a **new array reference on every `games` update**, and `reloadGamesOnly`
+(a ping's callback) calls `setGames` → new `games` → new `leagueTeamIds` ref →
+**teardown+resubscribe on every score ping**. Also `reloadGamesOnly` depends on
+`finalsCursor`, so a "Load earlier" tap re-subscribes too. Not a correctness bug (unique
+names, clean unsub), but it violates the audit's own "no channel churn from re-renders"
+budget. Fix: memoize on a stable primitive (e.g. `leagueTeamIds.join(',')`) and/or split
+the subscription list out of `reloadGamesOnly`'s dep.
+
+### 3. Comments / DMs newest-N-then-reverse
+- `getComments`/`getMessages` fetch newest DESC + `limit`, then `.reverse()` for
+  oldest-first display; `before` cursor is **`.lt(created_at)` (exclusive)** → the
+  boundary row is not re-returned, and a `seen`-Set dedup guards overlap on prepend. ✅
+- **Signature change contained:** `getComments` now returns `{comments, hasMore}` (was a
+  bare array) — its **only** caller (CommentThread) is updated. `getMessages`/
+  `listNotifications` already returned `{data, error}`; both callers updated; bells use
+  `getUnreadCount` (untouched). No orphaned caller. ✅
+- **Optimistic-DM invariants UNTOUCHED (S09):** the realtime-append effect
+  (`prev.some(x=>x.id===m.id) ? prev : [...prev, m]`), temp-id swap, `markConversationRead`
+  are byte-unchanged (only a comment added). Scroll preserved on prepend via
+  scrollHeight-delta anchor. ✅
+- **Behavior change (NOTED):** threads now show the newest 50 (was oldest 200). More
+  correct for a chat-like thread; "Load earlier" reaches back.
+
+### 4. Discover compound cursor
+- **players** uses a correct compound keyset `points.lt.cur OR (points.eq.cur AND
+  id.gt.curId)` matching `ORDER BY points DESC, id ASC` — tie-safe at the boundary; null-
+  points cursor short-circuits to empty. ✅
+- **Per-tab isolation:** `load()` deps `[tab, ilike, tabConfig]` → tab switch resets
+  `hasMore` + reloads first page; each tab has its own state + cursor. No cross-tab
+  bleed. ✅
+- **SHOULD-FIX #2 (minor):** teams/leagues/articles use a **single-column** `.lt(created_at)`
+  cursor with no `id` tiebreaker — two rows sharing `created_at` at the page-40 boundary
+  could skip one. Negligible at Discover scale, but the players tab already models the
+  correct pattern; apply it to the other three for symmetry.
+
+### 5. `list_my_conversations` migration
+Fetched prod `pg_get_functiondef` (2026-07-02): the migration's PRE-STATE comment is
+**byte-accurate**. Body preserved (mine/other/unread CTEs, object keys, `user_blocks`
+exclusion, `order by last_message_at desc nulls last`) with only the SELECT moved into a
+`capped` CTE carrying `limit greatest(1, least(p_limit,200))` on the **same order key** →
+limit and display order agree. Deterministic modulo ties on `last_message_at` (NOTED,
+never bites at DM scale). drop-zero-arg-overload + create + revoke public/grant
+anon,authenticated,service_role per repo convention; grant comment is **honest** (states
+the tightening). Old zero-arg overload removed. ✅ No client change (calls with no args).
+
+### 6/7. States + stress
+Every new list surface carries loading/empty/error: Team (skeleton + `ErrorState` +
+youth-locked), CommentThread (`loadingEarlier` + toast), Messages (skeleton + "Say hi 👋"
++ toast), Notifications (`loadingOlder` + toast), Discover (guarded button). Exactly-50
+boundary: a full page → `hasMore=true` → one wasted "load earlier" fetch that returns 0
+and hides the button — self-correcting, acceptable.
+
+### SHOULD-FIX (PR-F)
+1. **[Team.js:154-190]** Realtime channel re-subscribes on every score ping /
+   `games` update (new `leagueTeamIds` ref + `reloadGamesOnly` finalsCursor dep) →
+   channel churn. Memoize on a stable id-string; decouple sub list from the reload cb.
+2. **[Discover.js tabConfig]** teams/leagues/articles cursors lack an `id` tiebreaker
+   (`.lt(created_at)` only) → possible skipped row at a same-`created_at` boundary. Mirror
+   the players compound-cursor pattern.
+3. **[notifications.js:30 + posts.js getComments]** `hasMore` is computed from the
+   **post-blocked-filter** `rows.length === limit`, not the raw `data.length`. When a
+   blocked user's rows fill boundary slots, the page returns < limit → `hasMore=false`
+   **prematurely hides "Show older"/"Load earlier" while older rows still exist.** Compute
+   `hasMore` from raw `data.length === limit` (as Discover already does). Only bites users
+   who block someone; low-severity but a real pagination-truncation bug.
+
+### NOTED (PR-F)
+- **[teams.js getTeamGames]** `.neq('status','final')` (upcoming bucket) + `.eq('status',
+  'final')` (finals) **silently drops NULL-status rows** the old unfiltered query
+  included. Prod has zero NULL statuses today and `status` defaults to `'scheduled'`, but
+  the column is nullable — a future NULL-status game would vanish from a team schedule
+  (a display-data-loss, sensitive on youth surfaces). Defensive: `.or('status.is.null,
+  status.neq.final')` for the upcoming bucket.
+- Comments/DMs `.lt(created_at)` keyset can skip a row on identical-timestamp ties
+  (same class as SHOULD-FIX #2); `seen`-Set covers the shown side; negligible at scale.
+- Thread now shows newest-50 (was oldest-200) — intended, more correct.
+
+**Verdict: mergeable.** Pagination is real keyset (players compound cursor is correct),
+the DM/optimistic S09 logic is untouched, the migration is byte-faithful to prod + bounded
++ deterministic, states are complete, and the diff is scope-clean. The 3 SHOULD-FIX items
+(channel churn, single-column cursors, blocked-filter `hasMore` truncation) are quality/
+edge-correctness, not blockers — #3 is the most user-visible and cheapest to fix.
+
+---
+
+## Per-PR verdict summary (P1)
+| PR | Verdict | MUST-FIX | SHOULD-FIX | NOTED |
+|----|---------|----------|------------|-------|
+| **E** #38 RLS consolidation | ✅ mergeable | 0 | 0 | 1 (harness coverage) |
+| **F** #39 freshness + pagination | ✅ mergeable | 0 | 3 | 3 |
