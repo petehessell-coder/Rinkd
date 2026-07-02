@@ -66,3 +66,10 @@ focus ring is missing app-wide** (a regression vs the June QA pass memory).
 4. **Gallery GAL_* drift + inline-empty conversions on League/Tournament/Team** (C01 drift-pass territory)
 5. **AdminAnalytics profiles read → cohort RPC** (self-documented in code, pre-scale)
 6. **Regenerate build + record bundle numbers** for the diligence packet
+   (DONE in-sprint: main 262→258KB gzip after the share split)
+7. **Remaining window.confirm sites** (~11, discovered by the post-build
+   sweep; outside the operator audit's file list): ScorerView ×3 (reopen /
+   finalize-mismatch / discard-dead-writes — deliberate safety friction,
+   DON'T rush), EditGameModal ×2, PostActionMenu ×3 (block/report),
+   TeamManage schedule ×2, Profile push-off ×1. Convert to ConfirmSheet in
+   a calm window; the consumer-side alert() class was closed in-sprint.
