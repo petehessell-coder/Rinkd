@@ -2,7 +2,8 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import SEO from '../components/SEO';
-import { CardGridSkeleton, EmptyState } from '../components/Skeletons';
+import { CardGridSkeleton } from '../components/Skeletons';
+import { EmptyState } from '../components/ui';
 import { listShows, hasCreaseAccess } from '../lib/crease';
 import { C, colors } from '../lib/tokens';
 

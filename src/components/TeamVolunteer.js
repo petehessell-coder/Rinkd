@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { listTeamSlots, createSlot, deleteSlot, claimSlot, releaseSlot } from '../lib/volunteers';
 import { getTeamGames } from '../lib/teams';
-import { useUndoable } from './ui';
+import { useUndoable, useToast } from './ui';
 import { C, colors } from '../lib/tokens';
 
 const ROLE_PRESETS = ['Scorekeeper', 'Snack Parent', 'Locker Room Monitor', 'Gear Hauler', 'Statkeeper', 'Off-ice Official', 'Tournament Volunteer'];
@@ -133,6 +133,7 @@ function StatPill({ num, label, color }) {
 function SlotRow({ slot, isManager, currentUser, onChange, onOptimisticRemove, isPast }) {
   const [busy, setBusy] = useState(false);
   const runUndoable = useUndoable();
+  const { toast } = useToast();
   const assigned = slot.assigned_user;
   const isClaimedByMe = currentUser && slot.assigned_user_id === currentUser.id;
   const dateStr = slot.slot_time
@@ -142,7 +143,7 @@ function SlotRow({ slot, isManager, currentUser, onChange, onOptimisticRemove, i
   const wrap = async (fn) => {
     setBusy(true);
     try { await fn(); await onChange(); }
-    catch (e) { alert(e.message || "That didn't go through — check your connection and try again."); }
+    catch (e) { toast({ message: e.message || "That didn't go through — check your connection and try again.", tone: 'alert' }); }
     finally { setBusy(false); }
   };
 

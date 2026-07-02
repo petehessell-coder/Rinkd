@@ -1,6 +1,18 @@
 import React, { useState } from 'react';
-import { composeRecapCard, composeGamePuckCard, composeWatermarkedPhoto, composeStatCard } from '../lib/shareCard';
-import { composeRecapCardV2 } from '../lib/recapShareV2';
+// S10 · lazy share pipeline — the canvas composers (shareCard) and the QR-code
+// recap composer (recapShareV2, which statically pulls the ~40KB `qrcode` lib)
+// are heavy and only needed once the user actually taps Share. They're loaded
+// via dynamic import() inside onShare so they leave every page chunk that merely
+// renders a ShareButton.
+//
+// iOS user-activation NOTE: navigator.share requires an active user gesture.
+// The handler already awaits async card composition (getCard + compose) in the
+// same tick and works in prod on iOS, so one more awaited import() in that chain
+// is acceptable — but to keep the activation window as short as possible we FIRE
+// the import() immediately at the top of onShare (before awaiting getCard) and
+// only await the resolved module right before we compose. Do NOT move the await
+// earlier than necessary or gate it behind other awaits — that lengthens the gap
+// between the tap and navigator.share and risks losing activation on iOS.
 import { prefersNativeShare, downloadBlob, copyText, absoluteShareUrl } from '../lib/share';
 import { gameShareUrl } from '../lib/publicShare';
 import { uploadShareCard } from '../lib/ogCard';
@@ -38,15 +50,25 @@ export default function ShareButton({ getCard, isLeague, gameId, variant = 'ghos
   const onShare = async () => {
     if (busy) return;
     setBusy(true); setErr(false);
+    // Fire the heavy-lib import FIRST, before any await, so it downloads in
+    // parallel with getCard() and the user-activation window stays tight (see
+    // the import NOTE at the top of this file). We only await it right before we
+    // need the composer fn, below.
+    const composerP = isRecapV2 ? import('../lib/recapShareV2') : import('../lib/shareCard');
     // 1) Compose. If this fails, SHOW it — never fail silently.
     let blob, card;
     try {
       card = await getCard();
-      blob = isPhoto ? await composeWatermarkedPhoto(card.imageUrl, { tag: card.tag })
-        : isPuck ? await composeGamePuckCard(card)
-          : isStat ? await composeStatCard(card)
-            : isRecapV2 ? await composeRecapCardV2(card, { shareUrl: shareUrl || gameDeepLink, sponsorName: card.sponsorName })
+      if (isRecapV2) {
+        const { composeRecapCardV2 } = await composerP;
+        blob = await composeRecapCardV2(card, { shareUrl: shareUrl || gameDeepLink, sponsorName: card.sponsorName });
+      } else {
+        const { composeRecapCard, composeGamePuckCard, composeWatermarkedPhoto, composeStatCard } = await composerP;
+        blob = isPhoto ? await composeWatermarkedPhoto(card.imageUrl, { tag: card.tag })
+          : isPuck ? await composeGamePuckCard(card)
+            : isStat ? await composeStatCard(card)
               : await composeRecapCard(card, { format: 'portrait' });
+      }
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('[ShareButton] compose failed', e);

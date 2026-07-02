@@ -4,7 +4,8 @@ import Layout from '../components/Layout';
 import SEO from '../components/SEO';
 import { listArticles, listCategories } from '../lib/rinkside';
 import { useIsRinkdAdmin } from '../lib/userRole';
-import { CardGridSkeleton, EmptyState } from '../components/Skeletons';
+import { CardGridSkeleton } from '../components/Skeletons';
+import EmptyState from '../components/ui/EmptyState';
 import { C } from '../lib/tokens';
 
 function fmtDate(iso) {
@@ -147,12 +148,12 @@ export default function Rinkside({ currentUser, profile }) {
           {categories.length > 0 && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20, justifyContent: 'center' }}>
               <button onClick={() => setActiveCategory(null)}
-                style={{ background: !activeCategory ? C.red : 'transparent', color: !activeCategory ? '#fff' : C.steel, border: `1px solid ${!activeCategory ? C.red : C.border}`, padding: '6px 14px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Barlow, sans-serif' }}>
+                style={{ background: !activeCategory ? C.red : 'transparent', color: !activeCategory ? '#fff' : C.steel, border: `1px solid ${!activeCategory ? C.red : C.border}`, padding: '6px 14px', minHeight: 44, borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Barlow, sans-serif' }}>
                 All
               </button>
               {categories.map((cat) => (
                 <button key={cat} onClick={() => setActiveCategory(cat)}
-                  style={{ background: activeCategory === cat ? C.red : 'transparent', color: activeCategory === cat ? '#fff' : C.steel, border: `1px solid ${activeCategory === cat ? C.red : C.border}`, padding: '6px 14px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Barlow, sans-serif' }}>
+                  style={{ background: activeCategory === cat ? C.red : 'transparent', color: activeCategory === cat ? '#fff' : C.steel, border: `1px solid ${activeCategory === cat ? C.red : C.border}`, padding: '6px 14px', minHeight: 44, borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Barlow, sans-serif' }}>
                   {cat}
                 </button>
               ))}

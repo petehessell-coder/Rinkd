@@ -5,6 +5,7 @@ import { loadDailyRollup, loadDAU, loadRecentEvents, loadTopPages, loadGrowthFun
 import { useIsRinkdAdmin } from '../lib/userRole';
 import { supabase } from '../lib/supabase';
 import { C, colors } from '../lib/tokens';
+import { Icon, Skeleton } from '../components/ui';
 
 // ENRICH-1 follow-on (May 28, 2026): admin dormancy cohorting + recently-active
 // table. Reads profiles.last_seen_at (stamped by App.js touchLastSeen with a
@@ -186,14 +187,44 @@ export default function AdminAnalytics({ currentUser, profile }) {
   // from Batch 4.
   if (loading || isAdmin === null) return (
     <Layout profile={profile}>
-      <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice }}>Loading analytics…</div>
+      <div style={{ background: C.dark, minHeight: '100vh', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>
+        <div style={{ maxWidth: 1080, margin: '0 auto', padding: '20px 16px 80px' }}>
+          <Skeleton width={180} height={28} style={{ marginBottom: 8 }} />
+          <Skeleton width={220} height={13} style={{ marginBottom: 22 }} />
+
+          {/* Stat box row */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 22 }}>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
+                <Skeleton width="60%" height={10} style={{ marginBottom: 10 }} />
+                <Skeleton width="40%" height={26} />
+              </div>
+            ))}
+          </div>
+
+          {/* Chart block */}
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 22 }}>
+            <Skeleton width="30%" height={11} style={{ marginBottom: 12 }} />
+            <Skeleton width="100%" height={70} radius={6} />
+          </div>
+
+          {/* List rows */}
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', borderTop: i ? '1px solid rgba(46,91,140,0.2)' : 'none' }}>
+                <Skeleton width="50%" height={13} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </Layout>
   );
 
   if (!isAdmin) return (
     <Layout profile={profile}>
       <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.ice, gap: 12, padding: 24, textAlign: 'center' }}>
-        <div style={{ fontSize: 40 }}>🔒</div>
+        <Icon name="privacy" size={40} color={C.steel} />
         <div>Analytics is Rinkd staff only.</div>
         <button onClick={() => navigate('/home')} style={{ background: C.red, color: '#fff', border: 'none', padding: '10px 18px', borderRadius: 999, cursor: 'pointer' }}>Back to Home</button>
       </div>
@@ -204,7 +235,7 @@ export default function AdminAnalytics({ currentUser, profile }) {
     <Layout profile={profile}>
       <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, padding: 20, textAlign: 'center' }}>
         <div>
-          <div style={{ fontSize: 32, marginBottom: 10 }}>⚠️</div>
+          <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center' }}><Icon name="alert" size={32} color={C.red} /></div>
           <div style={{ color: C.red, fontWeight: 600, marginBottom: 4 }}>Couldn't load analytics</div>
           <div style={{ color: C.steel, fontSize: 12, marginBottom: 16 }}>{error}</div>
           <button onClick={load} style={{ background: C.red, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer', fontFamily: 'Barlow, sans-serif', fontWeight: 700 }}>Retry</button>

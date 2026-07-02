@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useUserRole } from '../lib/userRole';
 import { listRinks, createRink, updateRink, deleteRink } from '../lib/rinks';
 import { colors } from '../lib/tokens';
+import { Icon, Skeleton, ConfirmSheet } from '../components/ui';
 
 const TABS = ['Overview', 'Rinks', 'Requests'];
 const inputStyle = {
@@ -55,7 +56,7 @@ export default function AdminPanel({ profile }) {
             background: C.card, border: `1px solid ${C.border}`, borderRadius: 14,
             padding: '32px 28px', maxWidth: 460, textAlign: 'center',
           }}>
-            <div style={{ fontSize: 40, marginBottom: 10 }}>🔒</div>
+            <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center' }}><Icon name="privacy" size={40} color={C.steel} /></div>
             <h1 style={{
               fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic',
               fontSize: 24, textTransform: 'uppercase', marginBottom: 8,
@@ -271,6 +272,7 @@ function RinksTab() {
   const [editing, setEditing] = useState(null); // null = no edit, object = edit form, 'new' = create
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [confirmTarget, setConfirmTarget] = useState(null); // rink pending delete confirm
 
   const load = useCallback(async () => {
     setError(null);
@@ -294,12 +296,14 @@ function RinksTab() {
     finally { setBusy(false); }
   };
 
-  const handleDelete = async (r) => {
-    if (!window.confirm(`Delete "${r.name}${r.sub_rink ? ' · ' + r.sub_rink : ''}"? Games already pointing here will keep their rink_id (orphaned).`)) return;
+  // Hard DB delete with no restore path (and games pointing here go orphaned)
+  // — genuinely irreversible, so this stays a confirm rather than useUndoable.
+  const confirmDelete = async () => {
+    if (!confirmTarget) return;
     setBusy(true);
-    try { await deleteRink(r.id); await load(); }
+    try { await deleteRink(confirmTarget.id); await load(); }
     catch (e) { setError(e.message); }
-    finally { setBusy(false); }
+    finally { setBusy(false); setConfirmTarget(null); }
   };
 
   if (rinks === null) return <Loading />;
@@ -357,11 +361,24 @@ function RinksTab() {
             </div>
             <button onClick={() => startEdit(r)}
               style={{ background: 'transparent', border: `0.5px solid ${C.border}`, borderRadius: 999, color: C.ice, fontSize: 11, padding: '5px 10px', cursor: 'pointer', fontFamily: 'inherit' }}>Edit</button>
-            <button onClick={() => handleDelete(r)}
-              style={{ background: 'transparent', border: 'none', color: 'rgba(244,247,250,0.3)', fontSize: 16, cursor: 'pointer', padding: 4 }} title="Delete">🗑</button>
+            <button onClick={() => setConfirmTarget(r)} aria-label={`Delete ${r.name}`} title="Delete"
+              style={{ width: 44, height: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', color: 'rgba(244,247,250,0.5)', cursor: 'pointer' }}>
+              <Icon name="delete" size={16} />
+            </button>
           </div>
         ))}
       </div>
+
+      <ConfirmSheet
+        open={!!confirmTarget}
+        title="Delete this rink?"
+        body={confirmTarget ? `Delete "${confirmTarget.name}${confirmTarget.sub_rink ? ' · ' + confirmTarget.sub_rink : ''}"? Games already pointing here will keep their rink_id (orphaned). This can't be undone.` : ''}
+        confirmLabel="Delete"
+        danger
+        busy={busy}
+        onConfirm={confirmDelete}
+        onCancel={() => setConfirmTarget(null)}
+      />
     </>
   );
 }
@@ -437,6 +454,21 @@ function Field({ label, children }) {
     </div>
   );
 }
-function Loading() {
-  return <div style={{ padding: 30, textAlign: 'center', color: C.steel, fontSize: 13 }}>Getting the ice ready.</div>;
+// Geometric row-skeleton — matches the card-list layout every call site here
+// hydrates into (stat cards, requests, rinks), never a generic spinner.
+function Loading({ rows = 4 }) {
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderBottom: i < rows - 1 ? '0.5px solid rgba(244,247,250,0.06)' : 'none' }}>
+          <Skeleton width={34} height={34} radius={999} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <Skeleton width="45%" height={14} />
+            <div style={{ height: 6 }} />
+            <Skeleton width="65%" height={11} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }

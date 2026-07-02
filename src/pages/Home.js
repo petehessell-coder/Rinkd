@@ -193,7 +193,7 @@ function SearchBar({ navigate }) {
         />
         {term && (
           <button onClick={() => { setTerm(''); setResults(null); setOpen(false); }} aria-label="Clear search"
-            style={{ background: 'none', border: 'none', color: C.steel, cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 4 }}>×</button>
+            style={{ background: 'none', border: 'none', color: C.steel, cursor: 'pointer', fontSize: 18, lineHeight: 1, minWidth: 44, minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>×</button>
         )}
       </div>
 

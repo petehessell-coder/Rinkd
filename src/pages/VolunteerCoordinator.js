@@ -4,7 +4,7 @@ import Layout, { BRAND_COLORS as C } from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { listSlotsForTeams, listMyAssignedSlots, createSlot, updateSlot, deleteSlot, releaseSlot } from '../lib/volunteers';
 import { getTeamGames } from '../lib/teams';
-import { useUndoable } from '../components/ui';
+import { useUndoable, Skeleton, Icon } from '../components/ui';
 import { TeamLogo } from '../components/Logos';
 import { colors } from '../lib/tokens';
 
@@ -160,7 +160,7 @@ function StatCard({ num, label, color }) {
 }
 
 function SlotList({ slots, teams, onChange, onOptimisticRemove, profile }) {
-  if (!slots) return <div style={{ padding: 30, textAlign: 'center', color: C.steel, fontSize: 13 }}>Getting the ice ready.</div>;
+  if (!slots) return <SlotListSkeleton />;
   if (slots.length === 0) return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 24, textAlign: 'center', color: C.steel, fontSize: 13, marginBottom: 14 }}>
       Nothing here. Use the form below to add a slot.
@@ -170,6 +170,25 @@ function SlotList({ slots, teams, onChange, onOptimisticRemove, profile }) {
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
       {slots.map(s => <SlotRow key={s.id} slot={s} teams={teams} onChange={onChange} onOptimisticRemove={onOptimisticRemove} profile={profile} />)}
+    </div>
+  );
+}
+
+// Geometric placeholder matching SlotRow's layout — logo + two text lines +
+// trailing pill — so there's no layout shift when slots hydrate.
+function SlotListSkeleton() {
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
+      {[0, 1, 2].map(i => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
+          <Skeleton width={38} height={38} radius={9} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <Skeleton width="45%" height={14} style={{ marginBottom: 6 }} />
+            <Skeleton width="70%" height={11} />
+          </div>
+          <Skeleton width={54} height={20} radius={20} />
+        </div>
+      ))}
     </div>
   );
 }
@@ -221,8 +240,10 @@ function SlotRow({ slot, teams, onChange, onOptimisticRemove, profile }) {
       ) : (
         <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: 'rgba(245,158,11,0.15)', color: colors.warning, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Open</span>
       )}
-      <button onClick={handleDelete} disabled={busy}
-        style={{ background: 'transparent', border: 'none', color: 'rgba(244,247,250,0.3)', fontSize: 16, cursor: 'pointer', padding: 4 }} title="Delete">🗑</button>
+      <button onClick={handleDelete} disabled={busy} aria-label="Delete slot" title="Delete"
+        style={{ background: 'transparent', border: 'none', color: C.steel, cursor: busy ? 'not-allowed' : 'pointer', width: 44, height: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <Icon name="delete" size={16} />
+      </button>
     </div>
   );
 }

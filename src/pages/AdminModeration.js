@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useIsRinkdAdmin } from '../lib/userRole';
 import { timeAgo } from '../lib/posts';
 import { Avatar } from '../components/Logos';
-import { ListRowSkeleton, EmptyState } from '../components/Skeletons';
+import { Icon, Skeleton, EmptyState, ConfirmSheet, useToast } from '../components/ui';
 import { C, colors } from '../lib/tokens';
 
 /**
@@ -24,6 +24,7 @@ const TABS = [
 
 export default function AdminModerationPage({ currentUser, profile }) {
   const navigate = useNavigate();
+  const { toast } = useToast();
   // Platform-level moderation queue: Rinkd staff only. Per-league
   // commissioners moderate their own league's stuff via AdminPanel.
   const isAdmin = useIsRinkdAdmin(currentUser?.id);
@@ -33,6 +34,8 @@ export default function AdminModerationPage({ currentUser, profile }) {
   const [blocklist, setBlocklist] = useState([]);
   const [newWord, setNewWord] = useState('');
   const [newSeverity, setNewSeverity] = useState('high');
+  const [removeTarget, setRemoveTarget] = useState(null); // { kind, id } pending delete confirm
+  const [removeBusy, setRemoveBusy] = useState(false);
 
   const load = useCallback(async () => {
     // Don't fire the moderation queries until we know this is actually a Rinkd
@@ -87,21 +90,27 @@ export default function AdminModerationPage({ currentUser, profile }) {
     const { error } = await supabase.from(table).update({ is_flagged: false, is_hidden: false, flag_reason: null }).eq('id', id);
     if (error) {
       // Don't drop it from the queue — it's still flagged in the database.
-      // eslint-disable-next-line no-alert
-      alert("That didn't go through — check your connection and try again.");
+      toast({ message: "That didn't go through — check your connection and try again.", tone: 'alert' });
       return;
     }
     setItems((prev) => prev.filter((x) => x.id !== id));
   };
 
-  const remove = async (kind, id) => {
-    if (!window.confirm("Delete this content for good? This can't be undone.")) return;
+  const askRemove = (kind, id) => setRemoveTarget({ kind, id });
+
+  // Hard DB delete with no restore path — a confirm (not useUndoable) since
+  // there's genuinely nothing to hand back if the admin taps Undo.
+  const confirmRemove = async () => {
+    if (!removeTarget) return;
+    const { kind, id } = removeTarget;
     const table = kind === 'posts' ? 'posts' : 'comments';
+    setRemoveBusy(true);
     const { error } = await supabase.from(table).delete().eq('id', id);
+    setRemoveBusy(false);
+    setRemoveTarget(null);
     if (error) {
       // The row is still there — keep showing it rather than pretending it's gone.
-      // eslint-disable-next-line no-alert
-      alert("That didn't delete — check your connection and try again.");
+      toast({ message: "That didn't delete — check your connection and try again.", tone: 'alert' });
       return;
     }
     setItems((prev) => prev.filter((x) => x.id !== id));
@@ -115,7 +124,7 @@ export default function AdminModerationPage({ currentUser, profile }) {
       severity: newSeverity,
       added_by: currentUser?.id,
     });
-    if (error && !error.message.includes('duplicate')) { alert(error.message); return; }
+    if (error && !error.message.includes('duplicate')) { toast({ message: error.message, tone: 'alert' }); return; }
     setNewWord('');
     load();
   };
@@ -126,12 +135,17 @@ export default function AdminModerationPage({ currentUser, profile }) {
   };
 
   // isAdmin === null means useIsRinkdAdmin is still resolving. Render a
-  // neutral spinner so a real staff member doesn't see "staff only" flash.
+  // geometric skeleton (not a bare spinner) so a real staff member doesn't
+  // see "staff only" flash while the role lookup is in flight.
   if (isAdmin === null) {
     return (
       <Layout profile={profile}>
-        <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.steel, fontFamily: 'Barlow, sans-serif', fontSize: 14 }}>
-          Getting the ice ready.
+        <div style={{ background: C.dark, minHeight: '100vh', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>
+          <div style={{ maxWidth: 900, margin: '0 auto', padding: '20px 16px 80px' }}>
+            <Skeleton width={200} height={28} style={{ marginBottom: 8 }} />
+            <Skeleton width={280} height={13} style={{ marginBottom: 20 }} />
+            <ModerationListSkeleton />
+          </div>
         </div>
       </Layout>
     );
@@ -141,7 +155,7 @@ export default function AdminModerationPage({ currentUser, profile }) {
     return (
       <Layout profile={profile}>
         <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.ice, gap: 12, padding: 24, textAlign: 'center' }}>
-          <div style={{ fontSize: 40 }}>🔒</div>
+          <Icon name="privacy" size={40} color={C.steel} />
           <div>The moderation queue is Rinkd staff only.</div>
           <button onClick={() => navigate('/home')} style={{ background: C.red, color: '#fff', border: 'none', padding: '10px 18px', borderRadius: 999, cursor: 'pointer' }}>Back to Home</button>
         </div>
@@ -192,7 +206,7 @@ export default function AdminModerationPage({ currentUser, profile }) {
                   Add
                 </button>
               </form>
-              {loading ? <ListRowSkeleton rows={6} /> : blocklist.length === 0 ? (
+              {loading ? <ModerationListSkeleton rows={6} compact /> : blocklist.length === 0 ? (
                 <EmptyState icon="📝" title="Blocklist is empty" body="Add a word or phrase above and Rinkd auto-flags it on sight." />
               ) : (
                 <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
@@ -203,14 +217,17 @@ export default function AdminModerationPage({ currentUser, profile }) {
                         <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 13, color: C.ice, flex: 1 }}>{w.word}</span>
                         <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: sevColor, background: sevColor + '22', border: `1px solid ${sevColor}44`, padding: '3px 8px', borderRadius: 4 }}>{w.severity}</span>
                         {w.notes && <span style={{ fontSize: 11, color: C.steel, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.notes}</span>}
-                        <button onClick={() => deleteWord(w.id)} style={{ background: 'transparent', color: C.steel, border: 'none', cursor: 'pointer', fontSize: 16, padding: 4 }}>×</button>
+                        <button onClick={() => deleteWord(w.id)} aria-label={`Remove ${w.word} from blocklist`}
+                          style={{ width: 44, height: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', color: C.steel, border: 'none', cursor: 'pointer' }}>
+                          <Icon name="close" size={16} />
+                        </button>
                       </div>
                     );
                   })}
                 </div>
               )}
             </>
-          ) : loading ? <ListRowSkeleton rows={4} /> : items.length === 0 ? (
+          ) : loading ? <ModerationListSkeleton rows={4} /> : items.length === 0 ? (
             <EmptyState icon="✅" title="Clean sheet" body={`No flagged ${tab} right now. Nothing for you to review.`} />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -241,12 +258,12 @@ export default function AdminModerationPage({ currentUser, profile }) {
                   )}
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     <button onClick={() => approve(tab, it.id)}
-                      style={{ background: colors.success, color: '#fff', border: 'none', padding: '7px 14px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
-                      ✓ Approve (unhide)
+                      style={{ minHeight: 44, display: 'inline-flex', alignItems: 'center', gap: 6, background: colors.success, color: '#fff', border: 'none', padding: '0 16px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
+                      <Icon name="approved" size={14} /> Approve (unhide)
                     </button>
-                    <button onClick={() => remove(tab, it.id)}
-                      style={{ background: 'transparent', color: C.red, border: `1px solid ${C.red}`, padding: '7px 14px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
-                      🗑 Delete permanently
+                    <button onClick={() => askRemove(tab, it.id)}
+                      style={{ minHeight: 44, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'transparent', color: C.red, border: `1px solid ${C.red}`, padding: '0 16px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
+                      <Icon name="delete" size={14} color={C.red} /> Delete permanently
                     </button>
                   </div>
                 </div>
@@ -255,6 +272,56 @@ export default function AdminModerationPage({ currentUser, profile }) {
           )}
         </div>
       </div>
+
+      <ConfirmSheet
+        open={!!removeTarget}
+        title="Delete this content for good?"
+        body="This can't be undone."
+        confirmLabel="Delete"
+        danger
+        busy={removeBusy}
+        onConfirm={confirmRemove}
+        onCancel={() => setRemoveTarget(null)}
+      />
     </Layout>
+  );
+}
+
+// Geometric stand-in for the flagged-content / blocklist lists — matches the
+// real row shapes instead of a spinner. `compact` mirrors the tighter
+// single-line blocklist rows; the default matches the flagged-content cards.
+function ModerationListSkeleton({ rows = 4, compact = false }) {
+  if (compact) {
+    return (
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+        {Array.from({ length: rows }).map((_, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none' }}>
+            <Skeleton width="40%" height={13} />
+            <Skeleton width={50} height={16} radius={4} style={{ marginLeft: 'auto' }} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <Skeleton width={32} height={32} radius={999} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <Skeleton width="35%" height={13} />
+              <div style={{ height: 4 }} />
+              <Skeleton width="45%" height={11} />
+            </div>
+          </div>
+          <Skeleton width="100%" height={40} radius={8} style={{ marginBottom: 12 }} />
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Skeleton width={130} height={28} radius={999} />
+            <Skeleton width={150} height={28} radius={999} />
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }

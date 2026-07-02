@@ -4,11 +4,11 @@ import Layout from '../components/Layout';
 import TapeText from '../components/TapeText';
 import SEO from '../components/SEO';
 import { Avatar } from '../components/Logos';
-import { EmptyState, ListRowSkeleton } from '../components/Skeletons';
+import { ListRowSkeleton } from '../components/Skeletons';
 import { listNotifications, markRead, markAllRead, deleteNotification, KIND_META } from '../lib/notifications';
 import { timeAgo } from '../lib/posts';
 import { C, colors, motion } from '../lib/tokens';
-import { Icon, ErrorState } from '../components/ui';
+import { Icon, ErrorState, EmptyState, SectionHeader, useToast } from '../components/ui';
 import { transition, prefersReducedMotion } from '../lib/motion';
 import { useOnline } from '../lib/useOnline';
 import { prefetchGamePage, prefetchHandlers } from '../lib/prefetch';
@@ -29,6 +29,7 @@ export default function NotificationsPage({ currentUser, profile }) {
   // Rows mid-exit: fired dismiss, still animating out before filter() drops them.
   const [leaving, setLeaving] = useState(() => new Set());
   const online = useOnline();
+  const { toast } = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -55,8 +56,7 @@ export default function NotificationsPage({ currentUser, profile }) {
   const handleMarkAll = async () => {
     const { error } = await markAllRead();
     if (error) {
-      // eslint-disable-next-line no-alert
-      alert("Couldn't mark everything read. Check your connection and try again.");
+      toast({ message: "Couldn't mark everything read. Check your connection and try again.", tone: 'alert' });
       return;
     }
     setItems((prev) => prev.map((p) => ({ ...p, read_at: p.read_at || new Date().toISOString() })));
@@ -69,8 +69,7 @@ export default function NotificationsPage({ currentUser, profile }) {
     if (prefersReducedMotion()) {
       const { error } = await deleteNotification(id);
       if (error) {
-        // eslint-disable-next-line no-alert
-        alert("Couldn't dismiss that notification. Try again in a moment.");
+        toast({ message: "Couldn't dismiss that notification. Try again in a moment.", tone: 'alert' });
         return;
       }
       setItems((prev) => prev.filter((p) => p.id !== id));
@@ -86,8 +85,7 @@ export default function NotificationsPage({ currentUser, profile }) {
       if (error) {
         // The write failed — un-mark it as leaving so the row settles back in.
         setLeaving((prev) => { const n = new Set(prev); n.delete(id); return n; });
-        // eslint-disable-next-line no-alert
-        alert("Couldn't dismiss that notification. Try again in a moment.");
+        toast({ message: "Couldn't dismiss that notification. Try again in a moment.", tone: 'alert' });
         return;
       }
       setItems((prev) => prev.filter((p) => p.id !== id));
@@ -152,7 +150,7 @@ export default function NotificationsPage({ currentUser, profile }) {
               <>
                 {today.length > 0 && (
                   <>
-                    <LowerThird label="Today" />
+                    <SectionHeader label="Today" />
                     <div style={sectionCard}>
                       {today.map((n, i) => <NotifRow key={n.id} n={n} first={i === 0} leaving={leaving.has(n.id)} onOpen={openOne} onDelete={handleDelete} />)}
                     </div>
@@ -160,7 +158,7 @@ export default function NotificationsPage({ currentUser, profile }) {
                 )}
                 {earlier.length > 0 && (
                   <>
-                    <LowerThird label="Earlier" />
+                    <SectionHeader label="Earlier" />
                     <div style={sectionCard}>
                       {earlier.map((n, i) => <NotifRow key={n.id} n={n} first={i === 0} leaving={leaving.has(n.id)} onOpen={openOne} onDelete={handleDelete} />)}
                     </div>
@@ -188,16 +186,6 @@ function toneFor(kind) {
   if (GOLD_KINDS.has(kind)) return 'gold';
   if (RED_KINDS.has(kind)) return 'red';
   return 'white';
-}
-
-// Broadcast lower-third date divider — white Barlow Condensed 700 italic caps on
-// navy with a red accent slab, bleeding to the content column's left edge.
-function LowerThird({ label }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', background: C.card, borderLeft: '4px solid #D72638', marginLeft: -16, marginBottom: 12, padding: '8px 14px 8px 16px', borderTopRightRadius: 4, borderBottomRightRadius: 4 }}>
-      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 18, lineHeight: 1, letterSpacing: '0.05em', color: C.ice, textTransform: 'uppercase' }}>{label}</span>
-    </div>
-  );
 }
 
 function NotifRow({ n, first, leaving, onOpen, onDelete }) {

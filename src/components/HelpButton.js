@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/authContext';
 import { track } from '../lib/analytics';
 import { C, motion } from '../lib/tokens';
+import { useToast } from './ui';
 
 /**
  * Floating "?" button bottom-right of every page. Opens a help panel with:
@@ -63,6 +64,7 @@ export default function HelpButton() {
   // supabase.auth.getUser() on every mount — HelpButton is rendered by Layout
   // on every page, so the redundant network call was firing on every nav.
   const { user } = useAuth() || {};
+  const { toast } = useToast();
   const location = useLocation();
   // Hide the floating trigger inside a DM thread — the thread pins its composer
   // and Send button to the bottom edge, and the "?" button would overlap them.
@@ -106,7 +108,7 @@ export default function HelpButton() {
       category,
     });
     setSubmitting(false);
-    if (error) { alert("That didn't send — try again: " + error.message); return; }
+    if (error) { toast({ message: "That didn't send — try again: " + error.message, tone: 'alert' }); return; }
     track('bug_report_submitted', { category });
     setSubmitted(true);
     setDescription('');

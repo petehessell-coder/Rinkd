@@ -27,6 +27,11 @@ import { classifyImage } from '../lib/imageModeration';
 import { assignTeamManagerByInput } from '../lib/leagueTeamManagers';
 import { createLeagueSubPools } from '../lib/subPools';
 import { C, colors } from '../lib/tokens';
+import Icon from '../components/ui/Icon';
+import Skeleton from '../components/ui/Skeleton';
+import ErrorState from '../components/ui/ErrorState';
+import ConfirmSheet, { useConfirm, ConfirmSheetHost } from '../components/ui/ConfirmSheet';
+import { useToast, useUndoable } from '../components/ui/ToastHost';
 
 const inputStyle = { width:'100%', background:C.dark, border:`0.5px solid ${C.border}`, borderRadius:8, padding:'10px 12px', color:C.ice, fontFamily:'Barlow, sans-serif', fontSize:14, outline:'none' };
 const LOGO_COLORS = [C.red, C.blue, colors.success, colors.warning, colors.premium, '#0EA5E9', '#EC4899', C.navy];
@@ -73,6 +78,39 @@ function Btn({ onClick, children, disabled, variant = 'primary' }) {
 // (Inline CreateLeague stripped May 19, 2026 — Phase 1 of the league-parity
 //  build ships a real 4-step wizard at /league/create → src/pages/LeagueCreate.js.
 //  LeagueManage now only handles /league/:id/manage.)
+// Geometric loading placeholder mirroring the real page: navy header bar, the
+// horizontal tab strip, then three stacked card rows. Reserves the same
+// dimensions so there's no layout shift when the league hydrates. (Manifesto:
+// never a generic spinner — skeletons match the layout that's coming.)
+function ManageLeagueSkeleton() {
+  return (
+    <div style={{ background: C.dark, minHeight: '100vh', fontFamily: 'Barlow, sans-serif' }}>
+      <div style={{ background: C.navy, padding: '14px 16px', borderBottom: `0.5px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Skeleton width={90} height={13} radius={4} />
+        <Skeleton width={130} height={16} radius={4} />
+        <div style={{ width: 80 }} />
+      </div>
+      <div style={{ display: 'flex', gap: 8, background: C.navy, borderBottom: '2px solid rgba(46,91,140,0.3)', padding: '10px 16px' }}>
+        {[54, 66, 72, 62].map((w, i) => <Skeleton key={i} width={w} height={14} radius={4} />)}
+      </div>
+      <div style={{ padding: 16, maxWidth: 520, margin: '0 auto' }}>
+        {[0, 1, 2].map(i => (
+          <div key={i} style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: '14px 16px', marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <Skeleton width={32} height={32} radius={6} />
+              <div style={{ flex: 1 }}>
+                <Skeleton width="55%" height={13} radius={4} />
+                <div style={{ height: 6 }} />
+                <Skeleton width="35%" height={11} radius={4} />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ManageLeague({ id, navigate }) {
   const [league, setLeague] = useState(null);
   const [teams, setTeams] = useState([]);
@@ -83,6 +121,12 @@ function ManageLeague({ id, navigate }) {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('Teams');
   const [error, setError] = useState(null);
+  // Page-level load failure (distinct from `error`, the inline action-error
+  // banner). Drives the full-page ErrorState when the league never loaded.
+  const [loadError, setLoadError] = useState(null);
+  const confirm = useConfirm();
+  const { toast } = useToast();
+  const runUndoable = useUndoable();
   const [isCommissioner, setIsCommissioner] = useState(false);
   const [registrations, setRegistrations] = useState([]);
   // LEAGUE-DIV-1 M3 — divisions + the active scope. selectedDivisionId is set
@@ -145,6 +189,7 @@ function ManageLeague({ id, navigate }) {
   };
 
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
       // Fetch rinks alongside league/teams/games so the single-game form can
       // attach a real rink_id (and the rink shows up on the game cards via the
@@ -165,7 +210,12 @@ function ManageLeague({ id, navigate }) {
       // division leagues too — new teams then land in the "Main" division).
       setSelectedDivisionId(prev => (prev && (dv || []).some(d => d.id === prev)) ? prev : ((dv || [])[0]?.id || null));
       if (t.length >= 2) setGameForm(p => ({ ...p, home_team_id: t[0].id, away_team_id: t[1].id }));
-    } catch(e) { console.error(e); }
+    } catch(e) {
+      // Surface the failure so a null league renders a designed ErrorState with
+      // a Retry (was: silent console.error → the "← undefined" broken header).
+      console.error(e);
+      setLoadError(e);
+    }
     finally { setLoading(false); }
   }, [id]);
 
@@ -288,12 +338,16 @@ function ManageLeague({ id, navigate }) {
     if (divisions.length <= 1) { setError('A league needs at least one division — add another before deleting this one.'); return; }
     const teamCount = teams.filter(t => t.division_id === div.id).length;
     const gameCount = games.filter(g => g.division_id === div.id).length;
-    const ok = window.confirm(
-      `Delete division "${div.name}"?\n\n` +
-      `• ${teamCount} team${teamCount === 1 ? '' : 's'} will be removed from the league\n` +
-      `• ${gameCount} game${gameCount === 1 ? '' : 's'} will be unassigned (kept, not deleted)\n\n` +
-      `This can't be undone.`
-    );
+    // IRREVERSIBLE: deleteLeagueDivision cascade-deletes the division's
+    // league_teams links and SET-NULLs its games' division_id — recreating the
+    // division mints a new id, so teams/games can't be cleanly reattached.
+    // ConfirmSheet (danger), not useUndoable.
+    const ok = await confirm({
+      title: `Delete "${div.name}"?`,
+      body: `${teamCount} team${teamCount === 1 ? '' : 's'} will be removed from the league. ${gameCount} game${gameCount === 1 ? '' : 's'} will be unassigned (kept, not deleted). This can't be undone.`,
+      confirmLabel: 'Delete division',
+      danger: true,
+    });
     if (!ok) return;
     try { await deleteLeagueDivision(div.id); if (selectedDivisionId === div.id) setSelectedDivisionId(null); await load(); }
     catch (e) { setError(e.message); }
@@ -309,6 +363,27 @@ function ManageLeague({ id, navigate }) {
   const handleAssignTeamDivision = async (leagueTeamId, divId) => {
     try { await assignLeagueTeamDivision(leagueTeamId, divId); await load(); }
     catch (e) { setError(e.message); }
+  };
+
+  // REVERSIBLE: a league_teams row re-inserts cleanly via addLeagueTeam, so a
+  // team-remove is an optimistic remove + 5s Undo (VolunteerCoordinator slot
+  // pattern), not a confirm. The row is pulled from the list instantly; the
+  // hard DELETE is deferred and cancelled if Undo is tapped. Restore re-inserts
+  // from the row's own fields (the id changes on re-add — reload reconciles).
+  const handleRemoveTeam = (lt) => {
+    const name = lt.team?.name || lt.team_name || 'Team';
+    runUndoable({
+      message: `${name} removed from the league`,
+      apply: () => {
+        setTeams(prev => prev.filter(t => t.id !== lt.id));
+        return () => setTeams(prev => prev.some(t => t.id === lt.id) ? prev : [...prev, lt]);
+      },
+      commit: async () => {
+        await removeLeagueTeam(lt.id);
+        try { await load(); } catch { /* reconcile only */ }
+      },
+      errorMessage: "That didn't go through — the team's back. Try again.",
+    });
   };
 
   const multiDivision = divisions.length > 1;
@@ -329,12 +404,35 @@ function ManageLeague({ id, navigate }) {
   // (billing, sponsor inventory, staff, delete).
   const MANAGE_TABS = ['Teams', 'Divisions', 'Schedule', 'Playoffs', ...(isCommissioner ? ['Registrations', 'Sponsors', 'Integrations', 'Staff', 'Settings'] : [])];
 
-  if (loading) return <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Getting the ice ready.</div>;
+  if (loading) return <ManageLeagueSkeleton />;
+
+  // Load failed and there's no league to render — a designed ErrorState with a
+  // Retry beats the old "← undefined" broken header. (Only when the page has no
+  // league; a mid-session action error stays in the inline banner below.)
+  if (!league) return (
+    <div style={{ background: C.dark, minHeight: '100vh', fontFamily: 'Barlow, sans-serif', color: C.ice }}>
+      <div style={{ background: C.navy, padding: '14px 16px', borderBottom: `0.5px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <button onClick={() => navigate('/leagues')} style={{ background: 'none', border: 'none', color: C.steel, fontSize: 13, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>← Leagues</button>
+        <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 16, color: C.ice }}>MANAGE LEAGUE</div>
+        <div style={{ width: 80 }} />
+      </div>
+      <div style={{ padding: 16, maxWidth: 520, margin: '0 auto' }}>
+        <ErrorState
+          title={loadError ? "Couldn't load this league" : 'League not found'}
+          body={loadError
+            ? "A hiccup on our end or your connection. Your setup is safe — tap to try again."
+            : "This league may have been removed, or you don't have access to manage it."}
+          onRetry={loadError ? load : undefined}
+        />
+      </div>
+    </div>
+  );
 
   return (
     <div style={{ background: C.dark, minHeight: '100vh', fontFamily: 'Barlow, sans-serif', color: C.ice }}>
+      <ConfirmSheetHost controller={confirm} />
       <div style={{ background: C.navy, padding: '14px 16px', borderBottom: `0.5px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <button onClick={() => navigate('/league/' + id)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.6)', fontSize: 13, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>← {league?.name}</button>
+        <button onClick={() => navigate('/league/' + id)} style={{ background: 'none', border: 'none', color: C.steel, fontSize: 13, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>← {league?.name}</button>
         <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 16, color: C.ice }}>MANAGE LEAGUE</div>
         <div style={{ width: 80 }} />
       </div>
@@ -353,7 +451,7 @@ function ManageLeague({ id, navigate }) {
       <div style={{ padding: 16, maxWidth: 520, margin: '0 auto' }}>
         {league && league.is_activated === false && (
           <div style={{ background: 'rgba(245,158,11,0.12)', border: '0.5px solid rgba(245,158,11,0.4)', borderRadius: 10, padding: '12px 14px', marginBottom: 14, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-            <div style={{ fontSize: 18 }}>🔒</div>
+            <Icon name="privacy" size={18} color={colors.warning} style={{ marginTop: 1 }} />
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: colors.warning }}>Activation pending</div>
               <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.65)', marginTop: 4, lineHeight: 1.5 }}>
@@ -375,14 +473,14 @@ function ManageLeague({ id, navigate }) {
                 <DivisionPicker divisions={divisions} selectedId={selectedDivisionId} onSelect={setSelectedDivisionId} accent={C.red} />
               </>
             )}
-            <SecLabel>📋 Bulk add — import from a spreadsheet</SecLabel>
+            <SecLabel>Bulk add — import from a spreadsheet</SecLabel>
             <Card>
               <div style={{ fontSize: 13, color: C.steel, lineHeight: 1.6, marginBottom: 12 }}>
                 Got your teams (and schedule) in Excel or Google Sheets? Paste them in and stand up the whole league at once — fastest way to set up.
               </div>
               <button onClick={() => setShowImport(true)}
                 style={{ padding: '11px 18px', borderRadius: 999, background: C.blue, border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 16 }}>📋</span>
+                <Icon name="lineup" size={16} />
                 <span>Import from spreadsheet</span>
               </button>
             </Card>
@@ -426,7 +524,7 @@ function ManageLeague({ id, navigate }) {
 
             <SecLabel>League Teams ({scopedTeamsList.length})</SecLabel>
             <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
-              {scopedTeamsList.length === 0 && <div style={{ padding: 16, fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center' }}>No teams yet — add your first above.</div>}
+              {scopedTeamsList.length === 0 && <div style={{ padding: 16, fontSize: 13, color: C.steel, textAlign: 'center' }}>No teams yet — add your first above.</div>}
               {scopedTeamsList.map(lt => {
                 const name = lt.team?.name || lt.team_name || 'Unknown';
                 const color = lt.team?.logo_color || lt.logo_color || C.blue;
@@ -465,10 +563,12 @@ function ManageLeague({ id, navigate }) {
                           {divisions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                         </select>
                       )}
-                      <button onClick={() => removeLeagueTeam(lt.id).then(load)}
-                        style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.2)', cursor: 'pointer', fontSize: 16 }}
+                      <button onClick={() => handleRemoveTeam(lt)} title={`Remove ${name} from the league`}
+                        aria-label={`Remove ${name} from the league`}
+                        style={{ background: 'none', border: 'none', color: C.steel, cursor: 'pointer', fontSize: 16, width: 44, height: 44, margin: '-11px -13px -11px 0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
                         onMouseEnter={e => e.currentTarget.style.color = C.red}
-                        onMouseLeave={e => e.currentTarget.style.color = 'rgba(244,247,250,0.2)'}>✕</button>
+                        onMouseLeave={e => e.currentTarget.style.color = C.steel}>
+                        <Icon name="close" size={16} /></button>
                     </div>
                     {isAssigning && (
                       <div style={{ padding: '0 14px 12px 56px', display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -514,13 +614,12 @@ function ManageLeague({ id, navigate }) {
                 Pools never appear in the schedule or standings.
               </div>
               {scopedSubPools.length === 0 && (
-                <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.3)', padding: '4px 0 10px' }}>
+                <div style={{ fontSize: 13, color: C.steel, padding: '4px 0 10px' }}>
                   No sub pools yet{multiDivision && selectedDivisionId ? ' for this division' : ''}.
                 </div>
               )}
               {scopedSubPools.map(p => (
                 <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
-                  <span style={{ fontSize: 16 }}>{p.sub_pool_kind === 'goalies' ? '🥅' : '🏒'}</span>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>{p.team?.name || p.team_name}</div>
                     <div style={{ fontSize: 10, color: 'rgba(244,247,250,0.4)', marginTop: 2, textTransform: 'capitalize' }}>{p.sub_pool_kind} pool</div>
@@ -584,7 +683,7 @@ function ManageLeague({ id, navigate }) {
               Each division has its own teams, standings, schedule, and playoffs — all inheriting this league's rules. A single-division league needs no setup; the default "Main" division is already here. Add divisions to split the league (e.g. CAHL's D1 / 4B / 5C).
             </div>
             <Card>
-              {divisions.length === 0 && <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.3)', padding: '6px 0' }}>No divisions yet.</div>}
+              {divisions.length === 0 && <div style={{ fontSize: 13, color: C.steel, padding: '6px 0' }}>No divisions yet.</div>}
               {divisions.map((d, i) => {
                 const teamCount = teams.filter(t => t.division_id === d.id).length;
                 const arrow = (disabled) => ({ background: 'none', border: 'none', color: disabled ? 'rgba(244,247,250,0.15)' : 'rgba(244,247,250,0.55)', cursor: disabled ? 'default' : 'pointer', fontSize: 9, lineHeight: 1.1, padding: 0 });
@@ -598,9 +697,10 @@ function ManageLeague({ id, navigate }) {
                       onBlur={e => { const v = e.target.value.trim(); if (v && v !== d.name) handleRenameDivision(d.id, v); }}
                       style={{ ...inputStyle, flex: 1, marginBottom: 0 }} />
                     <span style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', whiteSpace: 'nowrap' }}>{teamCount} team{teamCount === 1 ? '' : 's'}</span>
-                    <button onClick={() => handleDeleteDivision(d)} title="Delete division"
-                      style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.3)', cursor: 'pointer', fontSize: 15 }}
-                      onMouseEnter={e => e.currentTarget.style.color = C.red} onMouseLeave={e => e.currentTarget.style.color = 'rgba(244,247,250,0.3)'}>🗑</button>
+                    <button onClick={() => handleDeleteDivision(d)} title="Delete division" aria-label={`Delete division ${d.name}`}
+                      style={{ background: 'none', border: 'none', color: C.steel, cursor: 'pointer', width: 44, height: 44, margin: '-11px -11px -11px 0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                      onMouseEnter={e => e.currentTarget.style.color = C.red} onMouseLeave={e => e.currentTarget.style.color = C.steel}>
+                      <Icon name="delete" size={15} /></button>
                   </div>
                 );
               })}
@@ -625,19 +725,19 @@ function ManageLeague({ id, navigate }) {
                 <DivisionPicker divisions={divisions} selectedId={selectedDivisionId} onSelect={setSelectedDivisionId} accent={C.red} />
               </>
             )}
-            <SecLabel>📋 Already have a schedule? Import it</SecLabel>
+            <SecLabel>Already have a schedule? Import it</SecLabel>
             <Card>
               <div style={{ fontSize: 13, color: C.steel, lineHeight: 1.6, marginBottom: 12 }}>
                 Paste your teams and schedule straight from a spreadsheet (Excel / Google Sheets) and stand up the whole league in one shot — the fastest way to get live.
               </div>
               <button onClick={() => setShowImport(true)}
                 style={{ padding: '11px 18px', borderRadius: 999, background: C.blue, border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 16 }}>📋</span>
+                <Icon name="lineup" size={16} />
                 <span>Import from spreadsheet</span>
               </button>
             </Card>
 
-            <SecLabel>⚡ Smart Generator — Target Games Per Team</SecLabel>
+            <SecLabel>Smart Generator — Target Games Per Team</SecLabel>
             <Card>
               <SmartScheduleGenerator
                 leagueId={id}
@@ -658,7 +758,7 @@ function ManageLeague({ id, navigate }) {
               <button onClick={() => setShowScheduleBuilder(true)}
                 disabled={!scopedTeamsList || scopedTeamsList.length < 2}
                 style={{ padding: '11px 18px', borderRadius: 999, background: scopedTeamsList.length < 2 ? C.border : C.blue, border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: scopedTeamsList.length < 2 ? 'not-allowed' : 'pointer', fontFamily: 'Barlow, sans-serif', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 16 }}>📅</span>
+                <Icon name="calendar" size={16} />
                 <span>Open advanced builder</span>
               </button>
             </Card>
@@ -701,7 +801,7 @@ function ManageLeague({ id, navigate }) {
 
             <SecLabel>Schedule ({scopedGamesList.length} games)</SecLabel>
             <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
-              {scopedGamesList.length === 0 && <div style={{ padding: 16, fontSize: 13, color: 'rgba(244,247,250,0.3)', textAlign: 'center' }}>No games yet — run the Smart Generator above to build the slate.</div>}
+              {scopedGamesList.length === 0 && <div style={{ padding: 16, fontSize: 13, color: C.steel, textAlign: 'center' }}>No games yet — run the Smart Generator above to build the slate.</div>}
               {scopedGamesList.map(g => {
                 const home = g.home_lt?.team?.name || g.home_lt?.team_name;
                 const away = g.away_lt?.team?.name || g.away_lt?.team_name;
@@ -715,7 +815,7 @@ function ManageLeague({ id, navigate }) {
                       <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 1 }}>
                         {new Date(g.start_time).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                         {g.rink?.name ? ` · ${g.rink.sub_rink ? `${g.rink.sub_rink} · ` : ''}${g.rink.name}` : ''}
-                        {g.youtube_url ? ' · 📺 stream' : ''}
+                        {g.youtube_url ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, marginLeft: 4, verticalAlign: 'middle' }}><Icon name="fan" size={12} /> stream</span> : ''}
                       </div>
                     </div>
                     {isFinal && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: 'rgba(244,247,250,0.08)', color: 'rgba(244,247,250,0.4)' }}>FINAL</span>}
@@ -840,6 +940,8 @@ function LeagueIntegrationsTab({ league, games = [], onSave }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [ok, setOk] = useState('');
+  // Disconnect is irreversible-class (stops syncing) → branded ConfirmSheet.
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
 
   const saveHockeyshift = async () => {
     setErr(''); setOk('');
@@ -858,8 +960,7 @@ function LeagueIntegrationsTab({ league, games = [], onSave }) {
   };
 
   const disconnect = async () => {
-    // eslint-disable-next-line no-alert
-    if (!window.confirm('Disconnect HockeyShift? Future syncs stop — teams and games already imported stay put. You can reconnect anytime.')) return;
+    setConfirmDisconnect(false);
     setErr(''); setOk(''); setBusy(true);
     try {
       const hs = { ...(league.settings?.hockeyshift || {}) };
@@ -906,7 +1007,7 @@ function LeagueIntegrationsTab({ league, games = [], onSave }) {
             <input value={divId} onChange={(e) => setDivId(e.target.value)} placeholder="HockeyShift division id (e.g. 48313)" style={{ ...inputStyle, flex: 1 }} />
             <Btn onClick={saveHockeyshift} disabled={busy || !authorized}>{busy ? 'Saving…' : 'Update'}</Btn>
           </div>
-          <button onClick={disconnect} disabled={busy} style={{ background: 'none', border: `1px solid ${C.red}`, color: C.red, borderRadius: 999, padding: '6px 14px', fontSize: 12, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif', marginTop: 10 }}>Disconnect</button>
+          <button onClick={() => setConfirmDisconnect(true)} disabled={busy} style={{ background: 'none', border: `1px solid ${C.red}`, color: C.red, borderRadius: 999, padding: '6px 14px', fontSize: 12, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif', marginTop: 10 }}>Disconnect</button>
         </div>
       ) : (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: 14, opacity: authorized ? 1 : 0.55 }}>
@@ -927,6 +1028,17 @@ function LeagueIntegrationsTab({ league, games = [], onSave }) {
       {/* GameSheet — live for leagues (GAMESHEET-LEAGUES-1) */}
       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', color: C.ice, textTransform: 'uppercase', margin: '26px 0 4px', paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}>GameSheet</div>
       <LeagueGameSheetSection league={league} games={games} />
+
+      <ConfirmSheet
+        open={confirmDisconnect}
+        title="Disconnect HockeyShift?"
+        body="Future syncs stop — teams and games already imported stay put. You can reconnect anytime."
+        confirmLabel="Disconnect"
+        danger
+        busy={busy}
+        onConfirm={disconnect}
+        onCancel={() => setConfirmDisconnect(false)}
+      />
     </div>
   );
 }
@@ -950,6 +1062,9 @@ function LeagueGameSheetSection({ league, games = [] }) {
   // Per-unmatched-row manual game pick (mapId → league_games id).
   const [pick, setPick] = useState({});
   const [msg, setMsg] = useState(null); // { kind:'ok'|'err', text }
+  // Unlink is irreversible-class (stops syncing this season) → ConfirmSheet.
+  // Holds the pending link row while the confirm sheet is open.
+  const [dropTarget, setDropTarget] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -989,9 +1104,10 @@ function LeagueGameSheetSection({ league, games = [] }) {
     if (error) { setMsg({ kind: 'err', text: error.message }); return; }
     load();
   };
-  const dropLink = async (lk) => {
-    // eslint-disable-next-line no-alert
-    if (!window.confirm(`Unlink GameSheet season ${lk.gamesheet_season_id}? Scores already synced stay put — only future syncs stop. You can relink anytime.`)) return;
+  const dropLink = async () => {
+    const lk = dropTarget;
+    setDropTarget(null);
+    if (!lk) return;
     const { error } = await removeLeagueLink(lk.id, leagueId);
     if (error) { setMsg({ kind: 'err', text: error.message }); return; }
     setMsg({ kind: 'ok', text: 'Unlinked.' }); load();
@@ -1052,7 +1168,7 @@ function LeagueGameSheetSection({ league, games = [] }) {
               </div>
             </div>
             <button onClick={() => toggleLink(lk)} style={{ background: 'transparent', color: C.ice, border: `1px solid ${C.border}`, borderRadius: 999, padding: '6px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>{lk.status === 'active' ? 'Pause' : 'Resume'}</button>
-            <button onClick={() => dropLink(lk)} style={{ background: 'transparent', color: C.red, border: `1px solid ${C.red}`, borderRadius: 999, padding: '6px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>Unlink</button>
+            <button onClick={() => setDropTarget(lk)} style={{ background: 'transparent', color: C.red, border: `1px solid ${C.red}`, borderRadius: 999, padding: '6px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>Unlink</button>
           </div>
         ))}
         <div style={{ display: 'flex', gap: 8, marginTop: links.length ? 12 : 0 }}>
@@ -1071,7 +1187,18 @@ function LeagueGameSheetSection({ league, games = [] }) {
       {msg && <div style={{ color: msg.kind === 'ok' ? colors.success : C.red, fontSize: 12.5, margin: '0 0 14px' }}>{msg.text}</div>}
 
       {loading ? (
-        <div style={{ textAlign: 'center', color: C.steel, padding: '24px 0', fontSize: 13 }}>Getting the ice ready.</div>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
+          {[0, 1, 2].map(i => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none' }}>
+              <div style={{ flex: 1 }}>
+                <Skeleton width="60%" height={13} radius={4} />
+                <div style={{ height: 6 }} />
+                <Skeleton width="40%" height={11} radius={4} />
+              </div>
+              <Skeleton width={64} height={22} radius={999} />
+            </div>
+          ))}
+        </div>
       ) : !hasLink ? null : (
         <>
           {/* Pending matches — commissioner confirms before any score is written */}
@@ -1135,6 +1262,16 @@ function LeagueGameSheetSection({ league, games = [] }) {
           )}
         </>
       )}
+
+      <ConfirmSheet
+        open={!!dropTarget}
+        title="Unlink this season?"
+        body={dropTarget ? `Unlink GameSheet season ${dropTarget.gamesheet_season_id}? Scores already synced stay put — only future syncs stop. You can relink anytime.` : ''}
+        confirmLabel="Unlink"
+        danger
+        onConfirm={dropLink}
+        onCancel={() => setDropTarget(null)}
+      />
     </div>
   );
 }
@@ -1287,7 +1424,7 @@ function PlayoffsTab({ leagueId, teams, standings, games, rinks, divisionId = nu
   return (
     <>
       {/* Bracket / scheduling form */}
-      <SecLabel>🏆 Generate Playoff Bracket</SecLabel>
+      <SecLabel>Generate Playoff Bracket</SecLabel>
       <Card>
         <div style={{ fontSize: 13, color: C.steel, lineHeight: 1.6, marginBottom: 12 }}>
           {hasRound1
@@ -1405,9 +1542,10 @@ function PlayoffsTab({ leagueId, teams, standings, games, rinks, divisionId = nu
                 background: busy || round1Preview.error || round1Preview.rows.length === 0 ? C.border : C.red,
                 border: 'none', color: '#fff', fontSize: 13, fontWeight: 700,
                 cursor: busy || round1Preview.error || round1Preview.rows.length === 0 ? 'not-allowed' : 'pointer',
-                fontFamily: 'Barlow, sans-serif',
+                fontFamily: 'Barlow, sans-serif', display: 'inline-flex', alignItems: 'center', gap: 6,
               }}>
-              {busy ? 'Generating…' : `🏆 Generate ${round1Preview.label || 'round 1'} (${round1Preview.rows.length} games)`}
+              {!busy && <Icon name="build" size={15} />}
+              <span>{busy ? 'Generating…' : `Generate ${round1Preview.label || 'round 1'} (${round1Preview.rows.length} games)`}</span>
             </button>
           </div>
         )}
@@ -1460,9 +1598,10 @@ function PlayoffsTab({ leagueId, teams, standings, games, rinks, divisionId = nu
                 background: busy || !nextRoundPreview || nextRoundPreview.error || (nextRoundPreview.rows?.length || 0) === 0 ? C.border : C.red,
                 border: 'none', color: '#fff', fontSize: 13, fontWeight: 700,
                 cursor: busy || !nextRoundPreview || nextRoundPreview.error || (nextRoundPreview.rows?.length || 0) === 0 ? 'not-allowed' : 'pointer',
-                fontFamily: 'Barlow, sans-serif',
+                fontFamily: 'Barlow, sans-serif', display: 'inline-flex', alignItems: 'center', gap: 6,
               }}>
-              {busy ? 'Generating…' : `🏆 Generate ${nextRoundPreview?.label || 'next round'} (${nextRoundPreview?.rows?.length || 0} games)`}
+              {!busy && <Icon name="build" size={15} />}
+              <span>{busy ? 'Generating…' : `Generate ${nextRoundPreview?.label || 'next round'} (${nextRoundPreview?.rows?.length || 0} games)`}</span>
             </button>
           </div>
         )}
@@ -1732,7 +1871,6 @@ function SmartScheduleGenerator({ leagueId, teams, rinks, divisionId = null, onP
           cursor: busy || !preview || preview.shape.totalGames === 0 ? 'not-allowed' : 'pointer',
           fontFamily: 'Barlow, sans-serif', display: 'inline-flex', alignItems: 'center', gap: 8,
         }}>
-        <span style={{ fontSize: 16 }}>⚡</span>
         <span>
           {busy ? 'Generating…' : confirmExisting ? `Confirm — insert ${preview?.shape?.totalGames || 0} games` : 'Generate Schedule'}
         </span>
@@ -1757,6 +1895,7 @@ const REG_STATUS = {
 const REG_GROUPS = [['pending', 'Pending'], ['approved', 'Approved'], ['waitlisted', 'Waitlisted'], ['rejected', 'Rejected']];
 
 function RegistrationsTab({ leagueId, league, registrations, onChanged }) {
+  const { toast } = useToast();
   const [open, setOpen] = useState(!!league.registration_open);
   const [feeDollars, setFeeDollars] = useState(league.registration_fee_cents ? String(league.registration_fee_cents / 100) : '');
   const [deadline, setDeadline] = useState(league.registration_deadline || '');
@@ -1822,7 +1961,7 @@ function RegistrationsTab({ leagueId, league, registrations, onChanged }) {
       if (action === 'approve') await approveRegistration(reg.id);
       else await updateRegistrationStatus(reg.id, action); // 'rejected' | 'waitlisted'
       await onChanged();
-    } catch (e) { alert(e.message || 'Action failed.'); }
+    } catch (e) { toast({ message: e.message || 'Action failed.', tone: 'alert' }); }
     finally { setBusyId(null); }
   };
 
@@ -1897,7 +2036,7 @@ function RegistrationsTab({ leagueId, league, registrations, onChanged }) {
           <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.5)' }}>Checking payout status…</div>
         ) : payoutsReady ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 18 }}>✅</span>
+            <Icon name="approved" size={18} color={colors.success} />
             <div>
               <div style={{ fontSize: 14, fontWeight: 700, color: C.ice }}>Payouts connected</div>
               <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.5)', marginTop: 2 }}>
@@ -1912,8 +2051,9 @@ function RegistrationsTab({ leagueId, league, registrations, onChanged }) {
               Paid registration works right now — fees collect through Rinkd and we settle up with you. Want entry fees deposited straight to your bank automatically instead? Connect a Stripe account (you keep 99%). You can do this anytime.
             </div>
             <button onClick={handleConnect} disabled={connecting}
-              style={{ padding: '11px 18px', background: 'transparent', border: `0.5px solid ${C.border}`, borderRadius: 999, color: C.ice, fontSize: 14, fontWeight: 700, cursor: connecting ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif', opacity: connecting ? 0.6 : 1 }}>
-              {connecting ? 'Opening Stripe…' : '💳 Connect payouts'}
+              style={{ padding: '11px 18px', background: 'transparent', border: `0.5px solid ${C.border}`, borderRadius: 999, color: C.ice, fontSize: 14, fontWeight: 700, cursor: connecting ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif', opacity: connecting ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              {!connecting && <Icon name="connect" size={16} />}
+              <span>{connecting ? 'Opening Stripe…' : 'Connect payouts'}</span>
             </button>
             {connectReturn && (
               <div style={{ fontSize: 12, color: colors.warning, marginTop: 10 }}>
@@ -1960,8 +2100,9 @@ function RegistrationsTab({ leagueId, league, registrations, onChanged }) {
             {savingCfg ? 'Saving…' : 'Save Settings'}
           </button>
           <button onClick={copyLink}
-            style={{ padding: '11px 16px', background: 'transparent', border: `0.5px solid ${C.border}`, borderRadius: 999, color: copied ? colors.success : C.ice, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>
-            {copied ? '✓ Copied' : '🔗 Copy Link'}
+            style={{ padding: '11px 16px', background: 'transparent', border: `0.5px solid ${C.border}`, borderRadius: 999, color: copied ? colors.success : C.ice, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'Barlow, sans-serif', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Icon name={copied ? 'approved' : 'link'} size={15} />
+            <span>{copied ? 'Copied' : 'Copy Link'}</span>
           </button>
         </div>
         {cfgFlash && <div style={{ marginTop: 10, fontSize: 12, color: cfgFlash.kind === 'ok' ? colors.success : C.red }}>{cfgFlash.text}</div>}
@@ -1973,14 +2114,15 @@ function RegistrationsTab({ leagueId, league, registrations, onChanged }) {
         <SecLabel>Registrations ({registrations.length})</SecLabel>
         {registrations.length > 0 && (
           <button onClick={exportCsv}
-            style={{ fontSize: 12, fontWeight: 700, color: C.steel, background: 'transparent', border: `0.5px solid ${C.border}`, borderRadius: 999, padding: '5px 12px', cursor: 'pointer', fontFamily: 'Barlow, sans-serif' }}>
-            ⬇ Export CSV
+            style={{ fontSize: 12, fontWeight: 700, color: C.steel, background: 'transparent', border: `0.5px solid ${C.border}`, borderRadius: 999, padding: '5px 12px', cursor: 'pointer', fontFamily: 'Barlow, sans-serif', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Icon name="export" size={13} />
+            <span>Export CSV</span>
           </button>
         )}
       </div>
 
       {registrations.length === 0 && (
-        <Card><div style={{ fontSize: 13, color: 'rgba(244,247,250,0.4)', textAlign: 'center', padding: '8px 0' }}>No registrations yet. Share your link to start collecting teams.</div></Card>
+        <Card><div style={{ fontSize: 13, color: C.steel, textAlign: 'center', padding: '8px 0' }}>No registrations yet. Share your link to start collecting teams.</div></Card>
       )}
 
       {REG_GROUPS.map(([status, title]) => {
@@ -1993,8 +2135,9 @@ function RegistrationsTab({ leagueId, league, registrations, onChanged }) {
             {status === 'pending' && paidPending.length >= 2 && (
               <div style={{ marginBottom: 8 }}>
                 <button onClick={approveAllPaid} disabled={!!bulkApproving}
-                  style={{ fontSize: 12, fontWeight: 700, padding: '7px 14px', borderRadius: 999, cursor: bulkApproving ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif', border: '0.5px solid rgba(34,197,94,0.5)', background: 'rgba(34,197,94,0.15)', color: colors.success, opacity: bulkApproving ? 0.7 : 1 }}>
-                  {bulkApproving ? `Approving ${bulkApproving.done}/${bulkApproving.total}…` : `✓ Approve all paid (${paidPending.length})`}
+                  style={{ fontSize: 12, fontWeight: 700, padding: '7px 14px', borderRadius: 999, cursor: bulkApproving ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif', border: '0.5px solid rgba(34,197,94,0.5)', background: 'rgba(34,197,94,0.15)', color: colors.success, opacity: bulkApproving ? 0.7 : 1, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  {!bulkApproving && <Icon name="approved" size={13} />}
+                  <span>{bulkApproving ? `Approving ${bulkApproving.done}/${bulkApproving.total}…` : `Approve all paid (${paidPending.length})`}</span>
                 </button>
                 {bulkFlash && <span style={{ marginLeft: 10, fontSize: 12, color: bulkFlash.kind === 'ok' ? colors.success : colors.redSoft }}>{bulkFlash.text}</span>}
               </div>
@@ -2071,6 +2214,7 @@ function LeagueSettings({ league, onSave }) {
     usah_classification: league.usah_classification || '',
     division_label: league.division_label || '',
   });
+  const { toast } = useToast();
   const [saving, setSaving] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
@@ -2084,13 +2228,13 @@ function LeagueSettings({ league, onSave }) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
-      alert(`Logo is ${(file.size / 1024 / 1024).toFixed(1)}MB — max 5MB.`);
+      toast({ message: `Logo is ${(file.size / 1024 / 1024).toFixed(1)}MB — max 5MB.`, tone: 'alert' });
       e.target.value = '';
       return;
     }
     const verdict = await classifyImage(file);
     if (!verdict.ok) {
-      alert("Looks like this image may violate Rinkd's community guidelines. Try a different one.");
+      toast({ message: "Looks like this image may violate Rinkd's community guidelines. Try a different one.", tone: 'alert' });
       e.target.value = '';
       return;
     }
@@ -2098,7 +2242,7 @@ function LeagueSettings({ league, onSave }) {
     const { data: { user } } = await supabase.auth.getUser();
     const { url, error: upErr } = await uploadMedia(file, user.id);
     setUploadingLogo(false);
-    if (upErr || !url) { alert("That logo didn't upload — check your connection and try again."); return; }
+    if (upErr || !url) { toast({ message: "That logo didn't upload — check your connection and try again.", tone: 'alert' }); return; }
     set('logo_url', url);
   };
 
@@ -2119,8 +2263,9 @@ function LeagueSettings({ league, onSave }) {
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
-            <label style={{ cursor: 'pointer', fontSize: 11, color: '#9BB5D6', padding: '5px 12px', borderRadius: 999, background: 'rgba(46,91,140,0.25)', border: '0.5px solid rgba(46,91,140,0.5)' }}>
-              {uploadingLogo ? 'Uploading…' : form.logo_url ? '📷 Replace logo' : '📷 Upload logo'}
+            <label style={{ cursor: 'pointer', fontSize: 11, color: '#9BB5D6', padding: '5px 12px', borderRadius: 999, background: 'rgba(46,91,140,0.25)', border: '0.5px solid rgba(46,91,140,0.5)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              {!uploadingLogo && <Icon name="camera" size={13} />}
+              <span>{uploadingLogo ? 'Uploading…' : form.logo_url ? 'Replace logo' : 'Upload logo'}</span>
               <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} disabled={uploadingLogo} />
             </label>
             {form.logo_url && (

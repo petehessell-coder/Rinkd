@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
 import { captureDataError } from '../lib/sentry';
 import { isExtraCommissioner } from '../lib/leagueCommissioners';
-import { Icon, BounceNumber, ErrorState } from '../components/ui';
+import { Icon, BounceNumber, ErrorState, Skeleton } from '../components/ui';
 import Layout from '../components/Layout';
 import RsvpBlock from '../components/RsvpBlock';
 import MapLink from '../components/MapLink';
@@ -300,7 +300,36 @@ export default function GameDetail({ profile }) {
 
   if (loading) return (
     <Layout profile={profile}>
-      <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Getting the ice ready.</div>
+      <div style={{ background: C.dark, minHeight: '100vh' }}>
+        {/* Score-box-shaped skeleton — mirrors the hydrated SCORE BOX layout
+            below (two team columns flanking a center score) so there's no
+            layout shift when the real game loads. */}
+        <div style={{ background: 'linear-gradient(135deg,#0B1F3A 0%,#112236 100%)', padding: '24px 16px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 16 }}>
+            <div style={{ flex: 1, textAlign: 'center' }}>
+              <Skeleton width={52} height={52} radius={10} style={{ margin: '0 auto 8px' }} />
+              <Skeleton width="70%" height={13} style={{ margin: '0 auto' }} />
+            </div>
+            <div style={{ textAlign: 'center', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Skeleton width={44} height={62} />
+                <span style={{ fontSize: 24, color: 'rgba(244,247,250,0.3)', fontWeight: 300 }}>–</span>
+                <Skeleton width={44} height={62} />
+              </div>
+              <Skeleton width={64} height={16} radius={20} style={{ margin: '10px auto 0' }} />
+            </div>
+            <div style={{ flex: 1, textAlign: 'center' }}>
+              <Skeleton width={52} height={52} radius={10} style={{ margin: '0 auto 8px' }} />
+              <Skeleton width="70%" height={13} style={{ margin: '0 auto' }} />
+            </div>
+          </div>
+        </div>
+        <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <Skeleton width="40%" height={11} />
+          <Skeleton width="100%" height={54} radius={12} />
+          <Skeleton width="100%" height={54} radius={12} />
+        </div>
+      </div>
     </Layout>
   );
 
@@ -677,7 +706,7 @@ export default function GameDetail({ profile }) {
           {/* SCORER VIEW BUTTON — team-only games don't have a scoresheet */}
           {isOrganizer && !isFinal && !isTeamGame && (
             <button onClick={() => navigate(isLeague ? `/league-scorer/${gameId}?type=league` : `/scorer/${gameId}`)}
-              style={{ width: '100%', padding: '11px', background: 'rgba(46,91,140,0.2)', border: `0.5px solid ${C.border}`, borderRadius: 10, color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              style={{ width: '100%', padding: '11px', minHeight: 44, background: 'rgba(46,91,140,0.2)', border: `0.5px solid ${C.border}`, borderRadius: 10, color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
               onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
               onMouseLeave={e => { e.currentTarget.style.background = 'rgba(46,91,140,0.2)'; e.currentTarget.style.color = C.ice; }}>
               <Icon name="scorer" size={16} /> Open Scorer View

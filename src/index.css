@@ -18,6 +18,22 @@
   .rinkd-pressable:hover { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4); }
 }
 
+/* S10 — :focus-visible ring (regression restore). A visible 2px ring in the
+   Rinkd blue family so keyboard + assistive-tech users always see focus. Scoped
+   to :focus-visible ONLY (never plain :focus) so mouse/touch clicks don't draw a
+   ring, and applied to every natively-focusable control plus [tabindex] widgets.
+   outline (not box-shadow) so it survives on elements with their own shadows and
+   never triggers layout shift. */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid rgba(46, 91, 140, 0.9);
+  outline-offset: 2px;
+}
+
 /* Rinkd dark calendar override */
 .rinkd-cal { background: #0B1F3A !important; border: 0.5px solid rgba(46,91,140,0.5) !important; border-radius: 12px !important; font-family: 'Barlow', sans-serif !important; color: #F4F7FA !important; }
 .rinkd-cal .react-datepicker__header { background: #07111F !important; border-bottom: 0.5px solid rgba(46,91,140,0.4) !important; border-radius: 12px 12px 0 0 !important; }

@@ -6,6 +6,7 @@ import { TeamLogo } from '../components/Logos';
 import { useIsRinkdAdmin } from '../lib/userRole';
 import { deleteTournamentAsAdmin, deleteLeagueAsAdmin, deleteTeamAsAdmin } from '../lib/adminDelete';
 import { C, colors } from '../lib/tokens';
+import { Icon, Skeleton, EmptyState } from '../components/ui';
 
 // Admin activation console. Rinkd staff only.
 //
@@ -98,9 +99,9 @@ function Row({ kind, item, onToggle, onDelete, busyId }) {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
         {kind !== 'team' && <Toggle value={isActivated} busy={busyId === item.id} onChange={(v) => onToggle(kind, item.id, v)} />}
-        <button title="Delete permanently" onClick={() => onDelete(kind, item)}
-          style={{ background: 'transparent', border: '0.5px solid rgba(215,38,56,0.5)', color: C.red, borderRadius: 8, padding: '5px 9px', cursor: 'pointer', fontSize: 13, lineHeight: 1 }}>
-          🗑
+        <button title="Delete permanently" aria-label={`Delete ${item.name} permanently`} onClick={() => onDelete(kind, item)}
+          style={{ width: 44, height: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: '0.5px solid rgba(215,38,56,0.5)', color: C.red, borderRadius: 8, cursor: 'pointer' }}>
+          <Icon name="delete" size={15} color={C.red} />
         </button>
       </div>
     </div>
@@ -253,14 +254,30 @@ export default function AdminActivations({ currentUser, profile }) {
 
   if (loading || isAdmin === null) return (
     <Layout profile={profile}>
-      <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice }}>Loading activations…</div>
+      <div style={{ background: C.dark, minHeight: '100vh', padding: 20, fontFamily: 'Barlow, sans-serif', color: C.ice, maxWidth: 720, margin: '0 auto' }}>
+        <Skeleton width={160} height={26} style={{ marginBottom: 8 }} />
+        <Skeleton width={260} height={12} style={{ marginBottom: 20 }} />
+        <Skeleton width={140} height={11} style={{ marginBottom: 8 }} />
+        <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 18 }}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderBottom: i < 3 ? '0.5px solid rgba(244,247,250,0.06)' : 'none' }}>
+              <Skeleton width={36} height={36} radius={8} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Skeleton width="45%" height={14} />
+                <div style={{ height: 6 }} />
+                <Skeleton width="30%" height={11} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </Layout>
   );
 
   if (!isAdmin) return (
     <Layout profile={profile}>
       <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.ice, gap: 12, padding: 24, textAlign: 'center' }}>
-        <div style={{ fontSize: 40 }}>🔒</div>
+        <Icon name="privacy" size={40} color={C.steel} />
         <div>Activations is Rinkd staff only.</div>
         <button onClick={() => navigate('/home')} style={{ background: C.red, color: '#fff', border: 'none', padding: '10px 18px', borderRadius: 999, cursor: 'pointer' }}>Back to Home</button>
       </div>
@@ -323,7 +340,7 @@ export default function AdminActivations({ currentUser, profile }) {
         </div>
         <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 18 }}>
           {filtered.tournaments.length === 0 ? (
-            <div style={{ padding: 16, fontSize: 13, color: C.steel, textAlign: 'center' }}>None match this filter.</div>
+            <EmptyState compact icon="🏆" title="No tournaments" body="None match this filter." style={{ border: 'none', borderRadius: 0 }} />
           ) : (
             filtered.tournaments.map((t) => (
               <Row key={t.id} kind="tournament" item={t} onToggle={onToggle} onDelete={onDelete} busyId={busyId} />
@@ -337,7 +354,7 @@ export default function AdminActivations({ currentUser, profile }) {
         </div>
         <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 18 }}>
           {filtered.leagues.length === 0 ? (
-            <div style={{ padding: 16, fontSize: 13, color: C.steel, textAlign: 'center' }}>None match this filter.</div>
+            <EmptyState compact icon="🏒" title="No leagues" body="None match this filter." style={{ border: 'none', borderRadius: 0 }} />
           ) : (
             filtered.leagues.map((l) => (
               <Row key={l.id} kind="league" item={l} onToggle={onToggle} onDelete={onDelete} busyId={busyId} />
@@ -351,7 +368,7 @@ export default function AdminActivations({ currentUser, profile }) {
         </div>
         <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
           {filtered.teams.length === 0 ? (
-            <div style={{ padding: 16, fontSize: 13, color: C.steel, textAlign: 'center' }}>{search ? 'No teams match.' : 'No teams.'}</div>
+            <EmptyState compact icon="👥" title="No teams" body={search ? 'No teams match.' : 'No teams yet.'} style={{ border: 'none', borderRadius: 0 }} />
           ) : (
             filtered.teams.map((tm) => (
               <Row key={tm.id} kind="team" item={tm} onToggle={onToggle} onDelete={onDelete} busyId={busyId} />
@@ -360,7 +377,7 @@ export default function AdminActivations({ currentUser, profile }) {
         </div>
 
         <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 18, lineHeight: 1.6 }}>
-          <strong>How it works:</strong> non-activated events can be configured (teams, schedule, bracket) and have visible public pages, but live scoring + auto-recap pushes are blocked at the RLS layer. Flip activated only after billing is complete. <strong style={{ color: C.red }}>🗑 Delete</strong> permanently removes an event/team and all its data (games, stats, recaps, rosters) — admins only, irreversible.
+          <strong>How it works:</strong> non-activated events can be configured (teams, schedule, bracket) and have visible public pages, but live scoring + auto-recap pushes are blocked at the RLS layer. Flip activated only after billing is complete. <strong style={{ color: C.red, display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: 'middle' }}><Icon name="delete" size={11} color={C.red} /> Delete</strong> permanently removes an event/team and all its data (games, stats, recaps, rosters) — admins only, irreversible.
         </div>
       </div>
       <DeleteModal target={deleteTarget} busy={deleteBusy} error={deleteError}

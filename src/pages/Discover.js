@@ -5,7 +5,8 @@ import SEO from '../components/SEO';
 import { Icon } from '../components/ui';
 import { Avatar, TierBadge, TeamLogo } from '../components/Logos';
 import TapeText from '../components/TapeText';
-import { CardGridSkeleton, ListRowSkeleton, EmptyState } from '../components/Skeletons';
+import { CardGridSkeleton, ListRowSkeleton } from '../components/Skeletons';
+import EmptyState from '../components/ui/EmptyState';
 import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
 import { followUser, unfollowUser, timeAgo } from '../lib/posts';
@@ -86,7 +87,7 @@ function PlayerRow({ p, currentUser, onOpen, isFollowingProp = false }) {
             background: following ? 'transparent' : C.red,
             color: following ? C.steel : '#fff',
             border: following ? `1px solid ${C.border}` : 'none',
-            padding: '6px 14px', borderRadius: 999, cursor: 'pointer',
+            padding: '6px 14px', minHeight: 44, borderRadius: 999, cursor: 'pointer',
             fontSize: 12, fontWeight: 700, fontFamily: 'Barlow, sans-serif',
           }}>
           {following ? 'Following' : 'Follow'}
@@ -374,7 +375,7 @@ export default function Discover({ currentUser, profile }) {
               <button key={t.id} onClick={() => setTab(t.id)}
                 style={{
                   background: 'transparent', color: tab === t.id ? C.ice : C.steel,
-                  border: 'none', padding: '10px 16px', cursor: 'pointer',
+                  border: 'none', padding: '10px 16px', minHeight: 44, cursor: 'pointer',
                   fontSize: 13, fontWeight: tab === t.id ? 700 : 500,
                   borderBottom: tab === t.id ? `3px solid ${C.red}` : '3px solid transparent',
                   fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap',

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { subscribeToPush, isPushSubscribed, unsubscribeFromPush } from '../lib/push';
 import Layout from '../components/Layout';
 import { C, colors } from '../lib/tokens';
-import { Icon, StatNumber, ErrorState, Img } from '../components/ui';
+import { Icon, StatNumber, ErrorState, Img, SectionHeader, Skeleton, useToast } from '../components/ui';
 import { number, plural } from '../lib/format';
 import { TierBadge } from '../components/Logos';
 import { updateProfile, PROFILE_SELECT } from '../lib/auth';
@@ -34,27 +34,6 @@ const initialsFromName = (name) => {
   const parts = String(name).trim().split(/\s+/);
   return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase();
 };
-
-// Broadcast lower-third section header — white Barlow Condensed 700 italic caps
-// on solid navy (#0f2847), bleeding to the column's left edge with a red accent
-// slab. The manifesto section-header pattern, not a generic label.
-function LowerThird({ label }) {
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center',
-      background: C.card, borderLeft: `4px solid ${C.red}`,
-      marginLeft: -16, marginBottom: 12, padding: '8px 14px 8px 16px',
-      borderTopRightRadius: 4, borderBottomRightRadius: 4,
-    }}>
-      <span style={{
-        flex: 1, minWidth: 0,
-        fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic',
-        fontSize: 18, lineHeight: 1, letterSpacing: '0.05em', color: C.ice,
-        textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      }}>{label}</span>
-    </div>
-  );
-}
 
 // Profile avatar — object-fit:cover at a fixed square aspect. On a missing or
 // broken image it falls back to initials on the elevated dark surface (#162f55),
@@ -112,6 +91,7 @@ function StatLine({ logoColor, initials, title, subtitle, gp, goals, assists, po
 export default function Profile({ currentUser, profile: myProfile, onProfileUpdate }) {
   const { userId: urlUserId } = useParams();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [profile, setProfile] = useState(myProfile);
   const [loadError, setLoadError] = useState(null);
   const [minorBlocked, setMinorBlocked] = useState(false); // YOUTH-PRIVACY: no minor profile pages
@@ -163,7 +143,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
     const sub = await subscribeToPush(currentUser?.id);
     setPushEnabled(!!sub);
     setPushLoading(false);
-    if (!sub) alert("Couldn't turn on notifications — if you blocked them before, allow Rinkd in your browser's site permissions, then try again.");
+    if (!sub) toast({ message: "Couldn't turn on notifications — if you blocked them before, allow Rinkd in your browser's site permissions, then try again.", tone: 'alert' });
   };
 
   const handleDisableNotifications = async () => {
@@ -275,23 +255,23 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
     const file = e.target.files?.[0];
     if (!file || !currentUser) return;
     if (file.size > 10 * 1024 * 1024) {
-      alert(`That cover photo is ${(file.size / 1024 / 1024).toFixed(1)} MB — keep it under 10 MB and try again.`);
+      toast({ message: `That cover photo is ${(file.size / 1024 / 1024).toFixed(1)} MB — keep it under 10 MB and try again.`, tone: 'alert' });
       e.target.value = '';
       return;
     }
     const coverVerdict = await classifyImage(file);
     if (!coverVerdict.ok) {
-      alert("That image won't clear our community guidelines — pick a different one and try again.");
+      toast({ message: "That image won't clear our community guidelines — pick a different one and try again.", tone: 'alert' });
       e.target.value = '';
       track('upload_blocked_nsfw', { label: coverVerdict.label, score: coverVerdict.score, scope: 'cover' });
       return;
     }
     setCoverUploading(true);
     const { url, error } = await uploadMedia(file, currentUser.id);
-    if (error || !url) { setCoverUploading(false); alert("That upload didn't go through — check your connection and try again."); return; }
+    if (error || !url) { setCoverUploading(false); toast({ message: "That upload didn't go through — check your connection and try again.", tone: 'alert' }); return; }
     const { error: uErr } = await updateProfile(currentUser.id, { cover_image_url: url });
     setCoverUploading(false);
-    if (uErr) { alert("Couldn't save your cover photo — try again in a sec."); return; }
+    if (uErr) { toast({ message: "Couldn't save your cover photo — try again in a sec.", tone: 'alert' }); return; }
     // Merge against the LATEST profile (via functional setter) and bubble the
     // merged value up. A quick second upload would otherwise read a stale
     // `profile` closure and clobber the first upload's field in the parent.
@@ -307,23 +287,23 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
     const file = e.target.files?.[0];
     if (!file || !currentUser) return;
     if (file.size > 5 * 1024 * 1024) {
-      alert(`That photo is ${(file.size / 1024 / 1024).toFixed(1)} MB — keep it under 5 MB and try again.`);
+      toast({ message: `That photo is ${(file.size / 1024 / 1024).toFixed(1)} MB — keep it under 5 MB and try again.`, tone: 'alert' });
       e.target.value = '';
       return;
     }
     const avatarVerdict = await classifyImage(file);
     if (!avatarVerdict.ok) {
-      alert("That image won't clear our community guidelines — pick a different one and try again.");
+      toast({ message: "That image won't clear our community guidelines — pick a different one and try again.", tone: 'alert' });
       e.target.value = '';
       track('upload_blocked_nsfw', { label: avatarVerdict.label, score: avatarVerdict.score, scope: 'avatar' });
       return;
     }
     setAvatarUploading(true);
     const { url, error } = await uploadMedia(file, currentUser.id);
-    if (error || !url) { setAvatarUploading(false); alert("That upload didn't go through — check your connection and try again."); return; }
+    if (error || !url) { setAvatarUploading(false); toast({ message: "That upload didn't go through — check your connection and try again.", tone: 'alert' }); return; }
     const { error: uErr } = await updateProfile(currentUser.id, { avatar_url: url });
     setAvatarUploading(false);
-    if (uErr) { alert("Couldn't save your profile picture — try again in a sec."); return; }
+    if (uErr) { toast({ message: "Couldn't save your profile picture — try again in a sec.", tone: 'alert' }); return; }
     // See handleCoverUpload — merge against the latest profile so concurrent
     // uploads don't drop each other's field on the parent's myProfile.
     setProfile((p) => {
@@ -343,7 +323,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
       track('dm_opened_from_profile');
       navigate(`/messages/${conversationId}`);
     } catch (err) {
-      alert(err?.message || "Couldn't start that conversation — try again in a sec.");
+      toast({ message: err?.message || "Couldn't start that conversation — try again in a sec.", tone: 'alert' });
     } finally {
       setDmLoading(false);
     }
@@ -449,7 +429,25 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
     </Layout>
   );
 
-  if (!profile) return <Layout profile={myProfile}><div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.02em' }}>Getting the ice ready.</div></div></Layout>;
+  if (!profile) return (
+    <Layout profile={myProfile}>
+      <div style={{ maxWidth: 640, margin: '0 auto', padding: '24px 16px' }}>
+        {/* Identity-header-shaped skeleton — mirrors the hydrated cover +
+            avatar + name/handle layout below so there's no layout shift. */}
+        <div style={{ background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, overflow: 'hidden', marginBottom: 16 }}>
+          <div style={{ height: 140, background: 'rgba(46,91,140,0.14)', position: 'relative' }}>
+            <div style={{ position: 'absolute', bottom: -28, left: 20 }}>
+              <Skeleton width={72} height={72} radius={999} style={{ border: `3px solid ${C.card}` }} />
+            </div>
+          </div>
+          <div style={{ padding: '36px 20px 20px' }}>
+            <Skeleton width="45%" height={22} style={{ marginBottom: 8 }} />
+            <Skeleton width="30%" height={13} />
+          </div>
+        </div>
+      </div>
+    </Layout>
+  );
 
   const tier = getTier(profile.points || 0);
   const progress = getTierProgress(profile.points || 0);
@@ -853,7 +851,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                 {/* Leagues — kept separate from Tournaments; never a blended total. */}
                 {leagueStats.length > 0 && (
                   <div style={{ marginBottom: tournamentStats.length > 0 ? 22 : 0 }}>
-                    <LowerThird label="League Stats" />
+                    <SectionHeader label="League Stats" />
                     {leagueStats.map((s, i) => (
                       <StatLine key={`lg-${i}`}
                         logoColor={s.team_logo_color}
@@ -868,7 +866,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                     players until a tournament lineup carries their user_id. */}
                 {tournamentStats.length > 0 && (
                   <div>
-                    <LowerThird label="Tournament Stats" />
+                    <SectionHeader label="Tournament Stats" />
                     {tournamentStats.map((s, i) => (
                       <StatLine key={`tn-${i}`}
                         logoColor={C.blue}

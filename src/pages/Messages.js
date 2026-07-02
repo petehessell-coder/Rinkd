@@ -4,8 +4,8 @@ import Layout from '../components/Layout';
 import SEO from '../components/SEO';
 import { Avatar } from '../components/Logos';
 import TapeText from '../components/TapeText';
-import { EmptyState, ListRowSkeleton } from '../components/Skeletons';
-import { ErrorState } from '../components/ui';
+import { ListRowSkeleton } from '../components/Skeletons';
+import { Button, EmptyState, ErrorState, useToast } from '../components/ui';
 import { useOnline } from '../lib/useOnline';
 import { timeAgo } from '../lib/posts';
 import {
@@ -14,7 +14,6 @@ import {
 } from '../lib/messages';
 import { C, motion } from '../lib/tokens';
 import { transition, motionSafe, ensureMotionKeyframes } from '../lib/motion';
-import { useToast } from '../components/ui';
 
 export default function Messages({ currentUser, profile }) {
   const { conversationId } = useParams();
@@ -33,6 +32,7 @@ function Inbox({ currentUser, profile }) {
   const [error, setError] = useState(false);
   const [picker, setPicker] = useState(false);
   const online = useOnline();
+  const { toast } = useToast();
 
   const load = useCallback(async () => {
     try {
@@ -115,8 +115,12 @@ function Inbox({ currentUser, profile }) {
           setPicker(false);
           navigate(`/messages/${id}`);
         } catch (e) {
-          // eslint-disable-next-line no-alert
-          alert(e?.message === 'cannot message this user' ? "You can't message this player right now." : "Couldn't start that conversation — try again in a sec.");
+          toast({
+            message: e?.message === 'cannot message this user'
+              ? "You can't message this player right now."
+              : "Couldn't start that conversation — try again in a sec.",
+            tone: 'alert',
+          });
         }
       }} />}
     </Layout>
@@ -153,7 +157,7 @@ function NewMessageModal({ currentUser, onClose, onPicked }) {
         style={{ width: '100%', maxWidth: 460, background: C.navy, border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden', fontFamily: 'Barlow, sans-serif' }}>
         <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontWeight: 800, fontSize: 16, color: C.ice }}>New message</span>
-          <button onClick={onClose} style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: C.steel, fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>×</button>
+          <button onClick={onClose} aria-label="Close" style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: C.steel, fontSize: 22, cursor: 'pointer', lineHeight: 1, minWidth: 44, minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', margin: '-11px -12px -11px auto' }}>×</button>
         </div>
         <div style={{ padding: 12 }}>
           <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players by name or @handle"
@@ -356,10 +360,16 @@ function Thread({ conversationId, currentUser, profile }) {
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '10px 12px', borderTop: `1px solid ${C.border}`, background: C.dark, flexShrink: 0 }}>
             <textarea value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={onKeyDown} rows={1} placeholder="Message…"
               style={{ flex: 1, resize: 'none', maxHeight: 120, background: C.card, border: `1px solid ${C.border}`, borderRadius: 18, color: C.ice, padding: '10px 14px', fontSize: 14, fontFamily: 'Barlow, sans-serif', outline: 'none', lineHeight: 1.4 }} />
-            <button onClick={send} disabled={!draft.trim() || sending}
-              style={{ background: draft.trim() ? C.red : C.border, color: '#fff', border: 'none', borderRadius: 999, padding: '10px 18px', fontSize: 14, fontWeight: 700, cursor: draft.trim() ? 'pointer' : 'default', fontFamily: 'Barlow, sans-serif', flexShrink: 0 }}>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={send}
+              disabled={!draft.trim() || sending}
+              disabledReason="Type a message first"
+              style={{ borderRadius: 999, flexShrink: 0 }}
+            >
               Send
-            </button>
+            </Button>
           </div>
         </div>
       </div>
