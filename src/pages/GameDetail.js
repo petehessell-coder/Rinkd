@@ -692,7 +692,7 @@ export default function GameDetail({ profile }) {
           {game.status === 'scheduled' && (
             <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 10, padding: '10px 14px 12px', marginBottom: 14 }}>
               <SecLabel>Are you in?</SecLabel>
-              <RsvpBlock gameId={gameId} compact={false} />
+              <RsvpBlock gameId={gameId} compact={false} source={isLeague ? 'league' : isTeamGame ? 'team' : 'tournament'} />
             </div>
           )}
 

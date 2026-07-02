@@ -1,7 +1,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import lazyWithRetry from './lib/lazyWithRetry';
 import { AuthContext, useAuth } from './lib/authContext';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import { getProfile, ensureProfileForUser, touchLastSeen } from './lib/auth';
 import { motion } from './lib/tokens';
@@ -98,6 +98,7 @@ function LoginRedirect() {
 
 function ProtectedRoute({ children }) {
   const { user, loading, profileError } = useAuth();
+  const location = useLocation();
   // Show a "tap to reload" hint after 4s so a slow cold-start doesn't feel
   // like a crash. The hint disappears the moment loading resolves.
   const [loadingSlow, setLoadingSlow] = React.useState(false);
@@ -125,7 +126,18 @@ function ProtectedRoute({ children }) {
       </div>
     </div>
   );
-  if (!user) return <Navigate to="/" replace />;
+  // BUG-3: carry the deep link through login so a push-notification tap (fan) or
+  // the scorekeeper's game link on first launch lands where it was headed — not
+  // on the bare front door. The `loading` branch above returns FIRST, so a
+  // still-rehydrating cold-PWA launch waits (shows the loading screen) rather
+  // than redirecting a user who is actually signed in. Auth.js's readReturnTo
+  // re-validates the target (must be a single-slash relative path).
+  if (!user) return (
+    <Navigate
+      to={`/login?returnTo=${encodeURIComponent(location.pathname + location.search)}`}
+      replace
+    />
+  );
   // Logged in, but the profile fetch failed after all retries — show a real
   // retry screen instead of falling through to pages with profile={null}.
   if (profileError) return (

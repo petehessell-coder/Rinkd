@@ -130,7 +130,9 @@ serve(async (req) => {
   const lines = String(post.content || '').split('\n').filter(Boolean);
   const title = lines[0] || leagueName || 'Rinkd';
   const body = lines.slice(1).join(' · ') || 'Tap to view the recap.';
-  const url = `/league-game/${leagueGameId}`;
+  // BUG-2: GameDetail keys its table off ?type — without ?type=league it queries
+  // the tournament `games` table and shows "Game not found." on every recap tap.
+  const url = `/league-game/${leagueGameId}?type=league`;
   const tag = `league-recap:${post.id}`; // collapse-key so a re-fire doesn't stack
   const pushPayload = JSON.stringify({ title, body, url, tag });
 

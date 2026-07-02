@@ -64,15 +64,15 @@ export default function HypeCard({ game, currentUserId, navigate }) {
 
   useEffect(() => {
     let alive = true;
-    if (game.isMine && currentUserId) getRsvp(game.id, currentUserId).then((r) => { if (alive) setRsvp(r?.status || null); });
+    if (game.isMine && currentUserId) getRsvp(game.id, currentUserId, game.source).then((r) => { if (alive) setRsvp(r?.status || null); });
     return () => { alive = false; };
-  }, [game.id, game.isMine, currentUserId]);
+  }, [game.id, game.isMine, currentUserId, game.source]);
 
   const setStatus = async (status) => {
     if (rsvpBusy) return;
     const prev = rsvp;
     setRsvp(status); setRsvpBusy(true); // optimistic
-    try { await upsertRsvp(game.id, currentUserId, status); }
+    try { await upsertRsvp(game.id, currentUserId, status, game.source); }
     catch { setRsvp(prev); } // reconcile on failure — never strand the UI
     finally { setRsvpBusy(false); }
   };
