@@ -40,7 +40,7 @@ function normLeagueLiveGame(g) {
     home: { id: g.home_team_id, name: g.home_lt?.team?.name || g.home_lt?.team_name || 'Home', logoUrl: g.home_lt?.team?.logo_url || g.home_lt?.logo_url || null },
     away: { id: g.away_team_id, name: g.away_lt?.team?.name || g.away_lt?.team_name || 'Away', logoUrl: g.away_lt?.team?.logo_url || g.away_lt?.logo_url || null },
     eventId: g.league_id, eventName: g.league?.name || 'League',
-    gameUrl: `/league-game/${g.id}?type=league`,
+    gameUrl: `/lg/${g.id}`,
   };
 }
 function normTournamentLiveGame(g) {
@@ -51,7 +51,7 @@ function normTournamentLiveGame(g) {
     home: { id: g.home_team_id, name: g.home_team?.team_name || 'Home', logoUrl: g.home_team?.logo_url || null },
     away: { id: g.away_team_id, name: g.away_team?.team_name || 'Away', logoUrl: g.away_team?.logo_url || null },
     eventId: g.tournament_id, eventName: g.tournament?.name || 'Tournament',
-    gameUrl: `/game/${g.id}`,
+    gameUrl: `/g/${g.id}`,
   };
 }
 
@@ -60,12 +60,13 @@ function normTournamentLiveGame(g) {
 // slug (RLS hides drafts from anon; admins see them for preview). `events` is
 // normalized to a flat, youth-safe list ordered by sort_order.
 export function getOperatorBySlug(slug) {
-  const key = `operator:${slug}`;
+  const normSlug = (slug || '').toLowerCase();
+  const key = `operator:${normSlug}`;
   return cached(key, 60_000, async () => {
     const { data: operator, error } = await supabase
       .from('featured_operators')
       .select('id, slug, name, tagline, logo_url, logo_initials, brand_color, accent_color, cover_image_url, website_url, platform_label, is_active')
-      .eq('slug', slug)
+      .eq('slug', normSlug)
       .maybeSingle();
     if (error) throw error;
     if (!operator) return { operator: null, events: [] };

@@ -166,6 +166,22 @@ shared pressable class (vocabulary-intended; desktop-only effect). Noted, no
 action: numberChange token stays dormant; like-bounce 300ms stays; bare-disabled
 buttons in hand-rolled modals fold into S10's component adoption.
 
+### 2026-07-02 · C12 Gate-2 (Pete sign-off — "apply all four")
+QA verdict A− → A+ (`audits/C12_qa.md`). All four refinements approved + applied:
+MF-1 live-game taps now use the PUBLIC share routes `/lg/:id` `/g/:id` (the
+gameday normalizers' auth-gated routes bounced anon evaluators to Landing —
+the exact tap the page exists for); SF-1 slugs lowercased in loader +
+middleware (`/o/XRHL` works); SF-2 chip strip suppressed for single-event
+operators (no duplicate rails); SF-3 admin go-live reuses the nulled payload.
+NOTED (accepted): `admin_set_featured` silent no-op on bad id (matches
+`admin_set_activation`); RPC write path harness+REST-verified but the admin
+UI flow still wants a first-login smoke (create → pin → go-live → delete).
+Ops during Stage 2: migration applied to prod via MCP after 37/37 PGlite
+prod-shape run; `/o/xrhl` + `/o/demo` seeded (service-role SQL — noted
+deviation from seed-via-RPC since MCP has no admin JWT); demo league
+`934dd511…` was MISSING `settings.is_demo` (deep link showed anon the teaser,
+not the give-first full page) — flag set, playbook restored.
+
 ### 2026-07-02 · C12 Gate-1 decisions (Pete sign-off — "go for all")
 Operator front door approved exactly as specced
 (`audits/C12_operator_front_door.md`): public `/o/:slug` route (link-only, NO nav

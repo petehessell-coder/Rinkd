@@ -155,11 +155,12 @@ export default async function middleware(req) {
 
   const url = new URL(req.url);
 
-  // Operator front door — /o/:slug (lowercase letters/digits/hyphens, 3-40).
-  const op = url.pathname.match(/^\/o\/([a-z0-9]+(?:-[a-z0-9]+)*)\/?$/);
+  // Operator front door — /o/:slug (letters/digits/hyphens, 3-40). Match
+  // case-insensitively then lowercase before lookup so /o/XRHL unfurls too.
+  const op = url.pathname.match(/^\/o\/([a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*)\/?$/);
   if (op) {
     let meta;
-    try { meta = await operatorMeta(op[1], url.origin); }
+    try { meta = await operatorMeta(op[1].toLowerCase(), url.origin); }
     catch { meta = genericMeta(url.origin); }
     return new Response(htmlDoc(meta, url.href), {
       headers: {

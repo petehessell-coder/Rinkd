@@ -515,9 +515,9 @@ function FeaturedOperatorsPanel({ leagues, tournaments, toast, confirm }) {
     if (activate && pinned.length === 0) { toast({ message: 'Pin at least one event before going live.', tone: 'alert' }); return; }
     setSaving(true);
     try {
-      // Step 1: upsert the card WITHOUT activating (dodges operator_needs_events
-      // on a brand-new card whose events aren't inserted yet).
-      const opId = await adminUpsertFeaturedOperator({
+      // Nulled/normalized payload — reused for every upsert step so re-activate
+      // never overwrites the nulled fields with raw empty strings from `form`.
+      const payload = {
         ...form,
         slug: form.slug.trim(),
         name: form.name.trim(),
@@ -529,8 +529,10 @@ function FeaturedOperatorsPanel({ leagues, tournaments, toast, confirm }) {
         cover_image_url: form.cover_image_url || null,
         website_url: form.website_url || null,
         platform_label: form.platform_label || null,
-        is_active: false,
-      });
+      };
+      // Step 1: upsert the card WITHOUT activating (dodges operator_needs_events
+      // on a brand-new card whose events aren't inserted yet).
+      const opId = await adminUpsertFeaturedOperator({ ...payload, is_active: false });
       // Step 2: replace pinned events.
       const events = pinned.map((p, i) => (
         p.kind === 'league'
@@ -540,7 +542,7 @@ function FeaturedOperatorsPanel({ leagues, tournaments, toast, confirm }) {
       await adminSetFeaturedOperatorEvents(opId, events);
       // Step 3: if going live, activate now that events exist.
       if (activate) {
-        await adminUpsertFeaturedOperator({ ...form, id: opId, slug: form.slug.trim(), name: form.name.trim(), is_active: true });
+        await adminUpsertFeaturedOperator({ ...payload, id: opId, is_active: true });
       }
       toast({ message: activate ? 'Operator card is live.' : 'Operator card saved as a draft.', tone: 'success' });
       cancelEdit();

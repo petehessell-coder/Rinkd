@@ -260,7 +260,9 @@ export default function Operator({ profile }) {
             </div>
           )}
 
-          {/* ── CHIP STRIP — "THEIR EVENTS" ── */}
+          {/* ── CHIP STRIP — "THEIR EVENTS" — a navigation rail; pointless for a
+              single event, so it only renders when there are 2+ events. ── */}
+          {events.length >= 2 && (
           <div className={inClass}>
             <SectionHeader label="Events" live={hasLive} />
             <div className="rinkd-op-rail" style={{
@@ -296,6 +298,7 @@ export default function Operator({ profile }) {
               })}
             </div>
           </div>
+          )}
 
           {/* ── LIVE NOW — only when live games exist ── */}
           {hasLive && (
