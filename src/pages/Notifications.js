@@ -17,7 +17,14 @@ export default function NotificationsPage({ currentUser, profile }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [filter, setFilter] = useState('all'); // all | unread
+  // Read-once initial filter from ?filter= (e.g. the reciprocity nudge deep-links
+  // to ?filter=unread). Only the two valid states are honored; anything else
+  // falls back to 'all'. This page doesn't WRITE query params, so a raw
+  // window.location read in the initializer is safe (no useSearchParams needed).
+  const [filter, setFilter] = useState(() => {
+    const q = new URLSearchParams(window.location.search).get('filter');
+    return q === 'unread' || q === 'all' ? q : 'all';
+  }); // all | unread
   const online = useOnline();
 
   const load = useCallback(async () => {
@@ -206,7 +213,7 @@ function NotifRow({ n, first, onOpen, onDelete }) {
         <div style={{ fontSize: 14, lineHeight: 1.45, color: C.ice }}>
           {hasName ? (
             <>
-              <span style={{ fontFamily: "'Barlow', sans-serif", fontWeight: hot ? 800 : 700, color: hot ? accent : C.ice }}>{actorName}</span>
+              <span style={{ fontFamily: "'Barlow', sans-serif", fontWeight: hot ? 800 : 700, color: hot ? accent : C.ice, display: 'inline-block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>{actorName}</span>
               {action ? <span style={{ color: C.steel, fontWeight: hot ? 600 : 400 }}> {action}</span> : null}
             </>
           ) : (

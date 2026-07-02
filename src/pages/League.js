@@ -653,13 +653,13 @@ export default function LeaguePage({ currentUser, profile }) {
                   color: isFollowing ? C.ice : '#fff',
                   border: isFollowing ? '1px solid rgba(46,91,140,0.5)' : 'none',
                   borderRadius: 999, padding: '5px 12px', minHeight: 44, fontSize: 11, fontWeight: 700,
-                  cursor: followBusy ? 'wait' : 'pointer',
+                  cursor: followBusy ? 'default' : 'pointer',
                   fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic',
                   letterSpacing: '0.05em', textTransform: 'uppercase',
-                  opacity: followBusy ? 0.6 : 1, whiteSpace: 'nowrap',
+                  opacity: followBusy ? 0.7 : 1, whiteSpace: 'nowrap',
                   display: 'inline-flex', alignItems: 'center', gap: 6,
                 }}>
-                <Icon name={isFollowing ? 'following' : 'bell'} size={13} />{isFollowing ? 'Following' : 'Follow'}
+                <Icon name={isFollowing ? 'following' : 'bell'} size={13} />{followBusy ? 'Following…' : isFollowing ? 'Following' : 'Follow'}
               </button>
             )}
             {currentUser && <PinToNavButton userId={currentUser.id} pinType="league" targetId={id} />}
@@ -845,7 +845,7 @@ export default function LeaguePage({ currentUser, profile }) {
                   youth: areScorersHidden(league?.settings),
                   canShare: isPublicSharingEnabled(league?.settings),
                   subtitle: league?.season || null,
-                  shareUrl: typeof window !== 'undefined' ? `${window.location.origin}/league/${id}` : null,
+                  shareUrl: typeof window !== 'undefined' ? `${window.location.origin}/league/${id}?tab=stats` : null,
                 }} />
             </>
           )}

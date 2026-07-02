@@ -602,12 +602,12 @@ export default function TournamentPage({ currentUser }) {
                   color: isFollowing ? C.ice : '#fff',
                   border: isFollowing ? '1px solid rgba(46,91,140,0.5)' : 'none',
                   borderRadius: 999, padding: '5px 12px', minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700,
-                  cursor: followBusy ? 'wait' : 'pointer',
+                  cursor: followBusy ? 'default' : 'pointer',
                   fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic',
                   letterSpacing: '0.05em', textTransform: 'uppercase',
-                  opacity: followBusy ? 0.6 : 1,
+                  opacity: followBusy ? 0.7 : 1,
                 }}>
-                {followBusy ? '...' : <span style={{display:'inline-flex',alignItems:'center',gap:6}}><Icon name={isFollowing ? 'following' : 'bell'} size={13} />{isFollowing ? 'Following' : 'Follow'}</span>}
+                {followBusy ? <span style={{display:'inline-flex',alignItems:'center',gap:6}}><Icon name={isFollowing ? 'following' : 'bell'} size={13} />Following…</span> : <span style={{display:'inline-flex',alignItems:'center',gap:6}}><Icon name={isFollowing ? 'following' : 'bell'} size={13} />{isFollowing ? 'Following' : 'Follow'}</span>}
               </button>
             )}
             {tournament && currentUser && <PinToNavButton userId={currentUser.id} pinType="tournament" targetId={id} />}
@@ -855,7 +855,7 @@ export default function TournamentPage({ currentUser }) {
                 youth: areScorersHidden(tournament?.settings),
                 canShare: isPublicSharingEnabled(tournament?.settings),
                 subtitle: selectedDivision?.name || null,
-                shareUrl: typeof window !== 'undefined' ? `${window.location.origin}/tournament/${id}` : null,
+                shareUrl: typeof window !== 'undefined' ? `${window.location.origin}/tournament/${id}?tab=stats` : null,
               }} />
           </>
         )}

@@ -36,7 +36,7 @@ export default function ReciprocityNudges({ currentUserId, navigate }) {
 
   return (
     <div
-      onClick={() => navigate('/notifications')}
+      onClick={() => navigate('/notifications?filter=unread')}
       className="rinkd-pressable"
       style={{
         display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer',
