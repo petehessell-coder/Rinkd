@@ -285,18 +285,24 @@ export default function Discover({ currentUser, profile }) {
       cursorKey: 'created_at',
       build: () => supabase.from('teams')
         .select('id, name, level, division, location, logo_color, logo_initials, logo_url, created_at')
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: true }), // tie-breaker so the cursor is deterministic
       applySearch: (q) => q.or(`name.ilike.${ilike},level.ilike.${ilike},location.ilike.${ilike}`),
-      applyCursor: (q, cur) => q.lt('created_at', cur),
+      // Compound cursor (created_at, id) — same tie-safe pattern as players:
+      // a plain `created_at < cur` can skip a row that TIES on created_at at
+      // the page boundary.
+      applyCursor: (q, cur, curId) => q.or(`created_at.lt.${cur},and(created_at.eq.${cur},id.gt.${curId})`),
     },
     leagues: {
       setter: setLeagues,
       cursorKey: 'created_at',
       build: () => supabase.from('leagues')
         .select('id, name, division, season, logo_color, created_at')
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: true }), // tie-breaker so the cursor is deterministic
       applySearch: (q) => q.or(`name.ilike.${ilike},division.ilike.${ilike}`),
-      applyCursor: (q, cur) => q.lt('created_at', cur),
+      // Compound cursor (created_at, id) — see teams above.
+      applyCursor: (q, cur, curId) => q.or(`created_at.lt.${cur},and(created_at.eq.${cur},id.gt.${curId})`),
     },
     articles: {
       setter: setArticles,
@@ -304,9 +310,11 @@ export default function Discover({ currentUser, profile }) {
       build: () => supabase.from('rinkside_articles')
         .select('id, slug, title, subtitle, hero_image_url, category, author_name, published_at, read_minutes')
         .eq('is_published', true)
-        .order('published_at', { ascending: false }),
+        .order('published_at', { ascending: false })
+        .order('id', { ascending: true }), // tie-breaker so the cursor is deterministic
       applySearch: (q) => q.or(`title.ilike.${ilike},subtitle.ilike.${ilike},category.ilike.${ilike}`),
-      applyCursor: (q, cur) => q.lt('published_at', cur),
+      // Compound cursor (published_at, id) — see teams above.
+      applyCursor: (q, cur, curId) => q.or(`published_at.lt.${cur},and(published_at.eq.${cur},id.gt.${curId})`),
     },
   }), [ilike]);
 

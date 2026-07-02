@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Icon, ErrorState, useToast } from '../components/ui';
 import { ListRowSkeleton } from '../components/Skeletons';
@@ -155,13 +155,29 @@ export default function TeamPage({ currentUser, profile }) {
     () => Array.from(new Set(games.filter((g) => g._source === 'league' && g.home_lt).flatMap((g) => [g.home_team_id, g.away_team_id]).filter(Boolean))),
     [games]
   );
+  // perf(scale) C08 QA fix — `leagueTeamIds` is a new array reference on every
+  // `games` update (e.g. each score ping's re-fetch), which previously sat
+  // directly in this effect's deps and tore down + resubscribed the channel
+  // on every ping. Key the effect on a STABLE primitive (sorted id string)
+  // instead — the subscription only needs to change when the actual id SET
+  // changes, not on every re-render that produces an equal-but-new array.
+  const leagueTeamIdsKey = useMemo(
+    () => leagueTeamIds.slice().sort().join(','),
+    [leagueTeamIds]
+  );
+  // `reloadGamesOnly` also changes reference whenever `finalsCursor` moves
+  // (e.g. a "Load earlier" tap), which would otherwise resubscribe the
+  // channel too. Keep the latest callback in a ref so the effect can invoke
+  // it without depending on it.
+  const reloadGamesOnlyRef = useRef(reloadGamesOnly);
+  useEffect(() => { reloadGamesOnlyRef.current = reloadGamesOnly; }, [reloadGamesOnly]);
   useEffect(() => {
     if (!id) return undefined;
     let channel = null;
     let reloadTimer = null;
     const scheduleReload = () => {
       if (reloadTimer) clearTimeout(reloadTimer);
-      reloadTimer = setTimeout(() => { reloadGamesOnly(); }, 1000);
+      reloadTimer = setTimeout(() => { reloadGamesOnlyRef.current(); }, 1000);
     };
     try {
       const name = `team:${id}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
@@ -187,7 +203,11 @@ export default function TeamPage({ currentUser, profile }) {
       if (reloadTimer) clearTimeout(reloadTimer);
       try { if (channel) supabase.removeChannel(channel); } catch { /* swallow */ }
     };
-  }, [id, leagueTeamIds, reloadGamesOnly]);
+    // Deps intentionally exclude `leagueTeamIds` (raw array, new ref every
+    // `games` update — see leagueTeamIdsKey above) and `reloadGamesOnly`
+    // (invoked via reloadGamesOnlyRef so its own dep churn, e.g. finalsCursor
+    // changing on "Load earlier", doesn't tear down the channel).
+  }, [id, leagueTeamIdsKey]);
 
   // "Load earlier games" — real keyset page further back via the `before`
   // cursor. Appends (never replaces) so already-visible rows don't jump.

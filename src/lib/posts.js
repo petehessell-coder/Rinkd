@@ -352,14 +352,21 @@ export async function getComments(postId, { limit = 50, before = null } = {}) {
       .order('created_at', { ascending: false }).limit(limit);
     if (before) fq = fq.lt('created_at', before);
     const { data: fallback } = await fq;
-    const rows = drop(fallback || []);
-    return { comments: rows.slice().reverse(), hasMore: rows.length === limit };
+    const rawFallback = fallback || [];
+    const rows = drop(rawFallback);
+    // hasMore reflects the raw (pre-blocked-filter) page size — see below.
+    return { comments: rows.slice().reverse(), hasMore: rawFallback.length === limit };
   }
-  const rows = drop(data || []);
+  const raw = data || [];
+  const rows = drop(raw);
   // Reverse DESC→ASC for oldest-first display (the newest page's rows, in
   // chronological order); "load earlier" prepends the NEXT (older) page in
   // the same oldest-first order ahead of what's already shown.
-  return { comments: rows.slice().reverse(), hasMore: rows.length === limit };
+  // hasMore is computed from the RAW (pre-blocked-filter) row count: if a
+  // blocked user's comments land at the page boundary, filtering can shrink
+  // `rows` below `limit` even though older rows still exist server-side,
+  // which would prematurely hide "Load earlier".
+  return { comments: rows.slice().reverse(), hasMore: raw.length === limit };
 }
 
 export async function createComment(postId, authorId, content) {

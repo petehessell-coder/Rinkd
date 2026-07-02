@@ -26,8 +26,12 @@ export async function listNotifications({ limit = 80, unreadOnly = false, before
   // actor_id is nullable (system notifications carry null) and a server-side
   // NOT IN would incorrectly exclude those null rows.
   const blocked = await getBlockedIds();
-  const rows = (data || []).filter((n) => !n.actor_id || !blocked.has(n.actor_id));
-  return { data: rows, error, hasMore: rows.length === limit };
+  const raw = data || [];
+  const rows = raw.filter((n) => !n.actor_id || !blocked.has(n.actor_id));
+  // hasMore reflects the raw (pre-filter) page size — the blocked-user filter
+  // can shrink `rows` below `limit` even when more rows exist past this page,
+  // which would otherwise prematurely hide "Show older".
+  return { data: rows, error, hasMore: raw.length === limit };
 }
 
 export async function getUnreadCount(userId) {
