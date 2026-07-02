@@ -166,6 +166,22 @@ shared pressable class (vocabulary-intended; desktop-only effect). Noted, no
 action: numberChange token stays dormant; like-bounce 300ms stays; bare-disabled
 buttons in hand-rolled modals fold into S10's component adoption.
 
+### 2026-07-02 · C08 Gate-1 (Pete sign-off — "A-F approved")
+Saturday-Night-Test audit (`audits/C08_performance.md`) approved as a 6-PR plan:
+**A** (P0, Opus) LIMIT the 5 stat RPCs + hot FK indexes + cron documentation;
+**B** (P0, Sonnet) event-page per-tab deferral + `cached()` on static data +
+Stats-tab caching; **C** (P0, Sonnet) Avatar lazy, hero JPEG 373→97KB, Feed
+waterfall→parallel, shareCard out of main bundle, ad-upload compression;
+**D** (P0, Opus) GameDetail→shared subscribeGame (lib gained the missing
+game_penalties watch), Home narrow live-reload, push fan-out chunked ×100,
+inbox channel gated on has-conversations; **E** (P1, Opus) RLS permissive-
+policy consolidation on posts/likes/comments; **F** (P1, Sonnet) Team realtime
++ pagination debt. DEFERRED (logged): event-wide League/Tournament channels →
+the env-gated broadcast flip is the Black-Bear-scale project, not a pre-pilot
+patch. Verified live: all 12 cron jobs active on prod (repo "missing crons" =
+doc drift; 7 commands embed secrets so recorded comment-only). Budgets per
+screen in the audit §4.
+
 ### 2026-07-02 · C12 Gate-2 (Pete sign-off — "apply all four")
 QA verdict A− → A+ (`audits/C12_qa.md`). All four refinements approved + applied:
 MF-1 live-game taps now use the PUBLIC share routes `/lg/:id` `/g/:id` (the
