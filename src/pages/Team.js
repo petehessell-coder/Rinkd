@@ -506,7 +506,7 @@ export default function TeamPage({ currentUser, profile }) {
               )}
             </div>
           )}
-          {g.status === 'scheduled' && <RsvpBlock gameId={g.id} compact={false} />}
+          {g.status === 'scheduled' && <RsvpBlock gameId={g.id} compact={false} source={g._source === 'league' ? 'league' : 'team'} />}
           {g.status === 'scheduled' && isManager && (
             <div onClick={e => e.stopPropagation()}>
               <LineupCTA game={g} teamId={id} teamName={team.name} canManage={isManager} onSaved={load} />
@@ -572,7 +572,7 @@ export default function TeamPage({ currentUser, profile }) {
             )}
             <CalendarButton game={g} teamLabel={`${team.name} — ${scheduleTitle(g)}`} />
           </div>
-          {!isPast && <RsvpBlock gameId={g.id} compact={true} />}
+          {!isPast && <RsvpBlock gameId={g.id} compact={true} source={g._source === 'league' ? 'league' : 'team'} />}
         </div>
       </div>
     );

@@ -24,7 +24,11 @@ function dedupeByUser(list) {
   return Array.from(byUser.values());
 }
 
-export default function RsvpBlock({ gameId, compact = false }) {
+// `source` selects which game table this RSVP belongs to ('team' | 'league' |
+// 'tournament'). Defaults to 'team' so existing team_games callers are
+// unaffected. GameDetail passes the kind it already derives; Team.js team-game
+// rows keep the default. See lib/rsvp.js for the column mapping.
+export default function RsvpBlock({ gameId, compact = false, source = 'team' }) {
   const [rsvps, setRsvps]     = useState([]);   // canonical list for this game
   const [userId, setUserId]   = useState(null);
   const [loading, setLoading] = useState(true);
@@ -39,12 +43,12 @@ export default function RsvpBlock({ gameId, compact = false }) {
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { if (mounted.current) setLoading(false); return; }
-    const all = await getGameRsvps(gameId);
+    const all = await getGameRsvps(gameId, source);
     if (!mounted.current) return;
     setUserId(user.id);
     setRsvps(dedupeByUser(all));
     setLoading(false);
-  }, [gameId]);
+  }, [gameId, source]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -102,9 +106,9 @@ export default function RsvpBlock({ gameId, compact = false }) {
 
     try {
       if (togglingOff) {
-        await deleteRsvp(gameId, userId);
+        await deleteRsvp(gameId, userId, source);
       } else {
-        await upsertRsvp(gameId, userId, status);
+        await upsertRsvp(gameId, userId, status, source);
       }
       // Refresh from DB to get accurate counts + profiles.
       await load();
