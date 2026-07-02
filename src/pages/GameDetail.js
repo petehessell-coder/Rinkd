@@ -483,6 +483,7 @@ export default function GameDetail({ profile }) {
           {isLive && (
             <div style={{ margin: '0 0 16px' }}>
               <LiveLowerThird
+                bleed="-24px -16px 0"
                 period={game.period}
                 label={`${periodDisplay(game.period)} · Live${liveClock ? ` · ${liveClock}` : ''}`}
                 accent={watching != null
