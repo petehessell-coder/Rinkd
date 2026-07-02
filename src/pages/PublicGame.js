@@ -7,6 +7,7 @@ import SEO from '../components/SEO';
 import ShareButton from '../components/ShareButton';
 import SoundToggle from '../components/SoundToggle';
 import GamePuckCard from '../components/GamePuckCard';
+import LiveLowerThird from '../components/LiveLowerThird';
 import { ErrorState } from '../components/ui';
 import { useOnline } from '../lib/useOnline';
 import { resolveStreamUrl, streamButtonLabel, detectStreamPlatform } from '../lib/streamUrl';
@@ -54,6 +55,26 @@ if (typeof document !== 'undefined' && !document.getElementById('rinkd-pg-anim')
 }
 
 const periodLabel = (p) => p === 1 ? '1st' : p === 2 ? '2nd' : p === 3 ? '3rd' : p === 4 ? 'OT' : 'SO';
+
+// S08 — "PUCK DROPS IN 2H 14M" countdown. Returns a formatted label when the
+// start_time is in the future (≥1h → "2H 14M", <1h → "43M"), else null so the
+// caller falls back to the static pill (past-due-but-still-scheduled included).
+// Client-only 60s tick, cleaned up on unmount, no fetch.
+function usePuckDropCountdown(startTime, active) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return undefined;
+    const t = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(t);
+  }, [active]);
+  if (!active || !startTime) return null;
+  const ms = new Date(startTime).getTime() - now;
+  if (!(ms > 0)) return null;
+  const totalMin = Math.floor(ms / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h >= 1 ? `PUCK DROPS IN ${h}H ${m}M` : `PUCK DROPS IN ${Math.max(m, 1)}M`;
+}
 
 // Broadcast period label — "2nd Period" / "Overtime" / "Shootout" (caps applied
 // in CSS). Tolerates null/0 (live game before the scorer sets a period).
@@ -189,6 +210,9 @@ export default function PublicGame({ league }) {
     if (p.status !== 'final' && st === 'final') haptics.success();
     finalBeat.current = { status: st, init: true };
   }, [game?.status, loading, game, blocked]);
+
+  // S08 — puck-drop countdown for scheduled games (hook above early returns).
+  const puckDrop = usePuckDropCountdown(game?.start_time, !loading && !blocked && game?.status === 'scheduled');
 
   if (loading) return (
     <Shell>
@@ -341,24 +365,33 @@ export default function PublicGame({ league }) {
           {isLive ? (
             /* Live broadcast lower-third: red-accent slab bleeding to the card
                edges, pulsing ring, "2ND PERIOD - LIVE". You feel it before you
-               read it. The opt-in goal horn lives here — the live surface. */
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '-22px -18px 18px', padding: '7px 8px 7px 18px', background: C.navy, borderLeft: `4px solid ${C.red}` }}>
-              <span className="pg-live-ring" style={{ width: 10, height: 10, borderRadius: 999, background: C.red, flex: '0 0 auto' }} />
-              <span style={{ flex: 1, minWidth: 0, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', textTransform: 'uppercase', letterSpacing: '0.05em', color: C.ice, fontSize: 17, lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {periodDisplay(game.period)} · Live{clock ? ` · ${clock}` : ''}
-              </span>
-              {watching != null && (
-                <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'rgba(244,247,250,0.75)', marginRight: 4 }}>
-                  <span className="pg-live-ring" style={{ width: 6, height: 6, borderRadius: 999, background: C.red }} />{watching.toLocaleString()}
-                </span>
-              )}
-              <SoundToggle />
-            </div>
+               read it. The opt-in goal horn lives here — the live surface.
+               Shared component (S08); watching count + horn ride in `accent`. */
+            <LiveLowerThird
+              period={game.period}
+              label={`${periodDisplay(game.period)} · Live${clock ? ` · ${clock}` : ''}`}
+              accent={<>
+                {watching != null && (
+                  <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'rgba(244,247,250,0.75)', marginRight: 4 }}>
+                    <span className="pg-live-ring" style={{ width: 6, height: 6, borderRadius: 999, background: C.red }} />{watching.toLocaleString()}
+                  </span>
+                )}
+                <SoundToggle />
+              </>}
+            />
           ) : (
             <div style={{ textAlign: 'center', marginBottom: 16 }}>
-              <span style={{ display: 'inline-block', background: isFinal ? 'rgba(244,247,250,0.12)' : 'rgba(46,91,140,0.3)', color: C.ice, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 13, letterSpacing: '0.08em', padding: '4px 14px', borderRadius: 999 }}>
-                {isFinal ? 'FINAL' : 'UPCOMING'}
-              </span>
+              {/* S08 — future scheduled games show the puck-drop countdown
+                  (condensed italic, muted); past-due scheduled falls back. */}
+              {puckDrop ? (
+                <span style={{ display: 'inline-block', fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 800, fontSize: 13, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.steel }}>
+                  {puckDrop}
+                </span>
+              ) : (
+                <span style={{ display: 'inline-block', background: isFinal ? 'rgba(244,247,250,0.12)' : 'rgba(46,91,140,0.3)', color: C.ice, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 13, letterSpacing: '0.08em', padding: '4px 14px', borderRadius: 999 }}>
+                  {isFinal ? 'FINAL' : 'UPCOMING'}
+                </span>
+              )}
             </div>
           )}
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 12 }}>
@@ -509,7 +542,7 @@ function TeamSide({ team, score, record, scorerLine, hideScore }) {
       {/* TV score bug — Barlow Condensed 900 italic, 72px. key={score} remounts
           on every score change so pgScorePop fires the hard puck-off-the-post
           bounce. */}
-      {!hideScore && <div key={score ?? 0} className="pg-score-pop" style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 72, color: C.ice, lineHeight: 1 }}>{score ?? 0}</div>}
+      {!hideScore && <div key={score ?? 0} className="pg-score-pop" style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 72, color: C.ice, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{score ?? 0}</div>}
       {scorerLine && <div style={{ fontSize: 12, color: C.steel, marginTop: 6, lineHeight: 1.4 }}>{scorerLine}</div>}
     </div>
   );
