@@ -33,7 +33,7 @@ const keyOf = (teamId, jersey) => `${teamId}:${jersey}`;
 
 export default function GamePuckCard({
   gameId, kind, homeTeam, awayTeam, lineupByTeam = {}, goals = [],
-  canVote = false, accent = C.red,
+  canVote = false, accent = C.red, hideNames = false,
 }) {
   const [tally, setTally] = useState(null);     // { rows, total, leader }
   const [myVote, setMyVote] = useState(null);   // { team_id, jersey } | null
@@ -166,7 +166,11 @@ export default function GamePuckCard({
   // remaining time (a long-lived demo window, or clock skew), drop the "~N min"
   // phrasing instead of printing a nonsense countdown — the open tally still shows.
   const closesInMin = closesRaw != null && closesRaw <= 180 ? closesRaw : null;
-  const nameFor = (teamId, jersey) => lineupByTeam[teamId]?.[jersey] || null;
+  // YOUTH-PRIVACY (S06 P0): on youth events every name renders jersey-only —
+  // the settled winner line, the reveal modal, and the vote-candidate labels.
+  // The share-card path already suppresses names; this closes the display path.
+  const safeResult = result && hideNames ? { ...result, winner_name: null } : result;
+  const nameFor = (teamId, jersey) => (hideNames ? null : (lineupByTeam[teamId]?.[jersey] || null));
   const teamNameFor = (teamId) => (teamId === homeTeam.id ? homeTeam.name : awayTeam.name);
   const labelFor = (teamId, jersey) => {
     const n = nameFor(teamId, jersey);
@@ -202,7 +206,7 @@ export default function GamePuckCard({
   if (result) {
     const revealModal = revealOpen && (
       <GamePuckReveal
-        gameId={gameId} kind={kind} result={result}
+        gameId={gameId} kind={kind} result={safeResult}
         teamName={teamNameFor(result.team_id)} winnerPucks={winnerPucks} accent={accent}
         onClose={() => setRevealOpen(false)}
         onRevealed={() => setRevealed(true)}
@@ -243,7 +247,7 @@ export default function GamePuckCard({
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: GP_FAINT, textTransform: 'uppercase' }}>Game Puck winner · Fans’ Pick</div>
             <div style={{ fontSize: 14, fontWeight: 800, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {result.winner_name ? `${result.winner_name} ` : ''}<span style={{ opacity: result.winner_name ? 0.7 : 1, fontWeight: 700 }}>#{result.jersey}</span>
+              {safeResult.winner_name ? `${safeResult.winner_name} ` : ''}<span style={{ opacity: safeResult.winner_name ? 0.7 : 1, fontWeight: 700 }}>#{safeResult.jersey}</span>
               {winnerPucks > 1 && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 800, color: accent, padding: '2px 7px', borderRadius: 999, background: 'rgba(215,38,56,0.16)' }}>{winnerPucks}× Game Puck</span>}
             </div>
             <div style={{ fontSize: 11, color: GP_DIM }}>{teamNameFor(result.team_id)} · {result.votes} of {result.total_votes} {result.total_votes === 1 ? 'vote' : 'votes'} · voting closed</div>

@@ -9,6 +9,8 @@ import { TeamLogo, Avatar } from '../components/Logos';
 import RecapCard from '../components/RecapCard';
 import PuckMark from '../components/PuckMark';
 import { getGamePuck } from '../lib/gamePucks';
+import MapLink from '../components/MapLink';
+import { getHeadToHead } from '../lib/gameday';
 import {
   loadHome, searchEverything, fmtGameWhen, fmtEventDate, getLiveHeroExtras, DEMO_LEAGUE_ID,
 } from '../lib/home';
@@ -699,21 +701,55 @@ function NextGameRow({ g, navigate }) {
   const time = dt ? dt.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).replace(/\s?([AP])M/i, (_, p) => p.toLowerCase()) : '';
   const rel = dt ? relDayLabel(dt) : null;
   const level = g._level || g._league_name || null;
+  // D1 — GAME DAY elevation. When the next game is today, the row goes from a
+  // schedule read to an urgency moment: red spine + "GAME DAY" label + puck-drop
+  // line. Red = urgency/live per the manifesto (gold stays scarce). Static
+  // treatment only — no animation to gate.
+  const isGameDay = rel === 'TODAY';
+
+  // D3 — season series, only for the game-day league row. team_games carry no
+  // opponent team id, so head-to-head is only queryable for league games; and we
+  // fetch lazily for the TODAY row alone to keep Home cheap. Non-blocking: renders
+  // when it lands, and we reserve a fixed-height line so there's no layout shift.
+  const canSeries = isGameDay && g._source === 'league' && g.home_team_id && g.away_team_id;
+  const [series, setSeries] = useState(null);
+  useEffect(() => {
+    if (!canSeries) return;
+    let alive = true;
+    getHeadToHead({ source: 'league', home: { id: g.home_team_id }, away: { id: g.away_team_id } })
+      .then((r) => { if (alive) setSeries(r); })
+      .catch(() => { /* silent — a missing series just leaves the reserved line blank */ });
+    return () => { alive = false; };
+  }, [canSeries, g.home_team_id, g.away_team_id]);
+  // From the viewer's team perspective: home_team_id is "home" in the record.
+  const myWins = series ? (g.is_home ? series.homeWins : series.awayWins) : 0;
+  const oppWins = series ? (g.is_home ? series.awayWins : series.homeWins) : 0;
+  const seriesLabel = series && series.played > 0 ? `Season series ${myWins}–${oppWins}${series.ties ? ` · ${series.ties} T` : ''}` : null;
+
   return (
-    <button onClick={() => navigate(href)} className="home-tap" style={{ width: '100%', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'stretch', gap: 0, background: C.card, border: `1px solid ${C.border}`, borderRadius: radii.card, padding: 0, marginBottom: 8, overflow: 'hidden' }}>
+    <button onClick={() => navigate(href)} className="home-tap" style={{ width: '100%', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'stretch', gap: 0, background: C.card, border: isGameDay ? `1px solid ${C.red}66` : `1px solid ${C.border}`, borderLeft: isGameDay ? `3px solid ${C.red}` : `1px solid ${C.border}`, borderRadius: radii.card, padding: 0, marginBottom: 8, overflow: 'hidden' }}>
       {/* Big date block — the broadcast schedule read. */}
-      <span style={{ flexShrink: 0, width: 72, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, padding: '12px 6px', background: 'rgba(46,91,140,0.18)', borderRight: `1px solid ${C.border}` }}>
-        <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', color: C.steel, fontFamily: "'Barlow Condensed', sans-serif" }}>{day}</span>
+      <span style={{ flexShrink: 0, width: 72, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, padding: '12px 6px', background: isGameDay ? `${C.red}1f` : 'rgba(46,91,140,0.18)', borderRight: `1px solid ${C.border}` }}>
+        <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', color: isGameDay ? C.red : C.steel, fontFamily: "'Barlow Condensed', sans-serif" }}>{day}</span>
         <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 26, lineHeight: 1, color: C.ice }}>{dnum}</span>
         <span style={{ fontSize: 11, fontWeight: 700, color: C.steel, fontFamily: "'Barlow Condensed', sans-serif" }}>{time}</span>
       </span>
       <span style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 3, padding: '11px 12px' }}>
-        <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.1em', color: C.steel, fontFamily: "'Barlow Condensed', sans-serif", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>NEXT GAME{level ? ` · ${level}` : ''}</span>
+        <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.1em', color: isGameDay ? C.red : C.steel, fontFamily: "'Barlow Condensed', sans-serif", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{isGameDay ? 'GAME DAY' : 'NEXT GAME'}{level ? ` · ${level}` : ''}</span>
         <span style={{ fontSize: 15, fontWeight: 700, color: C.ice, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {g._team?.name || 'My team'} <span style={{ color: C.steel, fontWeight: 400 }}>{g.is_home ? 'vs' : '@'}</span> {g.opponent || 'TBD'}
         </span>
-        {g.location && <span style={{ fontSize: 12, color: C.steel, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.location}</span>}
-        {rel && (
+        {canSeries && (
+          <span style={{ minHeight: 15, fontSize: 12, color: C.steel, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{seriesLabel || ' '}</span>
+        )}
+        {g.location && (
+          <MapLink text={g.location} icon="" style={{ fontSize: 12, color: C.steel, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 2 }} />
+        )}
+        {isGameDay ? (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, alignSelf: 'flex-start', marginTop: 2, fontSize: 10, fontWeight: 800, letterSpacing: '0.05em', color: C.red, background: `${C.red}1a`, border: `1px solid ${C.red}59`, borderRadius: 5, padding: '2px 7px', fontFamily: "'Barlow Condensed', sans-serif" }}>
+            <Icon name="gameReminder" size={11} color={C.red} />{time ? `PUCK DROPS ${time.toUpperCase()}` : 'PUCK DROPS SOON'}
+          </span>
+        ) : rel && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, alignSelf: 'flex-start', marginTop: 2, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', color: C.steel, background: 'rgba(139,163,190,0.12)', border: `1px solid ${C.border}`, borderRadius: 5, padding: '2px 7px', fontFamily: "'Barlow Condensed', sans-serif" }}>
             <Icon name="gameReminder" size={11} color={C.steel} />{rel}
           </span>

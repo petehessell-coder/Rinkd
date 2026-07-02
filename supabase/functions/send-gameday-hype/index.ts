@@ -92,12 +92,48 @@ serve(async (req) => {
   const stale: string[] = [];
   let sent = 0, attempted = 0;
 
+  // S06 N1 — audience honesty. Event FOLLOWERS used to get one push per game:
+  // on a 20-game league Saturday that's 20 pushes to every league follower.
+  // Now: rostered TEAM MEMBERS always get their own game's hype (max ~2/day by
+  // construction), while followers are capped at ONE hype per event per day via
+  // a `hype_day:<eventId>` ledger kind (game_reminders_sent.kind is free text —
+  // same no-schema-change trick as 'hype_2h').
+  const dayStart = new Date(); dayStart.setUTCHours(0, 0, 0, 0);
+
   for (const g of games) {
-    // The event's followers — the recap push's exact audience.
     const subTable = g.source === 'tournament' ? 'tournament_subscriptions' : 'league_subscriptions';
     const subCol = g.source === 'tournament' ? 'tournament_id' : 'league_id';
     const { data: subs } = await supabase.from(subTable).select('user_id').eq(subCol, g.eventId);
-    const userIds = (subs ?? []).map((s: any) => s.user_id).filter((uid: string) => !seen.has(`${g.id}|${uid}`));
+
+    // Rostered members of the two teams (league games only — tournament teams
+    // are nameplate rows with no memberships).
+    let memberIds: string[] = [];
+    if (g.source === 'league') {
+      const { data: lts } = await supabase.from('league_games')
+        .select('home_lt:league_teams!home_team_id(team_id), away_lt:league_teams!away_team_id(team_id)')
+        .eq('id', g.id).maybeSingle();
+      const teamIds = [lts?.home_lt?.team_id, lts?.away_lt?.team_id].filter(Boolean);
+      if (teamIds.length) {
+        const { data: members } = await supabase.from('team_members')
+          .select('user_id').in('team_id', teamIds);
+        memberIds = (members ?? []).map((m: any) => m.user_id).filter(Boolean);
+      }
+    }
+    const memberSet = new Set(memberIds);
+
+    const followerIds = (subs ?? []).map((s: any) => s.user_id).filter((uid: string) => !memberSet.has(uid));
+    // Daily cap for followers: skip anyone already hyped for this event today.
+    let cappedFollowers: string[] = followerIds;
+    if (followerIds.length) {
+      const { data: dayLedger } = await supabase.from('game_reminders_sent')
+        .select('user_id').eq('kind', `hype_day:${g.eventId}`)
+        .gte('sent_at', dayStart.toISOString()).in('user_id', followerIds);
+      const hypedToday = new Set((dayLedger ?? []).map((r: any) => r.user_id));
+      cappedFollowers = followerIds.filter((uid: string) => !hypedToday.has(uid));
+    }
+
+    const userIds = [...new Set([...memberIds, ...cappedFollowers])]
+      .filter((uid: string) => !seen.has(`${g.id}|${uid}`));
     if (!userIds.length) continue;
 
     const { data: pushSubs } = await supabase
@@ -105,7 +141,7 @@ serve(async (req) => {
     if (!pushSubs || !pushSubs.length) continue;
 
     const title = `🏒 ${g.away} @ ${g.home}`;
-    const body = `Puck drops in about 2 hours · ${g.eventName}. Tap for the matchup and head-to-head.`;
+    const body = `Puck drops in about 2 hours · ${g.eventName}. Tap for the matchup.`;
     const url = g.source === 'tournament' ? `/game/${g.id}` : `/league-game/${g.id}?type=league`;
     const payload = JSON.stringify({ title, body, url, tag: `hype:${g.id}` });
 
@@ -127,9 +163,11 @@ serve(async (req) => {
     // Record the ledger for everyone we targeted (delivered OR skipped) so a
     // re-run never re-fires, even for a user whose push later expired.
     if (userIds.length) {
-      await supabase.from('game_reminders_sent').insert(
-        userIds.map((uid: string) => ({ game_id: g.id, game_source: g.source, user_id: uid, kind: 'hype_2h' }))
-      );
+      const followerSent = userIds.filter((uid: string) => !memberSet.has(uid));
+      await supabase.from('game_reminders_sent').insert([
+        ...userIds.map((uid: string) => ({ game_id: g.id, game_source: g.source, user_id: uid, kind: 'hype_2h' })),
+        ...followerSent.map((uid: string) => ({ game_id: g.id, game_source: g.source, user_id: uid, kind: `hype_day:${g.eventId}` })),
+      ]);
     }
   }
 

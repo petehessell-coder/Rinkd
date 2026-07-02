@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
@@ -11,7 +11,8 @@ import { ErrorState } from '../components/ui';
 import { useOnline } from '../lib/useOnline';
 import { resolveStreamUrl, streamButtonLabel, detectStreamPlatform } from '../lib/streamUrl';
 import { subscribeGame } from '../lib/gameRealtime';
-import { useGoalMoment, GoalSweep } from '../lib/goalMoment';
+import { useGoalMoment, GoalSweep, usePeriodChange } from '../lib/goalMoment';
+import { haptics } from '../lib/haptics';
 import { loadGameCardData } from '../lib/gameCardData';
 import {
   isPublicSharingEnabled, areScorersHidden, isParentPublic, gameAppUrl, getRecapSponsor,
@@ -42,10 +43,13 @@ if (typeof document !== 'undefined' && !document.getElementById('rinkd-pg-anim')
     '@keyframes pgLiveRing{0%{box-shadow:0 0 0 0 rgba(215,38,56,0.7)}75%{box-shadow:0 0 0 16px rgba(215,38,56,0)}100%{box-shadow:0 0 0 0 rgba(215,38,56,0)}}'
     + '@keyframes pgScorePop{0%{transform:scale(1.2)}100%{transform:scale(1)}}'
     + '@keyframes pgShimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}'
+    // pgPeriodPulse — a single border flash when the period ticks over.
+    + '@keyframes pgPeriodPulse{0%{box-shadow:0 0 0 0 rgba(46,91,140,0)}30%{box-shadow:0 0 0 2px rgba(46,91,140,0.9)}100%{box-shadow:0 0 0 0 rgba(46,91,140,0)}}'
     + '.pg-live-ring{animation:pgLiveRing 1.5s ease-out infinite}'
     + '.pg-score-pop{animation:pgScorePop 200ms cubic-bezier(0.34,1.56,0.64,1)}'
+    + '.pg-period-pulse{animation:pgPeriodPulse 900ms ease-out}'
     + '.pg-shimmer{background:linear-gradient(90deg,rgba(46,91,140,0.18) 0%,rgba(46,91,140,0.32) 50%,rgba(46,91,140,0.18) 100%);background-size:800px 100%;animation:pgShimmer 1.4s linear infinite;border-radius:6px}'
-    + '@media (prefers-reduced-motion: reduce){.pg-live-ring{animation:none}.pg-score-pop{animation:none}.pg-shimmer{animation:none}}';
+    + '@media (prefers-reduced-motion: reduce){.pg-live-ring{animation:none}.pg-score-pop{animation:none}.pg-shimmer{animation:none}.pg-period-pulse{animation:none}}';
   document.head.appendChild(el);
 }
 
@@ -160,10 +164,31 @@ export default function PublicGame({ league }) {
   // SHARE-GOAL-1 — the goal moment for spectators who opened a shared live link.
   // `ready` gates out the loading→hydrate jump; `enabled` keeps a final game from
   // celebrating on a re-render. Hook sits above the early returns (rules of hooks).
+  // Neutral spectator surface: no rooting side, so myTeamSide stays null and the
+  // moment behaves exactly as it always has (full horn, full sweep, no muting).
   const goal = useGoalMoment(game?.home_score, game?.away_score, {
     ready: !loading && !!game && !blocked,
     enabled: game?.status === 'live',
+    myTeamSide: null,
   });
+
+  // L4 — period-change pulse (only counts a real forward tick; skips hydration).
+  const periodPulse = usePeriodChange(game?.period, {
+    ready: !loading && !!game && !blocked && game?.status === 'live',
+  });
+
+  // L3 — the final beat: one success buzz the moment a live game goes final.
+  // Mirrors the change-only discipline (skip the first ready read as baseline).
+  const finalBeat = useRef({ status: game?.status, init: false });
+  useEffect(() => {
+    const st = game?.status;
+    const ready = !loading && !!game && !blocked;
+    if (!ready) { finalBeat.current = { status: st, init: false }; return; }
+    const p = finalBeat.current;
+    if (!p.init) { finalBeat.current = { status: st, init: true }; return; }
+    if (p.status !== 'final' && st === 'final') haptics.success();
+    finalBeat.current = { status: st, init: true };
+  }, [game?.status, loading, game, blocked]);
 
   if (loading) return (
     <Shell>
@@ -222,6 +247,22 @@ export default function PublicGame({ league }) {
   const isLive = status === 'live';
   const dateStr = game.start_time ? new Date(game.start_time).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : null;
   const venue = [game.rink?.name, game.rink?.sub_rink].filter(Boolean).join(' · ');
+
+  // L3 — contextual state line, derived ONLY from real fields (scores + status).
+  // No clock exists, so we never fabricate "FINAL MINUTE" or a time remaining.
+  //   · live + tied  → 'TIED 2–2'
+  //   · final        → 'FINAL · [winner] wins'  (or 'FINAL · TIE')
+  const hScore = game.home_score ?? 0;
+  const aScore = game.away_score ?? 0;
+  const stateLine = (() => {
+    if (isFinal) {
+      if (hScore === aScore) return 'FINAL · TIE';
+      const winner = hScore > aScore ? homeTeam.name : awayTeam.name;
+      return `FINAL · ${winner || (hScore > aScore ? 'Home' : 'Away')} wins`;
+    }
+    if (isLive && hScore === aScore) return `TIED ${hScore}–${aScore}`;
+    return null;
+  })();
 
   // Broadcast detail — records (league only) + show-only-when-present flourishes.
   const recStr = (ltId) => { const r = recordByLt[ltId]; return r ? `${r.wins ?? 0}-${r.losses ?? 0}-${r.ties ?? 0}${r.otl ? `-${r.otl}` : ''}` : null; };
@@ -295,8 +336,8 @@ export default function PublicGame({ league }) {
         </div>
 
         {/* scoreboard */}
-        <div className={goal ? 'rinkd-goal-glow' : undefined} style={{ position: 'relative', background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 16, padding: '22px 18px', marginBottom: 16, overflow: 'hidden' }}>
-          {goal && <GoalSweep key={goal.key} side={goal.side} />}
+        <div className={`${goal ? 'rinkd-goal-glow' : ''}${periodPulse ? ' pg-period-pulse' : ''}`.trim() || undefined} style={{ position: 'relative', background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 16, padding: '22px 18px', marginBottom: 16, overflow: 'hidden' }}>
+          {goal && <GoalSweep key={goal.key} side={goal.side} label={goal.label} muted={goal.muted} />}
           {isLive ? (
             /* Live broadcast lower-third: red-accent slab bleeding to the card
                edges, pulsing ring, "2ND PERIOD - LIVE". You feel it before you
@@ -324,6 +365,12 @@ export default function PublicGame({ league }) {
             <TeamSide team={homeTeam} score={game.home_score} record={homeRecord} scorerLine={scorerLine(homeTeam.id)} hideScore={!isFinal && !isLive} />
             <TeamSide team={awayTeam} score={game.away_score} record={awayRecord} scorerLine={scorerLine(awayTeam.id)} hideScore={!isFinal && !isLive} />
           </div>
+          {/* L3 — contextual state line (real fields only; no fabricated clock). */}
+          {stateLine && (
+            <div style={{ textAlign: 'center', marginTop: 14, fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 800, fontSize: 14, letterSpacing: '0.06em', textTransform: 'uppercase', color: isFinal ? C.steel : C.ice }}>
+              {stateLine}
+            </div>
+          )}
           {sog && <PgShotShare home={sog.h} away={sog.a} />}
           {venue && <div style={{ textAlign: 'center', marginTop: 16, fontSize: 12, color: C.steel, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📍 {venue}</div>}
         </div>
@@ -415,6 +462,7 @@ export default function PublicGame({ league }) {
             goals={goals}
             canVote={false}
             accent={accent}
+            hideNames={scorersHidden}
           />
         )}
 

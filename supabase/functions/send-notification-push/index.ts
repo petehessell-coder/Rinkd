@@ -40,6 +40,8 @@ const KIND_TITLE: Record<string, string> = {
   like:     '❤️ New like',
   follow:   '👀 New follower',
   message:  '💬 New message',
+  milestone: '🏅 Milestone unlocked',
+  game_puck_won: '🏒 You won the Game Puck!',
 };
 
 const cors = {

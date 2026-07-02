@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ShareButton from './ShareButton';
 import PuckMark from './PuckMark';
 import { loadGamePuckCardData } from '../lib/gameCardData';
@@ -167,10 +168,18 @@ export default function GamePuckReveal({
   useEffect(() => { if (!reduced) ensurePeelKeyframes(); }, [reduced]);
   useEffect(() => () => clearTimeout(ripTimerRef.current), []);
 
+  const navigate = useNavigate();
   const name = result?.winner_name || null;
   const jersey = result?.jersey;
   const votes = result?.votes || 0;
   const totalVotes = result?.total_votes || 0;
+
+  // D8 — onward path. Only when a NAMED winner has a linked profile: youth events
+  // arrive with winner_name already nulled (jersey-only, COPPA), so gating on
+  // `name` keeps the name-derived label off youth entirely. No name → plain Done.
+  const winnerUserId = result?.winner_user_id || null;
+  const firstName = name ? name.trim().split(/\s+/)[0] : null;
+  const showSeasonPath = !!(winnerUserId && firstName);
 
   const finish = useCallback(() => {
     if (finishedRef.current) return;
@@ -424,10 +433,25 @@ export default function GamePuckReveal({
             <>
               <ShareButton gameId={gameId} isLeague={kind === 'league'} cardType="gamepuck" variant="solid" label="Share"
                 getCard={() => loadGamePuckCardData(gameId, kind === 'league')} />
-              <button onClick={onClose} style={{
-                background: 'transparent', color: GPR_DIM, border: `1px solid ${C.border}`, borderRadius: 999,
-                padding: '10px 20px', cursor: 'pointer', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 600,
-              }}>Done</button>
+              {showSeasonPath ? (
+                <button
+                  onClick={() => { onClose && onClose(); navigate(`/profile/${winnerUserId}`); }}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, maxWidth: 220,
+                    background: 'transparent', color: C.ice, border: `1px solid ${C.border}`, borderRadius: 999,
+                    padding: '10px 18px', cursor: 'pointer', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700,
+                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  }}
+                >
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>See {firstName}’s season</span>
+                  <span aria-hidden style={{ flex: 'none' }}>→</span>
+                </button>
+              ) : (
+                <button onClick={onClose} style={{
+                  background: 'transparent', color: GPR_DIM, border: `1px solid ${C.border}`, borderRadius: 999,
+                  padding: '10px 20px', cursor: 'pointer', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 600,
+                }}>Done</button>
+              )}
             </>
           )}
         </div>
