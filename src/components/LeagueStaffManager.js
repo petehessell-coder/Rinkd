@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   listLeagueStaff, assignLeagueManagerByInput, removeLeagueManager, revokeLeagueManagerInvite,
 } from '../lib/leagueManagers';
+import { listScorers, addScorerByInput, removeScorer } from '../lib/leagueScorers';
 import { useUndoable } from './ui';
 import { C, colors } from '../lib/tokens';
 
@@ -85,6 +86,63 @@ export default function LeagueStaffManager({ leagueId, leagueName, invitedBy }) 
     errorMessage: "That didn't go through — the invite's back. Try again.",
   });
 
+  // ── Scorers (league_roles role='scorer') — same add-by-input + optimistic
+  // remove/undo pattern as the managers section above. A scorer runs the clock
+  // (league_games_update RLS recognizes the role); managers/commissioners don't
+  // have to be the one scoring.
+  const [scorers, setScorers] = useState(null); // null = loading
+  const [scorerInput, setScorerInput] = useState('');
+  const [scorerFallbackEmail, setScorerFallbackEmail] = useState('');
+  const [scorerNeedsEmailFor, setScorerNeedsEmailFor] = useState(null);
+  const [scorerBusy, setScorerBusy] = useState(false);
+  const [scorerMsg, setScorerMsg] = useState(null);
+  const flashScorer = (kind, text) => { setScorerMsg({ kind, text }); setTimeout(() => setScorerMsg(null), 5000); };
+
+  const loadScorers = useCallback(async () => {
+    const { data, error } = await listScorers(leagueId);
+    if (error) { flashScorer('err', "Couldn't load scorers — check your connection and try again."); setScorers([]); return; }
+    setScorers(data || []);
+  }, [leagueId]);
+  useEffect(() => { loadScorers(); }, [loadScorers]);
+
+  const addScorer = async () => {
+    const raw = scorerInput.trim();
+    if (!raw) { flashScorer('err', 'Enter a handle or email to add a scorer.'); return; }
+    setScorerBusy(true); setScorerMsg(null);
+    const res = await addScorerByInput({
+      leagueId, leagueName, input: raw, invitedBy,
+      fallbackEmail: scorerNeedsEmailFor ? scorerFallbackEmail : null,
+    });
+    setScorerBusy(false);
+    if (res.status === 'added') {
+      flashScorer('ok', `Scorer added: ${res.profile.name || '@' + res.profile.handle}`);
+      setScorerInput(''); setScorerFallbackEmail(''); setScorerNeedsEmailFor(null);
+      await loadScorers();
+    } else if (res.status === 'already') {
+      flashScorer('err', `${res.profile.name || '@' + res.profile.handle} already has a ${res.role} role on this league.`);
+    } else if (res.status === 'invited') {
+      flashScorer('ok', `Invite emailed to ${res.email}. Add them as a scorer once they sign up.`);
+      setScorerInput(''); setScorerFallbackEmail(''); setScorerNeedsEmailFor(null);
+    } else if (res.status === 'needs_email') {
+      setScorerNeedsEmailFor(res.handle);
+      flashScorer('err', `No Rinkd account for "@${res.handle}". Enter their email and we'll send an invite.`);
+    } else {
+      flashScorer('err', res.message || "Couldn't add that scorer — double-check the handle or email and try again.");
+    }
+  };
+
+  // Optimistic remove + 5s Undo, mirroring the managers remove above.
+  const removeScorerRow = (s) => runUndoable({
+    message: `${s.profile?.name || '@' + (s.profile?.handle || '')} removed`,
+    apply: () => {
+      let prev;
+      setScorers((list) => { prev = list; return (list || []).filter((x) => x.id !== s.id); });
+      return () => { if (prev !== undefined) setScorers(prev); };
+    },
+    commit: async () => { const r = await removeScorer(s.id); if (r && r.error) throw r.error; loadScorers().catch(() => {}); },
+    errorMessage: "That didn't go through — they're back. Try again.",
+  });
+
   const managers = staff?.managers || [];
   const invites = staff?.pending_invites || [];
 
@@ -150,6 +208,54 @@ export default function LeagueStaffManager({ leagueId, leagueName, invitedBy }) 
           ))}
         </>
       )}
+
+      {/* ── Scorers ─────────────────────────────────────────────── */}
+      <div style={{ fontSize: 13, color: C.steel, margin: '26px 0 14px', lineHeight: 1.5 }}>
+        Add scorers to run the clock and enter goals live. They can score league games but <strong>cannot</strong> manage teams, the schedule, settings, or staff.
+      </div>
+
+      {scorerMsg && <div style={{ marginBottom: 12, fontSize: 13, color: scorerMsg.kind === 'ok' ? LOCAL.green : colors.redSoft }}>{scorerMsg.text}</div>}
+
+      {/* Add scorer */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 18 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 12 }}>Add a Scorer</div>
+        <label style={label}>Handle or email</label>
+        <input value={scorerInput} onChange={(e) => { setScorerInput(e.target.value); setScorerNeedsEmailFor(null); }} placeholder="@handle or name@email.com"
+          onKeyDown={(e) => { if (e.key === 'Enter' && !scorerBusy) addScorer(); }} style={inputStyle} />
+        {scorerNeedsEmailFor && (
+          <div style={{ marginTop: 10 }}>
+            <label style={label}>Email for @{scorerNeedsEmailFor} (send an invite)</label>
+            <input value={scorerFallbackEmail} onChange={(e) => setScorerFallbackEmail(e.target.value)} placeholder="name@email.com"
+              onKeyDown={(e) => { if (e.key === 'Enter' && !scorerBusy) addScorer(); }} style={inputStyle} />
+          </div>
+        )}
+        <div style={{ fontSize: 11, color: LOCAL.dim, marginTop: 8 }}>
+          Existing account → added right away. No account yet → we email a sign-up invite; add them here once they've joined.
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+          <button onClick={addScorer} disabled={scorerBusy} style={pillBtn(scorerBusy ? C.border : C.blue, '#fff')}>{scorerBusy ? 'Working…' : (scorerNeedsEmailFor ? 'Send invite' : 'Add scorer')}</button>
+        </div>
+      </div>
+
+      {/* Current scorers */}
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 8 }}>Scorers</div>
+      {scorers === null ? (
+        <div style={{ color: LOCAL.dim, fontSize: 13, padding: '14px 0' }}>Warming up.</div>
+      ) : scorers.length === 0 ? (
+        <div style={{ color: LOCAL.dim, fontSize: 13, padding: '14px 0' }}>No scorers yet — add the person who runs the clock.</div>
+      ) : scorers.map((s) => {
+        const p = s.profile || {};
+        return (
+          <div key={s.id} style={{ background: LOCAL.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: 12, marginBottom: 10, display: 'flex', gap: 12, alignItems: 'center' }}>
+            <div style={{ width: 38, height: 38, borderRadius: 999, background: p.avatar_color || C.blue, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: '#fff', flexShrink: 0 }}>{p.avatar_initials || (p.name || p.handle || '?').slice(0, 2).toUpperCase()}</div>
+            <div style={{ flex: 1, minWidth: 120 }}>
+              <div style={{ color: C.ice, fontWeight: 700, fontSize: 14 }}>{p.name || `@${p.handle}`}</div>
+              <div style={{ color: LOCAL.dim, fontSize: 12 }}>{p.handle ? `@${p.handle}` : ''} · Scorer</div>
+            </div>
+            <button onClick={() => removeScorerRow(s)} style={pillBtn('transparent', colors.redSoft, `1px solid ${colors.redSoft}`)}>Remove</button>
+          </div>
+        );
+      })}
     </div>
   );
 }

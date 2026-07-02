@@ -90,7 +90,6 @@ export default function LeagueRegister() {
         if (draft.contactEmail) setContactEmail(draft.contactEmail);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, isSuccess, isCanceled]);
 
   const handleSubmit = async () => {
