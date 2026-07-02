@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import SEO from '../components/SEO';
-import { Icon } from '../components/ui';
+import { Icon, Img } from '../components/ui';
 import { Avatar, TierBadge, TeamLogo } from '../components/Logos';
 import TapeText from '../components/TapeText';
 import { CardGridSkeleton, ListRowSkeleton } from '../components/Skeletons';
@@ -156,7 +156,7 @@ function TrendingRail({ navigate }) {
           {p.media_url && (
             p.media_type === 'video'
               ? <div style={{ background: '#000', borderRadius: 8, height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.steel, fontSize: 12 }}>▶ Video</div>
-              : <img src={p.media_url} alt="" style={{ width: '100%', height: 110, objectFit: 'cover', borderRadius: 8 }} />
+              : <Img src={p.media_url} alt="" height={110} radius={8} />
           )}
           {p.content && <div style={{ fontSize: 13, color: C.ice, lineHeight: 1.45, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>{p.content}</div>}
           <div style={{ display: 'flex', gap: 12, fontSize: 11, color: C.steel, marginTop: 'auto' }}>

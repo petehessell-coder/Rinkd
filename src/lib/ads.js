@@ -2,6 +2,7 @@
 // pick. Zero third-party script; just a cached-config read of our own tables.
 
 import { supabase } from './supabase';
+import { compressImage } from './image';
 
 const CACHE = new Map(); // "type:id" -> { at, placements }
 const TTL = 5 * 60 * 1000; // placements rarely change; don't refetch on tab switches
@@ -86,10 +87,15 @@ export async function listOwnerSponsors(ownerType, ownerId) {
 }
 
 export async function uploadCreativeImage(file, userId) {
-  const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+  // perf(C08 PR-C): route through the shared compression chokepoint (same
+  // maxEdge as posts.js's uploadMedia) so a raw sponsor upload never hits
+  // Storage/the feed at full resolution. Immutable per-upload filename below
+  // → cache for a year, matching uploadMedia.
+  const slim = await compressImage(file, { maxEdge: 1600 });
+  const ext = (slim.name.split('.').pop() || 'png').toLowerCase();
   const path = `${userId}/${Date.now()}.${ext}`;
   const { error } = await supabase.storage.from('ad-creatives')
-    .upload(path, file, { cacheControl: '3600', upsert: false });
+    .upload(path, slim, { cacheControl: '31536000', upsert: false });
   if (error) return { url: null, error };
   const { data } = supabase.storage.from('ad-creatives').getPublicUrl(path);
   return { url: data.publicUrl, error: null };

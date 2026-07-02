@@ -477,12 +477,23 @@ export default function Feed({ currentUser, profile }) {
     const page = data || [];
     setPosts(page);
     setHasMore(page.length === PAGE_SIZE);
-    if (currentUser) {
-      const liked = await getLikedPosts(currentUser.id, page.map(p => p.id));
-      setLikedPosts(liked);
-    }
-    // Reaction counts are public — load them whether or not we're signed in.
-    setReactionMap(await getReactions(currentUser?.id, page.map(p => p.id)));
+    // perf(C08 PR-C): likes + reaction counts are independent reads off the same
+    // page — fire them together instead of a sequential waterfall. Each is
+    // wrapped in its own catch so one failing (e.g. a reactions hiccup) still
+    // lets the other hydrate instead of blanking the whole feed via the outer
+    // catch below.
+    const postIds = page.map(p => p.id);
+    await Promise.all([
+      currentUser
+        ? getLikedPosts(currentUser.id, postIds)
+            .then(liked => setLikedPosts(liked))
+            .catch(e => console.error('[Feed] getLikedPosts failed', e))
+        : Promise.resolve(),
+      // Reaction counts are public — load them whether or not we're signed in.
+      getReactions(currentUser?.id, postIds)
+        .then(map => setReactionMap(map))
+        .catch(e => console.error('[Feed] getReactions failed', e)),
+    ]);
     } catch (e) {
       // A network drop / server hiccup must surface a retry, never hang the
       // skeleton forever.
@@ -727,14 +738,14 @@ export default function Feed({ currentUser, profile }) {
           <div style={{ background: C.card, borderRadius: 14, border: `1px solid ${C.border}`, marginBottom: 16, overflow: 'hidden' }}>
             {!composerOpen ? (
               <button onClick={() => setComposerOpen(true)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer' }}>
-                <Avatar profile={profile} size={36} />
+                <Avatar profile={profile} size={36} eager />
                 <span key={starterIdx} className="rinkd-starter-fade" style={{ flex: 1, color: C.steel, fontSize: 15, fontFamily: "'Barlow', sans-serif", textAlign: 'left' }}>{CHIRP_STARTERS[starterIdx]}</span>
                 <span style={{ padding: '6px 14px', borderRadius: 8, background: C.red, color: 'white', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 13 }}>CHIRP</span>
               </button>
             ) : (
               <form onSubmit={handlePost} style={{ padding: '14px 16px' }}>
                 <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-                  <Avatar profile={profile} size={36} />
+                  <Avatar profile={profile} size={36} eager />
                   <MentionInput value={content} onChange={setContent} onMentionsChange={setPostMentionIds}
                     placeholder={`${CHIRP_STARTERS[starterIdx]} · tag players with @`} maxLength={500} rows={3} autoFocus
                     style={{ flex: 1 }}
