@@ -247,6 +247,26 @@ export async function getYourHockey(userId) {
   if (!userId) return { teamCount: 0, teams: [], live: [], next: [], recentFinals: [] };
   let teams = [];
   try { teams = await getUserTeams(userId); } catch (_) { teams = []; }
+
+  // S07 D-S07-1 — followed teams count as "your hockey" too (the spectator
+  // follow must be REAL: a grandparent's followed team surfaces here exactly
+  // like a rostered one). Membership wins on overlap; follows are bounded.
+  try {
+    const { getMyFollowedTeamIds } = await import('./teamSubscriptions');
+    const followedIds = await getMyFollowedTeamIds(userId);
+    const memberTeamIds = new Set(teams.map((m) => m.team_id));
+    const extra = followedIds.filter((tid) => !memberTeamIds.has(tid)).slice(0, 10);
+    if (extra.length) {
+      const { data: fTeams } = await supabase
+        .from('teams')
+        .select('id,name,logo_color,logo_initials,logo_url')
+        .in('id', extra);
+      for (const t of (fTeams || [])) {
+        teams.push({ team_id: t.id, team: t, _followedOnly: true });
+      }
+    }
+  } catch (_) { /* follows are additive — never block the member path */ }
+
   if (!teams.length) return { teamCount: 0, teams: [], live: [], next: [], recentFinals: [] };
 
   const slice = teams.slice(0, TEAM_HYDRATE_CAP);
@@ -339,7 +359,9 @@ export async function loadHome(userId) {
     publicEvents,
     leader,
     ticker,
-    hasFollows,
+    // hasFollows: gameday ctx (memberships + event follows) OR the aggregated
+    // your-hockey teams, which now include S07 spectator team-follows.
+    hasFollows: hasFollows || (your?.teamCount || 0) > 0,
     // Followed event ids — the home subscribes to these for Realtime live
     // updates (no polling). Capped at the source.
     followIds: { tournamentIds: ctx.tournamentIds || [], leagueIds: ctx.leagueIds || [] },
