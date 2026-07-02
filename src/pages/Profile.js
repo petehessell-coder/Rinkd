@@ -120,7 +120,15 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
-  const [activeTab, setActiveTab] = useState('posts');
+  // S07 H2: profile tabs honor ?tab= (read-once — this page never writes query
+  // params, so no setSearchParams needed per the S04 lesson). Shared stat cards
+  // deep-link to ?tab=stats.
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const t = (new URLSearchParams(window.location.search).get('tab') || '').toLowerCase();
+      return ['posts', 'stats', 'activity', 'badges'].includes(t) ? t : 'posts';
+    } catch { return 'posts'; }
+  });
   const [following, setFollowing] = useState(false);
   const [followCounts, setFollowCounts] = useState({ followers: 0, following: 0 });
   const [followLoading, setFollowLoading] = useState(false);
@@ -750,7 +758,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                 <span style={{ width: 3, height: 14, background: C.red, borderRadius: 2, flexShrink: 0 }} />
                 <span style={{ flex: 1, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic', fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.steel, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{kicker}</span>
                 <div style={{ flexShrink: 0, margin: '-8px -8px -8px 0' }}>
-                  <ShareButton compact cardType="stat" label="" shareUrl={absoluteShareUrl(`/profile/${profileId}`)} getCard={getStatCard} />
+                  <ShareButton compact cardType="stat" label="" shareUrl={absoluteShareUrl(`/profile/${profileId}?tab=stats`)} getCard={getStatCard} />
                 </div>
               </div>
               <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 32, lineHeight: 1, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.name}</div>
