@@ -166,6 +166,19 @@ shared pressable class (vocabulary-intended; desktop-only effect). Noted, no
 action: numberChange token stays dormant; like-bounce 300ms stays; bare-disabled
 buttons in hand-rolled modals fold into S10's component adoption.
 
+### 2026-07-02 · C08 P0 wave SHIPPED (PRs #34–#37 merged + applied)
+Adversarial QA (`audits/C08_qa.md`): ZERO must-fix across A/B/D; C reviewed
+inline. One should-fix applied pre-merge (PR-A header: grants are TIGHTENED —
+public execute deliberately dropped — not "preserved"). Merged A→B→C→D;
+migration applied to prod (verified: one signature per RPC, anon default=100
+rows was unbounded, p_limit respected); 3 push edge fns redeployed
+(send-recap-push v12, send-league-recap-push v13 [verify_jwt true],
+send-gameday-hype v3 [verify_jwt false — cron]); Vercel prod READY on
+`6ea92918`. Main bundle 259.74→253.47kB gzip. NOTED (accepted): LIMIT ties
+nondeterministic at cutoff; stats invalidatePrefix key lacks trailing colon
+(UUID-safe); `_lastCtx` staleness self-heals on remount. Remaining: E (RLS
+consolidation) + F (freshness/pagination) — P1, pre-Aug 1.
+
 ### 2026-07-02 · C08 Gate-1 (Pete sign-off — "A-F approved")
 Saturday-Night-Test audit (`audits/C08_performance.md`) approved as a 6-PR plan:
 **A** (P0, Opus) LIMIT the 5 stat RPCs + hot FK indexes + cron documentation;
