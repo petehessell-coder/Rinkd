@@ -8,7 +8,9 @@ import { mentionMapFromRows } from '../lib/mentions';
 import ShareButton from './ShareButton';
 import { absoluteShareUrl } from '../lib/share';
 import { IndeterminateBar } from '../pages/Feed';
-import { Button, Skeleton } from './ui';
+import { Button, Skeleton, EmptyState } from './ui';
+import { isPublicSharingEnabled, areScorersHidden } from '../lib/publicShare';
+import { classifyImage } from '../lib/imageModeration';
 import { C, colors } from '../lib/tokens';
 
 // Local drift: no exact token match, kept inline per migration rules.
@@ -26,11 +28,24 @@ const GAL_BLUE = '#5B9FE2';
  * team column (tournament_team_id / league_team_id) and loads the competing
  * teams for the filter chips itself.
  *
- *   <Gallery tournamentId={id} currentUser={currentUser} navigate={navigate} />
- *   <Gallery leagueId={id} currentUser={currentUser} navigate={navigate} />
+ *   <Gallery tournamentId={id} currentUser={currentUser} settings={t.settings} />
+ *   <Gallery leagueId={id} currentUser={currentUser} settings={league.settings} />
+ *
+ * YOUTH-PRIVACY (C06 PR-1, D-C06-3): pass the parent event's `settings` so the
+ * gallery reads the same guardrails as the public game page:
+ *   - ANON visitors on a youth event (!isPublicSharingEnabled) lose the tab
+ *     content behind a quiet "sign in" invitation — signed-in members keep it.
+ *   - when the event hides scorers (areScorersHidden) AND the viewer is anon,
+ *     uploader display-names + free-text captions are suppressed (a caption like
+ *     "Great game Jake #23!" must not publish a minor's name to anon visitors).
  */
-export default function Gallery({ tournamentId = null, leagueId = null, currentUser }) {
+export default function Gallery({ tournamentId = null, leagueId = null, currentUser, settings = null }) {
   const isTournament = !!tournamentId;
+  // Anon on a non-publicly-shareable (youth) event: gate the content entirely.
+  const anonYouthLocked = !currentUser && !isPublicSharingEnabled(settings);
+  // Anon on a scorers-hidden event: strip uploader name + caption (still shows
+  // the photo + team tag, which aren't minor PII).
+  const suppressMeta = !currentUser && areScorersHidden(settings);
   const [teams, setTeams] = useState([]);            // [{ id, name }]
   const [teamFilter, setTeamFilter] = useState(null); // team id, or null = all
   const [posts, setPosts] = useState(null);          // null = loading
@@ -117,6 +132,21 @@ export default function Gallery({ tournamentId = null, leagueId = null, currentU
 
   const scopeLabel = isTournament ? 'tournament' : 'league';
 
+  // D-C06-3: anon on a youth event — the gallery is member-only. Quiet,
+  // partner-safe invitation (no "youth" wording, no leaky counts/thumbnails).
+  if (anonYouthLocked) {
+    return (
+      <div style={{ padding: '0 12px', fontFamily: 'Barlow, sans-serif' }}>
+        <EmptyState
+          compact
+          icon="📸"
+          title="Sign in to view photos"
+          body={`Photos from this ${scopeLabel} are shared with signed-in fans and families.`}
+        />
+      </div>
+    );
+  }
+
   return (
     <div style={{ padding: '0 12px', fontFamily: 'Barlow, sans-serif' }}>
       {/* Header: team filter chips + Add Photo CTA */}
@@ -171,7 +201,7 @@ export default function Gallery({ tournamentId = null, leagueId = null, currentU
                   <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, color: '#fff', textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}>▶</span>
                 </>
               ) : (
-                <img src={p.media_url} alt={p.content ? p.content.slice(0, 60) : ''} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                <img src={p.media_url} alt={!suppressMeta && p.content ? p.content.slice(0, 60) : ''} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
               )}
             </button>
           ))}
@@ -206,6 +236,7 @@ export default function Gallery({ tournamentId = null, leagueId = null, currentU
           isTournament={isTournament}
           scopeId={tournamentId || leagueId}
           currentUser={currentUser}
+          suppressMeta={suppressMeta}
           reactionInitial={reactionMap[lightbox.id]}
           onClose={() => setLightbox(null)}
         />
@@ -257,6 +288,17 @@ function AddPhotoModal({ scopeLabel, teams, currentUser, tournamentId, leagueId,
     setSubmitting(true);
     setError(null);
     try {
+      // Image moderation parity with the Feed composer (imageModeration.js is a
+      // no-op stub today; wiring the call site now means Gallery gets real
+      // Sightengine moderation for free when it ships — no call-site change).
+      if (!file.type?.startsWith('video')) {
+        const verdict = await classifyImage(file);
+        if (!verdict.ok) {
+          setError("That image won’t clear our community guidelines — pick a different one and try again.");
+          setSubmitting(false);
+          return;
+        }
+      }
       const up = await uploadMedia(file, currentUser.id);
       if (up.error) { setError('That didn’t upload — check your connection and try again.'); setSubmitting(false); return; }
       const params = {
@@ -368,17 +410,21 @@ function AddPhotoModal({ scopeLabel, teams, currentUser, tournamentId, leagueId,
   );
 }
 
-function Lightbox({ post, isTournament, scopeId, currentUser, reactionInitial, onClose }) {
+function Lightbox({ post, isTournament, scopeId, currentUser, suppressMeta = false, reactionInitial, onClose }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const author = post.profiles?.name || post.profiles?.handle || '';
+  // YOUTH-PRIVACY (C06 PR-1): for anon viewers on a scorers-hidden event, the
+  // uploader's display name and free-text caption may name a minor — suppress
+  // both (team tag + timestamp + the photo itself stay; those aren't minor PII).
+  const author = suppressMeta ? '' : (post.profiles?.name || post.profiles?.handle || '');
   const team = isTournament ? post.tournament_teams : post.league_teams;
   const teamName = team?.team_name || null;
   const mentionMap = mentionMapFromRows(post.post_mentions);
+  const showCaption = !suppressMeta && !!post.content;
   const isImage = post.media_type !== 'video';
   // Shared photos get a Rinkd corner watermark + a tap-back link to the event.
   const photoDeepLink = scopeId ? absoluteShareUrl(`/${isTournament ? 'tournament' : 'league'}/${scopeId}`) : absoluteShareUrl('/');
@@ -401,12 +447,12 @@ function Lightbox({ post, isTournament, scopeId, currentUser, reactionInitial, o
           {post.media_type === 'video' ? (
             <video src={post.media_url} controls autoPlay style={{ width: '100%', maxHeight: '70vh', display: 'block' }} />
           ) : (
-            <img src={post.media_url} alt={post.content || ''} style={{ width: '100%', maxHeight: '70vh', objectFit: 'contain', display: 'block' }} />
+            <img src={post.media_url} alt={showCaption ? post.content : ''} style={{ width: '100%', maxHeight: '70vh', objectFit: 'contain', display: 'block' }} />
           )}
         </div>
 
         <div style={{ padding: 14, color: C.ice }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: GAL_DIM, marginBottom: post.content ? 8 : 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: GAL_DIM, marginBottom: showCaption ? 8 : 10 }}>
             {teamName && (
               <span style={{ background: 'rgba(91,159,226,0.18)', color: GAL_BLUE, borderRadius: 999, padding: '2px 8px', fontWeight: 700 }}>{teamName}</span>
             )}
@@ -414,7 +460,7 @@ function Lightbox({ post, isTournament, scopeId, currentUser, reactionInitial, o
               {author ? `${author} · ` : ''}{timeAgo(post.created_at)} ago
             </span>
           </div>
-          {post.content && (
+          {showCaption && (
             <div style={{ fontSize: 14, lineHeight: 1.45, marginBottom: 10 }}>
               <MentionText text={post.content} mentions={mentionMap} />
             </div>

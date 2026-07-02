@@ -166,6 +166,29 @@ shared pressable class (vocabulary-intended; desktop-only effect). Noted, no
 action: numberChange token stays dormant; like-bounce 300ms stays; bare-disabled
 buttons in hand-rolled modals fold into S10's component adoption.
 
+### 2026-07-02 · C06 Gate-1 decisions (Pete sign-off — "go with recommendations")
+Delta audit (`audits/C06_game_day.md`): scorer <5s bar MET (3-tap goal, offline
+bulletproof — leg closed); fan <10s bar fails on CONTENT (11.5% league stream
+coverage, no tournament column, LiveBarn 100% placeholder IDs). Approved 4-PR
+plan: **PR-1** (P0, Opus) youth-privacy — server-side shields on
+`get_game_recap_card` (DEFINER, returned minors' names unchecked — widest
+leak, in-feed recap on every youth final) + `get_season_game_pucks`, Game Puck
+vote-chip hideNames, Gallery anon gate (D-C06-3: anon loses the tab on youth
+events via isPublicSharingEnabled; captions/names suppressed under
+areScorersHidden); **PR-2** (P0, Opus) — RSVP repaired via two nullable FK
+columns + exactly-one check (D-C06-2; team_game_rsvps FK'd only team_games —
+prod had ONE row ever), league recap push `?type=league` fix,
+ProtectedRoute→`/login?returnTo=` (one root cause stranding push-tap fans AND
+first-login scorekeepers); **PR-3** (P1, Sonnet) — lineup entry from the
+scorer's seat, Finalize behind ConfirmSheet (D-C06-6; director Reopen
+unchanged), penalty tap-chips, header clamp; **PR-4** (P1) — tournament
+`games.youtube_url` (D-C06-5), post-final next-game card, final-horn coverage
+by WIDENING recap-push audience to rostered members w/ dedup (D-C06-4 — no new
+game_final kind; closes the S06 deferral), recap/puck card caching.
+**Stream ops DEFERRED to Pete near event time:** LiveBarn/streaming
+availability for the pilots is uncertain — revisit venue IDs + stream URLs
+closer to Jul 24/Aug 1; the affordances stay honestly hidden until then.
+
 ### 2026-07-02 · C08 COMPLETE — P1 wave shipped (PRs #38–#39), collection closed
 Gate-2 "go do it": PR-E RLS consolidation merged + APPLIED to prod (QA
 reconciled every drop/create against live pg_policies; anon feed reads /

@@ -1020,7 +1020,7 @@ export default function LeaguePage({ currentUser, profile }) {
           {activeTab === 'Stats' && (
             <>
               <AdSlot slot="stats_presented" targetType="league" targetId={league.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
-              <SeasonGamePucks scope="league" id={id} accent={league.accent_color || C.red} />
+              <SeasonGamePucks scope="league" id={id} accent={league.accent_color || C.red} youth={areScorersHidden(league?.settings)} />
               <StatLeaderboards source="league" id={id} accent={league.accent_color || C.red} archived={league.settings?.archived_stats || null}
                 shareMeta={{
                   leagueName: league?.name,
@@ -1088,7 +1088,7 @@ export default function LeaguePage({ currentUser, profile }) {
           {/* GALLERY TAB — media-only grid over league posts (inherits
               reactions/comments/likes/moderation; no separate table) */}
           {activeTab === 'Gallery' && (
-            <Gallery leagueId={id} currentUser={currentUser} />
+            <Gallery leagueId={id} currentUser={currentUser} settings={league?.settings} />
           )}
 
           {/* INFO TAB */}

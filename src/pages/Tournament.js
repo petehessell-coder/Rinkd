@@ -993,7 +993,7 @@ export default function TournamentPage({ currentUser }) {
         {activeTab === 'Stats' && (
           <>
             <AdSlot slot="stats_presented" targetType="tournament" targetId={tournament.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
-            <SeasonGamePucks scope="tournament" id={id} accent={accent} />
+            <SeasonGamePucks scope="tournament" id={id} accent={accent} youth={areScorersHidden(tournament?.settings)} />
             <StatLeaderboards source="tournament" id={id} divisionId={selectedDivisionId} accent={accent}
               gamesheetSeasonId={tournament?.scoring_source === 'external' ? (tournament?.settings?.gamesheet_season_id || null) : null}
               shareMeta={{
@@ -1025,7 +1025,7 @@ export default function TournamentPage({ currentUser }) {
         )}
 
         {activeTab === 'Gallery' && (
-          <Gallery tournamentId={id} currentUser={currentUser} />
+          <Gallery tournamentId={id} currentUser={currentUser} settings={tournament?.settings} />
         )}
 
         {activeTab === 'Info' && <InfoTab tournament={tournament} />}
