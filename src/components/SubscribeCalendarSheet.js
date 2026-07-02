@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { C } from '../lib/tokens';
+import { C, motion } from '../lib/tokens';
 
 /**
  * SubscribeCalendarSheet — modal/popover for subscribing to a live calendar
@@ -166,7 +166,7 @@ export default function SubscribeCalendarSheet({ open, onClose, httpsUrl, webcal
         </div>
       </div>
 
-      <style>{`@keyframes rinkd-fade-in { from { opacity: 0; } to { opacity: 1; } } .rinkd-cal-fade{animation:rinkd-fade-in 0.15s ease-out} @media (prefers-reduced-motion: reduce){.rinkd-cal-fade{animation:none}}`}</style>
+      <style>{`@keyframes rinkd-fade-in { from { opacity: 0; } to { opacity: 1; } } .rinkd-cal-fade{animation:rinkd-fade-in ${motion.duration.entrance}ms ${motion.easing.out}} @media (prefers-reduced-motion: reduce){.rinkd-cal-fade{animation:none}}`}</style>
     </div>
   );
 }

@@ -3,7 +3,7 @@ import {
   generateRoundRobin, expandFixturesToGames,
   detectScheduleConflicts, bulkInsertLeagueGames,
 } from '../lib/scheduleBuilder';
-import { colors } from '../lib/tokens';
+import { colors, motion } from '../lib/tokens';
 
 const B = {
   navy: colors.bg, blue: colors.blue, red: colors.red,
@@ -113,11 +113,25 @@ export default function ScheduleBuilderModal({
     return t?.team?.name || t?.team_name || '?';
   };
 
+  // Entrance-only motion (manifesto "fade-in + translateY(-8px)" for centered
+  // modals) — close/unmount stays instant. Gated under reduced motion per the
+  // sanctioned MoreDrawer pattern.
+  const modalCss = `
+    @keyframes rinkd-sbm-overlay-in { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes rinkd-sbm-panel-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+    .rinkd-sbm-overlay { animation: rinkd-sbm-overlay-in ${motion.duration.entrance}ms ${motion.easing.out} both; }
+    .rinkd-sbm-panel { animation: rinkd-sbm-panel-in ${motion.duration.entrance}ms ${motion.easing.out} both; }
+    @media (prefers-reduced-motion: reduce) { .rinkd-sbm-overlay, .rinkd-sbm-panel { animation: none; } }
+  `;
+
   return (
     <div onClick={onClose}
+      className="rinkd-sbm-overlay"
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.78)', zIndex: 400,
                display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <style>{modalCss}</style>
       <div onClick={e => e.stopPropagation()}
+        className="rinkd-sbm-panel"
         style={{ background: B.card, border: `1px solid ${B.border}`, borderRadius: 14,
                  maxWidth: 720, width: '100%', maxHeight: '92vh', overflowY: 'auto',
                  padding: '22px 24px', fontFamily: "'Barlow', sans-serif", color: B.ice }}>

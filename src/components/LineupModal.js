@@ -10,7 +10,7 @@ import {
 // the same set_lineup RPC, so Migration H's minor gate applies unchanged
 // (adult subs pass; a minor anchored only to the pool is blocked by design).
 import { listSubPoolsForTeam, sendSubNeededAlert } from '../lib/subPools';
-import { C, colors } from '../lib/tokens';
+import { C, colors, motion } from '../lib/tokens';
 
 const B = {
   navy: C.navy, blue: C.blue, red: C.red,
@@ -318,10 +318,24 @@ export default function LineupModal({
   const dressedIn = (list) => list.filter(m => selected.has(m.id));
   const linesAssigned = Object.keys(lines).length;
 
+  // Entrance-only motion (manifesto "fade-in + translateY(-8px)" for centered
+  // modals) — close/unmount stays instant. Gated under reduced motion per the
+  // sanctioned MoreDrawer pattern.
+  const modalCss = `
+    @keyframes rinkd-lm-overlay-in { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes rinkd-lm-panel-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+    .rinkd-lm-overlay { animation: rinkd-lm-overlay-in ${motion.duration.entrance}ms ${motion.easing.out} both; }
+    .rinkd-lm-panel { animation: rinkd-lm-panel-in ${motion.duration.entrance}ms ${motion.easing.out} both; }
+    @media (prefers-reduced-motion: reduce) { .rinkd-lm-overlay, .rinkd-lm-panel { animation: none; } }
+  `;
+
   return (
     <div onClick={onClose}
+      className="rinkd-lm-overlay"
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.78)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <style>{modalCss}</style>
       <div onClick={e => e.stopPropagation()}
+        className="rinkd-lm-panel"
         style={{ background: B.card, border: `1px solid ${B.border}`, borderRadius: 14, maxWidth: 520, width: '100%', maxHeight: '92vh', overflowY: 'auto', padding: '20px 22px', fontFamily: "'Barlow', sans-serif", color: B.ice }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 20, textTransform: 'uppercase' }}>Set Lineup</div>

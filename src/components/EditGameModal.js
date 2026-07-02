@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { C } from '../lib/tokens';
+import { C, motion } from '../lib/tokens';
 
 // Shared "edit a previously-scheduled game" modal for both the league and
 // tournament Schedule tabs. Presentational only: it normalizes the form into a
@@ -133,13 +133,27 @@ export default function EditGameModal({ game, rinks = [], teams = null, title = 
     }
   };
 
+  // Entrance-only motion (manifesto "fade-in + translateY(-8px)" for centered
+  // modals) — the close/unmount path stays instant. Gated under reduced motion
+  // per the sanctioned MoreDrawer pattern.
+  const modalCss = `
+    @keyframes rinkd-egm-overlay-in { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes rinkd-egm-panel-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+    .rinkd-egm-overlay { animation: rinkd-egm-overlay-in ${motion.duration.entrance}ms ${motion.easing.out} both; }
+    .rinkd-egm-panel { animation: rinkd-egm-panel-in ${motion.duration.entrance}ms ${motion.easing.out} both; }
+    @media (prefers-reduced-motion: reduce) { .rinkd-egm-overlay, .rinkd-egm-panel { animation: none; } }
+  `;
+
   return (
     <div
       onClick={onClose}
+      className="rinkd-egm-overlay"
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}
     >
+      <style>{modalCss}</style>
       <div
         onClick={(e) => e.stopPropagation()}
+        className="rinkd-egm-panel"
         style={{ width: '100%', maxWidth: 460, maxHeight: '90vh', overflowY: 'auto', background: MODAL_CARD, border: `0.5px solid ${MODAL_BORDER}`, borderRadius: 14, padding: 20, fontFamily: 'Barlow, sans-serif', boxShadow: '0 24px 60px rgba(0,0,0,0.5)' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>

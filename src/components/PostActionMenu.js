@@ -3,7 +3,8 @@ import { Icon, useUndoable } from './ui';
 import { reportPost, reportComment, REPORT_REASONS, hidePost, hideComment } from '../lib/moderation';
 import { blockUser } from '../lib/blocks';
 import { deletePost, deleteComment } from '../lib/posts';
-import { C } from '../lib/tokens';
+import { C, motion } from '../lib/tokens';
+import { haptics } from '../lib/haptics';
 
 /**
  * ⋯ menu for an individual post or comment. For your OWN content it offers
@@ -163,7 +164,14 @@ export default function PostActionMenu({
     <div ref={rootRef} style={{ position: 'relative', display: 'inline-block' }}>
       <button
         aria-label="More actions"
-        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => {
+            const next = !v;
+            if (next) haptics.tick(); // light confirmation the menu opened
+            return next;
+          });
+        }}
         style={{
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           width: 44, height: 44, margin: '-10px -8px', // 44px tap target without growing the row
@@ -176,12 +184,17 @@ export default function PostActionMenu({
       </button>
 
       {open && (
-        <div style={{
+        <div className="rinkd-pam-menu" style={{
           position: 'absolute', right: 0, top: '100%', marginTop: 4,
           minWidth: 180, background: C.card, border: `1px solid ${C.border}`,
           borderRadius: 8, padding: 4, zIndex: 50,
           boxShadow: '0 6px 18px rgba(0,0,0,0.35)',
         }}>
+          <style>{`
+            @keyframes rinkd-pam-menu-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+            .rinkd-pam-menu { animation: rinkd-pam-menu-in ${motion.duration.entrance}ms ${motion.easing.out} both; }
+            @media (prefers-reduced-motion: reduce) { .rinkd-pam-menu { animation: none; } }
+          `}</style>
           {isOwn ? (
             <button onClick={doDelete} disabled={deleting} style={{ ...menuItemStyle, display: 'flex', alignItems: 'center', gap: 8, color: C.red, opacity: deleting ? 0.6 : 1 }}>
               <Icon name="delete" size={16} /> {deleting ? 'Deleting…' : `Delete ${kind === 'comment' ? 'comment' : 'post'}`}
@@ -230,16 +243,30 @@ function ReportModal({
   kind, pickedReason, setPickedReason, details, setDetails,
   submitting, error, onCancel, onSubmit,
 }) {
+  // Entrance-only motion (manifesto "fade-in + translateY(-8px)" for centered
+  // modals) — close/unmount stays instant. Gated under reduced motion per the
+  // sanctioned MoreDrawer pattern.
+  const modalCss = `
+    @keyframes rinkd-pam-report-overlay-in { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes rinkd-pam-report-panel-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+    .rinkd-pam-report-overlay { animation: rinkd-pam-report-overlay-in ${motion.duration.entrance}ms ${motion.easing.out} both; }
+    .rinkd-pam-report-panel { animation: rinkd-pam-report-panel-in ${motion.duration.entrance}ms ${motion.easing.out} both; }
+    @media (prefers-reduced-motion: reduce) { .rinkd-pam-report-overlay, .rinkd-pam-report-panel { animation: none; } }
+  `;
+
   return (
     <div
       onClick={onCancel}
+      className="rinkd-pam-report-overlay"
       style={{
         position: 'fixed', inset: 0, background: 'rgba(7,17,31,0.7)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: 20, zIndex: 1000,
       }}>
+      <style>{modalCss}</style>
       <div
         onClick={(e) => e.stopPropagation()}
+        className="rinkd-pam-report-panel"
         style={{
           background: C.card, border: `1px solid ${C.border}`, borderRadius: 14,
           padding: 20, width: '100%', maxWidth: 380, color: C.ice,
