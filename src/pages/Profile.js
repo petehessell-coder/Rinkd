@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { subscribeToPush, isPushSubscribed, unsubscribeFromPush } from '../lib/push';
 import Layout from '../components/Layout';
 import { C, colors } from '../lib/tokens';
-import { Icon, StatNumber, ErrorState, Img, SectionHeader, Skeleton } from '../components/ui';
+import { Icon, StatNumber, ErrorState, Img, SectionHeader, Skeleton, useToast } from '../components/ui';
 import { number, plural } from '../lib/format';
 import { TierBadge } from '../components/Logos';
 import { updateProfile, PROFILE_SELECT } from '../lib/auth';
@@ -91,6 +91,7 @@ function StatLine({ logoColor, initials, title, subtitle, gp, goals, assists, po
 export default function Profile({ currentUser, profile: myProfile, onProfileUpdate }) {
   const { userId: urlUserId } = useParams();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [profile, setProfile] = useState(myProfile);
   const [loadError, setLoadError] = useState(null);
   const [minorBlocked, setMinorBlocked] = useState(false); // YOUTH-PRIVACY: no minor profile pages
@@ -142,7 +143,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
     const sub = await subscribeToPush(currentUser?.id);
     setPushEnabled(!!sub);
     setPushLoading(false);
-    if (!sub) alert("Couldn't turn on notifications — if you blocked them before, allow Rinkd in your browser's site permissions, then try again.");
+    if (!sub) toast({ message: "Couldn't turn on notifications — if you blocked them before, allow Rinkd in your browser's site permissions, then try again.", tone: 'alert' });
   };
 
   const handleDisableNotifications = async () => {
@@ -254,23 +255,23 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
     const file = e.target.files?.[0];
     if (!file || !currentUser) return;
     if (file.size > 10 * 1024 * 1024) {
-      alert(`That cover photo is ${(file.size / 1024 / 1024).toFixed(1)} MB — keep it under 10 MB and try again.`);
+      toast({ message: `That cover photo is ${(file.size / 1024 / 1024).toFixed(1)} MB — keep it under 10 MB and try again.`, tone: 'alert' });
       e.target.value = '';
       return;
     }
     const coverVerdict = await classifyImage(file);
     if (!coverVerdict.ok) {
-      alert("That image won't clear our community guidelines — pick a different one and try again.");
+      toast({ message: "That image won't clear our community guidelines — pick a different one and try again.", tone: 'alert' });
       e.target.value = '';
       track('upload_blocked_nsfw', { label: coverVerdict.label, score: coverVerdict.score, scope: 'cover' });
       return;
     }
     setCoverUploading(true);
     const { url, error } = await uploadMedia(file, currentUser.id);
-    if (error || !url) { setCoverUploading(false); alert("That upload didn't go through — check your connection and try again."); return; }
+    if (error || !url) { setCoverUploading(false); toast({ message: "That upload didn't go through — check your connection and try again.", tone: 'alert' }); return; }
     const { error: uErr } = await updateProfile(currentUser.id, { cover_image_url: url });
     setCoverUploading(false);
-    if (uErr) { alert("Couldn't save your cover photo — try again in a sec."); return; }
+    if (uErr) { toast({ message: "Couldn't save your cover photo — try again in a sec.", tone: 'alert' }); return; }
     // Merge against the LATEST profile (via functional setter) and bubble the
     // merged value up. A quick second upload would otherwise read a stale
     // `profile` closure and clobber the first upload's field in the parent.
@@ -286,23 +287,23 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
     const file = e.target.files?.[0];
     if (!file || !currentUser) return;
     if (file.size > 5 * 1024 * 1024) {
-      alert(`That photo is ${(file.size / 1024 / 1024).toFixed(1)} MB — keep it under 5 MB and try again.`);
+      toast({ message: `That photo is ${(file.size / 1024 / 1024).toFixed(1)} MB — keep it under 5 MB and try again.`, tone: 'alert' });
       e.target.value = '';
       return;
     }
     const avatarVerdict = await classifyImage(file);
     if (!avatarVerdict.ok) {
-      alert("That image won't clear our community guidelines — pick a different one and try again.");
+      toast({ message: "That image won't clear our community guidelines — pick a different one and try again.", tone: 'alert' });
       e.target.value = '';
       track('upload_blocked_nsfw', { label: avatarVerdict.label, score: avatarVerdict.score, scope: 'avatar' });
       return;
     }
     setAvatarUploading(true);
     const { url, error } = await uploadMedia(file, currentUser.id);
-    if (error || !url) { setAvatarUploading(false); alert("That upload didn't go through — check your connection and try again."); return; }
+    if (error || !url) { setAvatarUploading(false); toast({ message: "That upload didn't go through — check your connection and try again.", tone: 'alert' }); return; }
     const { error: uErr } = await updateProfile(currentUser.id, { avatar_url: url });
     setAvatarUploading(false);
-    if (uErr) { alert("Couldn't save your profile picture — try again in a sec."); return; }
+    if (uErr) { toast({ message: "Couldn't save your profile picture — try again in a sec.", tone: 'alert' }); return; }
     // See handleCoverUpload — merge against the latest profile so concurrent
     // uploads don't drop each other's field on the parent's myProfile.
     setProfile((p) => {
@@ -322,7 +323,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
       track('dm_opened_from_profile');
       navigate(`/messages/${conversationId}`);
     } catch (err) {
-      alert(err?.message || "Couldn't start that conversation — try again in a sec.");
+      toast({ message: err?.message || "Couldn't start that conversation — try again in a sec.", tone: 'alert' });
     } finally {
       setDmLoading(false);
     }

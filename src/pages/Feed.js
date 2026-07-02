@@ -546,8 +546,7 @@ export default function Feed({ currentUser, profile }) {
     const isVideo = file.type.startsWith('video');
     const maxMB = isVideo ? 50 : 10;
     if (file.size > maxMB * 1024 * 1024) {
-      // eslint-disable-next-line no-alert
-      alert(`${isVideo ? 'Video' : 'Image'} is ${(file.size / 1024 / 1024).toFixed(1)}MB — max ${maxMB}MB. Trim a highlight or compress and try again.`);
+      toast({ message: `${isVideo ? 'Video' : 'Image'} is ${(file.size / 1024 / 1024).toFixed(1)}MB — max ${maxMB}MB. Trim a highlight or compress and try again.`, tone: 'alert' });
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
@@ -555,8 +554,7 @@ export default function Feed({ currentUser, profile }) {
     if (!isVideo) {
       const verdict = await classifyImage(file);
       if (!verdict.ok) {
-        // eslint-disable-next-line no-alert
-        alert("That image won't clear our community guidelines — pick a different one and try again.");
+        toast({ message: "That image won't clear our community guidelines — pick a different one and try again.", tone: 'alert' });
         if (fileInputRef.current) fileInputRef.current.value = '';
         track('upload_blocked_nsfw', { label: verdict.label, score: verdict.score });
         return;
@@ -575,7 +573,7 @@ export default function Feed({ currentUser, profile }) {
     let mediaUrl = null, mediaType = null;
     if (mediaFile) {
       const { url, mediaType: mt, error } = await uploadMedia(mediaFile, currentUser.id);
-      if (error) { setPosting(false); alert("That upload didn't go through — check your connection and try again."); return; }
+      if (error) { setPosting(false); toast({ message: "That upload didn't go through — check your connection and try again.", tone: 'alert' }); return; }
       mediaUrl = url; mediaType = mt;
     }
     const { data: newPost, error: postError } = await createPost(currentUser.id, { content: content.trim(), tag: selectedTag?.label || null, tagColor: selectedTag?.color || null, mediaUrl, mediaType });

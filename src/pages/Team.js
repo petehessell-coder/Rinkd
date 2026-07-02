@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Icon, ErrorState } from '../components/ui';
+import { Icon, ErrorState, useToast } from '../components/ui';
 import { ListRowSkeleton } from '../components/Skeletons';
 import Layout from '../components/Layout';
 import { getTeam, getTeamMembers, getTeamGames, getUserRoleOnTeam, isLeagueStaffOfTeam, requestToJoin, getPublicTeamSummary } from '../lib/teams';
@@ -37,6 +37,7 @@ function Avatar({ name, color, initials, size = 34 }) {
 export default function TeamPage({ currentUser, profile }) {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const online = useOnline();
   const [team, setTeam] = useState(null);
   const [members, setMembers] = useState([]);
@@ -116,8 +117,7 @@ export default function TeamPage({ currentUser, profile }) {
       if (/duplicate/i.test(e?.message || '')) {
         setJoinRequested(true);
       } else {
-        // eslint-disable-next-line no-alert
-        alert("That join request didn't go through — check your connection and try again.");
+        toast({ message: "That join request didn't go through — check your connection and try again.", tone: 'alert' });
       }
     }
     setJoinLoading(false);

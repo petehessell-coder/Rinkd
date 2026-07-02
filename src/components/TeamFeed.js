@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Icon, Img, ErrorState } from './ui';
+import { Icon, Img, ErrorState, useToast } from './ui';
 import { useOnline } from '../lib/useOnline';
 import { Avatar, TierBadge } from './Logos';
 import {
@@ -155,6 +155,7 @@ function PostCard({ post, currentUser, isLiked, reactions, onLike, onCommentChan
  * + followers see them on the team page.
  */
 export default function TeamFeed({ teamId, currentUser, isMember }) {
+  const { toast } = useToast();
   const [posts, setPosts] = useState([]);
   const [likedPosts, setLikedPosts] = useState([]);
   const [reactionMap, setReactionMap] = useState({});
@@ -200,14 +201,14 @@ export default function TeamFeed({ teamId, currentUser, isMember }) {
     const isVideo = file.type.startsWith('video');
     const maxMB = isVideo ? 50 : 10;
     if (file.size > maxMB * 1024 * 1024) {
-      alert(`${isVideo ? 'Video' : 'Image'} is ${(file.size / 1024 / 1024).toFixed(1)}MB — max ${maxMB}MB.`);
+      toast({ message: `${isVideo ? 'Video' : 'Image'} is ${(file.size / 1024 / 1024).toFixed(1)}MB — max ${maxMB}MB.`, tone: 'alert' });
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
     if (!isVideo) {
       const verdict = await classifyImage(file);
       if (!verdict.ok) {
-        alert('Looks like this image may violate Rinkd\'s community guidelines. Try a different one.');
+        toast({ message: 'Looks like this image may violate Rinkd\'s community guidelines. Try a different one.', tone: 'alert' });
         if (fileInputRef.current) fileInputRef.current.value = '';
         track('upload_blocked_nsfw', { label: verdict.label, score: verdict.score, scope: 'team' });
         return;
@@ -226,7 +227,7 @@ export default function TeamFeed({ teamId, currentUser, isMember }) {
     let mediaUrl = null, mediaType = null;
     if (mediaFile) {
       const { url, mediaType: mt, error } = await uploadMedia(mediaFile, currentUser.id);
-      if (error) { setPosting(false); alert("That upload didn't go through — check your connection and try again."); return; }
+      if (error) { setPosting(false); toast({ message: "That upload didn't go through — check your connection and try again.", tone: 'alert' }); return; }
       mediaUrl = url; mediaType = mt;
     }
     const { data, error } = await createPost(currentUser.id, {
@@ -236,7 +237,7 @@ export default function TeamFeed({ teamId, currentUser, isMember }) {
       mediaUrl, mediaType,
       teamId,
     });
-    if (error) { setPosting(false); alert("That post didn't go up — check your connection and try again."); return; }
+    if (error) { setPosting(false); toast({ message: "That post didn't go up — check your connection and try again.", tone: 'alert' }); return; }
     if (data?.id && postMentionIds.length) {
       const { error: mErr } = await savePostMentions(data.id, postMentionIds);
       if (mErr) console.warn('[TeamFeed post] mention save failed:', mErr?.message || mErr);
