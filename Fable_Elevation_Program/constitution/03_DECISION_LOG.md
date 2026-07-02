@@ -166,6 +166,20 @@ shared pressable class (vocabulary-intended; desktop-only effect). Noted, no
 action: numberChange token stays dormant; like-bounce 300ms stays; bare-disabled
 buttons in hand-rolled modals fold into S10's component adoption.
 
+### 2026-07-02 · C12 Gate-1 decisions (Pete sign-off — "go for all")
+Operator front door approved exactly as specced
+(`audits/C12_operator_front_door.md`): public `/o/:slug` route (link-only, NO nav
+entry — D-C12-4); `featured_operators` + `featured_operator_events` link table with
+two nullable FKs + `num_nonnulls=1` check, not polymorphic (D-C12-1); fail-closed
+RLS — public SELECT on `is_active`, zero write policies, all writes via
+`current_user_is_admin()`-gated SECURITY DEFINER RPCs that refuse youth tournaments
+and non-public leagues (D-C12-2); OG unfurl for `/o/:path*` ships as Wave 2 of the
+same sprint (D-C12-3); operator slug seeds first-touch `acquisition_ref` (D-C12-5);
+`admin_set_featured` RPC + pin toggles finally make `is_featured` a product control.
+Copy rule enforced: "engagement layer on top of your platform," never
+replace/replacement. Engineer = Opus 4.8 (new route + table + RLS = correctness-
+critical); migration PGlite prod-shape-tested before MCP apply.
+
 ### 2026-07-02 · S10 Gate-1 decisions (Pete sign-off)
 All three waves approved (finish: skeletons/emoji→Icon/targets/contrast/
 focus-ring/animation gates/lazy share pipeline; honesty: alert→toast,

@@ -71,6 +71,16 @@ export default async function handler(req) {
   if (!fonts.length) return fallback(); // no font → Satori can't draw text → static card
 
   try {
+    // C12 · operator card mode — title-only, brand-tinted (the /o/:slug unfurl).
+    // Reuses the exact card frame + fonts; just a bigger centered title and an
+    // optional brand-color gradient.
+    const card = p.get('card') || '';
+    const isOperator = card === 'operator';
+    const brand = (() => {
+      const b = p.get('brand') || '';
+      return /^#[0-9a-fA-F]{6}$/.test(b) ? b : null;
+    })();
+
     const home = p.get('home') || 'Home';
     const away = p.get('away') || 'Away';
     const hs = p.get('hs');
@@ -78,7 +88,7 @@ export default async function handler(req) {
     const status = (p.get('status') || '').toUpperCase(); // FINAL | LIVE | ''
     const title = p.get('title') || 'Rinkd';
     const sub = p.get('sub') || 'Every game lives on Rinkd';
-    const hasScore = hs !== null && as !== null && hs !== '' && as !== '';
+    const hasScore = !isOperator && hs !== null && as !== null && hs !== '' && as !== '';
 
     const pill = status
       ? el('div', {
@@ -102,8 +112,10 @@ export default async function handler(req) {
 
     const tree = el('div', {
       display: 'flex', flexDirection: 'column', width: '100%', height: '100%',
-      backgroundColor: NAVY,
-      backgroundImage: `linear-gradient(160deg, #13335c 0%, ${NAVY} 55%, ${NAVY2} 100%)`,
+      backgroundColor: brand || NAVY,
+      backgroundImage: brand
+        ? `linear-gradient(160deg, ${brand} 0%, ${NAVY} 60%, ${NAVY2} 100%)`
+        : `linear-gradient(160deg, #13335c 0%, ${NAVY} 55%, ${NAVY2} 100%)`,
       color: ICE, fontFamily: 'Barlow Condensed',
     }, [
       el('div', { display: 'flex', height: 10, width: '100%', backgroundColor: RED }, []),

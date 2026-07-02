@@ -51,6 +51,23 @@ export function capturePilotRef() {
   } catch { /* attribution is best-effort */ }
 }
 
+/**
+ * Seed the first-touch pilot ref from a source OTHER than the URL — e.g. an
+ * operator front door (/o/:slug) where the slug IS the acquisition source.
+ * FIRST TOUCH STILL WINS: if a ref was already captured (a ?ref= link, an
+ * earlier operator page), this is a no-op — the operator that actually brought
+ * the user is preserved. Value is trimmed + length-capped like capturePilotRef.
+ */
+export function seedPilotRef(ref) {
+  if (typeof window === 'undefined') return;
+  try {
+    const clean = (ref || '').trim().slice(0, 64);
+    if (clean && !localStorage.getItem(PILOT_REF_KEY)) {
+      localStorage.setItem(PILOT_REF_KEY, clean);
+    }
+  } catch { /* attribution is best-effort */ }
+}
+
 /** The stored first-touch pilot ref, or null. */
 export function pilotRef() {
   if (typeof window === 'undefined') return null;

@@ -8,7 +8,7 @@
 // Zero per-request render: og:image points at the client-composed card stored in
 // the `share-cards` bucket if present, else the generic /og-fallback-rinkd.png.
 
-export const config = { matcher: ['/g/:path*', '/lg/:path*'] };
+export const config = { matcher: ['/g/:path*', '/lg/:path*', '/o/:path*'] };
 
 const SUPABASE_URL = 'https://tbpoopsyhfuqcbugrjbh.supabase.co';
 // anon key is publishable (already shipped in the client bundle) — safe to embed.
@@ -102,6 +102,32 @@ async function gameMeta(isLeague, gameId, origin) {
   return { title, desc, image };
 }
 
+// C12 · Operator Front Door unfurl — an outreach link that unfurls with the
+// operator's brand IS the pitch. RESTs the active operator card (anon key,
+// exactly how gameMeta reads). og:image priority: their real cover photo → a
+// title-only /api/og operator card → the generic Rinkd fallback.
+function operatorPartnerLine(name) {
+  return `The fan & community layer for ${name} — on top of the platform you already run.`;
+}
+async function operatorMeta(slug, origin) {
+  const rows = await sb(`featured_operators?slug=eq.${encodeURIComponent(slug)}&is_active=eq.true&select=name,tagline,logo_url,brand_color,cover_image_url`);
+  const op = rows && rows[0];
+  if (!op) return genericMeta(origin);
+
+  const title = `${op.name} on Rinkd`;
+  const desc = op.tagline || operatorPartnerLine(op.name);
+  let image;
+  if (op.cover_image_url) {
+    image = op.cover_image_url;
+  } else {
+    // Title-only operator card via /api/og (card=operator mode).
+    const og = new URLSearchParams({ card: 'operator', title: op.name, sub: 'On Rinkd — the engagement layer on top of your platform' });
+    if (op.brand_color) og.set('brand', op.brand_color);
+    image = `${origin}/api/og?${og.toString()}`;
+  }
+  return { title, desc, image };
+}
+
 function htmlDoc(meta, pageUrl) {
   const t = esc(meta.title);
   const d = esc(meta.desc);
@@ -128,6 +154,21 @@ export default async function middleware(req) {
   if (!BOT_RE.test(ua)) return; // human → continue to the SPA
 
   const url = new URL(req.url);
+
+  // Operator front door — /o/:slug (lowercase letters/digits/hyphens, 3-40).
+  const op = url.pathname.match(/^\/o\/([a-z0-9]+(?:-[a-z0-9]+)*)\/?$/);
+  if (op) {
+    let meta;
+    try { meta = await operatorMeta(op[1], url.origin); }
+    catch { meta = genericMeta(url.origin); }
+    return new Response(htmlDoc(meta, url.href), {
+      headers: {
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'public, max-age=600, s-maxage=600',
+      },
+    });
+  }
+
   const m = url.pathname.match(/^\/(g|lg)\/([0-9a-fA-F-]{10,})/);
   if (!m) return;
   const isLeague = m[1] === 'lg';
