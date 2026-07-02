@@ -243,6 +243,14 @@ export default function Discover({ currentUser, profile }) {
   // Batched isFollowing lookup result — one query for the whole visible page
   // instead of N per-row queries. Refreshes whenever the players list changes.
   const [followingSet, setFollowingSet] = useState(() => new Set());
+  // perf(scale) C08 PR-F — "Show more" keyset paging, ONE tab at a time.
+  // Search results stay single-page (per spec) — hasMore/loadingMore only
+  // apply when there's no active search. PAGE_CAP is the per-tab page size
+  // (matches the existing 40-cap); each tab's cursor is the sort column of
+  // its own ORDER BY so paging is a real keyset, not an offset.
+  const PAGE_CAP = 40;
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const search$ = debounced.trim();
   const ilike = useMemo(() => {
@@ -250,59 +258,119 @@ export default function Discover({ currentUser, profile }) {
     return safe ? `%${safe}%` : null;
   }, [search$]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    let qErr = null;
-    if (tab === 'players') {
-      // YOUTH-PRIVACY: minors never surface in people search (RLS also hides
-      // them, but exclude explicitly so an insider's view stays consistent).
-      let q = supabase.from('profiles')
+  // Tab config: which setter, the base query builder, the cursor column, and
+  // how to read a cursor value off the last row of a page. Shared by both the
+  // first-page load() and loadMore() below so the two can never drift.
+  const tabConfig = useMemo(() => ({
+    players: {
+      setter: setPlayers,
+      cursorKey: 'points',
+      build: () => supabase.from('profiles')
+        // YOUTH-PRIVACY: minors never surface in people search (RLS also
+        // hides them, but exclude explicitly so an insider's view stays consistent).
         .select('id, name, handle, position, level, points, tier, avatar_color, avatar_initials')
         .neq('account_type', 'minor')
         .order('points', { ascending: false, nullsFirst: false })
-        .limit(40);
-      if (ilike) q = q.or(`name.ilike.${ilike},handle.ilike.${ilike}`);
-      const { data, error: e } = await q;
-      qErr = e;
-      // Hide blocked users (either direction) from the people-search results.
-      const blocked = await getBlockedIds();
-      const rows = blocked.size ? (data || []).filter((p) => !blocked.has(p.id)) : (data || []);
-      setPlayers(rows);
-    } else if (tab === 'teams') {
-      let q = supabase.from('teams')
-        .select('id, name, level, division, location, logo_color, logo_initials, logo_url')
+        .order('id', { ascending: true }), // tie-breaker so the cursor is deterministic
+      applySearch: (q) => q.or(`name.ilike.${ilike},handle.ilike.${ilike}`),
+      // Compound cursor (points, id) — a plain `points < cur` would silently
+      // skip/duplicate rows that TIE on the same points value at the page
+      // boundary (common near 0 points). `or` replicates keyset-with-tiebreaker.
+      // cur === null means the cursor row itself had no points (sorts last,
+      // nullsFirst:false) — there's nothing further to page to.
+      applyCursor: (q, cur, curId) => (cur == null ? q.eq('id', curId).limit(0) : q.or(`points.lt.${cur},and(points.eq.${cur},id.gt.${curId})`)),
+    },
+    teams: {
+      setter: setTeams,
+      cursorKey: 'created_at',
+      build: () => supabase.from('teams')
+        .select('id, name, level, division, location, logo_color, logo_initials, logo_url, created_at')
         .order('created_at', { ascending: false })
-        .limit(40);
-      if (ilike) q = q.or(`name.ilike.${ilike},level.ilike.${ilike},location.ilike.${ilike}`);
-      const { data, error: e } = await q;
-      qErr = e;
-      setTeams(data || []);
-    } else if (tab === 'leagues') {
-      let q = supabase.from('leagues')
-        .select('id, name, division, season, logo_color')
+        .order('id', { ascending: true }), // tie-breaker so the cursor is deterministic
+      applySearch: (q) => q.or(`name.ilike.${ilike},level.ilike.${ilike},location.ilike.${ilike}`),
+      // Compound cursor (created_at, id) — same tie-safe pattern as players:
+      // a plain `created_at < cur` can skip a row that TIES on created_at at
+      // the page boundary.
+      applyCursor: (q, cur, curId) => q.or(`created_at.lt.${cur},and(created_at.eq.${cur},id.gt.${curId})`),
+    },
+    leagues: {
+      setter: setLeagues,
+      cursorKey: 'created_at',
+      build: () => supabase.from('leagues')
+        .select('id, name, division, season, logo_color, created_at')
         .order('created_at', { ascending: false })
-        .limit(40);
-      if (ilike) q = q.or(`name.ilike.${ilike},division.ilike.${ilike}`);
-      const { data, error: e } = await q;
-      qErr = e;
-      setLeagues(data || []);
-    } else if (tab === 'articles') {
-      let q = supabase.from('rinkside_articles')
+        .order('id', { ascending: true }), // tie-breaker so the cursor is deterministic
+      applySearch: (q) => q.or(`name.ilike.${ilike},division.ilike.${ilike}`),
+      // Compound cursor (created_at, id) — see teams above.
+      applyCursor: (q, cur, curId) => q.or(`created_at.lt.${cur},and(created_at.eq.${cur},id.gt.${curId})`),
+    },
+    articles: {
+      setter: setArticles,
+      cursorKey: 'published_at',
+      build: () => supabase.from('rinkside_articles')
         .select('id, slug, title, subtitle, hero_image_url, category, author_name, published_at, read_minutes')
         .eq('is_published', true)
         .order('published_at', { ascending: false })
-        .limit(40);
-      if (ilike) q = q.or(`title.ilike.${ilike},subtitle.ilike.${ilike},category.ilike.${ilike}`);
-      const { data, error: e } = await q;
-      qErr = e;
-      setArticles(data || []);
+        .order('id', { ascending: true }), // tie-breaker so the cursor is deterministic
+      applySearch: (q) => q.or(`title.ilike.${ilike},subtitle.ilike.${ilike},category.ilike.${ilike}`),
+      // Compound cursor (published_at, id) — see teams above.
+      applyCursor: (q, cur, curId) => q.or(`published_at.lt.${cur},and(published_at.eq.${cur},id.gt.${curId})`),
+    },
+  }), [ilike]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setHasMore(false);
+    const cfg = tabConfig[tab];
+    let q = cfg.build().limit(PAGE_CAP);
+    if (ilike) q = cfg.applySearch(q);
+    const { data, error: qErr } = await q;
+    if (qErr) { setError(qErr.message); setLoading(false); return; }
+    let rows = data || [];
+    if (tab === 'players') {
+      // Hide blocked users (either direction) from the people-search results.
+      const blocked = await getBlockedIds();
+      rows = blocked.size ? rows.filter((p) => !blocked.has(p.id)) : rows;
     }
-    if (qErr) setError(qErr.message);
+    cfg.setter(rows);
+    // Search stays single-page; directory browsing (no search) can page further.
+    setHasMore(!ilike && (data || []).length === PAGE_CAP);
     setLoading(false);
-  }, [tab, ilike]);
+  }, [tab, ilike, tabConfig]);
 
   useEffect(() => { load(); }, [load]);
+
+  // "Show more" — keyset page using the LAST loaded row's cursor column.
+  // Never active during a search (hasMore is forced false above).
+  const loadMore = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const cfg = tabConfig[tab];
+      const currentRows = { players, teams, leagues, articles }[tab];
+      const lastRow = currentRows[currentRows.length - 1];
+      const cursor = lastRow?.[cfg.cursorKey];
+      let q = cfg.build().limit(PAGE_CAP);
+      if (cursor != null) q = cfg.applyCursor(q, cursor, lastRow?.id);
+      const { data, error: qErr } = await q;
+      if (qErr) throw qErr;
+      let rows = data || [];
+      if (tab === 'players') {
+        const blocked = await getBlockedIds();
+        rows = blocked.size ? rows.filter((p) => !blocked.has(p.id)) : rows;
+      }
+      cfg.setter((prev) => {
+        const seen = new Set(prev.map((r) => r.id));
+        const fresh = rows.filter((r) => !seen.has(r.id));
+        return [...prev, ...fresh];
+      });
+      setHasMore((data || []).length === PAGE_CAP);
+    } catch (e) {
+      setError(e?.message || 'Could not load more results.');
+    }
+    setLoadingMore(false);
+  };
 
   // One batched isFollowing lookup whenever the visible player list changes —
   // replaces N per-PlayerRow queries. Quietly fails to an empty set on error
@@ -452,6 +520,16 @@ export default function Discover({ currentUser, profile }) {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+            {/* perf(scale) C08 PR-F — "Show more" keyset page, one tab at a
+                time. Never shown mid-search (hasMore is forced false then). */}
+            {!loading && !error && hasMore && (
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
+                <button onClick={loadMore} disabled={loadingMore}
+                  style={{ background: 'transparent', color: C.ice, border: `1px solid ${C.border}`, borderRadius: 999, padding: '8px 20px', minHeight: 44, fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: loadingMore ? 'default' : 'pointer', opacity: loadingMore ? 0.6 : 1 }}>
+                  {loadingMore ? 'Loading…' : 'Show more'}
+                </button>
               </div>
             )}
           </div>

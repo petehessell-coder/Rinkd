@@ -26,6 +26,11 @@ export default function CommentThread({ open, postId, currentUser, viewerProfile
   const [commentText, setCommentText] = useState('');
   const [commentMentionIds, setCommentMentionIds] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+  // perf(scale) C08 PR-F — keyset "load earlier": hasMore/loadingEarlier drive
+  // the quiet button at the TOP of the thread. Only shown once a full page
+  // came back (see getComments' hasMore contract).
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
   const { toast } = useToast();
 
   // Lazy load on first open (manifesto: comment threads don't load until needed).
@@ -34,8 +39,8 @@ export default function CommentThread({ open, postId, currentUser, viewerProfile
     let alive = true;
     (async () => {
       try {
-        const c = await getComments(postId);
-        if (alive) { setComments(c); setLoaded(true); }
+        const { comments: c, hasMore: more } = await getComments(postId);
+        if (alive) { setComments(c); setHasMore(more); setLoaded(true); }
       } catch (e) {
         console.warn('[CommentThread] load failed:', e?.message || e);
         if (alive) setLoaded(true);
@@ -43,6 +48,28 @@ export default function CommentThread({ open, postId, currentUser, viewerProfile
     })();
     return () => { alive = false; };
   }, [open, loaded, postId]);
+
+  // "Load earlier comments" — prepend the next (older) page ahead of what's
+  // already shown. Cursor is the oldest currently-loaded comment's created_at
+  // (comments[0], since the array is oldest-first).
+  const loadEarlier = async () => {
+    if (loadingEarlier || !comments.length) return;
+    setLoadingEarlier(true);
+    try {
+      const cursor = comments[0]?.created_at;
+      const { comments: older, hasMore: more } = await getComments(postId, { before: cursor });
+      setComments((prev) => {
+        const seen = new Set(prev.map((c) => c.id));
+        const fresh = older.filter((c) => !seen.has(c.id));
+        return [...fresh, ...prev];
+      });
+      setHasMore(more);
+    } catch (e) {
+      console.warn('[CommentThread] load earlier failed:', e?.message || e);
+      toast({ message: "Couldn't load earlier comments — check your connection and try again.", tone: 'alert' });
+    }
+    setLoadingEarlier(false);
+  };
 
   // Optimistic insert: show the comment instantly with a temp id, then swap for
   // the real row when Supabase confirms. Roll back + restore typed text on error.
@@ -88,6 +115,21 @@ export default function CommentThread({ open, postId, currentUser, viewerProfile
 
   return (
     <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+      {/* perf(scale) C08 PR-F — quiet "load earlier" affordance, only shown
+          once a full page was loaded (getComments' hasMore contract). */}
+      {hasMore && (
+        <div style={{ textAlign: 'center', marginBottom: 10 }}>
+          <button onClick={loadEarlier} disabled={loadingEarlier}
+            style={{
+              background: 'transparent', border: 'none', color: C.steel,
+              fontSize: 12, fontWeight: 600, cursor: loadingEarlier ? 'default' : 'pointer',
+              padding: '4px 8px', fontFamily: "'Barlow', sans-serif",
+              opacity: loadingEarlier ? 0.6 : 1,
+            }}>
+            {loadingEarlier ? 'Loading…' : 'Load earlier comments'}
+          </button>
+        </div>
+      )}
       {comments.map((c) => (
         <div key={c.id} style={{ display: 'flex', gap: 8, marginBottom: 10, opacity: c.__pending ? 0.55 : 1, transition: 'opacity 0.18s' }}>
           <Avatar profile={c.profiles} size={28} />

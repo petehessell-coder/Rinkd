@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Icon, ErrorState, useToast } from '../components/ui';
 import { ListRowSkeleton } from '../components/Skeletons';
@@ -25,6 +25,12 @@ import { isFollowingTeam, followTeam, unfollowTeam } from '../lib/teamSubscripti
 import { track } from '../lib/analytics';
 
 const TABS = ['Roster', 'Schedule', 'Feed', 'Volunteer', 'Info'];
+// perf(scale) C08 PR-F — Team.js's own default page, passed explicitly to
+// getTeamGames (whose bare-call default stays 200/200 for OTHER callers —
+// TeamManage/TeamVolunteer/VolunteerCoordinator/lib/home — that expect the
+// historic full-ish fetch). Well above the 5/5 collapsed display slice so
+// "Show all" has real headroom before "Load earlier games" is needed.
+const TEAM_GAMES_PAGE = { finalCap: 20, upcomingCap: 10 };
 
 function Avatar({ name, color, initials, size = 34 }) {
   return (
@@ -55,12 +61,20 @@ export default function TeamPage({ currentUser, profile }) {
   const [joinLoading, setJoinLoading] = useState(false);
   const [subscribeOpen, setSubscribeOpen] = useState(false);
   // Default schedule view shows recent 5 + upcoming 5; tapping "Show all"
-  // expands to every game past + future. Persists per-team via state, resets
-  // on page change. Keeps the team page light by default but never hides data.
+  // expands to every game past + future WITHIN the loaded page. Persists
+  // per-team via state, resets on page change. Keeps the team page light by
+  // default but never hides data — "Load earlier games" (below) fetches
+  // further back via a real keyset cursor once the loaded page runs out.
   const [showAllGames, setShowAllGames] = useState(false);
   // Schedule filter: All / Games / Practices (practices+events). Games stay the
   // headline; practices/events are a quieter, condensed class of row.
   const [scheduleFilter, setScheduleFilter] = useState('all');
+  // perf(scale) C08 PR-F — getTeamGames keyset pagination. moreFinals/cursor
+  // drive "Load earlier games"; loadingMoreGames is separate from the
+  // full-page `loading` so paging in more history doesn't re-show the skeleton.
+  const [moreFinals, setMoreFinals] = useState(false);
+  const [finalsCursor, setFinalsCursor] = useState(null);
+  const [loadingMoreGames, setLoadingMoreGames] = useState(false);
   // YOUTH-PRIVACY: when a youth team is RLS-invisible to this viewer, we still
   // show a results-only "locked" view (team-level record) + how to get access,
   // instead of a dead-end "not found".
@@ -95,16 +109,130 @@ export default function TeamPage({ currentUser, profile }) {
       }
 
       setTeam(t);
-      const [m, g, r, ls] = await Promise.all([
-        getTeamMembers(id), getTeamGames(id), getUserRoleOnTeam(id), isLeagueStaffOfTeam(id)
+      const [m, gRes, r, ls] = await Promise.all([
+        getTeamMembers(id), getTeamGames(id, TEAM_GAMES_PAGE), getUserRoleOnTeam(id), isLeagueStaffOfTeam(id)
       ]);
-      setMembers(m); setGames(g); setUserRole(r); setIsLeagueStaff(ls);
+      setMembers(m); setUserRole(r); setIsLeagueStaff(ls);
+      setGames(gRes); setMoreFinals(gRes.moreFinals); setFinalsCursor(gRes.oldestFinalCursor);
       await hydrateJoin();
     } catch(e) { console.error(e); captureDataError(e, { where: 'Team.load', teamId: id }); setError(e); }
     finally { setLoading(false); }
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // perf(scale) C08 PR-F — games-only re-query for the realtime ping below.
+  // Re-fetches the FIRST page (finalsCursor reset) so a fresh score shows up
+  // immediately; a spectator who already paged back further keeps their
+  // history on the next manual "Load earlier" tap (their existing older rows
+  // stay in state — see the merge in the realtime effect).
+  const reloadGamesOnly = useCallback(async () => {
+    try {
+      const gRes = await getTeamGames(id, TEAM_GAMES_PAGE);
+      setGames((prev) => {
+        // Merge the fresh first page with any earlier rows the viewer already
+        // paged in, de-duping by id (fresh page wins on conflict).
+        const freshIds = new Set(gRes.map((g) => g.id));
+        const keptOlder = prev.filter((g) => !freshIds.has(g.id) && (!finalsCursor || new Date(g.start_time) < new Date(finalsCursor)));
+        return [...gRes, ...keptOlder].sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
+      });
+      setMoreFinals(gRes.moreFinals);
+      if (!finalsCursor) setFinalsCursor(gRes.oldestFinalCursor);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[Team] live games reload failed; holding last data:', e?.message || e);
+    }
+  }, [id, finalsCursor]);
+
+  // perf(scale) C08 PR-F — realtime freshness. The Team page previously had NO
+  // subscription at all (self-inflicted polling via manual refresh). Bind to
+  // BOTH game tables this team's schedule can source from (team_games via
+  // team_id; league_games via each league_teams row this team occupies, home
+  // OR away) — mirrors League.js's single-channel + debounced-requery pattern.
+  // league_team ids only change when roster/league membership changes, so we
+  // resolve them once per team load rather than re-deriving on every render.
+  const leagueTeamIds = useMemo(
+    () => Array.from(new Set(games.filter((g) => g._source === 'league' && g.home_lt).flatMap((g) => [g.home_team_id, g.away_team_id]).filter(Boolean))),
+    [games]
+  );
+  // perf(scale) C08 QA fix — `leagueTeamIds` is a new array reference on every
+  // `games` update (e.g. each score ping's re-fetch), which previously sat
+  // directly in this effect's deps and tore down + resubscribed the channel
+  // on every ping. Key the effect on a STABLE primitive (sorted id string)
+  // instead — the subscription only needs to change when the actual id SET
+  // changes, not on every re-render that produces an equal-but-new array.
+  const leagueTeamIdsKey = useMemo(
+    () => leagueTeamIds.slice().sort().join(','),
+    [leagueTeamIds]
+  );
+  // `reloadGamesOnly` also changes reference whenever `finalsCursor` moves
+  // (e.g. a "Load earlier" tap), which would otherwise resubscribe the
+  // channel too. Keep the latest callback in a ref so the effect can invoke
+  // it without depending on it.
+  const reloadGamesOnlyRef = useRef(reloadGamesOnly);
+  useEffect(() => { reloadGamesOnlyRef.current = reloadGamesOnly; }, [reloadGamesOnly]);
+  useEffect(() => {
+    if (!id) return undefined;
+    let channel = null;
+    let reloadTimer = null;
+    const scheduleReload = () => {
+      if (reloadTimer) clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(() => { reloadGamesOnlyRef.current(); }, 1000);
+    };
+    try {
+      const name = `team:${id}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+      channel = supabase.channel(name)
+        .on('postgres_changes',
+          { event: '*', schema: 'public', table: 'team_games', filter: `team_id=eq.${id}` },
+          scheduleReload);
+      // league_games doesn't carry this team's id directly — filter per
+      // league_teams row (home or away), same bounded per-id-filter pattern
+      // GamedayStrip uses for its followed-event bindings. Capped at 20 rows
+      // (×2 filters) as a sanity rail; a team playing in more than 20 leagues
+      // at once is not a real case.
+      leagueTeamIds.slice(0, 20).forEach((ltId) => {
+        channel.on('postgres_changes', { event: '*', schema: 'public', table: 'league_games', filter: `home_team_id=eq.${ltId}` }, scheduleReload);
+        channel.on('postgres_changes', { event: '*', schema: 'public', table: 'league_games', filter: `away_team_id=eq.${ltId}` }, scheduleReload);
+      });
+      channel.subscribe();
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[team] realtime subscribe failed; page may show stale scores:', err);
+    }
+    return () => {
+      if (reloadTimer) clearTimeout(reloadTimer);
+      try { if (channel) supabase.removeChannel(channel); } catch { /* swallow */ }
+    };
+    // Deps intentionally exclude `leagueTeamIds` (raw array, new ref every
+    // `games` update — see leagueTeamIdsKey above) and `reloadGamesOnly`
+    // (invoked via reloadGamesOnlyRef so its own dep churn, e.g. finalsCursor
+    // changing on "Load earlier", doesn't tear down the channel).
+  }, [id, leagueTeamIdsKey]);
+
+  // "Load earlier games" — real keyset page further back via the `before`
+  // cursor. Appends (never replaces) so already-visible rows don't jump.
+  const loadMoreGames = async () => {
+    if (loadingMoreGames || !finalsCursor) return;
+    setLoadingMoreGames(true);
+    try {
+      // upcomingCap: 0 — "Load earlier" only pages further into FINALS
+      // history; the upcoming window is already fully covered by the
+      // TEAM_GAMES_PAGE fetch above and doesn't need re-fetching here.
+      const gRes = await getTeamGames(id, { finalCap: TEAM_GAMES_PAGE.finalCap, upcomingCap: 0, before: finalsCursor });
+      setGames((prev) => {
+        const seen = new Set(prev.map((g) => g.id));
+        const fresh = gRes.filter((g) => !seen.has(g.id));
+        return [...prev, ...fresh].sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
+      });
+      setMoreFinals(gRes.moreFinals);
+      if (gRes.oldestFinalCursor) setFinalsCursor(gRes.oldestFinalCursor);
+      setShowAllGames(true); // the new rows are all "recent" finals — show them
+    } catch (e) {
+      console.error(e);
+      toast({ message: "Couldn't load earlier games — check your connection and try again.", tone: 'alert' });
+    }
+    setLoadingMoreGames(false);
+  };
 
   const handleJoin = async () => {
     setJoinLoading(true);
@@ -744,6 +872,33 @@ export default function TeamPage({ currentUser, profile }) {
                     {showAllGames
                       ? `Show recent only`
                       : `Show all ${totalGames} ${scheduleFilter === 'practices' ? 'practices' : scheduleFilter === 'games' ? 'games' : 'items'} →`}
+                  </button>
+                </div>
+              )}
+              {/* perf(scale) C08 PR-F — real keyset "load earlier": once the
+                  loaded finals page is exhausted (moreFinals), page further
+                  back rather than pretending "Show all" already has everything. */}
+              {showAllGames && moreFinals && (
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
+                  <button
+                    onClick={loadMoreGames}
+                    disabled={loadingMoreGames}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: 999,
+                      background: 'transparent',
+                      border: `1px solid ${C.border}`,
+                      color: C.steel,
+                      fontFamily: "'Barlow', sans-serif",
+                      fontWeight: 600,
+                      fontSize: 12,
+                      cursor: loadingMoreGames ? 'default' : 'pointer',
+                      opacity: loadingMoreGames ? 0.6 : 1,
+                      transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={e => { if (!loadingMoreGames) e.currentTarget.style.color = C.ice; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = C.steel; }}>
+                    {loadingMoreGames ? 'Loading…' : 'Load earlier games'}
                   </button>
                 </div>
               )}
