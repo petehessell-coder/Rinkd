@@ -4,7 +4,7 @@ import Layout from '../components/Layout';
 import SEO from '../components/SEO';
 import MapLink from '../components/MapLink';
 import PinToNavButton from '../components/PinToNavButton';
-import { getLeague, getLeagueTeams, getLeagueGames, getLeagueStandings, getUserLeagueRole } from '../lib/leagues';
+import { getLeague, getLeagueTeams, getLeagueGames, getLeagueStandings, getUserLeagueRole, getLeagueStatusCounts } from '../lib/leagues';
 import { listLeagueDivisions, getMyDivisionInLeague } from '../lib/leagueDivisions';
 import { captureDataError } from '../lib/sentry';
 import DivisionPicker from '../components/DivisionPicker';
@@ -41,7 +41,13 @@ import { useOnline } from '../lib/useOnline';
 import { prefetchGamePage, prefetchHandlers } from '../lib/prefetch';
 import { staggerStyle, useReducedMotion } from '../lib/motion';
 import { motion as motionTokens } from '../lib/tokens';
+import { invalidatePrefix } from '../lib/cache';
 const TABS = ['Schedule', 'Standings', 'Stats', 'Teams', 'Feed', 'Gallery', 'Info'];
+// PR-B — tabs whose bodies read `games`/`standings`. Schedule needs both
+// (GameRow shows each side's W-L-T via `recordByLt`, which is built from
+// `standings`); Standings needs standings only. Drives per-tab deferral below.
+const GAMES_TABS = new Set(['Schedule', 'Standings']);
+const TEAMS_TABS = new Set(['Teams']);
 
 // S04: tabs are deep-linkable. ?tab= is read once on mount (validated against
 // TABS, case-insensitive); writes go through setSearchParams (see selectTab in
@@ -244,6 +250,32 @@ export default function LeaguePage({ currentUser, profile }) {
   const [teams, setTeams] = useState([]);
   const [games, setGames] = useState([]);
   const [standings, setStandings] = useState([]);
+  // PR-B — per-tab deferral. games/standings load when Schedule or Standings
+  // first activates; teams when Teams first activates. *Loaded flags start
+  // false and drive the tab-body skeleton until the first fetch resolves (an
+  // empty-but-loaded result still flips to true, so an empty state renders
+  // instead of an eternal skeleton). *Loading flags guard in-flight fetches so
+  // switching tabs quickly doesn't double-fire, and *Loaded also gates
+  // loadLive's realtime refresh (see below).
+  const [gamesLoaded, setGamesLoaded] = useState(false);
+  const [gamesLoading, setGamesLoading] = useState(false);
+  const [standingsLoaded, setStandingsLoaded] = useState(false);
+  const [standingsLoading, setStandingsLoading] = useState(false);
+  const [teamsLoaded, setTeamsLoaded] = useState(false);
+  const [teamsLoading, setTeamsLoading] = useState(false);
+  // Mirror the *Loaded flags in refs so loadLive (below) can read their
+  // current value without being in its own dependency array — keeps loadLive
+  // referentially stable ([id] only, exactly like pre-PR-B) so the realtime
+  // subscription effect's channel is untouched: it still only re-subscribes
+  // when `id` changes, never when a tab's first load flips a loaded flag.
+  const gamesLoadedRef = useRef(false);
+  const standingsLoadedRef = useRef(false);
+  useEffect(() => { gamesLoadedRef.current = gamesLoaded; }, [gamesLoaded]);
+  useEffect(() => { standingsLoadedRef.current = standingsLoaded; }, [standingsLoaded]);
+  // Cheap eager counts (head:true — no row payload) for the header stat bar +
+  // hero LIVE pill, which render before any tab body and must not force the
+  // full games/teams arrays to load on mount. See getLeagueStatusCounts.
+  const [statusCounts, setStatusCounts] = useState({ teams: 0, games: 0, final: 0, scheduled: 0, live: 0 });
   // LEAGUE-DIV-1 M2 — divisions + the active scope. Single-division leagues
   // (KOHA/ESHL) get one "Main" division → no picker, no scoping change.
   const [divisions, setDivisions] = useState([]);
@@ -305,19 +337,37 @@ export default function LeaguePage({ currentUser, profile }) {
   const [feedError, setFeedError] = useState(false);
   const online = useOnline();
 
+  // PR-B — eager mount load is now just what the HEADER needs: the league row,
+  // divisions, user role, and cheap status counts (Teams/Games/Played/Left +
+  // live count, via getLeagueStatusCounts — head:true, no row payload).
+  // games/standings/teams (the expensive joined rows) load per-tab below —
+  // see loadGamesData/loadStandingsData/loadTeamsData + the tab-activation
+  // effect. The one exception is an anonymous, non-demo visitor: they land on
+  // PublicLeagueLanding (no tabs at all), which needs the real teams+games
+  // arrays for its "competing teams" list and stat counts — so that path loads
+  // them eagerly too (mirrors the pre-PR-B behavior for that surface only).
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       // userRole comes back as null for anon users — that's fine, we render
-      // PublicLeagueLanding before any role-gated UI. The other four queries
-      // all hit public-read policies so they work for anon too.
-      const [l, t, g, s, r, dv] = await Promise.all([
-        getLeague(id), getLeagueTeams(id), getLeagueGames(id), getLeagueStandings(id),
+      // PublicLeagueLanding before any role-gated UI. The other queries all
+      // hit public-read policies so they work for anon too.
+      const [l, r, dv, counts] = await Promise.all([
+        getLeague(id),
         currentUser ? getUserLeagueRole(id) : Promise.resolve(null),
         listLeagueDivisions(id),
+        getLeagueStatusCounts(id),
       ]);
-      setLeague(l); setTeams(t); setGames(g); setStandings(s); setUserRole(r); setDivisions(dv);
+      setLeague(l); setUserRole(r); setDivisions(dv); setStatusCounts(counts);
+
+      // Anon + non-demo: no tabs render, so PublicLeagueLanding needs the full
+      // arrays right away (it's the whole page, not a deferred tab body).
+      if (!currentUser && l?.settings?.is_demo !== true) {
+        const [t, g] = await Promise.all([getLeagueTeams(id), getLeagueGames(id)]);
+        setTeams(t); setGames(g);
+        setTeamsLoaded(true); setGamesLoaded(true);
+      }
     } catch(e) {
       // Distinguish a genuine fetch failure from "league not found" — both
       // used to render the same generic "League not found" screen, which made
@@ -330,14 +380,65 @@ export default function LeaguePage({ currentUser, profile }) {
     } finally { setLoading(false); }
   }, [id, currentUser]);
 
+  // Schedule + Standings tabs share the games+standings fetch (Schedule's
+  // GameRow shows each side's W-L-T via `recordByLt`, built from `standings`).
+  // Loads once per mount; loadLive (below) re-fetches after that.
+  const loadGamesData = useCallback(async () => {
+    if (gamesLoading) return;
+    setGamesLoading(true);
+    try {
+      const g = await getLeagueGames(id);
+      setGames(g); setGamesLoaded(true);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[League] games load failed', e);
+      captureDataError(e, { where: 'League.loadGamesData', leagueId: id });
+    } finally { setGamesLoading(false); }
+  }, [id, gamesLoading]);
+
+  const loadStandingsData = useCallback(async () => {
+    if (standingsLoading) return;
+    setStandingsLoading(true);
+    try {
+      const s = await getLeagueStandings(id);
+      setStandings(s); setStandingsLoaded(true);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[League] standings load failed', e);
+      captureDataError(e, { where: 'League.loadStandingsData', leagueId: id });
+    } finally { setStandingsLoading(false); }
+  }, [id, standingsLoading]);
+
+  const loadTeamsData = useCallback(async () => {
+    if (teamsLoading) return;
+    setTeamsLoading(true);
+    try {
+      const t = await getLeagueTeams(id);
+      setTeams(t); setTeamsLoaded(true);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[League] teams load failed', e);
+      captureDataError(e, { where: 'League.loadTeamsData', leagueId: id });
+    } finally { setTeamsLoading(false); }
+  }, [id, teamsLoading]);
+
   // perf(scale): the realtime tick must NOT re-run the full load() (league row +
-  // teams + divisions + role) on every goal for every spectator — only games and
-  // standings change when a scorer finalizes. Re-fetch just those; the static
-  // config is fetched once on mount and left alone.
+  // divisions + role) on every goal for every spectator — only games and
+  // standings change when a scorer finalizes, and ONLY once that data has
+  // actually been loaded (Schedule/Standings tab visited, or the anon teaser).
+  // Otherwise a spectator sitting on Teams/Feed/Stats would pay for a
+  // games+standings fetch they never asked for. Also sweeps the Stats-tab
+  // cache (StatLeaderboards + SeasonGamePucks) so a goal refreshes leaderboards
+  // within a tick — see PR-B item 3.
   const loadLive = useCallback(async () => {
     try {
-      const [g, s] = await Promise.all([getLeagueGames(id), getLeagueStandings(id)]);
-      setGames(g); setStandings(s);
+      const jobs = [];
+      if (gamesLoadedRef.current) jobs.push(getLeagueGames(id).then((g) => setGames(g)));
+      if (standingsLoadedRef.current) jobs.push(getLeagueStandings(id).then((s) => setStandings(s)));
+      if (jobs.length) await Promise.all(jobs);
+      invalidatePrefix(`stats:league:${id}`);
+      // Cheap header counts stay fresh regardless of which tab is open.
+      getLeagueStatusCounts(id).then(setStatusCounts).catch(() => {});
     } catch (e) {
       // eslint-disable-next-line no-console
       console.warn('[League] live reload failed; spectators hold last data:', e?.message || e);
@@ -419,6 +520,25 @@ export default function LeaguePage({ currentUser, profile }) {
     if (activeTab !== 'Feed' || feedPosts !== null) return;
     loadFeed();
   }, [activeTab, feedPosts, loadFeed]);
+
+  // PR-B — per-tab deferral, mirroring the Feed pattern above. Schedule AND
+  // Standings both need games+standings: Schedule's GameRow shows each side's
+  // W-L-T via `recordByLt`, which is built from `standings` (see the render
+  // below), and Standings obviously needs the table itself. Teams gets its own
+  // fetch. Each guards on its *Loaded flag so revisiting a tab after the first
+  // load is a no-op — the realtime loadLive() effect (below) owns keeping it
+  // fresh from then on. This effect also covers the initial deep-linked tab
+  // (?tab=standings etc.) since `activeTab`'s initial value already comes from
+  // initialTabFromUrl — the effect runs on mount with whatever tab that
+  // resolved to.
+  useEffect(() => {
+    if (!id) return;
+    if (GAMES_TABS.has(activeTab)) {
+      if (!gamesLoaded) loadGamesData();
+      if (!standingsLoaded) loadStandingsData();
+    }
+    if (TEAMS_TABS.has(activeTab) && !teamsLoaded) loadTeamsData();
+  }, [id, activeTab, gamesLoaded, standingsLoaded, teamsLoaded, loadGamesData, loadStandingsData, loadTeamsData]);
 
   // Realtime: spectators see scores update live when scorers finalize a
   // game. Mirrors the Tournament.js pattern (channel name carries a random
@@ -613,8 +733,12 @@ export default function LeaguePage({ currentUser, profile }) {
   // Hero status chip: a red pill ONLY when a game is live right now (manifesto:
   // "red means something is alive" — never decoration). "In Season" / "Season
   // Complete" / "Draft" still show, as muted text via the same statusLabel.
-  const statusActive = liveGames.length > 0;
-  const statusLabel = liveGames.length > 0 ? 'LIVE' : league.status === 'active' ? 'In Season' : league.status === 'complete' ? 'Season Complete' : 'Draft';
+  // PR-B: games may not be loaded yet (Schedule/Standings tab not visited) —
+  // fall back to the cheap eager `statusCounts.live` (event-wide, not
+  // division-scoped) so the hero pill is accurate on first paint regardless of
+  // landing tab. Once games load, the real division-scoped count takes over.
+  const statusActive = gamesLoaded ? liveGames.length > 0 : statusCounts.live > 0;
+  const statusLabel = statusActive ? 'LIVE' : league.status === 'active' ? 'In Season' : league.status === 'complete' ? 'Season Complete' : 'Draft';
   const upcomingGames = scopedGames.filter(g => g.status === 'scheduled' && new Date(g.start_time) >= now);
   const recentGames = scopedGames.filter(g => g.status === 'final').slice(-5).reverse();
   const allGamesByWeek = scopedGames.reduce((acc, g) => {
@@ -713,13 +837,16 @@ export default function LeaguePage({ currentUser, profile }) {
 
         {/* Stat bar + tabs sit on solid navy below the photographic hero. */}
         <div style={{ background: C.navy }}>
-          {/* Stats bar */}
+          {/* Stats bar — PR-B: uses the cheap eager statusCounts (head:true,
+              event-wide) until the owning tab has loaded the real array, then
+              switches to the live division-scoped value so it stays exact
+              once a spectator actually visits Schedule/Standings/Teams. */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', borderTop: `0.5px solid ${C.border}`, background: C.navy }}>
             {[
-              { num: teams.length, label: 'Teams' },
-              { num: games.length, label: 'Games' },
-              { num: games.filter(g => g.status === 'final').length, label: 'Played' },
-              { num: games.filter(g => g.status === 'scheduled').length, label: 'Left' },
+              { num: teamsLoaded ? teams.length : statusCounts.teams, label: 'Teams' },
+              { num: gamesLoaded ? games.length : statusCounts.games, label: 'Games' },
+              { num: gamesLoaded ? games.filter(g => g.status === 'final').length : statusCounts.final, label: 'Played' },
+              { num: gamesLoaded ? games.filter(g => g.status === 'scheduled').length : statusCounts.scheduled, label: 'Left' },
             ].map((s, i) => (
               <div key={i} style={{ padding: '10px 0', textAlign: 'center', borderRight: i < 3 ? '0.5px solid rgba(46,91,140,0.3)' : 'none' }}>
                 <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 20, color: C.ice }}>{s.num}</div>
@@ -769,8 +896,12 @@ export default function LeaguePage({ currentUser, profile }) {
           )}
 
 
-          {/* SCHEDULE TAB */}
-          {activeTab === 'Schedule' && (
+          {/* SCHEDULE TAB — PR-B: games+standings are lazy; show the geometric
+              row skeleton (not a spinner) until the first load lands. */}
+          {activeTab === 'Schedule' && !gamesLoaded && (
+            <ListRowSkeleton rows={6} />
+          )}
+          {activeTab === 'Schedule' && gamesLoaded && (
             <>
               <AdSlot slot="schedule_presented" targetType="league" targetId={league.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
               {games.length > 0 && (
@@ -839,8 +970,11 @@ export default function LeaguePage({ currentUser, profile }) {
             </>
           )}
 
-          {/* STANDINGS TAB */}
-          {activeTab === 'Standings' && (
+          {/* STANDINGS TAB — PR-B: lazy-loaded; skeleton until the first fetch lands. */}
+          {activeTab === 'Standings' && !standingsLoaded && (
+            <ListRowSkeleton rows={6} />
+          )}
+          {activeTab === 'Standings' && standingsLoaded && (
             <>
               <AdSlot slot="standings_presented" targetType="league" targetId={league.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
               <LowerThird label="Season Standings" />
@@ -899,8 +1033,11 @@ export default function LeaguePage({ currentUser, profile }) {
             </>
           )}
 
-          {/* TEAMS TAB */}
-          {activeTab === 'Teams' && (
+          {/* TEAMS TAB — PR-B: lazy-loaded; skeleton until the first fetch lands. */}
+          {activeTab === 'Teams' && !teamsLoaded && (
+            <ListRowSkeleton rows={6} />
+          )}
+          {activeTab === 'Teams' && teamsLoaded && (
             multiDivision ? (
               /* Cross-division finder: search across the whole league, grouped
                  by division. The competitive views (Schedule/Standings) follow

@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { cached, invalidate, invalidatePrefix } from './cache';
 
 export async function getTeam(id) {
   // Explicit FK hint required: teams now has TWO FKs pointing at profiles
@@ -53,19 +54,24 @@ export async function updateTeam(id, updates) {
   return data;
 }
 
+// perf(scale) — roster is read on every Team.js + TeamManage.js mount plus
+// LineupModal opens, but edited rarely. 60s TTL, invalidated by the roster
+// writes below.
 export async function getTeamMembers(teamId) {
-  // YOUTH-PRIVACY: invite_email is column-revoked — select explicit columns
-  // (no contact). Managers fetch roster contacts via the get_team_contacts RPC.
-  const { data, error } = await supabase
-    .from('team_members')
-    .select('id, team_id, user_id, role, jersey_number, position, shot_hand, is_captain, is_alternate, status, invite_name, profile:profiles!team_members_user_id_fkey(id, name, handle, avatar_color, avatar_initials)')
-    .eq('team_id', teamId)
-    .in('status', ['active', 'pending'])
-    .order('role')
-    .order('jersey_number')
-    .limit(200); // perf(scale): roster ceiling — a corrupted/import-ballooned roster can't pull thousands
-  if (error) throw error;
-  return data || [];
+  return cached(`team-members:${teamId}`, 60_000, async () => {
+    // YOUTH-PRIVACY: invite_email is column-revoked — select explicit columns
+    // (no contact). Managers fetch roster contacts via the get_team_contacts RPC.
+    const { data, error } = await supabase
+      .from('team_members')
+      .select('id, team_id, user_id, role, jersey_number, position, shot_hand, is_captain, is_alternate, status, invite_name, profile:profiles!team_members_user_id_fkey(id, name, handle, avatar_color, avatar_initials)')
+      .eq('team_id', teamId)
+      .in('status', ['active', 'pending'])
+      .order('role')
+      .order('jersey_number')
+      .limit(200); // perf(scale): roster ceiling — a corrupted/import-ballooned roster can't pull thousands
+    if (error) throw error;
+    return data || [];
+  });
 }
 
 export async function getTeamGames(teamId) {
@@ -161,18 +167,23 @@ export async function addTeamMember({ team_id, user_id, role, jersey_number, pos
     .insert({ team_id, user_id: user_id || null, role, jersey_number, position, shot_hand, invite_email, invite_name, status })
     .select().single();
   if (error) throw error;
+  invalidate(`team-members:${team_id}`);
   return data;
 }
 
 export async function updateTeamMember(id, updates) {
   const { data, error } = await supabase.from('team_members').update(updates).eq('id', id).select().single();
   if (error) throw error;
+  if (data?.team_id) invalidate(`team-members:${data.team_id}`);
   return data;
 }
 
 export async function removeTeamMember(id) {
   const { error } = await supabase.from('team_members').delete().eq('id', id);
   if (error) throw error;
+  // team_id isn't in scope post-delete (no .select() here) — coarse-but-correct
+  // sweep, tiny blast radius at a 60s TTL (mirrors removeLeagueTeam above).
+  invalidatePrefix('team-members:');
 }
 
 export async function addTeamGame({ team_id, opponent, is_home, location, start_time, notes }) {
@@ -344,6 +355,9 @@ export async function approveJoinRequest(requestId, { member_id = null } = {}) {
     p_member_id: member_id || null,
   });
   if (error) throw error;
+  // No teamId in scope here (RPC takes only the request id) — coarse-but-
+  // correct sweep, tiny blast radius at a 60s TTL (mirrors removeTeamMember).
+  invalidatePrefix('team-members:');
 }
 
 /** Unclaimed (no user_id) roster slots on a team — e.g. imported ghost rosters. */

@@ -17,7 +17,7 @@
 // All embeds are FK-NAME-QUALIFIED (the Jun-2 embed-ambiguity footgun rule).
 // =============================================================================
 import { supabase } from './supabase';
-import { cached } from './cache';
+import { cached, invalidatePrefix } from './cache';
 
 // Reuse the EXACT gameday select + normalizers so the live games render through
 // the shared Gameday/LiveGameCard with no shape drift.
@@ -190,6 +190,11 @@ export async function adminUpsertFeaturedOperator(payload) {
     p_is_active:       payload.is_active ?? false,
   });
   if (error) throw error;
+  // perf(scale) — the /o/:slug page cache (getOperatorBySlug, 60s TTL) must
+  // not serve a stale card after an admin edit. No slug-scoped key is cheaply
+  // derivable here for an existing operator being renamed, so sweep the whole
+  // `operator:` namespace — coarse but correct, and cheap (admin writes are rare).
+  invalidatePrefix('operator:');
   return data; // operator uuid
 }
 
@@ -199,6 +204,8 @@ export async function adminSetFeaturedOperatorEvents(operatorId, events) {
     p_events: events, // [{ league_id|tournament_id, sort_order }]
   });
   if (error) throw error;
+  // Same coarse sweep — this call only has the operator id, not its slug.
+  invalidatePrefix('operator:');
 }
 
 export async function adminDeleteFeaturedOperator(id) {

@@ -35,9 +35,15 @@ import { useOnline } from '../lib/useOnline';
 import { prefetchGamePage, prefetchHandlers } from '../lib/prefetch';
 import { staggerStyle, useReducedMotion } from '../lib/motion';
 import { motion as motionTokens } from '../lib/tokens';
+import { cached, invalidatePrefix } from '../lib/cache';
 
 
 const TABS = ['Standings','Schedule','Bracket','Stats','Feed','Gallery','Info'];
+// PR-B — tabs whose bodies read `games`/`standingsRaw`. Standings and Schedule
+// both need games+standings (Schedule's suspension badge needs the flags too,
+// which travel with the same load); Bracket needs games only but is cheap
+// enough to share the same fetch rather than add a 3rd loader.
+const GAMES_TABS = new Set(['Standings', 'Schedule', 'Bracket']);
 
 // S04: tabs are deep-linkable. ?tab= is read once on mount (validated against
 // TABS, case-insensitive) and written via replaceState on every switch — no
@@ -180,6 +186,22 @@ export default function TournamentPage({ currentUser }) {
   // filtered `standings` is derived below. Loading all divisions once keeps
   // `load` [id]-bound so a division switch doesn't tear down the realtime sub.
   const [standingsRaw, setStandingsRaw] = useState([]);
+  // PR-B — games+standings (+ suspension flags, which ride along) are lazy:
+  // load on first activation of Standings/Schedule/Bracket, mirroring the
+  // League.js pattern. gamesLoaded also gates loadLive's realtime refresh.
+  const [gamesLoaded, setGamesLoaded] = useState(false);
+  const [gamesLoading, setGamesLoading] = useState(false);
+  // Mirrors gamesLoaded in a ref so loadLive (below) can read its current
+  // value without depending on it — keeps loadLive referentially stable
+  // ([id] only, exactly like pre-PR-B) so the realtime subscription effect's
+  // channel is untouched: it still only re-subscribes when `id` changes,
+  // never when the Standings/Schedule/Bracket tab's first load flips the flag.
+  const gamesLoadedRef = useRef(false);
+  useEffect(() => { gamesLoadedRef.current = gamesLoaded; }, [gamesLoaded]);
+  // Cheap eager live-game count (head:true, no row payload) for the header
+  // hero LIVE pill + the Feed tab's LiveGameStrip — both need to know "is
+  // anything live right now" before Standings/Schedule/Bracket has loaded.
+  const [liveCount, setLiveCount] = useState(0);
   const [divisions, setDivisions] = useState([]);
   const [selectedDivisionId, setSelectedDivisionId] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -210,30 +232,32 @@ export default function TournamentPage({ currentUser }) {
   // (no names ever reach this page). Drives the ⚠️ badge on standings rows.
   const [suspendedTeams, setSuspendedTeams] = useState({});
 
+  // PR-B — eager mount load is now just what the HEADER needs: the tournament
+  // row (cached 60s inline via cached(), just below), divisions, and a cheap
+  // eager live-game count (head:true) for the hero LIVE pill + LiveGameStrip.
+  // games/standingsRaw/suspension flags (the expensive joined rows) load per-
+  // tab — see loadGamesData + the tab-activation effect. Exception: an
+  // anonymous, non-demo visitor lands on PublicTournamentLanding (no tabs at
+  // all), which needs the real `games` array for its "competing teams" +
+  // stats derivation — that path loads it eagerly, mirroring League.js.
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      // Load tournament
-      const { data: t, error: te } = await supabase
-        .from('tournaments')
-        .select('*')
-        .eq('id', id)
-        .single();
-      if (te) { captureDataError(te, { where: 'Tournament.load.tournament', tournamentId: id }); setError(te.message); setLoading(false); return; }
+      // Load tournament — cached 60s (static config, hit on every mount +
+      // back-nav). Wrapped inline since Tournament.js already fetches this
+      // row itself rather than through a shared lib helper.
+      const t = await cached(`tournament:${id}`, 60_000, async () => {
+        const { data, error } = await supabase.from('tournaments').select('*').eq('id', id).single();
+        if (error) throw error;
+        return data;
+      }).catch((te) => {
+        captureDataError(te, { where: 'Tournament.load.tournament', tournamentId: id });
+        setError(te.message);
+        return null;
+      });
+      if (!t) { setLoading(false); return; }
       setTournament(t);
-
-      // Load games — surface error instead of silently rendering the empty state.
-      const { data: g, error: ge } = await supabase
-        .from('games')
-        .select('*, home_team:tournament_teams!home_team_id(id,team_name,pool,logo_url), away_team:tournament_teams!away_team_id(id,team_name,pool,logo_url), rink:rinks(id,name,sub_rink,live_barn_venue_id)')
-        .eq('tournament_id', id)
-        // perf(scale): most-recent 1000 by start_time (all upcoming + recent past),
-        // returned ascending — a mega-event drops only ancient history, not live games.
-        .order('start_time', { ascending: false })
-        .limit(1000);
-      if (ge) { captureDataError(ge, { where: 'Tournament.load.games', tournamentId: id }); setError(ge.message); setLoading(false); return; }
-      setGames((g || []).reverse());
 
       // Load divisions (MULTIDIV-1). Single-division events have exactly one
       // ("Main", from the backfill/create); multi-division events drive the switcher.
@@ -249,6 +273,51 @@ export default function TournamentPage({ currentUser }) {
       setSelectedDivisionId((cur) =>
         cur && divList.some((d) => d.id === cur) ? cur : (divList[0]?.id ?? null));
 
+      // Cheap eager live-game count for the hero pill + LiveGameStrip — bounded
+      // head:true query, no row payload, so it's safe to run on every mount
+      // regardless of which tab (if any) actually needs the full games array.
+      const { count } = await supabase.from('games').select('id', { count: 'exact', head: true }).eq('tournament_id', id).eq('status', 'live');
+      setLiveCount(count || 0);
+
+      // Anon + non-demo: no tabs render, so PublicTournamentLanding needs the
+      // full games array right away (it's the whole page, not a deferred tab).
+      if (!currentUser && t?.settings?.is_demo !== true) {
+        const { data: g, error: ge } = await supabase
+          .from('games')
+          .select('*, home_team:tournament_teams!home_team_id(id,team_name,pool,logo_url), away_team:tournament_teams!away_team_id(id,team_name,pool,logo_url), rink:rinks(id,name,sub_rink,live_barn_venue_id)')
+          .eq('tournament_id', id)
+          .order('start_time', { ascending: false })
+          .limit(1000);
+        if (ge) { captureDataError(ge, { where: 'Tournament.load.games.anon', tournamentId: id }); setError(ge.message); setLoading(false); return; }
+        setGames((g || []).reverse());
+        setGamesLoaded(true);
+      }
+    } catch(e) {
+      captureDataError(e, { where: 'Tournament.load', tournamentId: id });
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [id, currentUser]);
+
+  // Standings/Schedule/Bracket share this one games+standings(+suspension
+  // flags) fetch — mirrors League.js's loadGamesData/loadStandingsData split,
+  // collapsed to one loader here since all three Tournament tabs need games.
+  const loadGamesData = useCallback(async () => {
+    if (gamesLoading) return;
+    setGamesLoading(true);
+    try {
+      const { data: g, error: ge } = await supabase
+        .from('games')
+        .select('*, home_team:tournament_teams!home_team_id(id,team_name,pool,logo_url), away_team:tournament_teams!away_team_id(id,team_name,pool,logo_url), rink:rinks(id,name,sub_rink,live_barn_venue_id)')
+        .eq('tournament_id', id)
+        // perf(scale): most-recent 1000 by start_time (all upcoming + recent past),
+        // returned ascending — a mega-event drops only ancient history, not live games.
+        .order('start_time', { ascending: false })
+        .limit(1000);
+      if (ge) throw ge;
+      setGames((g || []).reverse());
+
       // Load standings for ALL divisions from the staged view — same error
       // treatment so a failed query doesn't masquerade as "no games played yet."
       // Grouping/filtering by the selected division happens in the derived
@@ -260,7 +329,7 @@ export default function TournamentPage({ currentUser }) {
         .order('pool', { ascending: true })
         .order('pool_rank', { ascending: true })
         .limit(500); // perf(scale): bounded by team count, capped for safety
-      if (se) { captureDataError(se, { where: 'Tournament.load.standings', tournamentId: id }); setError(se.message); setLoading(false); return; }
+      if (se) throw se;
       setStandingsRaw(s || []);
 
       // GS-2 — team-level suspension flags for the standings badge.
@@ -273,41 +342,52 @@ export default function TournamentPage({ currentUser }) {
         setSuspendedTeams(flagMap);
       } catch { setSuspendedTeams({}); }
 
-    } catch(e) {
-      captureDataError(e, { where: 'Tournament.load', tournamentId: id });
+      setGamesLoaded(true);
+    } catch (e) {
+      captureDataError(e, { where: 'Tournament.loadGamesData', tournamentId: id });
       setError(e.message);
     } finally {
-      setLoading(false);
+      setGamesLoading(false);
     }
-  }, [id]);
+  }, [id, gamesLoading]);
 
   // perf(scale): the realtime tick must NOT re-run the full load() (tournament
   // row + divisions) on every goal for every spectator — only games, standings,
-  // and the suspension flags change when a game finalizes. Re-fetch just those.
-  // (Select shapes mirror the live subset of load() above.)
+  // and the suspension flags change when a game finalizes, and ONLY once that
+  // data has actually been loaded (Standings/Schedule/Bracket visited, or the
+  // anon teaser). Otherwise a spectator sitting on Stats/Feed/Gallery would pay
+  // for a games+standings fetch they never asked for. Also sweeps the Stats-tab
+  // cache (StatLeaderboards + SeasonGamePucks) so a goal refreshes leaderboards
+  // within a tick — see PR-B item 3.
   const loadLive = useCallback(async () => {
     try {
-      const [{ data: g }, { data: s }] = await Promise.all([
-        supabase.from('games')
-          .select('*, home_team:tournament_teams!home_team_id(id,team_name,pool,logo_url), away_team:tournament_teams!away_team_id(id,team_name,pool,logo_url), rink:rinks(id,name,sub_rink,live_barn_venue_id)')
-          .eq('tournament_id', id)
-          .order('start_time', { ascending: false }) // perf(scale): most-recent window, reversed to asc below
-          .limit(1000),
-        supabase.from(STANDINGS_VIEW)
-          .select('*')
-          .eq('tournament_id', id)
-          .order('pool', { ascending: true })
-          .order('pool_rank', { ascending: true })
-          .limit(500),
-      ]);
-      if (g) setGames(g.reverse());
-      if (s) setStandingsRaw(s);
-      try {
-        const { data: flags } = await supabase.rpc('get_tournament_suspension_flags', { p_tournament_id: id });
-        const flagMap = {};
-        (flags || []).forEach(f => { flagMap[f.team_id] = f.pending_count; });
-        setSuspendedTeams(flagMap);
-      } catch { /* best-effort suspension flags */ }
+      if (gamesLoadedRef.current) {
+        const [{ data: g }, { data: s }] = await Promise.all([
+          supabase.from('games')
+            .select('*, home_team:tournament_teams!home_team_id(id,team_name,pool,logo_url), away_team:tournament_teams!away_team_id(id,team_name,pool,logo_url), rink:rinks(id,name,sub_rink,live_barn_venue_id)')
+            .eq('tournament_id', id)
+            .order('start_time', { ascending: false }) // perf(scale): most-recent window, reversed to asc below
+            .limit(1000),
+          supabase.from(STANDINGS_VIEW)
+            .select('*')
+            .eq('tournament_id', id)
+            .order('pool', { ascending: true })
+            .order('pool_rank', { ascending: true })
+            .limit(500),
+        ]);
+        if (g) setGames(g.reverse());
+        if (s) setStandingsRaw(s);
+        try {
+          const { data: flags } = await supabase.rpc('get_tournament_suspension_flags', { p_tournament_id: id });
+          const flagMap = {};
+          (flags || []).forEach(f => { flagMap[f.team_id] = f.pending_count; });
+          setSuspendedTeams(flagMap);
+        } catch { /* best-effort suspension flags */ }
+      }
+      invalidatePrefix(`stats:tournament:${id}`);
+      // Cheap header live-count stays fresh regardless of which tab is open.
+      supabase.from('games').select('id', { count: 'exact', head: true }).eq('tournament_id', id).eq('status', 'live')
+        .then(({ count }) => setLiveCount(count || 0)).catch(() => {});
     } catch (e) {
       // eslint-disable-next-line no-console
       console.warn('[Tournament] live reload failed; spectators hold last data:', e?.message || e);
@@ -431,6 +511,19 @@ export default function TournamentPage({ currentUser }) {
     loadFeed();
   }, [activeTab, feedPosts, loadFeed]);
 
+  // PR-B — per-tab deferral, mirroring the Feed pattern above. Standings,
+  // Schedule, and Bracket all read games/standingsRaw, so they share one
+  // loader guarded by gamesLoaded. This effect also covers the initial
+  // deep-linked tab (?tab=schedule etc.) since `activeTab`'s initial value
+  // already comes from initialTabFromUrl — the effect runs on mount with
+  // whatever tab that resolved to (default landing tab is Standings).
+  // Feed is included too: its LiveGameStrip needs real game rows (not just
+  // the eager liveCount) to render the live-now cards.
+  useEffect(() => {
+    if (!id) return;
+    if ((GAMES_TABS.has(activeTab) || activeTab === 'Feed') && !gamesLoaded) loadGamesData();
+  }, [id, activeTab, gamesLoaded, loadGamesData]);
+
   const handleFollowToggle = async () => {
     if (!currentUser?.id || !id || followBusy) return;
     setFollowBusy(true);
@@ -542,7 +635,11 @@ export default function TournamentPage({ currentUser }) {
   const divisionGames = selectedDivisionId
     ? games.filter(g => g.division_id === selectedDivisionId)
     : games;
-  const liveGames = games.filter(g => g.status === 'live'); // header badge stays event-wide
+  // PR-B: games may not be loaded yet (Standings/Schedule/Bracket not visited)
+  // — fall back to the cheap eager `liveCount` so the hero pill + Feed tab's
+  // LiveGameStrip stay accurate on first paint regardless of landing tab.
+  // Once games load, the real array (and the strip's actual game data) takes over.
+  const liveGames = gamesLoaded ? games.filter(g => g.status === 'live') : []; // header badge stays event-wide
   const finalGames = divisionGames.filter(g => g.status === 'final');
   const scheduledGames = divisionGames.filter(g => g.status === 'scheduled');
   // Bracket games ordered by tree position (round_of_16 → QF → SF → Final →
@@ -581,8 +678,9 @@ export default function TournamentPage({ currentUser }) {
   // Organizer branding — falls back to Rinkd red when the tournament isn't branded.
   const accent = tournament?.accent_color || C.red;
   // Hero status chip: a red pill when something's live right now, otherwise
-  // muted text (completed / upcoming).
-  const statusActive = liveGames.length > 0;
+  // muted text (completed / upcoming). PR-B: before games load, fall back to
+  // the cheap eager liveCount (see liveGames above).
+  const statusActive = gamesLoaded ? liveGames.length > 0 : liveCount > 0;
   const isComplete = tournament?.status === 'complete' || tournament?.status === 'completed';
   const statusLabel = statusActive ? 'LIVE' : isComplete ? 'COMPLETED' : 'UPCOMING';
   // Directors AND assigned scorers see the in-card "Open Scorer View"
@@ -718,7 +816,11 @@ export default function TournamentPage({ currentUser }) {
       {/* CONTENT */}
       <div style={{padding:16}}>
 
-        {activeTab === 'Standings' && (
+        {/* PR-B: games+standings are lazy — geometric skeleton until the first load lands. */}
+        {activeTab === 'Standings' && !gamesLoaded && (
+          <ListRowSkeleton rows={6} />
+        )}
+        {activeTab === 'Standings' && gamesLoaded && (
           <>
             <AdSlot slot="standings_presented" targetType="tournament" targetId={tournament.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
             {Object.keys(standings).length === 0
@@ -841,7 +943,10 @@ export default function TournamentPage({ currentUser }) {
           </>
         )}
 
-        {activeTab === 'Schedule' && (
+        {activeTab === 'Schedule' && !gamesLoaded && (
+          <ListRowSkeleton rows={6} />
+        )}
+        {activeTab === 'Schedule' && gamesLoaded && (
           <>
             <AdSlot slot="schedule_presented" targetType="tournament" targetId={tournament.id} style={{ maxWidth: 320, margin: '0 0 12px' }} radius={8} />
             {divisionGames.length === 0
@@ -850,7 +955,10 @@ export default function TournamentPage({ currentUser }) {
           </>
         )}
 
-        {activeTab === 'Bracket' && (
+        {activeTab === 'Bracket' && !gamesLoaded && (
+          <ListRowSkeleton rows={6} />
+        )}
+        {activeTab === 'Bracket' && gamesLoaded && (
           bracketGames.length === 0
             ? <TabEmptyState icon="🏆" title="Bracket locks after pools" body="Once pool play wraps, the seeds drop in and the road to the championship lights up here." />
             : <>
