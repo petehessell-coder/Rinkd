@@ -66,6 +66,7 @@ const PublicGame = lazyWithRetry(() => import('./pages/PublicGame'));
 const AdminPanel = lazyWithRetry(() => import('./pages/AdminPanel'));
 const VolunteerCoordinator = lazyWithRetry(() => import('./pages/VolunteerCoordinator'));
 const NotFound = lazyWithRetry(() => import('./pages/NotFound'));
+const Operator = lazyWithRetry(() => import('./pages/Operator'));
 
 // AuthContext + useAuth live in ./lib/authContext so leaf components can
 // consume them without creating a circular import back to App.js. Re-exported
@@ -281,6 +282,11 @@ function AppRoutes() {
       <Route path="/league/:id/register" element={<LeagueRegister />} />
       <Route path="/tournament/:id/register" element={<TournamentRegister />} />
       <Route path="/league/:id" element={<League currentUser={user} profile={profile} />} />
+      {/* C12 · Operator Front Door — the branded /o/:slug landing we forward a
+          partner platform or big operator. PUBLIC (outside ProtectedRoute), like
+          /league/:id above. Link-only surface: no nav entry. RLS shows only
+          is_active operators to anon; admins preview drafts. */}
+      <Route path="/o/:slug" element={<Operator currentUser={user} profile={profile} />} />
       <Route path="/team/create" element={<ProtectedRoute><TeamManage profile={profile} /></ProtectedRoute>} />
       <Route path="/team/:id/manage" element={<ProtectedRoute><TeamManage profile={profile} /></ProtectedRoute>} />
       <Route path="/team/:id" element={<ProtectedRoute><Team currentUser={user} profile={profile} /></ProtectedRoute>} />
