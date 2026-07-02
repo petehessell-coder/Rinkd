@@ -97,17 +97,21 @@ export default function GamePuckCard({
   }, [result, revealed]);
 
   // Candidate players per team: union of lineup jerseys + goal participants.
+  // YOUTH-PRIVACY (C06 PR-1): on youth events the vote chips must render
+  // jersey-only — route every candidate name through `hideNames`, the exact
+  // gate the settled-winner path uses (`safeResult`/`nameFor`). Previously this
+  // built names raw from lineupByTeam, leaking minors' names on the chips.
   const candidatesByTeam = useMemo(() => {
     const build = (teamId) => {
       const seen = new Map(); // jersey -> name|null
       const lu = lineupByTeam[teamId] || {};
       Object.keys(lu).forEach((j) => {
         const n = Number(j);
-        if (!Number.isNaN(n)) seen.set(n, lu[j] || null);
+        if (!Number.isNaN(n)) seen.set(n, hideNames ? null : (lu[j] || null));
       });
       goals.filter((g) => g.team_id === teamId).forEach((g) => {
         [g.scorer_number, g.assist1_number, g.assist2_number].forEach((num) => {
-          if (num != null && !seen.has(num)) seen.set(num, lu[num] || null);
+          if (num != null && !seen.has(num)) seen.set(num, hideNames ? null : (lu[num] || null));
         });
       });
       return [...seen.entries()]
@@ -118,7 +122,7 @@ export default function GamePuckCard({
       [homeTeam.id]: build(homeTeam.id),
       [awayTeam.id]: build(awayTeam.id),
     };
-  }, [homeTeam.id, awayTeam.id, lineupByTeam, goals]);
+  }, [homeTeam.id, awayTeam.id, lineupByTeam, goals, hideNames]);
 
   const hasCandidates =
     (candidatesByTeam[homeTeam.id]?.length || 0) +
