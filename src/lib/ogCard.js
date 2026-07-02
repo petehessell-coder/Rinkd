@@ -8,7 +8,6 @@
 // shares the same game.
 
 import { supabase } from './supabase';
-import { composeRecapCard } from './shareCard';
 
 export function shareCardPath(gameId, isLeague) {
   return `${isLeague ? 'lg' : 'g'}/${gameId}.png`;
@@ -18,6 +17,9 @@ export async function uploadShareCard(gameId, isLeague, card) {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return; // anon → no write; OG falls back to the generic card
+    // Dynamic import keeps the canvas composer out of the eager main chunk
+    // (ShareButton statically imports this module).
+    const { composeRecapCard } = await import('./shareCard');
     const wide = await composeRecapCard(card, { format: 'wide' });
     await supabase.storage.from('share-cards').upload(
       shareCardPath(gameId, isLeague),

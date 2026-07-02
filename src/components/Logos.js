@@ -235,7 +235,7 @@ export function TeamLogo({ team, size = 40, radius, style }) {
   return <div style={common}>{initials}</div>;
 }
 
-export function Avatar({ profile, size = 36 }) {
+export function Avatar({ profile, size = 36, eager = false }) {
   const tierColors = { Mite:C.steel,Squirt:tokenColors.success,Peewee:'#0EA5E9',Bantam:tokenColors.warning,Midget:tokenColors.premium,Junior:C.red,Pro:C.ice };
   const borderColor = tierColors[profile?.tier]||C.steel;
   const common = {
@@ -251,6 +251,7 @@ export function Avatar({ profile, size = 36 }) {
         <img
           src={profile.avatar_url}
           alt={profile?.name || ''}
+          loading={eager ? 'eager' : 'lazy'}
           style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
           onError={(e) => { e.currentTarget.style.display = 'none'; }}
         />

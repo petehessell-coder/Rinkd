@@ -6,7 +6,6 @@
 // Mirrors PublicGame's embeds/normalization (kept intentionally parallel).
 
 import { supabase } from './supabase';
-import { buildRecapCardData } from './shareCard';
 import { getGamePuck } from './gamePucks';
 import { areScorersHidden, getRecapSponsor, getGamePuckSponsor } from './publicShare';
 import { colors } from './tokens';
@@ -66,6 +65,12 @@ export async function loadGameCardData(gameId, isLeague) {
 
   const competition = parent?.name || 'Rinkd';
   const sponsor = getRecapSponsor(parent?.settings);
+  // perf(C08 PR-C): shareCard.js is an 815-line canvas composer. gameCardData
+  // is statically imported by Feed.js (eagerly imported in App.js), so a
+  // top-level `import` here rode shareCard along on the main chunk even
+  // though loadGameCardData is only ever invoked lazily via ShareButton's
+  // `getCard` callback on share-tap. Load it on demand instead.
+  const { buildRecapCardData } = await import('./shareCard');
   return buildRecapCardData({
     home, away,
     homeScore: g.home_score, awayScore: g.away_score,
