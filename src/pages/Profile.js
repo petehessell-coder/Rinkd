@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { subscribeToPush, isPushSubscribed, unsubscribeFromPush } from '../lib/push';
 import Layout from '../components/Layout';
 import { C, colors } from '../lib/tokens';
-import { Icon, StatNumber, ErrorState, Img } from '../components/ui';
+import { Icon, StatNumber, ErrorState, Img, SectionHeader, Skeleton } from '../components/ui';
 import { number, plural } from '../lib/format';
 import { TierBadge } from '../components/Logos';
 import { updateProfile, PROFILE_SELECT } from '../lib/auth';
@@ -34,27 +34,6 @@ const initialsFromName = (name) => {
   const parts = String(name).trim().split(/\s+/);
   return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase();
 };
-
-// Broadcast lower-third section header — white Barlow Condensed 700 italic caps
-// on solid navy (#0f2847), bleeding to the column's left edge with a red accent
-// slab. The manifesto section-header pattern, not a generic label.
-function LowerThird({ label }) {
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center',
-      background: C.card, borderLeft: `4px solid ${C.red}`,
-      marginLeft: -16, marginBottom: 12, padding: '8px 14px 8px 16px',
-      borderTopRightRadius: 4, borderBottomRightRadius: 4,
-    }}>
-      <span style={{
-        flex: 1, minWidth: 0,
-        fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic',
-        fontSize: 18, lineHeight: 1, letterSpacing: '0.05em', color: C.ice,
-        textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      }}>{label}</span>
-    </div>
-  );
-}
 
 // Profile avatar — object-fit:cover at a fixed square aspect. On a missing or
 // broken image it falls back to initials on the elevated dark surface (#162f55),
@@ -449,7 +428,25 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
     </Layout>
   );
 
-  if (!profile) return <Layout profile={myProfile}><div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice, textTransform: 'uppercase', letterSpacing: '0.02em' }}>Getting the ice ready.</div></div></Layout>;
+  if (!profile) return (
+    <Layout profile={myProfile}>
+      <div style={{ maxWidth: 640, margin: '0 auto', padding: '24px 16px' }}>
+        {/* Identity-header-shaped skeleton — mirrors the hydrated cover +
+            avatar + name/handle layout below so there's no layout shift. */}
+        <div style={{ background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, overflow: 'hidden', marginBottom: 16 }}>
+          <div style={{ height: 140, background: 'rgba(46,91,140,0.14)', position: 'relative' }}>
+            <div style={{ position: 'absolute', bottom: -28, left: 20 }}>
+              <Skeleton width={72} height={72} radius={999} style={{ border: `3px solid ${C.card}` }} />
+            </div>
+          </div>
+          <div style={{ padding: '36px 20px 20px' }}>
+            <Skeleton width="45%" height={22} style={{ marginBottom: 8 }} />
+            <Skeleton width="30%" height={13} />
+          </div>
+        </div>
+      </div>
+    </Layout>
+  );
 
   const tier = getTier(profile.points || 0);
   const progress = getTierProgress(profile.points || 0);
@@ -853,7 +850,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                 {/* Leagues — kept separate from Tournaments; never a blended total. */}
                 {leagueStats.length > 0 && (
                   <div style={{ marginBottom: tournamentStats.length > 0 ? 22 : 0 }}>
-                    <LowerThird label="League Stats" />
+                    <SectionHeader label="League Stats" />
                     {leagueStats.map((s, i) => (
                       <StatLine key={`lg-${i}`}
                         logoColor={s.team_logo_color}
@@ -868,7 +865,7 @@ export default function Profile({ currentUser, profile: myProfile, onProfileUpda
                     players until a tournament lineup carries their user_id. */}
                 {tournamentStats.length > 0 && (
                   <div>
-                    <LowerThird label="Tournament Stats" />
+                    <SectionHeader label="Tournament Stats" />
                     {tournamentStats.map((s, i) => (
                       <StatLine key={`tn-${i}`}
                         logoColor={C.blue}

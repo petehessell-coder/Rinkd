@@ -673,7 +673,7 @@ export default function TournamentPage({ currentUser }) {
             {divisions.map(d => (
               <button key={d.id} onClick={() => setSelectedDivisionId(d.id)}
                 style={{
-                  flexShrink:0, padding:'5px 12px', borderRadius:999,
+                  flexShrink:0, padding:'5px 12px', minHeight:44, display:'inline-flex', alignItems:'center', borderRadius:999,
                   fontSize:12, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap',
                   fontFamily:"'Barlow Condensed', sans-serif", fontStyle:'italic',
                   letterSpacing:'0.04em', textTransform:'uppercase',
@@ -1170,7 +1170,7 @@ function FeedTab({ posts, setPosts, loading, error = false, online = true, onRet
             </button>
           </div>
           {composerError && <div style={{color:colors.redSoft,fontSize:11,marginTop:6}}>{composerError}</div>}
-          <div style={{fontSize:10,color:'#7C8B9F',marginTop:4,textAlign:'right'}}>{draft.length}/500</div>
+          <div style={{fontSize:11,color:C.steel,marginTop:4,textAlign:'right'}}>{draft.length}/500</div>
         </div>
       )}
 

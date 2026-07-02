@@ -848,6 +848,8 @@ export default function LeaguePage({ currentUser, profile }) {
                 <TabEmptyState title="No standings yet" body="The table fills in the moment the first game goes final. Check back after the puck drops." />
               ) : (
                 <div style={card}>
+                  <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                  <div style={{ minWidth: 340 }}>
                   <div style={{ display: 'grid', gridTemplateColumns: standingsCols, padding: '8px 12px', background: 'rgba(46,91,140,0.2)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.35)', textTransform: 'uppercase' }}>
                     <span>Team</span><span style={{textAlign:'center'}}>GP</span><span style={{textAlign:'center'}}>W</span><span style={{textAlign:'center'}}>L</span>{showOtl && <span style={{textAlign:'center'}}>OTL</span>}<span style={{textAlign:'center'}}>T</span><span style={{textAlign:'center'}}>GF</span><span style={{textAlign:'center'}}>PTS</span>
                   </div>
@@ -873,6 +875,8 @@ export default function LeaguePage({ currentUser, profile }) {
                     </div>
                     );
                   })}
+                  </div>
+                  </div>
                 </div>
               )}
             </>
@@ -1160,8 +1164,8 @@ function LeagueFeedTab({ posts, setPosts, loading, error = false, online = true,
           />
           {mediaFile && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#9BB5D6', marginTop: 6 }}>
-              <span>📎 {mediaFile.name}</span>
-              <button onClick={() => setMediaFile(null)} style={{ background: 'transparent', border: 'none', color: colors.redSoft, fontSize: 11, cursor: 'pointer' }}>Remove</button>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>📎 {mediaFile.name}</span>
+              <button onClick={() => setMediaFile(null)} style={{ background: 'transparent', border: 'none', color: colors.redSoft, fontSize: 11, cursor: 'pointer', minWidth: 44, minHeight: 44, flexShrink: 0 }}>Remove</button>
             </div>
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
@@ -1176,7 +1180,7 @@ function LeagueFeedTab({ posts, setPosts, loading, error = false, online = true,
             </button>
           </div>
           {composerError && <div style={{ color: colors.redSoft, fontSize: 11, marginTop: 6 }}>{composerError}</div>}
-          <div style={{ fontSize: 10, color: '#7C8B9F', marginTop: 4, textAlign: 'right' }}>{draft.length}/500</div>
+          <div style={{ fontSize: 11, color: C.steel, marginTop: 4, textAlign: 'right' }}>{draft.length}/500</div>
         </div>
       )}
 

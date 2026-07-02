@@ -364,7 +364,7 @@ export default function TeamPage({ currentUser, profile }) {
               <MapLink rink={g.rink} text={g.location} icon=""
                 style={{
                   fontSize: 10, fontWeight: 700, letterSpacing: '0.04em',
-                  padding: '3px 9px', borderRadius: 999,
+                  padding: '3px 9px', minHeight: 44, borderRadius: 999,
                   background: 'rgba(46,91,140,0.25)',
                   border: '0.5px solid rgba(46,91,140,0.6)',
                   color: C.ice, textDecoration: 'none',
@@ -571,7 +571,7 @@ export default function TeamPage({ currentUser, profile }) {
             <>
               {coaches.length > 0 && (
                 <>
-                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'rgba(244,247,250,0.3)', textTransform: 'uppercase', marginBottom: 8 }}>Coaching Staff</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 8 }}>Coaching Staff</div>
                   <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
                     {coaches.map(renderMemberRow)}
                   </div>
@@ -579,7 +579,7 @@ export default function TeamPage({ currentUser, profile }) {
               )}
               {goalies.length > 0 && (
                 <>
-                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'rgba(244,247,250,0.3)', textTransform: 'uppercase', marginBottom: 8 }}>Goalies</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 8 }}>Goalies</div>
                   <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
                     {goalies.map(renderMemberRow)}
                   </div>
@@ -587,7 +587,7 @@ export default function TeamPage({ currentUser, profile }) {
               )}
               {defense.length > 0 && (
                 <>
-                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'rgba(244,247,250,0.3)', textTransform: 'uppercase', marginBottom: 8 }}>Defense</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 8 }}>Defense</div>
                   <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
                     {defense.map(renderMemberRow)}
                   </div>
@@ -595,7 +595,7 @@ export default function TeamPage({ currentUser, profile }) {
               )}
               {forwards.length > 0 && (
                 <>
-                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'rgba(244,247,250,0.3)', textTransform: 'uppercase', marginBottom: 8 }}>Forwards</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 8 }}>Forwards</div>
                   <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
                     {forwards.map(renderMemberRow)}
                   </div>
