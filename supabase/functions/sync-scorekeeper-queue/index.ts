@@ -64,7 +64,10 @@ const RULES: Record<string, { ops: string[]; cols: string[]; needsTeam: boolean 
     needsTeam: true,
   },
   game_goalie_changes: {
-    ops: ["insert"],
+    // S05: delete added alongside the goalie-change undo in ScorerView (and
+    // the matching goalie_changes_scorer_delete RLS policy) — the generic
+    // delete path already scopes by id + authorized game_id.
+    ops: ["insert", "delete"],
     cols: ["id", "game_id", "team_id", "goalie_out_number", "goalie_in_number", "period", "time_in_period", "created_at"],
     needsTeam: true,
   },

@@ -780,6 +780,7 @@ function ManageLeague({ id, navigate }) {
             leagueId={id}
             leagueTeams={scopedTeamsList}
             divisionId={selectedDivisionId}
+            existingGamesCount={scopedGamesList.length}
             rinkByTeam={rinkByTeamMap(games)}
             onClose={() => setShowScheduleBuilder(false)}
             onPublished={async () => { setShowScheduleBuilder(false); await load(); }}
@@ -1182,6 +1183,14 @@ function PlayoffsTab({ leagueId, teams, standings, games, rinks, divisionId = nu
 
   // Existing playoff games on this league, grouped by round.
   const playoffGames = useMemo(() => (games || []).filter((g) => g.phase === 'playoffs'), [games]);
+
+  // Regular-season games in scope that aren't final yet. Round-1 seeds off the
+  // standings, so unplayed games mean the seeding can still change — surface a
+  // non-blocking heads-up before the commissioner locks in round 1.
+  const unplayedRegularCount = useMemo(
+    () => (games || []).filter((g) => g.phase !== 'playoffs' && g.status !== 'final').length,
+    [games],
+  );
   const byRound = useMemo(() => {
     const map = {};
     for (const g of playoffGames) {
@@ -1239,14 +1248,24 @@ function PlayoffsTab({ leagueId, teams, standings, games, rinks, divisionId = nu
     });
   }, [byRound, lastFinalRound, bracketSize, form]);
 
-  const handleGenerate = async (rows, errorOverride) => {
+  const handleGenerate = async (rows, targetLabel) => {
     if (busy || !rows || rows.length === 0) return;
+    // Idempotency guard: bulkInsertLeagueGames doesn't dedupe, so re-tapping
+    // "Generate next round" would double the round. Block if games for the
+    // target round label already exist (mirrors the hasRound1 byRound check).
+    if (targetLabel && (byRound[targetLabel] || []).length > 0) {
+      const isFinal = targetLabel === 'final';
+      setError(isFinal ? 'Final round already generated.' : `The ${targetLabel} round is already generated.`);
+      return;
+    }
     setBusy(true);
-    setError(errorOverride || null);
+    setError(null);
     const { error: insertErr } = await bulkInsertLeagueGames(leagueId, rows, divisionId);
-    setBusy(false);
-    if (insertErr) { setError(insertErr.message || 'Insert failed.'); return; }
-    await onPublished?.();
+    if (insertErr) { setBusy(false); setError(insertErr.message || 'Insert failed.'); return; }
+    // Hold busy THROUGH the parent reload — releasing it before onPublished
+    // leaves a window where byRound is stale and a fast second tap duplicates
+    // the round (S05 QA P1-1).
+    try { await onPublished?.(); } finally { setBusy(false); }
   };
 
   const teamNameByLtId = useMemo(() => {
@@ -1374,7 +1393,12 @@ function PlayoffsTab({ leagueId, teams, standings, games, rinks, divisionId = nu
                 })}
               </div>
             )}
-            <button onClick={() => handleGenerate(round1Preview.rows)}
+            {!round1Preview.error && round1Preview.rows.length > 0 && unplayedRegularCount > 0 && (
+              <div style={{ marginTop: 10, fontSize: 12, color: colors.warning, lineHeight: 1.5 }}>
+                {unplayedRegularCount} regular-season game{unplayedRegularCount === 1 ? ' is' : 's are'} still unplayed — seeds may change.
+              </div>
+            )}
+            <button onClick={() => handleGenerate(round1Preview.rows, round1Preview.label)}
               disabled={busy || round1Preview.error || round1Preview.rows.length === 0}
               style={{
                 marginTop: 10, padding: '10px 16px', borderRadius: 999,
@@ -1429,7 +1453,7 @@ function PlayoffsTab({ leagueId, teams, standings, games, rinks, divisionId = nu
                 </div>
               </>
             )}
-            <button onClick={() => handleGenerate(nextRoundPreview?.rows)}
+            <button onClick={() => handleGenerate(nextRoundPreview?.rows, nextRoundPreview?.label)}
               disabled={busy || !nextRoundPreview || nextRoundPreview.error || (nextRoundPreview.rows?.length || 0) === 0}
               style={{
                 marginTop: 10, padding: '10px 16px', borderRadius: 999,
@@ -1741,6 +1765,8 @@ function RegistrationsTab({ leagueId, league, registrations, onChanged }) {
   const [cfgFlash, setCfgFlash] = useState(null);
   const [copied, setCopied] = useState(false);
   const [busyId, setBusyId] = useState(null);
+  const [bulkApproving, setBulkApproving] = useState(null); // { done, total } while running
+  const [bulkFlash, setBulkFlash] = useState(null); // { kind, text } result of Approve-all
   const [payoutsReady, setPayoutsReady] = useState(null); // null = checking
   const [isFounder, setIsFounder] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -1798,6 +1824,32 @@ function RegistrationsTab({ leagueId, league, registrations, onChanged }) {
       await onChanged();
     } catch (e) { alert(e.message || 'Action failed.'); }
     finally { setBusyId(null); }
+  };
+
+  // Bulk-approve every pending row that has been paid. approveRegistration is
+  // idempotent (guards on league_team_id) so a re-run is safe. We run them
+  // sequentially so team-create inserts don't collide, collect per-row
+  // failures, then reload once.
+  const paidPending = registrations.filter(r => r.status === 'pending' && r.paid_at);
+  const approveAllPaid = async () => {
+    if (bulkApproving) return;
+    const targets = registrations.filter(r => r.status === 'pending' && r.paid_at);
+    if (targets.length === 0) return;
+    setBulkFlash(null);
+    setBulkApproving({ done: 0, total: targets.length });
+    let failures = 0;
+    for (let i = 0; i < targets.length; i++) {
+      try { await approveRegistration(targets[i].id); }
+      catch { failures += 1; }
+      setBulkApproving({ done: i + 1, total: targets.length });
+    }
+    setBulkApproving(null);
+    if (failures > 0) {
+      setBulkFlash({ kind: 'err', text: `${failures} couldn't be approved — see rows.` });
+    } else {
+      setBulkFlash({ kind: 'ok', text: `Approved ${targets.length} paid team${targets.length === 1 ? '' : 's'}.` });
+    }
+    await onChanged();
   };
 
   const exportCsv = () => {
@@ -1938,6 +1990,15 @@ function RegistrationsTab({ leagueId, league, registrations, onChanged }) {
         return (
           <div key={status} style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: meta.color, margin: '6px 0 6px' }}>{title} · {rows.length}</div>
+            {status === 'pending' && paidPending.length >= 2 && (
+              <div style={{ marginBottom: 8 }}>
+                <button onClick={approveAllPaid} disabled={!!bulkApproving}
+                  style={{ fontSize: 12, fontWeight: 700, padding: '7px 14px', borderRadius: 999, cursor: bulkApproving ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif', border: '0.5px solid rgba(34,197,94,0.5)', background: 'rgba(34,197,94,0.15)', color: colors.success, opacity: bulkApproving ? 0.7 : 1 }}>
+                  {bulkApproving ? `Approving ${bulkApproving.done}/${bulkApproving.total}…` : `✓ Approve all paid (${paidPending.length})`}
+                </button>
+                {bulkFlash && <span style={{ marginLeft: 10, fontSize: 12, color: bulkFlash.kind === 'ok' ? colors.success : colors.redSoft }}>{bulkFlash.text}</span>}
+              </div>
+            )}
             {rows.map(r => (
               <div key={r.id} style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', marginBottom: 8 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>

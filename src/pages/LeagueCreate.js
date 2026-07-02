@@ -669,8 +669,24 @@ export default function LeagueCreate({ profile }) {
         } catch (_) { /* non-fatal */ }
       }
 
-      // 4. Add teams. Batch insert to avoid the N+1 wizard anti-pattern
-      //    flagged in the Phase 1 doc.
+      // 4. Create REAL division rows from the wizard's division names.
+      //    The whole app groups by league_teams.division_id → league_divisions;
+      //    the settings.divisions blob has NO readers, so without this step the
+      //    wizard's divisions + team assignments silently vanished (S05 audit,
+      //    silent-data-loss class). Structural, so a failure throws → cleanup.
+      let divisionIdByName = {};
+      if ((data.divisions || []).length) {
+        const { data: divRows, error: divErr } = await supabase
+          .from('league_divisions')
+          .insert(data.divisions.map((name, i) => ({ league_id: league.id, name, sort_order: i })))
+          .select('id, name');
+        if (divErr) throw divErr;
+        divisionIdByName = Object.fromEntries((divRows || []).map(d => [d.name, d.id]));
+      }
+
+      // 5. Add teams. Batch insert to avoid the N+1 wizard anti-pattern
+      //    flagged in the Phase 1 doc. division_id carries the wizard's
+      //    assignment; the legacy text column stays for back-compat readers.
       if ((data.teams || []).length) {
         const rows = data.teams.map(t => ({
           league_id: league.id,
@@ -680,6 +696,7 @@ export default function LeagueCreate({ profile }) {
           logo_initials: t.logo_initials,
           logo_url: t.logo_url || null,
           division: t.division || '',
+          division_id: divisionIdByName[t.division] || null,
         }));
         const { error: teamsErr } = await supabase.from('league_teams').insert(rows);
         if (teamsErr) throw teamsErr;

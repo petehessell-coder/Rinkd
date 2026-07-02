@@ -15,6 +15,28 @@ const input = {
 };
 const label = { fontSize: 12, fontWeight: 700, color: C.steel, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6, display: 'block' };
 
+// S05 C4 — simple client-side email format guard (not exhaustive RFC 5322;
+// just catches the "obviously not an email" case before it hits Stripe/DB).
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function draftKey(eventId) { return `rinkd_reg_draft_${eventId}`; }
+
+// S05 C4 — before redirecting to Stripe Checkout, stash the three fields in
+// sessionStorage so a ?canceled=1 return trip can rehydrate the form instead of
+// making the registrant retype everything. Cleared on ?success=1.
+function saveDraft(eventId, fields) {
+  try { window.sessionStorage.setItem(draftKey(eventId), JSON.stringify(fields)); } catch { /* storage unavailable — best effort only */ }
+}
+function loadDraft(eventId) {
+  try {
+    const raw = window.sessionStorage.getItem(draftKey(eventId));
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+function clearDraft(eventId) {
+  try { window.sessionStorage.removeItem(draftKey(eventId)); } catch { /* no-op */ }
+}
+
 function Shell({ children }) {
   return (
     <div style={{ background: C.dark, minHeight: '100vh', fontFamily: 'Barlow, sans-serif', color: C.ice, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 18px' }}>
@@ -54,18 +76,39 @@ export default function TournamentRegister() {
     return () => { cancelled = true; };
   }, [id]);
 
+  // S05 C4 — on a canceled Stripe return, rehydrate the form from the draft
+  // saved right before redirect so the registrant doesn't retype everything.
+  // On a successful return, the draft is stale (registration is done) — drop it.
+  useEffect(() => {
+    if (!id) return;
+    if (isSuccess) { clearDraft(id); return; }
+    if (isCanceled) {
+      const draft = loadDraft(id);
+      if (draft) {
+        if (draft.teamName) setTeamName(draft.teamName);
+        if (draft.contactName) setContactName(draft.contactName);
+        if (draft.contactEmail) setContactEmail(draft.contactEmail);
+      }
+    }
+  }, [id, isSuccess, isCanceled]);
+
   const handleSubmit = async () => {
     setError(null);
     if (!teamName.trim() || !contactName.trim() || !contactEmail.trim()) {
       setError('Please fill in all three fields.');
       return;
     }
+    if (!EMAIL_RE.test(contactEmail.trim())) {
+      setError("That email doesn't look right — double-check it so your confirmation can land.");
+      return;
+    }
     setSubmitting(true);
     try {
-      const res = await createRegistrationCheckout(id, {
-        teamName: teamName.trim(), contactName: contactName.trim(), contactEmail: contactEmail.trim(),
-      }, 'tournament');
+      const fields = { teamName: teamName.trim(), contactName: contactName.trim(), contactEmail: contactEmail.trim() };
+      saveDraft(id, fields); // stash before the Stripe redirect so ?canceled=1 can rehydrate
+      const res = await createRegistrationCheckout(id, fields, 'tournament');
       if (res?.url) { window.location.href = res.url; return; } // → Stripe Checkout
+      clearDraft(id); // free tournament — registration is done, no return trip needed
       setSubmitted(true); // free tournament: registration recorded, no payment
     } catch (e) {
       if (e.reason === 'full') setError('This tournament is full — registration is closed.');

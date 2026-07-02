@@ -28,6 +28,7 @@ const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
  */
 export default function ScheduleBuilderModal({
   leagueId, leagueTeams, rinkByTeam, defaultStartDate, onClose, onPublished, divisionId = null,
+  existingGamesCount = 0,
 }) {
   // Wizard form state
   const today = new Date();
@@ -44,6 +45,7 @@ export default function ScheduleBuilderModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
+  const [confirmExisting, setConfirmExisting] = useState(false); // two-tap guard when the league already has games
 
   const teamById = useMemo(() => {
     const m = new Map();
@@ -75,11 +77,19 @@ export default function ScheduleBuilderModal({
 
   const handlePublish = async () => {
     if (!proposed) return;
+    // The bulk insert doesn't dedupe — publishing on top of an existing slate
+    // ADDS these games, doubling the schedule. Force a one-tap confirm first so
+    // a commissioner doesn't accidentally double their season.
+    if (existingGamesCount > 0 && !confirmExisting) {
+      setConfirmExisting(true);
+      return;
+    }
     setSubmitting(true);
     setError(null);
     const { data, error } = await bulkInsertLeagueGames(leagueId, proposed.games, divisionId);
     setSubmitting(false);
     if (error) { setError(error.message); return; }
+    setConfirmExisting(false);
     setResult({ inserted: data?.length || 0 });
     if (onPublished) onPublished();
   };
@@ -209,15 +219,21 @@ export default function ScheduleBuilderModal({
               })}
             </div>
 
+            {confirmExisting && !submitting && !result && (
+              <div style={{ background: 'rgba(245,158,11,0.12)', border: `0.5px solid ${B.amber}`, borderRadius: 8, padding: '10px 12px', marginBottom: 10, fontSize: 13, color: B.amber, lineHeight: 1.5 }}>
+                This league already has {existingGamesCount} game{existingGamesCount === 1 ? '' : 's'} — publishing ADDS these on top. Publish anyway?
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={onClose} disabled={submitting}
+              <button onClick={confirmExisting ? () => setConfirmExisting(false) : onClose} disabled={submitting}
                 style={{ flex: 1, padding: 11, borderRadius: 999, background: 'rgba(244,247,250,0.08)', border: 'none', color: B.steel, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
                 Cancel
               </button>
               <button onClick={handlePublish} disabled={submitting || result}
-                style={{ flex: 2, padding: 11, borderRadius: 999, background: result ? B.green : B.red, border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: submitting ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: submitting ? 0.7 : 1 }}>
+                style={{ flex: 2, padding: 11, borderRadius: 999, background: result ? B.green : confirmExisting ? B.amber : B.red, border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: submitting ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: submitting ? 0.7 : 1 }}>
                 {submitting ? 'Publishing…'
                   : result ? `✓ Published ${result.inserted} games`
+                  : confirmExisting ? `Publish anyway — ${proposed.games.length} games`
                   : `Publish ${proposed.games.length} games`}
               </button>
             </div>

@@ -116,21 +116,32 @@ function ScoreBtn({ onClick, children, variant = 'minus' }) {
   );
 }
 
-function Modal({ title, onClose, onSave, saveLabel = 'Save', busy = false, children }) {
+// B1 — bottom sheet with a scrollable body and a pinned Save/Cancel footer so
+// Save is ALWAYS reachable, even with a 25-player roster. Flex column: title
+// (fixed) + body (scrolls) + footer (sticky bottom, same navy background).
+// B2 — `emphasizeSave` (goal modal, scorer picked) bumps Save visually and
+// surfaces `footerHint` ("Assist is optional…") so the known-scorer/no-assist
+// flow is + → jersey → Save with no scrolling.
+function Modal({ title, onClose, onSave, saveLabel = 'Save', busy = false, emphasizeSave = false, footerHint = null, children }) {
+  const saveBg = busy ? C.border : C.red;
+  const bump = emphasizeSave && !busy;
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div style={{ background: C.navy, borderRadius: '16px 16px 0 0', padding: 20, width: '100%', maxWidth: 480, borderTop: `0.5px solid ${C.border}` }}>
-        <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice, marginBottom: 16 }}>{title}</div>
-        {children}
-        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-          <button onClick={onClose}
-            style={{ flex: 1, padding: 12, background: 'rgba(244,247,250,0.08)', border: 'none', borderRadius: 999, color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 14, cursor: 'pointer', transition: 'all 0.15s' }}
-            onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(244,247,250,0.08)'; e.currentTarget.style.color = C.ice; }}>Cancel</button>
-          <button onClick={busy ? undefined : onSave} disabled={busy}
-            style={{ flex: 2, padding: 12, background: busy ? C.border : C.red, border: 'none', borderRadius: 999, color: '#fff', fontFamily: 'Barlow, sans-serif', fontSize: 14, fontWeight: 700, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.7 : 1, transition: 'all 0.15s' }}
-            onMouseEnter={e => { if (!busy) { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; } }}
-            onMouseLeave={e => { e.currentTarget.style.background = busy ? C.border : C.red; e.currentTarget.style.color = '#fff'; }}>{busy ? 'Saving…' : saveLabel}</button>
+      <div style={{ background: C.navy, borderRadius: '16px 16px 0 0', width: '100%', maxWidth: 480, borderTop: `0.5px solid ${C.border}`, maxHeight: '85vh', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 18, color: C.ice, padding: '20px 20px 12px' }}>{title}</div>
+        <div style={{ padding: '0 20px', overflowY: 'auto', flex: 1, minHeight: 0, WebkitOverflowScrolling: 'touch' }}>{children}</div>
+        <div style={{ padding: '12px 20px 20px', background: C.navy, borderTop: `0.5px solid ${C.border}` }}>
+          {footerHint && <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.5)', textAlign: 'center', marginBottom: 10, fontFamily: 'Barlow, sans-serif' }}>{footerHint}</div>}
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={onClose}
+              style={{ flex: 1, padding: 12, background: 'rgba(244,247,250,0.08)', border: 'none', borderRadius: 999, color: C.ice, fontFamily: 'Barlow, sans-serif', fontSize: 14, cursor: 'pointer', transition: 'all 0.15s' }}
+              onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(244,247,250,0.08)'; e.currentTarget.style.color = C.ice; }}>Cancel</button>
+            <button onClick={busy ? undefined : onSave} disabled={busy}
+              style={{ flex: 2, padding: 12, background: saveBg, border: 'none', borderRadius: 999, color: '#fff', fontFamily: 'Barlow, sans-serif', fontSize: bump ? 15 : 14, fontWeight: bump ? 800 : 700, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.7 : 1, transition: 'all 0.15s', boxShadow: bump ? '0 0 0 2px rgba(215,38,56,0.35), 0 6px 18px rgba(215,38,56,0.45)' : 'none' }}
+              onMouseEnter={e => { if (!busy) { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; } }}
+              onMouseLeave={e => { e.currentTarget.style.background = saveBg; e.currentTarget.style.color = '#fff'; }}>{busy ? 'Saving…' : saveLabel}</button>
+          </div>
         </div>
       </div>
     </div>
@@ -183,9 +194,10 @@ function PlayerPicker({ label, players, value, onPick, allowClear = false, clear
           return (
             <button key={p.jersey} type="button" disabled={isDisabled}
               onClick={() => onPick(isSel ? '' : p.jersey)}
-              style={{ ...pickBtnStyle(isSel), opacity: isDisabled ? 0.3 : 1, cursor: isDisabled ? 'not-allowed' : 'pointer' }}>
-              <span style={{ fontWeight: 900 }}>#{p.jersey}</span>
-              {p.name ? <span style={{ fontWeight: 600 }}>{p.name}</span> : null}
+              style={{ ...pickBtnStyle(isSel), maxWidth: 160, minWidth: 0, opacity: isDisabled ? 0.3 : 1, cursor: isDisabled ? 'not-allowed' : 'pointer' }}>
+              {/* B3 — jersey # stays fully visible (flexShrink 0); a long name truncates. */}
+              <span style={{ fontWeight: 900, flexShrink: 0 }}>#{p.jersey}</span>
+              {p.name ? <span style={{ fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span> : null}
               {p.is_captain ? <span style={pickTagStyle}>C</span> : p.is_alternate ? <span style={{ ...pickTagStyle, background: C.border, color: C.steel }}>A</span> : null}
             </button>
           );
@@ -1170,6 +1182,18 @@ export default function ScorerView() {
     setPenalties(prev => prev.filter(p => p.id !== id));
   };
 
+  // B5 — goalie changes live in game_goalie_changes (same queuedWrite path as
+  // goals/penalties: saveGoalie ~1090, logStartingGoalie ~1139). Mirror
+  // deletePenalty exactly so a mis-logged change (incl. a wrong starter nudge)
+  // is deletable like every other logged event.
+  const deleteGoalieChange = async (id) => {
+    if (isLocked) return;
+    setErrorMsg('');
+    const { error } = await queuedWrite('game_goalie_changes', 'delete', {}, { gameId, isLeague, match: { id, game_id: gameId } });
+    if (error) { setErrorMsg('Could not delete the goalie change — check your connection and try again.'); return; }
+    setGoalieChanges(prev => prev.filter(c => c.id !== id));
+  };
+
   if (loadError) return (
     <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif', padding: 24 }}>
       <div style={{ textAlign: 'center', maxWidth: 320 }}>
@@ -1557,7 +1581,8 @@ export default function ScorerView() {
                   <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>{teamName(g.team_id)} · {periodLabel(g.period)}{g.time_in_period ? ` · ${g.time_in_period}` : ''}</div>
                 </div>
                 {!isLocked && (
-                  <button onClick={() => deleteGoal(g.id)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.2)', cursor: 'pointer', fontSize: 14 }}
+                  /* B4 — 44×44 hit area; negative margins keep the glyph's visual position. */
+                  <button onClick={() => deleteGoal(g.id)} aria-label="Delete goal" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 44, minHeight: 44, margin: '-10px -12px -10px 0', background: 'none', border: 'none', color: 'rgba(244,247,250,0.2)', cursor: 'pointer', fontSize: 14 }}
                     onMouseEnter={e => e.currentTarget.style.color = C.red}
                     onMouseLeave={e => e.currentTarget.style.color = 'rgba(244,247,250,0.2)'}>✕</button>
                 )}
@@ -1593,7 +1618,7 @@ export default function ScorerView() {
           {[homeTeam, awayTeam].map((team, i) => (
             <div key={team?.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderTop: i > 0 ? '0.5px solid rgba(244,247,250,0.07)' : 'none' }}>
               <span style={{ fontSize: 14, fontWeight: 600, color: C.ice, flex: 1 }}>{team?.team_name}</span>
-              {!isLocked && <button onClick={() => changeShots(team?.id, -1)} style={{ width: 36, height: 36, background: 'rgba(244,247,250,0.08)', border: 'none', borderRadius: 8, color: C.ice, fontSize: 18, cursor: 'pointer', transition: 'all 0.15s' }}
+              {!isLocked && <button onClick={() => changeShots(team?.id, -1)} style={{ width: 44, height: 44, background: 'rgba(244,247,250,0.08)', border: 'none', borderRadius: 8, color: C.ice, fontSize: 18, cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0 }}
                 onMouseEnter={e => { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}
                 onMouseLeave={e => { e.currentTarget.style.background = 'rgba(244,247,250,0.08)'; e.currentTarget.style.color = C.ice; }}>−</button>}
               <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 32, color: C.ice, width: 48, textAlign: 'center' }}>{shotTotals[team?.id] || 0}</span>
@@ -1618,7 +1643,8 @@ export default function ScorerView() {
                 <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>{periodLabel(p.period)}{p.time_in_period ? ` · ${p.time_in_period}` : ''} · {p.duration_minutes} min</div>
               </div>
               {!isLocked && (
-                <button onClick={() => deletePenalty(p.id)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.2)', cursor: 'pointer', fontSize: 14 }}
+                /* B4 — 44×44 hit area; negative margins keep the glyph's visual position. */
+                <button onClick={() => deletePenalty(p.id)} aria-label="Delete penalty" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 44, minHeight: 44, margin: '-10px -16px -10px 0', background: 'none', border: 'none', color: 'rgba(244,247,250,0.2)', cursor: 'pointer', fontSize: 14 }}
                   onMouseEnter={e => e.currentTarget.style.color = C.red}
                   onMouseLeave={e => e.currentTarget.style.color = 'rgba(244,247,250,0.2)'}>✕</button>
               )}
@@ -1654,7 +1680,7 @@ export default function ScorerView() {
               )}
               {goalieChanges.filter(g => g.team_id === team?.id).map(c => (
                 <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
-                  <div style={{ flex: 1 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: C.ice }}>
                       {c.goalie_out_number && c.goalie_in_number ? `#${c.goalie_out_number} → #${c.goalie_in_number}`
                         : c.goalie_in_number ? `#${c.goalie_in_number} in net`
@@ -1663,6 +1689,12 @@ export default function ScorerView() {
                     </div>
                     <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.4)', marginTop: 2 }}>{periodLabel(c.period)}{c.time_in_period ? ` · ${c.time_in_period}` : ''}</div>
                   </div>
+                  {!isLocked && (
+                    /* B5 — same 44×44 ✕ delete pattern as penalties. */
+                    <button onClick={() => deleteGoalieChange(c.id)} aria-label="Delete goalie change" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 44, minHeight: 44, margin: '-8px -16px -8px 0', background: 'none', border: 'none', color: 'rgba(244,247,250,0.2)', cursor: 'pointer', fontSize: 14 }}
+                      onMouseEnter={e => e.currentTarget.style.color = C.red}
+                      onMouseLeave={e => e.currentTarget.style.color = 'rgba(244,247,250,0.2)'}>✕</button>
+                  )}
                 </div>
               ))}
               {!isLocked && <AddBtn onClick={() => { setGoalieForm({ goalie_out_number: '', goalie_in_number: '', period, time_in_period: '' }); setGoalieModal(team?.id); }}>+ Log Change — {team?.team_name}</AddBtn>}
@@ -1793,7 +1825,9 @@ export default function ScorerView() {
 
       {/* GOAL MODAL */}
       {goalModal && (
-        <Modal title="Log Goal" onClose={() => { setGoalModal(false); pendingEventIdRef.current = null; }} onSave={saveGoal} saveLabel="Save Goal" busy={modalBusy}>
+        <Modal title="Log Goal" onClose={() => { setGoalModal(false); pendingEventIdRef.current = null; }} onSave={saveGoal} saveLabel="Save Goal" busy={modalBusy}
+          emphasizeSave={goalForm.scorer_number !== '' && goalForm.scorer_number != null}
+          footerHint={(goalForm.scorer_number !== '' && goalForm.scorer_number != null) ? 'Assist is optional — tap Save Goal when you\'re ready.' : null}>
           <MField label="Team">
             <select style={selectStyle} value={goalForm.team_id} onChange={e => setGoalForm(p => ({ ...p, team_id: e.target.value }))}>
               <option value={homeTeam?.id}>{homeTeam?.team_name}</option>
