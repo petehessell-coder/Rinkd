@@ -19,8 +19,11 @@
 --   via pg_get_functiondef 2026-07-02, diffed against
 --   20260621130000_youth_privacy_e_event_minor_shield.sql — no drift) with ONLY
 --   the added `p_limit` param and the trailing `LIMIT ...` line changed. The
---   youth jersey-shield logic, SECURITY DEFINER clause, search_path, and grants
---   are preserved exactly. PostgREST clients pass named args, so an added
+--   youth jersey-shield logic, SECURITY DEFINER clause, and search_path are
+--   preserved exactly. Grants are TIGHTENED to the repo convention (revoke from
+--   public + explicit anon/authenticated/service_role): prod's current ACL also
+--   carries an implicit PUBLIC EXECUTE, which this migration deliberately drops —
+--   every PostgREST role keeps execute. Clients pass named args, so an added
 --   defaulted param is backward-compatible — old single-arg callers keep working.
 --
 -- IDEMPOTENCY
