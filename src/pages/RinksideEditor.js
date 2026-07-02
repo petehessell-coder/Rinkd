@@ -6,6 +6,7 @@ import {
 } from '../lib/rinkside';
 import { useIsRinkdAdmin } from '../lib/userRole';
 import { C } from '../lib/tokens';
+import { Skeleton, useToast, useConfirm, ConfirmSheetHost } from '../components/ui';
 
 function slugify(s) {
   return (s || '').toLowerCase().trim()
@@ -50,6 +51,8 @@ export default function RinksideEditor({ currentUser, profile }) {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const { toast } = useToast();
+  const confirmDelete = useConfirm();
 
   useEffect(() => {
     if (isNew) return;
@@ -88,8 +91,19 @@ export default function RinksideEditor({ currentUser, profile }) {
   if (adminCheckLoading) {
     return (
       <Layout profile={profile} currentPage="rinkside">
-        <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.steel, fontFamily: 'Barlow, sans-serif', fontSize: 14 }}>
-          Getting the ice ready.
+        <div style={{ background: C.dark, minHeight: '100vh', fontFamily: 'Barlow, sans-serif' }}>
+          <div style={{ maxWidth: 900, margin: '0 auto', padding: '20px 16px 80px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+              <Skeleton width={80} height={13} />
+              <Skeleton width={160} height={30} radius={999} />
+            </div>
+            <Skeleton width="50%" height={28} style={{ marginBottom: 18 }} />
+            <div style={{ display: 'grid', gap: 14 }}>
+              <Skeleton width="100%" height={40} radius={8} />
+              <Skeleton width="100%" height={40} radius={8} />
+              <Skeleton width="100%" height={200} radius={8} />
+            </div>
+          </div>
         </div>
       </Layout>
     );
@@ -107,8 +121,8 @@ export default function RinksideEditor({ currentUser, profile }) {
   }
 
   const handleSave = async (publish = isPublished) => {
-    if (!title.trim()) { alert('Add a title to continue.'); return; }
-    if (!slugValue.trim()) { alert('Add a URL slug to continue.'); return; }
+    if (!title.trim()) { toast({ message: 'Add a title to continue.', tone: 'alert' }); return; }
+    if (!slugValue.trim()) { toast({ message: 'Add a URL slug to continue.', tone: 'alert' }); return; }
     setSaving(true);
     const fields = {
       slug: slugValue.trim(),
@@ -130,18 +144,23 @@ export default function RinksideEditor({ currentUser, profile }) {
       res = await updateArticle(articleId, fields);
     }
     setSaving(false);
-    if (res.error) { alert("That didn't save — " + res.error.message); return; }
+    if (res.error) { toast({ message: "That didn't save — " + res.error.message, tone: 'alert' }); return; }
     navigate(`/rinkside/${res.data.slug}`);
   };
 
   const handleDelete = async () => {
     if (!articleId || deleting) return;
-    if (!window.confirm("Delete this article? This can't be undone.")) return;
+    if (!(await confirmDelete({
+      title: 'Delete this article?',
+      body: "This can't be undone — the article is removed everywhere immediately.",
+      confirmLabel: 'Delete',
+      danger: true,
+    }))) return;
     setDeleting(true);
     const { error } = await deleteArticle(articleId);
     if (error) {
       setDeleting(false);
-      alert("That didn't delete — " + error.message);
+      toast({ message: "That didn't delete — " + error.message, tone: 'alert' });
       return;
     }
     navigate('/rinkside');
@@ -262,6 +281,7 @@ export default function RinksideEditor({ currentUser, profile }) {
           )}
         </div>
       </div>
+      <ConfirmSheetHost controller={confirmDelete} />
     </Layout>
   );
 }

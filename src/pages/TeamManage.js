@@ -11,6 +11,7 @@ import { classifyImage } from '../lib/imageModeration';
 import { listTeamManagers, addTeamManagerByInput, removeTeamManager, demoteTeamManager } from '../lib/teamManagers';
 import { SCHEDULE_TYPES, eventMeta, scheduleTitle } from '../lib/scheduleMeta';
 import { C, colors } from '../lib/tokens';
+import { Skeleton, Icon, useToast, useUndoable, useConfirm, ConfirmSheetHost } from '../components/ui';
 
 const inputStyle = { width:'100%', background:C.dark, border:`0.5px solid ${C.border}`, borderRadius:8, padding:'10px 12px', color:C.ice, fontFamily:'Barlow, sans-serif', fontSize:14, outline:'none' };
 const selectStyle = { ...inputStyle };
@@ -61,6 +62,7 @@ function CreateTeam({ profile, navigate }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const { toast } = useToast();
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   const handleCreate = async () => {
@@ -80,13 +82,13 @@ function CreateTeam({ profile, navigate }) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
-      alert(`That logo's ${(file.size / 1024 / 1024).toFixed(1)} MB — keep it under 5 MB and upload again.`);
+      toast({ message: `That logo's ${(file.size / 1024 / 1024).toFixed(1)} MB — keep it under 5 MB and upload again.`, tone: 'alert' });
       e.target.value = '';
       return;
     }
     const verdict = await classifyImage(file);
     if (!verdict.ok) {
-      alert("That image doesn't pass our community guidelines — pick a different one.");
+      toast({ message: "That image doesn't pass our community guidelines — pick a different one.", tone: 'alert' });
       e.target.value = '';
       return;
     }
@@ -94,7 +96,7 @@ function CreateTeam({ profile, navigate }) {
     const { data: { user } } = await supabase.auth.getUser();
     const { url, error: upErr } = await uploadMedia(file, user.id);
     setUploadingLogo(false);
-    if (upErr || !url) { alert("That upload didn't go through — check your connection and try again."); return; }
+    if (upErr || !url) { toast({ message: "That upload didn't go through — check your connection and try again.", tone: 'alert' }); return; }
     set('logo_url', url);
   };
 
@@ -114,8 +116,9 @@ function CreateTeam({ profile, navigate }) {
         <div>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(244,247,250,0.4)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Logo</div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <label style={{ cursor: 'pointer', fontSize: 11, color: '#9BB5D6', padding: '4px 10px', borderRadius: 999, background: 'rgba(46,91,140,0.25)', border: '0.5px solid rgba(46,91,140,0.5)' }}>
-              {uploadingLogo ? 'Uploading…' : form.logo_url ? '📷 Replace' : '📷 Upload'}
+            <label style={{ cursor: 'pointer', fontSize: 11, color: '#9BB5D6', padding: '4px 10px', borderRadius: 999, background: 'rgba(46,91,140,0.25)', border: '0.5px solid rgba(46,91,140,0.5)', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <Icon name="camera" size={12} />
+              {uploadingLogo ? 'Uploading…' : form.logo_url ? 'Replace' : 'Upload'}
               <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} disabled={uploadingLogo} />
             </label>
             {form.logo_url && (
@@ -146,17 +149,24 @@ function CreateTeam({ profile, navigate }) {
                     background: active ? 'rgba(215,38,56,0.12)' : 'transparent', color: C.ice,
                     fontFamily: 'Barlow, sans-serif', display: 'flex', flexDirection: 'column',
                     alignItems: 'center', justifyContent: 'center', gap: 2 }}>
-                  <span style={{ fontWeight: 800, fontSize: 15 }}>{active ? '✓ ' : ''}{opt.label}</span>
+                  <span style={{ fontWeight: 800, fontSize: 15, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {active && <Icon name="approved" size={13} />}{opt.label}
+                  </span>
                   <span style={{ fontSize: 11, color: colors.muted }}>{opt.sub}</span>
                 </button>
               );
             })}
           </div>
         </Field>
-        <div style={{ fontSize: 12, color: form.is_youth ? C.gold : colors.muted, margin: '-6px 0 12px', lineHeight: 1.45 }}>
-          {form.is_youth
-            ? '🔒 Youth teams are private. Only rostered members, their parents/guardians, and coaches can see the roster, schedule, and locations — never the public.'
-            : 'Adult teams are public and discoverable. Personal contact info (email/phone) still stays members-only.'}
+        <div style={{ fontSize: 12, color: form.is_youth ? C.gold : colors.muted, margin: '-6px 0 12px', lineHeight: 1.45, display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+          {form.is_youth ? (
+            <>
+              <Icon name="privacy" size={13} style={{ marginTop: 2, flexShrink: 0 }} />
+              <span>Youth teams are private. Only rostered members, their parents/guardians, and coaches can see the roster, schedule, and locations — never the public.</span>
+            </>
+          ) : (
+            <span>Adult teams are public and discoverable. Personal contact info (email/phone) still stays members-only.</span>
+          )}
         </div>
         <Row2>
           <Field label="Division"><input style={inputStyle} value={form.division} onChange={e => set('division', e.target.value)} placeholder="e.g. 14U AA" /></Field>
@@ -172,8 +182,39 @@ function CreateTeam({ profile, navigate }) {
         style={{ width: '100%', padding: 14, background: C.red, border: 'none', borderRadius: 999, color: '#fff', fontSize: 15, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'Barlow, sans-serif', opacity: saving ? 0.7 : 1, transition: 'all 0.15s' }}
         onMouseEnter={e => { if (!saving) { e.currentTarget.style.background = C.ice; e.currentTarget.style.color = C.navy; }}}
         onMouseLeave={e => { e.currentTarget.style.background = C.red; e.currentTarget.style.color = '#fff'; }}>
-        {saving ? 'Creating…' : '🏒 Create Team'}
+        {saving ? 'Creating…' : 'Create Team'}
       </button>
+    </div>
+  );
+}
+
+// Geometric placeholder mirroring the manage header + tabs + roster rows —
+// no generic spinner, no layout shift when the real data hydrates.
+function ManageTeamSkeleton() {
+  return (
+    <div style={{ background: C.dark, minHeight: '100vh', fontFamily: 'Barlow, sans-serif', color: C.ice }}>
+      <div style={{ background: C.navy, padding: '14px 16px', borderBottom: `0.5px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Skeleton width={80} height={13} />
+        <Skeleton width={120} height={16} />
+        <div style={{ width: 60 }} />
+      </div>
+      <div style={{ display: 'flex', gap: 0, background: C.navy, borderBottom: '2px solid rgba(46,91,140,0.3)', padding: '10px 16px' }}>
+        {[0, 1, 2, 3].map(i => <Skeleton key={i} width={64} height={14} style={{ marginRight: 20 }} />)}
+      </div>
+      <div style={{ padding: 16, maxWidth: 520, margin: '0 auto' }}>
+        <Skeleton width="40%" height={12} style={{ marginBottom: 10 }} />
+        <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
+          {[0, 1, 2].map(i => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
+              <Skeleton width={24} height={16} />
+              <div style={{ flex: 1 }}>
+                <Skeleton width="55%" height={13} style={{ marginBottom: 6 }} />
+                <Skeleton width="35%" height={11} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -192,6 +233,7 @@ function ManageTeam({ id, profile, navigate }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null); // transient confirmation (e.g. "Added 24 practices")
+  const runUndoable = useUndoable();
 
   // Add member form
   const [memberForm, setMemberForm] = useState({ name: '', email: '', jersey_number: '', position: 'Center', role: 'player', shot_hand: 'left' });
@@ -284,6 +326,27 @@ function ManageTeam({ id, profile, navigate }) {
     } catch(e) { setError(e.message); }
     setSaving(false);
   };
+
+  // Optimistically drop a roster row and return a synchronous restore (via
+  // client state, no network) for the deferred remove's Undo.
+  const removeMemberFromList = useCallback((memberId) => {
+    let prev;
+    setMembers(cur => { prev = cur; return cur.filter(m => m.id !== memberId); });
+    return () => { if (prev !== undefined) setMembers(prev); };
+  }, []);
+
+  // removeTeamMember is a hard delete with no confirm today — this replaces
+  // the un-guarded fire-and-forget with optimistic + 5s Undo (manifesto:
+  // lightweight/reversible actions get Undo, not a confirm dialog). The
+  // "restore" during the commit's undo window is purely a full re-add via
+  // addTeamMember from the in-memory row, so it stays clean even on flaky
+  // rink wifi (nothing hits the network unless Undo is never tapped).
+  const handleRemoveMember = (m) => runUndoable({
+    message: `${m.profile?.name || m.invite_name || 'Player'} removed from roster`,
+    apply: () => removeMemberFromList(m.id),
+    commit: async () => { await removeTeamMember(m.id); try { await load(); } catch { /* reconcile only */ } },
+    errorMessage: "That didn't go through — they're back on the roster. Try again.",
+  });
 
   const resetScheduleForm = () => setScheduleForm({
     event_type: scheduleForm.event_type, // keep the toggle where the user left it
@@ -387,7 +450,7 @@ function ManageTeam({ id, profile, navigate }) {
 
   const MANAGE_TABS = ['Roster', 'Schedule', 'Requests', 'Settings'];
 
-  if (loading) return <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Getting the ice ready.</div>;
+  if (loading) return <ManageTeamSkeleton />;
 
   return (
     <div style={{ background: C.dark, minHeight: '100vh', fontFamily: 'Barlow, sans-serif', color: C.ice }}>
@@ -484,10 +547,12 @@ function ManageTeam({ id, profile, navigate }) {
                       {m.position}{m.profile?.handle ? ' · @' + m.profile.handle : contacts[m.id] ? ' · ' + contacts[m.id] : ''}
                     </div>
                   </div>
-                  <button onClick={() => removeTeamMember(m.id).then(load)}
-                    style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.2)', cursor: 'pointer', fontSize: 16 }}
+                  <button onClick={() => handleRemoveMember(m)} aria-label={`Remove ${m.profile?.name || m.invite_name || 'player'} from roster`} title="Remove"
+                    style={{ background: 'none', border: 'none', color: C.steel, cursor: 'pointer', width: 44, height: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
                     onMouseEnter={e => e.currentTarget.style.color = C.red}
-                    onMouseLeave={e => e.currentTarget.style.color = 'rgba(244,247,250,0.2)'}>✕</button>
+                    onMouseLeave={e => e.currentTarget.style.color = C.steel}>
+                    <Icon name="close" size={16} />
+                  </button>
                 </div>
               ))}
             </div>
@@ -625,10 +690,12 @@ function ManageTeam({ id, profile, navigate }) {
                     }
                     {editable && (
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
-                        <button onClick={() => handleDeleteItem(g)} title="Remove"
-                          style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.25)', cursor: 'pointer', fontSize: 15, lineHeight: 1, minWidth: 44, minHeight: 44 }}
+                        <button onClick={() => handleDeleteItem(g)} aria-label="Remove from schedule" title="Remove"
+                          style={{ background: 'none', border: 'none', color: C.steel, cursor: 'pointer', lineHeight: 1, minWidth: 44, minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                           onMouseEnter={e => e.currentTarget.style.color = C.red}
-                          onMouseLeave={e => e.currentTarget.style.color = 'rgba(244,247,250,0.25)'}>✕</button>
+                          onMouseLeave={e => e.currentTarget.style.color = C.steel}>
+                          <Icon name="close" size={15} />
+                        </button>
                         {g.series_id && (
                           <button onClick={() => handleDeleteSeries(g.series_id, meta.label.toLowerCase())}
                             style={{ background: 'none', border: 'none', color: C.steel, cursor: 'pointer', fontSize: 11, padding: '6px 4px', whiteSpace: 'nowrap' }}>
@@ -675,7 +742,9 @@ function ManageTeam({ id, profile, navigate }) {
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <ActionBtn onClick={() => handleApprove(req)}>✓ Approve</ActionBtn>
+                  <ActionBtn onClick={() => handleApprove(req)}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon name="approved" size={13} />Approve</span>
+                  </ActionBtn>
                   <ActionBtn onClick={() => handleDeny(req)} variant="danger" small>Deny</ActionBtn>
                 </div>
               </div>
@@ -696,6 +765,7 @@ function TeamSettings({ team, onSave }) {
   const [form, setForm] = useState({ name: team.name, division: team.division || '', level: team.level || '', location: team.location || '', home_rink: team.home_rink || '', logo_color: team.logo_color || C.red, logo_initials: team.logo_initials || '', logo_url: team.logo_url || '' });
   const [saving, setSaving] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const { toast } = useToast();
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   const handleSave = async () => {
@@ -710,13 +780,13 @@ function TeamSettings({ team, onSave }) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
-      alert(`That logo's ${(file.size / 1024 / 1024).toFixed(1)} MB — keep it under 5 MB and upload again.`);
+      toast({ message: `That logo's ${(file.size / 1024 / 1024).toFixed(1)} MB — keep it under 5 MB and upload again.`, tone: 'alert' });
       e.target.value = '';
       return;
     }
     const verdict = await classifyImage(file);
     if (!verdict.ok) {
-      alert("That image doesn't pass our community guidelines — pick a different one.");
+      toast({ message: "That image doesn't pass our community guidelines — pick a different one.", tone: 'alert' });
       e.target.value = '';
       return;
     }
@@ -724,7 +794,7 @@ function TeamSettings({ team, onSave }) {
     const { data: { user } } = await supabase.auth.getUser();
     const { url, error: upErr } = await uploadMedia(file, user.id);
     setUploadingLogo(false);
-    if (upErr || !url) { alert("That upload didn't go through — check your connection and try again."); return; }
+    if (upErr || !url) { toast({ message: "That upload didn't go through — check your connection and try again.", tone: 'alert' }); return; }
     set('logo_url', url);
   };
 
@@ -736,8 +806,9 @@ function TeamSettings({ team, onSave }) {
           <TeamLogo team={{ name: form.name, logo_url: form.logo_url, logo_color: form.logo_color, logo_initials: form.logo_initials }} size={56} radius={10} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <label style={{ cursor: 'pointer', fontSize: 11, color: '#9BB5D6', padding: '4px 10px', borderRadius: 999, background: 'rgba(46,91,140,0.25)', border: '0.5px solid rgba(46,91,140,0.5)' }}>
-                {uploadingLogo ? 'Uploading…' : form.logo_url ? '📷 Replace logo' : '📷 Upload logo'}
+              <label style={{ cursor: 'pointer', fontSize: 11, color: '#9BB5D6', padding: '4px 10px', borderRadius: 999, background: 'rgba(46,91,140,0.25)', border: '0.5px solid rgba(46,91,140,0.5)', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <Icon name="camera" size={12} />
+                {uploadingLogo ? 'Uploading…' : form.logo_url ? 'Replace logo' : 'Upload logo'}
                 <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} disabled={uploadingLogo} />
               </label>
               {form.logo_url && (
@@ -816,17 +887,30 @@ function ManagersSection({ teamId, foundingManagerId }) {
     }
   };
 
+  const { toast } = useToast();
+  const confirmAction = useConfirm();
+
   const handleRemove = async (memberId, name) => {
-    if (!window.confirm(`Remove ${name} as a manager? They'll lose management access. (To keep them on the roster as a player, use Demote instead.)`)) return;
+    if (!(await confirmAction({
+      title: `Remove ${name} as a manager?`,
+      body: "They'll lose management access. (To keep them on the roster as a player, use Demote instead.)",
+      confirmLabel: 'Remove',
+      danger: true,
+    }))) return;
     const { error } = await removeTeamManager(memberId);
-    if (error) { alert(`Couldn't remove them: ${error.message}`); return; }
+    if (error) { toast({ message: `Couldn't remove them: ${error.message}`, tone: 'alert' }); return; }
     load();
   };
 
   const handleDemote = async (memberId, name) => {
-    if (!window.confirm(`Demote ${name} to player? They'll stay on the roster but lose management access.`)) return;
+    if (!(await confirmAction({
+      title: `Demote ${name} to player?`,
+      body: "They'll stay on the roster but lose management access.",
+      confirmLabel: 'Demote',
+      danger: true,
+    }))) return;
     const { error } = await demoteTeamManager(memberId);
-    if (error) { alert(`Couldn't demote them: ${error.message}`); return; }
+    if (error) { toast({ message: `Couldn't demote them: ${error.message}`, tone: 'alert' }); return; }
     load();
   };
 
@@ -857,7 +941,16 @@ function ManagersSection({ teamId, foundingManagerId }) {
       </Card>
 
       {loading ? (
-        <div style={{ color: C.steel, fontSize: 13, padding: '16px 0', textAlign: 'center' }}>Warming up.</div>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 24 }}>
+          {[0, 1].map(i => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', padding: 12, borderTop: i ? '1px solid rgba(46,91,140,0.25)' : 'none', gap: 12 }}>
+              <Skeleton width={36} height={36} radius={999} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Skeleton width="40%" height={14} />
+              </div>
+            </div>
+          ))}
+        </div>
       ) : managers.length === 0 ? (
         <div style={{ textAlign: 'center', color: C.steel, padding: '20px 0', fontSize: 13 }}>
           No extra managers yet — add one above to share the load. (The founder is set on the team itself, not listed here.)
@@ -903,6 +996,7 @@ function ManagersSection({ teamId, foundingManagerId }) {
           })}
         </div>
       )}
+      <ConfirmSheetHost controller={confirmAction} />
     </>
   );
 }

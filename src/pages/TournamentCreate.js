@@ -7,6 +7,7 @@ import { addScorerByInput } from '../lib/tournamentScorers';
 import { roundRobinPairs } from '../lib/tournamentManage';
 import Layout from '../components/Layout';
 import { C, colors } from '../lib/tokens';
+import { Icon, useToast, useConfirm, ConfirmSheetHost } from '../components/ui';
 
 const COLORS = {
   navy: C.navy, blue: C.blue, red: C.red,
@@ -335,7 +336,10 @@ function Step3({ data, onChange, onBack, onNext }) {
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
               <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: poolColors[pi]||poolColors[0], color: poolTextColors[pi]||poolTextColors[0], letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>POOL {t.pool}</span>
               <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: C.ice }}>{t.name}</span>
-              <button onClick={() => removeTeam(i)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.3)', cursor: 'pointer', fontSize: 16, padding: '0 4px' }}>✕</button>
+              <button onClick={() => removeTeam(i)} aria-label={`Remove ${t.name}`} title="Remove"
+                style={{ background: 'none', border: 'none', color: C.steel, cursor: 'pointer', width: 44, height: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Icon name="close" size={15} />
+              </button>
             </div>
           );
         })}
@@ -361,6 +365,9 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
   const [genStart, setGenStart] = useState('');
   const [genMinutes, setGenMinutes] = useState(60);
   const [genRink, setGenRink] = useState('');
+  const { toast } = useToast();
+  const confirmRegen = useConfirm();
+  const warn = (message) => { toast({ message, tone: 'alert' }); };
   // "One venue" — when the whole tournament runs at a single facility, the per-rink
   // facility field just repeats the venue from Step 1. "One rink" — when there's
   // exactly one rink, every game is there, so the per-game rink picker is noise.
@@ -412,12 +419,17 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
   // Round-robin generator — the recommended way to fill the schedule. Reuses the
   // same circle-method pairing the Manage page uses, run client-side on the
   // in-memory team list (teams have no DB ids yet at this step).
-  const generateRoundRobin = () => {
+  const generateRoundRobin = async () => {
     const teamList = data.teams || [];
-    if (teamList.length < 2) return alert('Add at least two teams in Step 3 first.');
-    if (!genStart) return alert('Pick a start date and time for the first game.');
+    if (teamList.length < 2) return warn('Add at least two teams in Step 3 first.');
+    if (!genStart) return warn('Pick a start date and time for the first game.');
     if ((data.games || []).length > 0 &&
-        !window.confirm(`Regenerate the schedule? This replaces the ${data.games.length} game${data.games.length === 1 ? '' : 's'} already listed.`)) return;
+        !(await confirmRegen({
+          title: 'Regenerate the schedule?',
+          body: `This replaces the ${data.games.length} game${data.games.length === 1 ? '' : 's'} already listed.`,
+          confirmLabel: 'Regenerate',
+          danger: true,
+        }))) return;
 
     const byPool = {};
     for (const t of teamList) {
@@ -427,7 +439,7 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
     const minutes = parseInt(genMinutes, 10) || 60;
     const rink = useOneRink ? soleRink : genRink;
     let cursor = new Date(genStart);
-    if (isNaN(cursor.getTime())) return alert("That start time didn't read right — pick the date and time again.");
+    if (isNaN(cursor.getTime())) return warn("That start time didn't read right — pick the date and time again.");
 
     const games = [];
     for (const pool of Object.keys(byPool).sort()) {
@@ -436,7 +448,7 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
         cursor = new Date(cursor.getTime() + minutes * 60 * 1000);
       }
     }
-    if (!games.length) return alert('No games to generate — each pool needs at least two teams.');
+    if (!games.length) return warn('No games to generate — each pool needs at least two teams.');
     onChange('games', games);
   };
 
@@ -455,7 +467,10 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
                 ? <div style={{ fontSize: 11, color: C.red, fontWeight: 600 }}>LiveBarn: {r.live_barn_venue_id}</div>
                 : <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.3)' }}>No LiveBarn</div>}
             </div>
-            <button onClick={() => removeRink(i)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.3)', cursor: 'pointer', fontSize: 16 }}>✕</button>
+            <button onClick={() => removeRink(i)} aria-label={`Remove ${r.sub_rink || r.name}`} title="Remove"
+              style={{ background: 'none', border: 'none', color: C.steel, cursor: 'pointer', width: 44, height: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Icon name="close" size={15} />
+            </button>
           </div>
         ))}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
@@ -491,12 +506,15 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
             <span style={{ color: 'rgba(244,247,250,0.3)', fontSize: 11 }}>vs</span>
             <span style={{ flex: 1, fontWeight: 600, textAlign: 'right' }}>{g.away}</span>
             <span style={{ fontSize: 10, color: 'rgba(244,247,250,0.3)', marginLeft: 4 }}>{g.rink}</span>
-            <button onClick={() => removeGame(i)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.3)', cursor: 'pointer', fontSize: 14 }}>✕</button>
+            <button onClick={() => removeGame(i)} aria-label={`Remove ${g.home} vs ${g.away}`} title="Remove"
+              style={{ background: 'none', border: 'none', color: C.steel, cursor: 'pointer', width: 44, height: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Icon name="close" size={14} />
+            </button>
           </div>
         ))}
         {/* Round-robin generator — the recommended way to fill the schedule */}
         <div style={{ background: 'rgba(46,91,140,0.12)', border: '0.5px solid rgba(46,91,140,0.4)', borderRadius: 10, padding: 14, marginTop: 12 }}>
-          <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 15, color: C.ice, marginBottom: 4 }}>⚡ Generate Round-Robin</div>
+          <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 15, color: C.ice, marginBottom: 4 }}>Generate Round-Robin</div>
           <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.45)', marginBottom: 12, lineHeight: 1.5 }}>
             Every team plays every other team in its pool once. Games are stacked back-to-back from the start time — edit any of them below afterward.
           </div>
@@ -512,7 +530,7 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
               </select>
             </Field>
           )}
-          <button onClick={generateRoundRobin} style={{ background: COLORS.red, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer', width: '100%' }}>⚡ Generate Schedule</button>
+          <button onClick={generateRoundRobin} style={{ background: COLORS.red, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer', width: '100%' }}>Generate Schedule</button>
         </div>
 
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(244,247,250,0.3)', textTransform: 'uppercase', marginTop: 16 }}>Or add a game manually</div>
@@ -560,13 +578,17 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
         {(data.scorekeepers||[]).map((s,i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', fontSize: 13, color: 'rgba(244,247,250,0.6)' }}>
             <span>{s}</span>
-            <button onClick={() => { const sc=[...(data.scorekeepers||[])]; sc.splice(i,1); onChange('scorekeepers',sc); }} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.3)', cursor: 'pointer' }}>✕</button>
+            <button onClick={() => { const sc=[...(data.scorekeepers||[])]; sc.splice(i,1); onChange('scorekeepers',sc); }} aria-label={`Remove ${s}`} title="Remove"
+              style={{ background: 'none', border: 'none', color: C.steel, cursor: 'pointer', width: 44, height: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Icon name="close" size={15} />
+            </button>
           </div>
         ))}
         <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.35)', marginTop: 8 }}>They'll get access to the scorer view for this tournament only</div>
       </Card>
 
-      <BtnRow onBack={onBack} onNext={onSubmit} nextLabel="🚀 Publish Tournament" loading={loading} />
+      <BtnRow onBack={onBack} onNext={onSubmit} nextLabel="Publish Tournament" loading={loading} />
+      <ConfirmSheetHost controller={confirmRegen} />
     </>
   );
 }

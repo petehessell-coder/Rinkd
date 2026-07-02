@@ -10,6 +10,7 @@ import { addScorerByInput } from '../lib/leagueScorers';
 import { uploadMedia } from '../lib/posts';
 import { classifyImage } from '../lib/imageModeration';
 import { C, colors } from '../lib/tokens';
+import { Icon, useToast } from '../components/ui';
 
 // Phase 1 of the league-parity build (May 19, 2026 plan;
 // see ~/Downloads/rinkd_v4/LEAGUE_PARITY_PHASE_1_BUILD.md).
@@ -29,12 +30,6 @@ import { C, colors } from '../lib/tokens';
 // has a Schedule tab with rink + game builders. The wizard's job is to
 // stand up the league shell + initial team roster; commissioners then
 // run the season from /league/:id/manage.
-
-const COLORS = {
-  navy: C.navy, blue: C.blue, red: C.red,
-  ice: C.ice, steel: C.steel, dark: C.dark,
-  card: C.card, border: C.border,
-};
 
 const LOGO_COLORS = [C.red, C.blue, colors.success, colors.warning, colors.premium, '#0EA5E9', '#EC4899', C.navy];
 
@@ -158,7 +153,7 @@ function Toggle({ value, onChange, label, sub }) {
 }
 
 function Card({ children }) {
-  return <div style={{ background: COLORS.card, border: `0.5px solid ${COLORS.border}`, borderRadius: 12, padding: '16px 18px', marginBottom: 12 }}>{children}</div>;
+  return <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: '16px 18px', marginBottom: 12 }}>{children}</div>;
 }
 
 function SectionLabel({ children }) {
@@ -173,7 +168,7 @@ function Progress({ step }) {
   return (
     <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
       {[1,2,3,4].map(i => (
-        <div key={i} style={{ height: 4, flex: 1, borderRadius: 4, background: i < step ? COLORS.red : i === step ? COLORS.blue : 'rgba(244,247,250,0.1)', transition: 'background 0.2s' }} />
+        <div key={i} style={{ height: 4, flex: 1, borderRadius: 4, background: i < step ? C.red : i === step ? C.blue : 'rgba(244,247,250,0.1)', transition: 'background 0.2s' }} />
       ))}
     </div>
   );
@@ -184,7 +179,7 @@ function BtnRow({ onBack, onNext, nextLabel = 'Next →', loading = false }) {
     <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
       {onBack && <button onClick={onBack} style={{ background: 'rgba(244,247,250,0.08)', color: 'rgba(244,247,250,0.6)', border: 'none', borderRadius: 999, padding: '12px 20px', fontFamily: 'Barlow, sans-serif', fontSize: 14, cursor: 'pointer' }}>← Back</button>}
       <button onClick={onNext} disabled={loading}
-        style={{ flex: 1, background: COLORS.red, color: '#fff', border: 'none', borderRadius: 999, padding: 12, fontFamily: 'Barlow, sans-serif', fontSize: 14, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
+        style={{ flex: 1, background: C.red, color: '#fff', border: 'none', borderRadius: 999, padding: 12, fontFamily: 'Barlow, sans-serif', fontSize: 14, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
         {loading ? 'Publishing…' : nextLabel}
       </button>
     </div>
@@ -197,19 +192,20 @@ const goalDiffOptions = [{value:'none',label:'No limit'}, ...Array.from({length:
 
 function Step1({ data, onChange, onNext }) {
   const [uploading, setUploading] = useState(false);
+  const { toast } = useToast();
   const initials = data.logo_initials || (data.name || '').split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase();
 
   const handleLogoUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
-      alert(`That logo's ${(file.size / 1024 / 1024).toFixed(1)} MB — keep it under 5 MB and upload again.`);
+      toast({ message: `That logo's ${(file.size / 1024 / 1024).toFixed(1)} MB — keep it under 5 MB and upload again.`, tone: 'alert' });
       e.target.value = '';
       return;
     }
     const verdict = await classifyImage(file);
     if (!verdict.ok) {
-      alert("That image doesn't pass our community guidelines — pick a different one.");
+      toast({ message: "That image doesn't pass our community guidelines — pick a different one.", tone: 'alert' });
       e.target.value = '';
       return;
     }
@@ -217,7 +213,7 @@ function Step1({ data, onChange, onNext }) {
     const { data: { user } } = await supabase.auth.getUser();
     const { url, error: upErr } = await uploadMedia(file, user.id);
     setUploading(false);
-    if (upErr || !url) { alert("That upload didn't go through — check your connection and try again."); return; }
+    if (upErr || !url) { toast({ message: "That upload didn't go through — check your connection and try again.", tone: 'alert' }); return; }
     onChange('logo_url', url);
   };
 
@@ -232,8 +228,9 @@ function Step1({ data, onChange, onNext }) {
         <div>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(244,247,250,0.4)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Logo</div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <label style={{ cursor: 'pointer', fontSize: 11, color: '#9BB5D6', padding: '4px 10px', borderRadius: 999, background: 'rgba(46,91,140,0.25)', border: '0.5px solid rgba(46,91,140,0.5)' }}>
-              {uploading ? 'Uploading…' : data.logo_url ? '📷 Replace' : '📷 Upload'}
+            <label style={{ cursor: 'pointer', fontSize: 11, color: '#9BB5D6', padding: '4px 10px', borderRadius: 999, background: 'rgba(46,91,140,0.25)', border: '0.5px solid rgba(46,91,140,0.5)', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <Icon name="camera" size={12} />
+              {uploading ? 'Uploading…' : data.logo_url ? 'Replace' : 'Upload'}
               <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} disabled={uploading} />
             </label>
             {data.logo_url && (
@@ -480,13 +477,16 @@ function Step3({ data, onChange, onBack, onNext }) {
           <div key={d} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '0.5px solid rgba(244,247,250,0.06)' }}>
             <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: 'rgba(46,91,140,0.3)', color: C.steel, letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{d}</span>
             <span style={{ flex: 1 }} />
-            <button onClick={() => removeDivision(i)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.3)', cursor: 'pointer', fontSize: 16 }}>✕</button>
+            <button onClick={() => removeDivision(i)} aria-label={`Remove ${d} division`} title="Remove"
+              style={{ background: 'none', border: 'none', color: C.steel, cursor: 'pointer', width: 44, height: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Icon name="close" size={15} />
+            </button>
           </div>
         ))}
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <input value={newDivision} onChange={e => setNewDivision(e.target.value)} onKeyDown={e => e.key === 'Enter' && addDivision()}
             placeholder="e.g. A Division" style={{ flex: 1, ...inputStyle }} />
-          <button onClick={addDivision} style={{ background: COLORS.blue, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Add</button>
+          <button onClick={addDivision} style={{ background: C.blue, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Add</button>
         </div>
       </Card>
 
@@ -500,7 +500,10 @@ function Step3({ data, onChange, onBack, onNext }) {
               {t.division && <div style={{ fontSize: 10, color: 'rgba(244,247,250,0.4)' }}>{t.division}</div>}
             </div>
             {!t.team_id && <span style={{ fontSize: 9, fontWeight: 700, color: colors.warning, padding: '2px 6px', borderRadius: 4, background: 'rgba(245,158,11,0.12)', letterSpacing: '0.05em' }}>UNLINKED</span>}
-            <button onClick={() => removeTeam(i)} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.3)', cursor: 'pointer', fontSize: 16, padding: '0 4px' }}>✕</button>
+            <button onClick={() => removeTeam(i)} aria-label={`Remove ${t.name}`} title="Remove"
+              style={{ background: 'none', border: 'none', color: C.steel, cursor: 'pointer', width: 44, height: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Icon name="close" size={15} />
+            </button>
           </div>
         ))}
 
@@ -513,7 +516,7 @@ function Step3({ data, onChange, onBack, onNext }) {
               {divisions.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
           )}
-          <button onClick={addUnlinkedTeam} disabled={!newTeam.trim()} style={{ background: COLORS.blue, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: newTeam.trim() ? 'pointer' : 'not-allowed', opacity: newTeam.trim() ? 1 : 0.5 }}>Add new</button>
+          <button onClick={addUnlinkedTeam} disabled={!newTeam.trim()} style={{ background: C.blue, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: newTeam.trim() ? 'pointer' : 'not-allowed', opacity: newTeam.trim() ? 1 : 0.5 }}>Add new</button>
         </div>
         {searchResults.length > 0 && (
           <div style={{ marginTop: 8, background: 'rgba(46,91,140,0.12)', border: '0.5px solid rgba(46,91,140,0.4)', borderRadius: 8 }}>
@@ -561,13 +564,16 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
         {(data.commissioners || []).map((c, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', fontSize: 13, color: 'rgba(244,247,250,0.6)' }}>
             <span>{c}</span>
-            <button onClick={() => { const arr=[...(data.commissioners||[])]; arr.splice(i,1); onChange('commissioners', arr); }} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.3)', cursor: 'pointer' }}>✕</button>
+            <button onClick={() => { const arr=[...(data.commissioners||[])]; arr.splice(i,1); onChange('commissioners', arr); }} aria-label={`Remove ${c}`} title="Remove"
+              style={{ background: 'none', border: 'none', color: C.steel, cursor: 'pointer', width: 44, height: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Icon name="close" size={15} />
+            </button>
           </div>
         ))}
         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
           <input value={commInput} onChange={e => setCommInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addCommissioner()}
             placeholder="@handle or email" style={{ flex: 1, ...inputStyle }} />
-          <button onClick={addCommissioner} style={{ background: COLORS.blue, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Add</button>
+          <button onClick={addCommissioner} style={{ background: C.blue, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Add</button>
         </div>
       </Card>
 
@@ -579,17 +585,20 @@ function Step4({ data, onChange, onBack, onSubmit, loading }) {
         {(data.scorers || []).map((s, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', fontSize: 13, color: 'rgba(244,247,250,0.6)' }}>
             <span>{s}</span>
-            <button onClick={() => { const arr=[...(data.scorers||[])]; arr.splice(i,1); onChange('scorers', arr); }} style={{ background: 'none', border: 'none', color: 'rgba(244,247,250,0.3)', cursor: 'pointer' }}>✕</button>
+            <button onClick={() => { const arr=[...(data.scorers||[])]; arr.splice(i,1); onChange('scorers', arr); }} aria-label={`Remove ${s}`} title="Remove"
+              style={{ background: 'none', border: 'none', color: C.steel, cursor: 'pointer', width: 44, height: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Icon name="close" size={15} />
+            </button>
           </div>
         ))}
         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
           <input value={scorerInput} onChange={e => setScorerInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addScorer()}
             placeholder="@handle or email" style={{ flex: 1, ...inputStyle }} />
-          <button onClick={addScorer} style={{ background: COLORS.blue, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Add</button>
+          <button onClick={addScorer} style={{ background: C.blue, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Add</button>
         </div>
       </Card>
 
-      <BtnRow onBack={onBack} onNext={onSubmit} nextLabel="🏆 Publish League" loading={loading} />
+      <BtnRow onBack={onBack} onNext={onSubmit} nextLabel="Publish League" loading={loading} />
     </>
   );
 }
