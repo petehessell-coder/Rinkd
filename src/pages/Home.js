@@ -12,7 +12,7 @@ import { getGamePuck } from '../lib/gamePucks';
 import MapLink from '../components/MapLink';
 import { getHeadToHead } from '../lib/gameday';
 import {
-  loadHome, searchEverything, fmtGameWhen, fmtEventDate, getLiveHeroExtras, DEMO_LEAGUE_ID,
+  loadHome, loadHomeLive, searchEverything, fmtGameWhen, fmtEventDate, getLiveHeroExtras, DEMO_LEAGUE_ID,
 } from '../lib/home';
 
 // Surface-elevated — the "card that matters" tone from the manifesto. The hero
@@ -68,14 +68,41 @@ export default function Home({ currentUser, profile }) {
 
   useEffect(() => { setLoading(true); refresh(); }, [refresh]);
 
-  // ── Realtime: subscribe to the user's followed events; re-run the bounded
+  // ── Narrow live re-load: a goal/score ping refreshes ONLY the live tiles
+  // (ticker, live/upcoming games, the hero's LIVE flag) and MERGES them into the
+  // existing state — the rest of the board (your-hockey, this-week, discover,
+  // standings) is untouched, so there is no skeleton flash on a live update.
+  // The full loadHome() only runs on mount / user change (via refresh above).
+  const refreshLive = useCallback(async () => {
+    if (!currentUser?.id) return;
+    try {
+      const d = await loadHomeLive(currentUser.id);
+      setData((prev) => {
+        if (!prev) return prev; // nothing to merge into yet; the mount load will land
+        return {
+          ...prev,
+          live: d.live,
+          upcoming: d.upcoming,
+          ticker: d.ticker,
+          featured: prev.featured && d.featuredIsLive !== undefined
+            ? { ...prev.featured, isLive: d.featuredIsLive }
+            : prev.featured,
+        };
+      });
+    } catch (e) {
+      // A failed live refresh must never blank the board — keep the last good state.
+      console.warn('[Home] live refresh failed:', e?.message || e);
+    }
+  }, [currentUser?.id]);
+
+  // ── Realtime: subscribe to the user's followed events; re-run the NARROW live
   // load on a (debounced) change. No polling. Unsubscribe on unmount / id change.
   const follow = data?.followIds;
   const followKey = follow ? `${follow.tournamentIds.join(',')}|${follow.leagueIds.join(',')}` : '';
   useEffect(() => {
     if (!follow || (!follow.tournamentIds.length && !follow.leagueIds.length)) return undefined;
     let timer = null;
-    const ping = () => { clearTimeout(timer); timer = setTimeout(refresh, 800); };
+    const ping = () => { clearTimeout(timer); timer = setTimeout(refreshLive, 800); };
     const ch = supabase.channel(`home-${currentUser?.id || 'anon'}`);
     follow.tournamentIds.slice(0, 20).forEach((tid) => {
       ch.on('postgres_changes', { event: '*', schema: 'public', table: 'games', filter: `tournament_id=eq.${tid}` }, ping);
@@ -85,7 +112,7 @@ export default function Home({ currentUser, profile }) {
     });
     ch.subscribe();
     return () => { clearTimeout(timer); try { supabase.removeChannel(ch); } catch { /* best-effort */ } };
-  }, [followKey, currentUser?.id, follow, refresh]);
+  }, [followKey, currentUser?.id, follow, refreshLive]);
 
   return (
     <Layout profile={profile}>

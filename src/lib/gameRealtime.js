@@ -55,9 +55,15 @@ export function subscribeGame({ kind = 'tournament', gameId, onChange }) {
     let ch = supabase
       .channel(topic)
       .on('postgres_changes', { event: '*', schema: 'public', table: rowTable, filter: `id=eq.${gameId}` }, () => onChange());
-    // Tournament/league games keep their scoring in game_goals; team_games don't.
+    // Tournament/league games keep their scoring in game_goals and their
+    // infractions in game_penalties; team_games don't have either. GameDetail
+    // renders the penalty feed too, so we watch both here (PublicGame ignores
+    // penalties but the extra ping is harmless — it just re-runs a debounced
+    // snapshot read that already includes them where shown).
     if (kind !== 'team') {
-      ch = ch.on('postgres_changes', { event: '*', schema: 'public', table: 'game_goals', filter: `game_id=eq.${gameId}` }, () => onChange());
+      ch = ch
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'game_goals', filter: `game_id=eq.${gameId}` }, () => onChange())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'game_penalties', filter: `game_id=eq.${gameId}` }, () => onChange());
     }
     ch.subscribe();
     channel = ch;

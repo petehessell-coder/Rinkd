@@ -134,10 +134,18 @@ serve(async (req) => {
   const tag = `league-recap:${post.id}`; // collapse-key so a re-fire doesn't stack
   const pushPayload = JSON.stringify({ title, body, url, tag });
 
-  // 6. Send in parallel, prune 410/404 (expired/cancelled subs).
+  // 6. Send in CHUNKED batches, prune 410/404 (expired/cancelled subs).
+  //    Unbounded Promise.all over every subscriber risks an edge-function
+  //    timeout at pilot scale. We dispatch in sequential batches of BATCH_SIZE,
+  //    concurrent WITHIN a batch via Promise.allSettled, so peak concurrency is
+  //    bounded but throughput stays high. Per-sub error isolation (stale pruning
+  //    + non-stale logging) is unchanged — it just runs one batch at a time.
+  const BATCH_SIZE = 100;
   const stale: string[] = [];
   let sent = 0;
-  await Promise.all(pushSubs.map(async (s) => {
+  let failed = 0;
+
+  const sendOne = async (s: { user_id: string; subscription: string }) => {
     let parsed: unknown;
     try { parsed = JSON.parse(s.subscription); }
     catch { stale.push(s.user_id); return; }
@@ -149,17 +157,24 @@ serve(async (req) => {
       if (statusCode === 410 || statusCode === 404) {
         stale.push(s.user_id);
       } else {
+        failed++;
         console.error('[send-league-recap-push] delivery failed', {
           user_id: s.user_id, post_id: post.id, statusCode,
           message: (err as { message?: string })?.message,
         });
       }
     }
-  }));
+  };
+
+  for (let i = 0; i < pushSubs.length; i += BATCH_SIZE) {
+    const batch = pushSubs.slice(i, i + BATCH_SIZE);
+    await Promise.allSettled(batch.map(sendOne));
+  }
 
   if (stale.length > 0) {
     await supabase.from('push_subscriptions').delete().in('user_id', stale);
   }
 
+  console.log('[send-league-recap-push] done', { sent, failed, pruned: stale.length, attempted: pushSubs.length });
   return json({ sent, attempted: pushSubs.length, pruned: stale.length });
 });
