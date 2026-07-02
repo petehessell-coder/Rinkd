@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { getLeague } from '../lib/leagues';
 import { createRegistrationCheckout } from '../lib/registrations';
+import { Button } from '../components/ui';
 import { C, colors } from '../lib/tokens';
 
 // Public, unauthenticated registration page: /league/:id/register
@@ -199,26 +200,32 @@ export default function LeagueRegister() {
             )}
 
             <div style={{ marginBottom: 14 }}>
-              <label style={label}>Team Name</label>
-              <input style={input} value={teamName} onChange={e => setTeamName(e.target.value)} placeholder="e.g. North Shore Eagles" maxLength={80} />
+              <label htmlFor="reg-team-name" style={label}>Team Name</label>
+              <input id="reg-team-name" style={input} value={teamName} onChange={e => setTeamName(e.target.value)} placeholder="e.g. North Shore Eagles" maxLength={80} autoComplete="organization" />
             </div>
             <div style={{ marginBottom: 14 }}>
-              <label style={label}>Contact Name</label>
-              <input style={input} value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Your full name" maxLength={80} />
+              <label htmlFor="reg-contact-name" style={label}>Contact Name</label>
+              <input id="reg-contact-name" style={input} value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Your full name" maxLength={80} autoComplete="name" />
             </div>
             <div style={{ marginBottom: 16 }}>
-              <label style={label}>Contact Email</label>
-              <input style={input} type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} placeholder="you@email.com" maxLength={120} />
+              <label htmlFor="reg-contact-email" style={label}>Contact Email</label>
+              <input id="reg-contact-email" style={input} type="email" inputMode="email" autoComplete="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} placeholder="you@email.com" maxLength={120} />
             </div>
 
             {error && (
               <div style={{ background: 'rgba(215,38,56,0.14)', border: '0.5px solid rgba(215,38,56,0.4)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: C.red }}>{error}</div>
             )}
 
-            <button onClick={handleSubmit} disabled={submitting}
-              style={{ width: '100%', padding: 14, background: submitting ? 'rgba(215,38,56,0.5)' : C.red, border: 'none', borderRadius: 999, color: '#fff', fontSize: 15, fontWeight: 800, cursor: submitting ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif' }}>
+            <Button
+              variant="primary"
+              fullWidth
+              onClick={handleSubmit}
+              loading={submitting}
+              disabledReason="Fill in your team name, contact name and email."
+              style={{ borderRadius: 999 }}
+            >
               {submitting ? 'Starting…' : feeCents > 0 ? `Register & Pay ${feeLabel}` : 'Submit Registration'}
-            </button>
+            </Button>
             {feeCents > 0 && (
               <div style={{ fontSize: 11, color: C.steel, textAlign: 'center', marginTop: 10 }}>
                 Secure payment by Stripe. You’ll be redirected to complete checkout.

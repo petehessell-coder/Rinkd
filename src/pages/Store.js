@@ -6,6 +6,7 @@ import { getProducts } from '../lib/products';
 import { getMerchProducts, startStoreCheckout } from '../lib/store';
 import { track } from '../lib/analytics';
 import { supabase } from '../lib/supabase';
+import { Button, Skeleton } from '../components/ui';
 import { C, colors } from '../lib/tokens';
 
 const CART_KEY = 'rinkd_cart_v1';
@@ -84,7 +85,7 @@ function MerchCard({ p, onAdd }) {
           </span>
           <button
             onClick={() => onAdd(p, variant)}
-            style={{ background: C.red, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', cursor: 'pointer', whiteSpace: 'nowrap' }}
+            style={{ background: C.red, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 12px', minHeight: 44, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', cursor: 'pointer', whiteSpace: 'nowrap' }}
           >
             Add to cart
           </button>
@@ -107,6 +108,19 @@ function Section({ title, sub, children }) {
 }
 
 const inputStyle = { width: '100%', background: C.navy, color: C.ice, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px', fontSize: 14, fontFamily: "'Barlow', sans-serif", boxSizing: 'border-box' };
+
+// Placeholders stay the visible cue (the design is placeholder-labelled), so the
+// real <label> is screen-reader-only but properly associated via htmlFor/id — a
+// blank tap target never sits unlabelled for assistive tech.
+const srOnly = { position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap', border: 0 };
+function Field({ id, label, children }) {
+  return (
+    <div style={{ minWidth: 0 }}>
+      <label htmlFor={id} style={srOnly}>{label}</label>
+      {children}
+    </div>
+  );
+}
 
 // ── Cart + checkout modal ──────────────────────────────────────────────────────
 function CartModal({ cart, currency, onClose, onQty, onRemove, profile }) {
@@ -202,23 +216,46 @@ function CartModal({ cart, currency, onClose, onQty, onRemove, profile }) {
         {step === 'address' && (
           <>
             <div style={{ display: 'grid', gap: 10 }}>
-              <input style={inputStyle} placeholder="Full name" value={form.name} onChange={set('name')} />
-              <input style={inputStyle} placeholder="Email" type="email" value={form.email} onChange={set('email')} />
-              <input style={inputStyle} placeholder="Address" value={form.address1} onChange={set('address1')} />
-              <input style={inputStyle} placeholder="Apt, suite (optional)" value={form.address2} onChange={set('address2')} />
-              <input style={inputStyle} placeholder="City" value={form.city} onChange={set('city')} />
+              <Field id="ship-name" label="Full name">
+                <input id="ship-name" style={inputStyle} placeholder="Full name" value={form.name} onChange={set('name')} autoComplete="name" />
+              </Field>
+              <Field id="ship-email" label="Email">
+                <input id="ship-email" style={inputStyle} placeholder="Email" type="email" inputMode="email" autoComplete="email" value={form.email} onChange={set('email')} />
+              </Field>
+              <Field id="ship-address1" label="Address">
+                <input id="ship-address1" style={inputStyle} placeholder="Address" value={form.address1} onChange={set('address1')} autoComplete="address-line1" />
+              </Field>
+              <Field id="ship-address2" label="Apt, suite (optional)">
+                <input id="ship-address2" style={inputStyle} placeholder="Apt, suite (optional)" value={form.address2} onChange={set('address2')} autoComplete="address-line2" />
+              </Field>
+              <Field id="ship-city" label="City">
+                <input id="ship-city" style={inputStyle} placeholder="City" value={form.city} onChange={set('city')} autoComplete="address-level2" />
+              </Field>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                <input style={inputStyle} placeholder="State" value={form.state} onChange={set('state')} />
-                <input style={inputStyle} placeholder="ZIP" value={form.zip} onChange={set('zip')} />
-                <input style={inputStyle} placeholder="Country" value={form.country} onChange={set('country')} />
+                <Field id="ship-state" label="State">
+                  <input id="ship-state" style={inputStyle} placeholder="State" value={form.state} onChange={set('state')} autoComplete="address-level1" />
+                </Field>
+                <Field id="ship-zip" label="ZIP">
+                  <input id="ship-zip" style={inputStyle} placeholder="ZIP" inputMode="numeric" autoComplete="postal-code" value={form.zip} onChange={set('zip')} />
+                </Field>
+                <Field id="ship-country" label="Country">
+                  <input id="ship-country" style={inputStyle} placeholder="Country" value={form.country} onChange={set('country')} autoComplete="country" />
+                </Field>
               </div>
             </div>
             {err && <div style={{ color: C.red, fontSize: 13, marginTop: 12 }}>{err}</div>}
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 16 }}>
               <button onClick={() => setStep('cart')} disabled={busy} style={{ ...secondaryBtn, flex: '0 0 auto' }}>← Back</button>
-              <button onClick={pay} disabled={busy || !addressValid} style={{ ...primaryBtn, flex: 1, opacity: (busy || !addressValid) ? 0.6 : 1 }}>
+              <Button
+                variant="primary"
+                onClick={pay}
+                loading={busy}
+                disabled={!addressValid}
+                disabledReason="Fill in name, email, address, city, country and ZIP to continue."
+                style={{ flex: 1 }}
+              >
                 {busy ? 'Starting checkout…' : 'Continue to payment →'}
-              </button>
+              </Button>
             </div>
             <div style={{ fontSize: 11.5, color: C.steel, marginTop: 10, textAlign: 'center' }}>Secure payment by Stripe. Shipping + tax shown before you pay.</div>
           </>
@@ -228,9 +265,40 @@ function CartModal({ cart, currency, onClose, onQty, onRemove, profile }) {
   );
 }
 
-const qtyBtn = { background: C.navy, color: C.ice, border: `1px solid ${C.border}`, borderRadius: 6, width: 26, height: 26, fontSize: 16, cursor: 'pointer', lineHeight: 1 };
+const qtyBtn = { background: C.navy, color: C.ice, border: `1px solid ${C.border}`, borderRadius: 6, width: 44, height: 44, minWidth: 44, minHeight: 44, fontSize: 16, cursor: 'pointer', lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 };
 const primaryBtn = { width: '100%', background: C.red, color: '#fff', border: 'none', borderRadius: 10, padding: '13px', fontSize: 15, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', cursor: 'pointer', fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic' };
 const secondaryBtn = { background: 'transparent', color: C.steel, border: `1px solid ${C.border}`, borderRadius: 10, padding: '13px 16px', fontSize: 14, cursor: 'pointer' };
+
+// True-layout loading state — a section heading slab + a product grid of card
+// shapes that match MerchCard's geometry (square image, title lines, price/CTA
+// row) so nothing shifts when the real gear hydrates. Skeleton's shimmer is
+// reduced-motion gated at the primitive level.
+function StoreSkeleton() {
+  return (
+    <div aria-hidden="true">
+      {[0, 1].map((s) => (
+        <div key={s} style={{ marginBottom: 34 }}>
+          <Skeleton width={s === 0 ? 150 : 210} height={20} radius={4} />
+          <Skeleton width={s === 0 ? 210 : 0} height={s === 0 ? 12 : 0} radius={4} style={{ marginTop: 6, opacity: s === 0 ? 1 : 0 }} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 14, marginTop: 12 }}>
+            {Array.from({ length: s === 0 ? 3 : 4 }).map((_, i) => (
+              <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
+                <Skeleton width="100%" height={0} radius={0} style={{ aspectRatio: '1 / 1', height: 'auto' }} />
+                <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <Skeleton width="85%" height={14} radius={4} />
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 4 }}>
+                    <Skeleton width={54} height={18} radius={4} />
+                    <Skeleton width={74} height={30} radius={8} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function Store({ profile }) {
   const [affiliate, setAffiliate] = useState(null);
@@ -316,7 +384,7 @@ export default function Store({ profile }) {
           Some links are affiliate links — Rinkd may earn a commission on purchases, at no extra cost to you.
         </div>
 
-        {loading && <div style={{ color: C.steel, fontSize: 14 }}>Getting the ice ready.</div>}
+        {loading && <StoreSkeleton />}
 
         {!loading && (
           <>

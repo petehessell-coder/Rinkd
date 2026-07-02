@@ -8,6 +8,7 @@ import { mentionMapFromRows } from '../lib/mentions';
 import ShareButton from './ShareButton';
 import { absoluteShareUrl } from '../lib/share';
 import { IndeterminateBar } from '../pages/Feed';
+import { Button, Skeleton } from './ui';
 import { C, colors } from '../lib/tokens';
 
 // Local drift: no exact token match, kept inline per migration rules.
@@ -132,9 +133,9 @@ export default function Gallery({ tournamentId = null, leagueId = null, currentU
           <button
             onClick={() => setAddOpen(true)}
             style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap',
               background: GAL_BLUE, color: C.ice, border: 'none', borderRadius: 8,
-              padding: '8px 14px', fontWeight: 700, fontSize: 13, cursor: 'pointer',
+              padding: '8px 14px', minHeight: 44, fontWeight: 700, fontSize: 13, cursor: 'pointer',
             }}>
             <span style={{ fontSize: 15 }}>＋</span> Add Photo
           </button>
@@ -142,7 +143,11 @@ export default function Gallery({ tournamentId = null, leagueId = null, currentU
       </div>
 
       {posts === null ? (
-        <div style={{ textAlign: 'center', color: GAL_DIM, fontSize: 13, padding: '40px 16px' }}>Getting the ice ready.</div>
+        <div aria-hidden="true" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(108px, 1fr))', gap: 6 }}>
+          {Array.from({ length: 12 }).map((_, i) => (
+            <Skeleton key={i} width="100%" height={0} radius={8} style={{ aspectRatio: '1 / 1', height: 'auto' }} />
+          ))}
+        </div>
       ) : posts.length === 0 ? (
         <div style={{ textAlign: 'center', color: GAL_DIM, fontSize: 13, padding: '48px 16px', lineHeight: 1.6 }}>
           <div style={{ fontSize: 36, marginBottom: 8 }}>📸</div>
@@ -217,7 +222,8 @@ function Chip({ active, onClick, children }) {
         background: active ? 'rgba(91,159,226,0.22)' : 'rgba(11,31,58,0.6)',
         border: `1px solid ${active ? GAL_BLUE : GAL_BORDER}`,
         color: active ? C.ice : GAL_STEEL, borderRadius: 999,
-        padding: '4px 12px', fontSize: 12, fontWeight: active ? 700 : 500,
+        padding: '4px 12px', minHeight: 44, display: 'inline-flex', alignItems: 'center',
+        fontSize: 12, fontWeight: active ? 700 : 500,
         cursor: 'pointer', fontFamily: 'Barlow, sans-serif', whiteSpace: 'nowrap',
       }}>
       {children}
@@ -288,7 +294,7 @@ function AddPhotoModal({ scopeLabel, teams, currentUser, tournamentId, leagueId,
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div style={{ color: C.ice, fontWeight: 700, fontSize: 16 }}>Add Photo</div>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: GAL_DIM, fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>×</button>
+          <button onClick={onClose} aria-label="Close" style={{ background: 'transparent', border: 'none', color: GAL_DIM, fontSize: 20, cursor: 'pointer', lineHeight: 1, minWidth: 44, minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', margin: '-12px -12px -12px 0' }}>×</button>
         </div>
 
         <label style={{
@@ -344,18 +350,18 @@ function AddPhotoModal({ scopeLabel, teams, currentUser, tournamentId, leagueId,
 
         {error && <div style={{ color: colors.redSoft, fontSize: 12, marginBottom: 10 }}>{error}</div>}
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button onClick={onClose} style={{ background: 'transparent', border: `1px solid ${GAL_BORDER}`, color: GAL_STEEL, borderRadius: 8, padding: '8px 14px', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Cancel</button>
-          <button
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
+          <button onClick={onClose} style={{ background: 'transparent', border: `1px solid ${GAL_BORDER}`, color: GAL_STEEL, borderRadius: 8, padding: '8px 14px', minHeight: 44, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+          <Button
+            variant="primary"
+            size="sm"
             onClick={submit}
-            disabled={!file || submitting}
-            style={{
-              background: (!file || submitting) ? GAL_BORDER : GAL_BLUE, color: C.ice, border: 'none',
-              borderRadius: 8, padding: '8px 16px', fontWeight: 700, fontSize: 13,
-              cursor: (!file || submitting) ? 'default' : 'pointer',
-            }}>
+            loading={submitting}
+            disabled={!file}
+            disabledReason="Pick a photo first"
+          >
             {submitting ? 'Posting…' : 'Post to the Feed'}
-          </button>
+          </Button>
         </div>
       </div>
     </Backdrop>
@@ -388,8 +394,9 @@ function Lightbox({ post, isTournament, scopeId, currentUser, reactionInitial, o
         <div style={{ position: 'relative', background: '#000' }}>
           <button onClick={onClose} aria-label="Close" style={{
             position: 'absolute', top: 8, right: 8, zIndex: 2,
-            width: 30, height: 30, borderRadius: 999, border: 'none',
-            background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: 18, cursor: 'pointer',
+            width: 44, height: 44, borderRadius: 999, border: 'none',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: 20, cursor: 'pointer',
           }}>×</button>
           {post.media_type === 'video' ? (
             <video src={post.media_url} controls autoPlay style={{ width: '100%', maxHeight: '70vh', display: 'block' }} />
