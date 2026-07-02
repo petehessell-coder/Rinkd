@@ -1,76 +1,46 @@
-# Pilot Scorecard — Denominators (DRAFT, needs Pete sign-off)
+# Pilot Scorecard — Denominators (SIGNED OFF · Pete · July 2, 2026)
 
-> The Pilot Analytics spec's own guardrail: *"Lock the denominators for activation
-> and retention in writing before pilots, or the %s are meaningless."* This is that
-> lock. **Nothing here is final until Pete signs off the numbers + definitions.**
+> The Pilot Analytics spec's guardrail: *"Lock the denominators for activation
+> and retention in writing before pilots, or the %s are meaningless."* This is
+> that lock — all five decisions are now final.
 
-The instrumentation + rollup views are live (deployed 2026-07-01). They compute the
-numerators automatically. What must be decided by a human is **what each percentage
-is divided by** — the denominator — because that's a judgment call, not a query.
+## The five decisions
 
----
+### 1. Activation denominator — **roster × 1.5**
+`# of players on the event roster × 1.5` (the player if adult + ~1 parent for
+youth). Computable the day the roster lands; no operator dependency. If an
+operator hands us an explicit invite list, we may report BOTH numbers but the
+roster×1.5 figure is the scorecard number.
+- **Numerator (automated):** distinct users who signed up AND took a connect
+  action (followed/joined their team, league, or event).
+- Layer-on-top pilots (no roster): fall back to the `?ref=` visitor cohort.
 
-## The two pilot archetypes (denominators differ by archetype)
+### 2. Game-day window — **the event's actual game dates**
+Engagement (3+ sessions/active user, action rate) is measured on days with ≥1
+scheduled game for the event, derived from the schedule. No fixed calendar
+padding.
 
-**A. FULL-PLATFORM pilot** — Rinkd runs the whole event (Little Caesars, Oakland).
-We know the roster, so denominators are **relational** (derived from the event's
-league/tournament membership), which is cleaner and more honest than link-clicks.
+### 3. Retention basis — **activated users** (not all signups)
+People who never connected aren't "lost." The `analytics_pilot_retention` view
+was updated accordingly (migration `20260702150000`, live on prod).
 
-**B. LAYER-ON-TOP pilot** — Rinkd is the fan layer on an event that lives on another
-platform. We don't have the roster, so denominators fall back to the **`?ref=`
-attribution cohort** (who arrived via the pilot's link/QR).
+### 4. Retention window — **return the following week** (week-2)
+Computable immediately for every pilot; the view computes it. "Returned for
+the next event" may be reported as a supplementary narrative metric when a
+next event exists, but week-2 is the scorecard number.
 
----
+### 5. Per-pilot ref slugs — **`little-caesars`** and **`oakland`**
+Hand out links/QRs as `rinkd.app/?ref=little-caesars` and
+`rinkd.app/?ref=oakland`. First-touch attribution + the dashboard slice are
+already live; scorecards populate the moment traffic lands.
 
-## Proposed denominators (per metric)
+## What serves this (all live)
+- `analytics_pilot_actions` / `_activation` / `_engagement` / `_retention`
+  (commissioner-gated, sliced by ref) + the AdminAnalytics "Pilot scorecards"
+  section.
+- For full-platform pilots, activation/retention can ALSO be derived
+  relationally from the event roster; the roster×1.5 denominator is applied at
+  reporting time against the automated numerators.
 
-### Activation — target ≥ 40%
-"A rostered person + their family signed up and connected to their team."
-- **Full-platform denominator (proposed):** the count of **invited participants +
-  expected family accounts** for the event. Recommended concrete definition:
-  `# of players on the event roster × an agreed household factor` (propose **1.5**
-  accounts/player = the player if adult + ~1 parent for youth), OR simply the
-  **explicit invite list** if the operator gives us one. ⬜ *Pete: pick roster×factor
-  or invite-list, and set the factor.*
-- **Numerator:** distinct users who signed up AND took a connect action (joined/
-  followed their team or league).
-- **Layer-on-top denominator:** distinct `?ref=` visitors who reached a signup-
-  eligible surface. (Weaker; use only when there's no roster.)
-
-### Engagement — target: 3+ sessions/active user on game days + ≥ 50% take an action
-- **Denominator:** **active users in the pilot cohort during the event window.**
-  For full-platform = users tied to the event roster/league; for layer-on-top = the
-  `?ref=` signup cohort. ⬜ *Pete: confirm "game-day window" = the event's actual
-  game dates (recommended) vs a fixed calendar range.*
-- **Numerators (already computed):** `avg_sessions_per_user`, `users_3plus_sessions`,
-  and `action_rate_pct` (distinct users with ≥1 social action ÷ active users), from
-  `analytics_pilot_engagement`.
-
-### Retention — target ≥ 30%
-"Came back for a second event / the following week."
-- **Denominator:** the **activated cohort from the pilot** (not all signups — the
-  people who actually activated). ⬜ *Pete: confirm retention is measured against
-  activated users (recommended) vs all signups.*
-- **Window:** ⬜ *Pete: "return the following week" (what the view computes today) vs
-  "return for the next event." For a single-weekend pilot, next-event may be more
-  meaningful — say which.*
-
----
-
-## What's already built to serve this
-- `analytics_pilot_activation` · `_engagement` · `_retention` · `_actions`
-  (commissioner-gated), sliced by `ref`.
-- For the **relational** (full-platform) denominators, the numerators can be joined
-  to the event's roster/league membership instead of `ref` — a small follow-up query
-  once the roster source per pilot is confirmed.
-
-## Open decisions for Pete (the sign-off checklist)
-1. ⬜ Activation denominator: **roster × household factor** (set factor) **or**
-   operator invite list?
-2. ⬜ Game-day window definition (event dates vs fixed range)?
-3. ⬜ Retention measured vs **activated users** or all signups?
-4. ⬜ Retention window: **following week** or **next event**?
-5. ⬜ Per-pilot `ref` slugs to hand out (e.g. `little-caesars`, `oakland`)?
-
-Once these five are answered, every scorecard number is reportable per pilot with a
-denominator that means something.
+**Every scorecard number is now reportable per pilot with a denominator that
+means something.**
