@@ -16,7 +16,10 @@ import GamePuckCard from '../components/GamePuckCard';
 import ShareButton from '../components/ShareButton';
 import { loadGameCardData } from '../lib/gameCardData';
 import { useOnline } from '../lib/useOnline';
-import { C, colors } from '../lib/tokens';
+import { C, colors, shadows } from '../lib/tokens';
+import { resolveStreamUrl, streamButtonLabel, detectStreamPlatform } from '../lib/streamUrl';
+import LiveLowerThird, { periodDisplay } from '../components/LiveLowerThird';
+import { getHeadToHead } from '../lib/gameday';
 import { areScorersHidden } from '../lib/publicShare';
 import { useGoalMoment, GoalSweep, usePeriodChange } from '../lib/goalMoment';
 import { haptics } from '../lib/haptics';
@@ -49,6 +52,26 @@ function ensureGdAnim() {
     + '.gd-period-pulse{animation:gdPeriodPulse 900ms ease-out}'
     + '@media (prefers-reduced-motion: reduce){.gd-period-pulse{animation:none}}';
   document.head.appendChild(el);
+}
+
+// S08 — "PUCK DROPS IN 2H 14M" countdown. Returns a formatted label when
+// start_time is in the future (≥1h → "2H 14M", <1h → "43M"), else null so the
+// caller keeps the static SCHEDULED pill (past-due-scheduled included).
+// Client-only 60s tick, cleaned up on unmount, no fetch.
+function usePuckDropCountdown(startTime, active) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return undefined;
+    const t = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(t);
+  }, [active]);
+  if (!active || !startTime) return null;
+  const ms = new Date(startTime).getTime() - now;
+  if (!(ms > 0)) return null;
+  const totalMin = Math.floor(ms / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h >= 1 ? `PUCK DROPS IN ${h}H ${m}M` : `PUCK DROPS IN ${Math.max(m, 1)}M`;
 }
 
 function SecLabel({ children }) {
@@ -91,7 +114,7 @@ export default function GameDetail({ profile }) {
       let g = null;
       if (isLeague) {
         const r = await supabase.from('league_games')
-          .select('*, home_lt:league_teams!home_team_id(id, team_name, logo_color, logo_initials, logo_url, team:teams(id,name,logo_color,logo_initials,logo_url)), away_lt:league_teams!away_team_id(id, team_name, logo_color, logo_initials, logo_url, team:teams(id,name,logo_color,logo_initials,logo_url)), rink:rinks(name,sub_rink,live_barn_venue_id), league:leagues(name)')
+          .select('*, home_lt:league_teams!home_team_id(id, team_name, logo_color, logo_initials, logo_url, team:teams(id,name,logo_color,logo_initials,logo_url)), away_lt:league_teams!away_team_id(id, team_name, logo_color, logo_initials, logo_url, team:teams(id,name,logo_color,logo_initials,logo_url)), rink:rinks(name,sub_rink,live_barn_venue_id,youtube_url), league:leagues(name)')
           .eq('id', gameId).single();
         g = r.data;
       } else if (isTeamGame) {
@@ -251,6 +274,30 @@ export default function GameDetail({ profile }) {
     finalBeat.current = { status: st, init: true };
   }, [game?.status, loading, game]);
 
+  // S08 — season series (lazy head-to-head). Wired for league AND tournament
+  // games: both carry usable event-scoped team ids on home_team_id/away_team_id
+  // (league_team ids / tournament_team ids), which is exactly what getHeadToHead
+  // queries by. team_games carry no opponent team id, so they're skipped.
+  // Non-blocking, alive-guarded; renders under the S06 state line when played>0.
+  const seriesSource = isLeague ? 'league' : (!isTeamGame && game?.tournament_id) ? 'tournament' : null;
+  const seriesHomeId = game?.home_team_id || null;
+  const seriesAwayId = game?.away_team_id || null;
+  const canSeries = !loading && !!game && !!seriesSource && !!seriesHomeId && !!seriesAwayId;
+  const [series, setSeries] = useState(null);
+  const [seriesLoading, setSeriesLoading] = useState(false);
+  useEffect(() => {
+    if (!canSeries) { setSeries(null); setSeriesLoading(false); return undefined; }
+    let alive = true;
+    setSeriesLoading(true);
+    getHeadToHead({ source: seriesSource, home: { id: seriesHomeId }, away: { id: seriesAwayId } })
+      .then((r) => { if (alive) { setSeries(r); setSeriesLoading(false); } })
+      .catch(() => { if (alive) { setSeries(null); setSeriesLoading(false); } });
+    return () => { alive = false; };
+  }, [canSeries, seriesSource, seriesHomeId, seriesAwayId]);
+
+  // S08 — puck-drop countdown for scheduled games (hook above early returns).
+  const puckDrop = usePuckDropCountdown(game?.start_time, !loading && !!game && game?.status === 'scheduled');
+
   if (loading) return (
     <Layout profile={profile}>
       <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>Getting the ice ready.</div>
@@ -370,6 +417,15 @@ export default function GameDetail({ profile }) {
     return null;
   })();
 
+  // S08 — season-series line. home_team_id is "home" in the head-to-head record,
+  // which maps to homeTeam here. Rendered only when played>0; while the fetch is
+  // in flight we reserve the line height (no layout shift), then collapse if the
+  // result is empty (played===0).
+  const seriesLabel = (series && series.played > 0)
+    ? `Season series ${series.homeWins}–${series.awayWins}${series.ties ? ` · ${series.ties} T` : ''}`
+    : null;
+  const showSeriesLine = canSeries && (seriesLoading || !!seriesLabel);
+
   return (
     <Layout profile={profile}>
       <div style={{ background: C.dark, minHeight: '100vh', fontFamily: 'Barlow, sans-serif', color: C.ice, maxWidth: 600, margin: '0 auto', paddingBottom: 40 }}>
@@ -412,13 +468,28 @@ export default function GameDetail({ profile }) {
         </div>
 
         {/* SCORE BOX */}
-        <div className={`${goal ? 'rinkd-goal-glow' : ''}${periodPulse ? ' gd-period-pulse' : ''}`.trim() || undefined} style={{ position: 'relative', overflow: 'hidden', background: 'linear-gradient(135deg,#0B1F3A 0%,#112236 100%)', padding: '24px 16px 0' }}>
+        <div className={`${goal ? 'rinkd-goal-glow' : ''}${periodPulse ? ' gd-period-pulse' : ''}`.trim() || undefined} style={{ position: 'relative', overflow: 'hidden', background: 'linear-gradient(135deg,#0B1F3A 0%,#112236 100%)', padding: '24px 16px 0', boxShadow: isLive ? shadows.live : undefined }}>
           {goal && <GoalSweep key={goal.key} side={goal.side} label={goal.label} muted={goal.muted} />}
           {/* Opt-in goal horn — the live surface (mirrors PublicGame). Anchored
               top-right so it never collides with the round-label chip. */}
           {isLive && (
             <div style={{ position: 'absolute', top: 4, right: 8, zIndex: 5 }}>
               <SoundToggle />
+            </div>
+          )}
+          {/* S08 — shared live lower-third: red slab + ring-expand dot +
+              "<PERIOD> · LIVE" (+ clock/watching when present). Replaces the old
+              inline "● LIVE · 1st" pill; the horn stays top-right above. */}
+          {isLive && (
+            <div style={{ margin: '0 0 16px' }}>
+              <LiveLowerThird
+                bleed="-24px -16px 0"
+                period={game.period}
+                label={`${periodDisplay(game.period)} · Live${liveClock ? ` · ${liveClock}` : ''}`}
+                accent={watching != null
+                  ? <span style={{ flexShrink: 0, fontSize: 12, color: 'rgba(244,247,250,0.75)', marginRight: 4, whiteSpace: 'nowrap' }}>{watching.toLocaleString()} watching</span>
+                  : null}
+              />
             </div>
           )}
           {tournamentRoundLabel && (
@@ -452,16 +523,23 @@ export default function GameDetail({ profile }) {
             {/* Score */}
             <div style={{ textAlign: 'center', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <BounceNumber value={game.home_score ?? 0} style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 56, color: C.ice, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }} />
+                <BounceNumber value={game.home_score ?? 0} style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 72, color: C.ice, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }} />
                 <span style={{ fontSize: 24, color: 'rgba(244,247,250,0.3)', fontWeight: 300 }}>–</span>
-                <BounceNumber value={game.away_score ?? 0} style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 56, color: C.ice, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }} />
+                <BounceNumber value={game.away_score ?? 0} style={{ fontFamily: 'Barlow Condensed, sans-serif', fontStyle: 'italic', fontWeight: 900, fontSize: 72, color: C.ice, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }} />
               </div>
-              <div style={{ textAlign: 'center', marginTop: 6 }}>
-                {isLive && <span style={{ background: C.red, color: '#fff', fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20, letterSpacing: '0.06em' }}>● LIVE · {periodLabel(game.period)}{liveClock ? ` · ${liveClock}` : ''}</span>}
-                {isLive && watching != null && <span style={{ marginLeft: 8, fontSize: 11, color: C.steel }}>· {watching.toLocaleString()} watching</span>}
-                {isFinal && <span style={{ background: 'rgba(244,247,250,0.08)', color: 'rgba(244,247,250,0.4)', fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>FINAL</span>}
-                {!isLive && !isFinal && <span style={{ background: C.border, color: C.steel, fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>SCHEDULED</span>}
-              </div>
+              {/* S08 — live status now lives in the LiveLowerThird slab at the
+                  top of the score box; here we keep only the FINAL / scheduled
+                  state. Future scheduled games show the puck-drop countdown
+                  (condensed italic, muted); past-due scheduled falls back. */}
+              {(isFinal || (!isLive && !isFinal)) && (
+                <div style={{ textAlign: 'center', marginTop: 6 }}>
+                  {isFinal && <span style={{ background: 'rgba(244,247,250,0.08)', color: 'rgba(244,247,250,0.4)', fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>FINAL</span>}
+                  {!isLive && !isFinal && (puckDrop
+                    ? <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontStyle: 'italic', fontWeight: 800, fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.steel }}>{puckDrop}</span>
+                    : <span style={{ background: C.border, color: C.steel, fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>SCHEDULED</span>
+                  )}
+                </div>
+              )}
               {/* GS-5 — pre-game roster check attestation (verify_game_rosters).
                   Team-level signal only: it says the lineups were checked
                   against the suspension list, never who was on it. */}
@@ -497,6 +575,15 @@ export default function GameDetail({ profile }) {
             </div>
           )}
 
+          {/* S08 — season series. Reserved-height muted line under the state line
+              while the head-to-head fetch is in flight (no layout shift), then
+              collapses entirely if the two teams have never met (played===0). */}
+          {showSeriesLine && (
+            <div style={{ textAlign: 'center', marginBottom: 16, minHeight: 15, fontSize: 12, color: C.steel, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {seriesLabel || ' '}
+            </div>
+          )}
+
           {/* Stats bar — only shown for league/tournament games where we track shots+goals */}
           {!isTeamGame && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', borderTop: `0.5px solid rgba(46,91,140,0.3)`, background: C.navy }}>
@@ -515,6 +602,26 @@ export default function GameDetail({ profile }) {
         </div>
 
         <div style={{ padding: 16 }}>
+
+          {/* S08 — Watch button: YouTube / Twitch / Facebook / Vimeo broadcast
+              for this game (game then rink). Platform-colored, above the fold,
+              shown whenever a resolved URL exists (pre-game, live, final — the
+              archive usually lives on at the same URL). The LiveBarn block below
+              is untouched. Mirrors PublicGame. team_games have no stream URL. */}
+          {(() => {
+            if (isTeamGame) return null;
+            const streamUrl = resolveStreamUrl(game);
+            if (!streamUrl) return null;
+            const p = detectStreamPlatform(streamUrl);
+            const col = p === 'youtube' ? '#FF0000' : p === 'twitch' ? '#9146FF' : p === 'facebook' ? '#1877F2' : p === 'vimeo' ? '#1AB7EA' : C.blue;
+            return (
+              <div style={{ textAlign: 'center', marginBottom: 14 }}>
+                <a href={streamUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: col, color: '#fff', fontFamily: "'Barlow', sans-serif", fontWeight: 700, fontSize: 14, padding: '11px 22px', borderRadius: 999, textDecoration: 'none' }}>
+                  <span style={{ fontSize: 12 }}>▶</span> {streamButtonLabel(streamUrl) || 'Watch live'}
+                </a>
+              </div>
+            );
+          })()}
 
           {/* Share the recap — final league/tournament games (team games have no public page) */}
           {isFinal && !isTeamGame && (

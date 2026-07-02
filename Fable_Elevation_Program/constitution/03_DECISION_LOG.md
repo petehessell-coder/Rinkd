@@ -145,3 +145,13 @@ pilot-activation event. **D-S07-2:** ❤️ Like + 🔥 reactions BOTH stay; rev
 with Oakland pilot engagement data (both are tracked separately now).
 Deferred: per-object OG for event pages, /photo/:id route, milestone composer,
 Profile badges rebuild.
+
+### 2026-07-02 · S08 Gate-1 decision (Pete sign-off)
+All 5 broadcast-delta upgrades approved: real stream wired into GameDetail
+(the LiveBarn-only affordance was DEAD — placeholder venue IDs — while league
+games carry real youtube_urls), 72px score + shadows.live, shared
+LiveLowerThird (red slab + ring pulse on both pages, fixes PublicGame's
+tabular-nums jitter), puck-drop countdown, season-series line via
+getHeadToHead. Standings-implication projections DEFERRED (needs projection
+math; records + series carry the stakes). Presentation only — data/scoring
+logic untouched.
