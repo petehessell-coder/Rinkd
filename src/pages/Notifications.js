@@ -7,8 +7,9 @@ import { Avatar } from '../components/Logos';
 import { EmptyState, ListRowSkeleton } from '../components/Skeletons';
 import { listNotifications, markRead, markAllRead, deleteNotification, KIND_META } from '../lib/notifications';
 import { timeAgo } from '../lib/posts';
-import { C, colors } from '../lib/tokens';
+import { C, colors, motion } from '../lib/tokens';
 import { Icon, ErrorState } from '../components/ui';
+import { transition, prefersReducedMotion } from '../lib/motion';
 import { useOnline } from '../lib/useOnline';
 import { prefetchGamePage, prefetchHandlers } from '../lib/prefetch';
 
@@ -25,6 +26,8 @@ export default function NotificationsPage({ currentUser, profile }) {
     const q = new URLSearchParams(window.location.search).get('filter');
     return q === 'unread' || q === 'all' ? q : 'all';
   }); // all | unread
+  // Rows mid-exit: fired dismiss, still animating out before filter() drops them.
+  const [leaving, setLeaving] = useState(() => new Set());
   const online = useOnline();
 
   const load = useCallback(async () => {
@@ -61,13 +64,35 @@ export default function NotificationsPage({ currentUser, profile }) {
 
   const handleDelete = async (id, e) => {
     e.stopPropagation();
-    const { error } = await deleteNotification(id);
-    if (error) {
-      // eslint-disable-next-line no-alert
-      alert("Couldn't dismiss that notification. Try again in a moment.");
+
+    // Reduced motion: fire the write and remove instantly — no exit animation.
+    if (prefersReducedMotion()) {
+      const { error } = await deleteNotification(id);
+      if (error) {
+        // eslint-disable-next-line no-alert
+        alert("Couldn't dismiss that notification. Try again in a moment.");
+        return;
+      }
+      setItems((prev) => prev.filter((p) => p.id !== id));
       return;
     }
-    setItems((prev) => prev.filter((p) => p.id !== id));
+
+    // Fire the dismiss immediately (don't wait on the animation), then animate
+    // the row out concurrently and filter it once the exit finishes.
+    const req = deleteNotification(id);
+    setLeaving((prev) => { const n = new Set(prev); n.add(id); return n; });
+    setTimeout(async () => {
+      const { error } = await req;
+      if (error) {
+        // The write failed — un-mark it as leaving so the row settles back in.
+        setLeaving((prev) => { const n = new Set(prev); n.delete(id); return n; });
+        // eslint-disable-next-line no-alert
+        alert("Couldn't dismiss that notification. Try again in a moment.");
+        return;
+      }
+      setItems((prev) => prev.filter((p) => p.id !== id));
+      setLeaving((prev) => { const n = new Set(prev); n.delete(id); return n; });
+    }, motion.duration.exit);
   };
 
   const unreadCount = items.filter((i) => !i.read_at).length;
@@ -129,7 +154,7 @@ export default function NotificationsPage({ currentUser, profile }) {
                   <>
                     <LowerThird label="Today" />
                     <div style={sectionCard}>
-                      {today.map((n, i) => <NotifRow key={n.id} n={n} first={i === 0} onOpen={openOne} onDelete={handleDelete} />)}
+                      {today.map((n, i) => <NotifRow key={n.id} n={n} first={i === 0} leaving={leaving.has(n.id)} onOpen={openOne} onDelete={handleDelete} />)}
                     </div>
                   </>
                 )}
@@ -137,7 +162,7 @@ export default function NotificationsPage({ currentUser, profile }) {
                   <>
                     <LowerThird label="Earlier" />
                     <div style={sectionCard}>
-                      {earlier.map((n, i) => <NotifRow key={n.id} n={n} first={i === 0} onOpen={openOne} onDelete={handleDelete} />)}
+                      {earlier.map((n, i) => <NotifRow key={n.id} n={n} first={i === 0} leaving={leaving.has(n.id)} onOpen={openOne} onDelete={handleDelete} />)}
                     </div>
                   </>
                 )}
@@ -175,7 +200,7 @@ function LowerThird({ label }) {
   );
 }
 
-function NotifRow({ n, first, onOpen, onDelete }) {
+function NotifRow({ n, first, leaving, onOpen, onDelete }) {
   const meta = KIND_META[n.kind] || { icon: 'notifications', label: 'Notification' };
   const isUnread = !n.read_at;
   const tone = toneFor(n.kind);
@@ -188,14 +213,23 @@ function NotifRow({ n, first, onOpen, onDelete }) {
   const hasName = actorName && body.toLowerCase().startsWith(actorName.toLowerCase());
   const action = hasName ? body.slice(actorName.length).replace(/^\s+/, '') : null;
   return (
-    <div onClick={() => onOpen(n)}
+    <div onClick={() => onOpen(n)} className="rinkd-pressable"
       {...(isGameUrl(n.url) ? prefetchHandlers(prefetchGamePage) : {})}
       style={{
         display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px',
         borderTop: first ? 'none' : '1px solid rgba(46,91,140,0.18)',
         borderLeft: isUnread ? '4px solid #D72638' : '4px solid transparent',
         background: isUnread ? colors.surfaceElevated : C.card,
-        cursor: 'pointer', transition: 'background 0.15s',
+        cursor: 'pointer',
+        // Mark-read: the red unread left-border eases to transparent over `tab`
+        // instead of snapping. Exit (M4b): fade + slide down over `exit`.
+        opacity: leaving ? 0 : 1,
+        transform: leaving ? 'translateY(8px)' : 'none',
+        transition: leaving
+          ? transition(['opacity', 'transform'], motion.duration.exit, 'in')
+          : (prefersReducedMotion()
+            ? 'background 0.15s'
+            : `background 0.15s, border-color ${motion.duration.tab}ms ${motion.easing.inOut}`),
       }}
       onMouseEnter={(e) => { if (!isUnread) e.currentTarget.style.background = 'rgba(46,91,140,0.12)'; }}
       onMouseLeave={(e) => { e.currentTarget.style.background = isUnread ? colors.surfaceElevated : C.card; }}>

@@ -5,9 +5,17 @@
    (e.g. the Button primitive's own press) win via specificity, so this never
    fights component-level animation. Fully disabled under reduced motion. */
 @media (prefers-reduced-motion: no-preference) {
-  button:not(:disabled), .rinkd-pressable { transition: transform 110ms cubic-bezier(0.4, 0, 0.2, 1); }
+  /* 100ms = motion.duration.press token (S09 M3a). */
+  button:not(:disabled), .rinkd-pressable { transition: transform 100ms cubic-bezier(0.4, 0, 0.2, 1); }
   button:not(:disabled):active { transform: scale(0.97); }
+  .rinkd-pressable { transition: transform 100ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 100ms cubic-bezier(0.4, 0, 0.2, 1); }
   .rinkd-pressable:active { transform: scale(0.985); }
+}
+/* S09 M3a (D-S09-1) — manifesto hover lift on every pressable card.
+   0 4px 16px rgba(0,0,0,0.4) = shadows.hover token. Hover-capable pointers
+   only so it never sticks on touch. */
+@media (prefers-reduced-motion: no-preference) and (hover: hover) {
+  .rinkd-pressable:hover { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4); }
 }
 
 /* Rinkd dark calendar override */

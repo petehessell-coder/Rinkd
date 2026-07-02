@@ -98,7 +98,7 @@ function BackButton({ inline = false }) {
         cursor: 'pointer', padding: inline ? '6px 10px' : '6px 8px',
         borderRadius: 8, fontFamily: "'Barlow', sans-serif",
         fontSize: 14, fontWeight: 600, lineHeight: 1,
-        transition: 'background 0.15s',
+        transition: 'background 100ms', /* press token (S09 M3b) */
       }}
       onMouseEnter={(e) => { e.currentTarget.style.background = B.border + '66'; }}
       onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
@@ -138,7 +138,7 @@ export default function Layout({ children, profile }) {
     const { size, isVertical, active } = opts;
     if (item.isMore) {
       return (
-        <button onClick={() => setMoreOpen(true)}
+        <button onClick={() => setMoreOpen(true)} className="rinkd-pressable"
           style={{
             display: 'flex', alignItems: isVertical ? 'center' : 'center',
             flexDirection: isVertical ? 'column' : 'row',
@@ -150,7 +150,7 @@ export default function Layout({ children, profile }) {
             borderRadius: isVertical ? 0 : 10,
             fontSize: isVertical ? 10 : 15,
             position: 'relative',
-            transition: 'all 0.15s',
+            transition: 'color 100ms, background 100ms', /* press token (S09 M3b) */
           }}
           onMouseEnter={e => { if (!isVertical) e.currentTarget.style.background = B.border + '66'; }}
           onMouseLeave={e => { if (!isVertical) e.currentTarget.style.background = 'transparent'; }}>
@@ -160,7 +160,7 @@ export default function Layout({ children, profile }) {
       );
     }
     return (
-      <Link to={item.path}
+      <Link to={item.path} className="rinkd-pressable"
         style={{
           display: 'flex', alignItems: 'center',
           flexDirection: isVertical ? 'column' : 'row',
@@ -172,7 +172,7 @@ export default function Layout({ children, profile }) {
           color: active ? B.ice : B.steel,
           fontWeight: active ? 600 : 400,
           fontSize: isVertical ? 10 : 15,
-          transition: 'all 0.15s',
+          transition: 'color 100ms, background 100ms', /* press token (S09 M3b) */
           position: 'relative',
           minWidth: isVertical ? 50 : undefined,
         }}

@@ -155,3 +155,13 @@ tabular-nums jitter), puck-drop countdown, season-series line via
 getHeadToHead. Standings-implication projections DEFERRED (needs projection
 math; records + series carry the stakes). Presentation only — data/scoring
 logic untouched.
+
+### 2026-07-02 · S09 Gate-1 decisions (Pete sign-off)
+M1–M4 approved (six modal entrances on entrance/sheet tokens; the manifesto
+tab-strip SLIDE at tab/inOut; press feedback promoted app-wide incl. the
+110ms→press-token drift fix; DM optimistic send — the last non-optimistic send;
+notification dismiss exit fade; honest indeterminate upload bars replacing
+Feed's fake 30→80% steps). **D-S09-1:** shadows.hover APPLIED app-wide via the
+shared pressable class (vocabulary-intended; desktop-only effect). Noted, no
+action: numberChange token stays dormant; like-bounce 300ms stays; bare-disabled
+buttons in hand-rolled modals fold into S10's component adoption.

@@ -12,7 +12,9 @@ import {
   listConversations, getMessages, sendMessage, markConversationRead,
   subscribeToConversation, getConversationOther, getOrCreateDm, searchUsers,
 } from '../lib/messages';
-import { C } from '../lib/tokens';
+import { C, motion } from '../lib/tokens';
+import { transition, motionSafe, ensureMotionKeyframes } from '../lib/motion';
+import { useToast } from '../components/ui';
 
 export default function Messages({ currentUser, profile }) {
   const { conversationId } = useParams();
@@ -81,7 +83,7 @@ function Inbox({ currentUser, profile }) {
                 const mine = c.last_message_sender_id === currentUser?.id;
                 const unread = c.unread > 0;
                 return (
-                  <div key={c.conversation_id} onClick={() => navigate(`/messages/${c.conversation_id}`)}
+                  <div key={c.conversation_id} className="rinkd-pressable" onClick={() => navigate(`/messages/${c.conversation_id}`)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px',
                       borderTop: i ? '1px solid rgba(46,91,140,0.2)' : 'none', cursor: 'pointer',
@@ -190,6 +192,7 @@ function Thread({ conversationId, currentUser, profile }) {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const bottomRef = useRef(null);
+  const { toast } = useToast();
 
   const scrollToBottom = (behavior = 'auto') => {
     requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior, block: 'end' }));
@@ -197,6 +200,7 @@ function Thread({ conversationId, currentUser, profile }) {
 
   // Initial load: header (other participant) + messages, then mark read.
   useEffect(() => {
+    ensureMotionKeyframes(); // registers rinkdStaggerIn (reduced-motion gated)
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -228,17 +232,37 @@ function Thread({ conversationId, currentUser, profile }) {
     const body = draft.trim();
     if (!body || sending) return;
     setSending(true);
+
+    // Optimistic bubble — show it instantly with a temp id, then swap for the
+    // real row when the server confirms (mirrors CommentThread). The temp id is
+    // `temp-…`, so the realtime echo (which dedups on the REAL row id) can never
+    // match it — no double-render while it's pending.
+    const tempId = `temp-${Date.now()}`;
+    const tempMsg = { id: tempId, body, sender_id: myId, created_at: new Date().toISOString(), __pending: true };
+    setMsgs((prev) => [...prev, tempMsg]);
     setDraft('');
+    scrollToBottom('smooth');
+
     const { data, error } = await sendMessage(conversationId, body);
     setSending(false);
+
     if (error) {
-      setDraft(body); // restore so the user doesn't lose their text
-      // eslint-disable-next-line no-alert
-      alert("Couldn't send. Check your connection and try again.");
+      // Roll the temp bubble back out, restore the typed text, and say so.
+      setMsgs((prev) => prev.filter((x) => x.id !== tempId));
+      setDraft(body);
+      toast({ message: "That didn't send — check your connection and try again.", tone: 'alert' });
       return;
     }
+
     if (data) {
-      setMsgs((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+      // Swap temp → real. If the realtime echo beat us and already inserted the
+      // real row, drop the temp instead of adding a duplicate (dedup on real id).
+      setMsgs((prev) => {
+        const realAlreadyIn = prev.some((x) => x.id === data.id);
+        return realAlreadyIn
+          ? prev.filter((x) => x.id !== tempId)
+          : prev.map((x) => (x.id === tempId ? data : x));
+      });
       scrollToBottom('smooth');
     }
   };
@@ -305,15 +329,21 @@ function Thread({ conversationId, currentUser, profile }) {
               msgs.map((m) => {
                 const mine = m.sender_id === myId;
                 return (
-                  <div key={m.id} style={{ display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start' }}>
+                  <div key={m.id} style={{
+                    display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start',
+                    animation: motionSafe(`rinkdStaggerIn ${motion.duration.entrance}ms ${motion.easing.out} both`),
+                  }}>
                     <div style={{
                       maxWidth: '76%', padding: '9px 13px', borderRadius: 16,
                       borderBottomRightRadius: mine ? 4 : 16, borderBottomLeftRadius: mine ? 16 : 4,
                       background: mine ? C.blue : C.card, color: C.ice, fontSize: 14, lineHeight: 1.4,
                       whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                      opacity: m.__pending ? 0.55 : 1, transition: transition('opacity', motion.duration.entrance),
                     }}>
                       {m.body}
-                      <div style={{ fontSize: 10, color: mine ? 'rgba(244,247,250,0.6)' : C.steel, marginTop: 4, textAlign: 'right' }}>{timeAgo(m.created_at)}</div>
+                      <div style={{ fontSize: 10, color: mine ? 'rgba(244,247,250,0.6)' : C.steel, marginTop: 4, textAlign: 'right' }}>
+                        {m.__pending ? 'sending…' : timeAgo(m.created_at)}
+                      </div>
                     </div>
                   </div>
                 );

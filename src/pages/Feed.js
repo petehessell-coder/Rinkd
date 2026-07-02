@@ -77,8 +77,27 @@ if (typeof document !== 'undefined' && !document.getElementById('rinkd-feed-anim
     + '.rinkd-like-count{animation:rinkdLikeCount 300ms ease-out}'
     + '.rinkd-live-dot{animation:rinkdLivePulse 1.5s ease-out infinite}'
     + '.rinkd-starter-fade{animation:rinkdStarterFade .5s ease}'
-    + '@media (prefers-reduced-motion: reduce){.rinkd-live-dot,.rinkd-starter-fade,.rinkd-like-pop,.rinkd-like-count{animation:none}}';
+    // Honest upload — an INDETERMINATE sweep (we don't get true % from the SDK),
+    // so a fixed-width slug travels the track on a 1.5s loop instead of faking a
+    // percentage. Reduced motion collapses it to a static tinted bar.
+    + '@keyframes rinkdIndeterminate{0%{transform:translateX(-140%)}100%{transform:translateX(320%)}}'
+    + '.rinkd-indeterminate{animation:rinkdIndeterminate 1.5s cubic-bezier(0.4,0,0.2,1) infinite}'
+    + '@media (prefers-reduced-motion: reduce){.rinkd-live-dot,.rinkd-starter-fade,.rinkd-like-pop,.rinkd-like-count{animation:none}.rinkd-indeterminate{animation:none;transform:none;width:100%!important;opacity:0.55}}';
   document.head.appendChild(el);
+}
+
+// Honest upload bar — an INDETERMINATE track (the storage SDK gives us no true
+// progress %, so we don't fake 30→80 steps). A slug sweeps the rail on a 1.5s
+// loop while the upload is in flight; reduced motion shows a static tinted bar
+// (see the .rinkd-indeterminate rules above). Exported so Gallery reuses the
+// exact same visual instead of a near-copy that can drift.
+export function IndeterminateBar({ color = C.blue }) {
+  return (
+    <div style={{ height: 3, background: C.border, borderRadius: 2, overflow: 'hidden' }}>
+      <div className="rinkd-indeterminate"
+        style={{ height: '100%', width: '45%', background: color, borderRadius: 2 }} />
+    </div>
+  );
 }
 
 // Tap-to-fullscreen lightbox so highlight clips and goal photos actually look
@@ -453,7 +472,6 @@ export default function Feed({ currentUser, profile }) {
   const [followingFallback, setFollowingFallback] = useState(false);
   const [mediaFile, setMediaFile] = useState(null);
   const [mediaPreview, setMediaPreview] = useState(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [starterIdx, setStarterIdx] = useState(0);
 
   // Cycle the composer prompt while it's collapsed so the feed feels alive.
@@ -583,20 +601,19 @@ export default function Feed({ currentUser, profile }) {
   const handlePost = async (e) => {
     e.preventDefault();
     if ((!content.trim() && !mediaFile) || !currentUser) return;
-    setPosting(true); setUploadProgress(0);
+    setPosting(true);
     let mediaUrl = null, mediaType = null;
     if (mediaFile) {
-      setUploadProgress(30);
       const { url, mediaType: mt, error } = await uploadMedia(mediaFile, currentUser.id);
       if (error) { setPosting(false); alert("That upload didn't go through — check your connection and try again."); return; }
-      mediaUrl = url; mediaType = mt; setUploadProgress(80);
+      mediaUrl = url; mediaType = mt;
     }
     const { data: newPost, error: postError } = await createPost(currentUser.id, { content: content.trim(), tag: selectedTag?.label || null, tagColor: selectedTag?.color || null, mediaUrl, mediaType });
     if (postError) {
       // The insert failed — don't clear the composer or fire analytics, or the
       // user loses their text and we log a chirp that never landed. The composer
       // stays open with the typed content intact (it's only cleared on success).
-      setPosting(false); setUploadProgress(0);
+      setPosting(false);
       // eslint-disable-next-line no-console
       console.warn('[handlePost] createPost failed:', postError?.message || postError);
       toast({ message: "That didn't send — check your connection and try again.", tone: 'alert' });
@@ -627,7 +644,7 @@ export default function Feed({ currentUser, profile }) {
     const eventProps = { has_media: !!mediaUrl, media_type: mediaType, tag: selectedTag?.label, scope: 'global' };
     track('post_created', eventProps);
     track('chirp_created', eventProps);
-    setContent(''); setPostMentionIds([]); setSelectedTag(null); removeMedia(); setComposerOpen(false); setUploadProgress(0);
+    setContent(''); setPostMentionIds([]); setSelectedTag(null); removeMedia(); setComposerOpen(false);
     setPosting(false);
     // Reconcile in the background (no await) — swaps the grafted row for the
     // canonical one (real embeds, server counts) without making the author stare
@@ -764,9 +781,9 @@ export default function Feed({ currentUser, profile }) {
                     <button type="button" onClick={removeMedia} aria-label="Remove media" style={{ position: 'absolute', top: 8, right: 8, width: 44, height: 44, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', border: 'none', color: 'white', cursor: 'pointer', fontSize: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
                   </div>
                 )}
-                {uploadProgress > 0 && uploadProgress < 100 && (
-                  <div style={{ height: 3, background: C.border, borderRadius: 2, marginBottom: 12 }}>
-                    <div style={{ height: '100%', width: `${uploadProgress}%`, background: C.blue, borderRadius: 2, transition: 'width 0.3s' }}/>
+                {posting && mediaFile && (
+                  <div style={{ marginBottom: 12 }}>
+                    <IndeterminateBar />
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>

@@ -19,8 +19,12 @@ export default function Tag({
   variant = 'soft',
   onClick,
   style,
+  className,
   ...rest
 }) {
+  // S09 M3c — a clickable Tag must give tactile press feedback (shared
+  // .rinkd-pressable scale-on-tap). Merge with any caller-supplied className.
+  const pressClass = [onClick ? 'rinkd-pressable' : '', className].filter(Boolean).join(' ') || undefined;
   const variantStyle = {
     soft:    { background: hexToRgba(color, 0.16), color, border: '1px solid transparent' },
     solid:   { background: color, color: readableOn(color), border: '1px solid transparent' },
@@ -30,6 +34,7 @@ export default function Tag({
   return (
     <span
       onClick={onClick}
+      className={pressClass}
       style={{
         display: 'inline-flex', alignItems: 'center',
         maxWidth: '100%', minWidth: 0,

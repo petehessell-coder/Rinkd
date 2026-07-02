@@ -7,6 +7,7 @@ import { MentionText } from './Mentions';
 import { mentionMapFromRows } from '../lib/mentions';
 import ShareButton from './ShareButton';
 import { absoluteShareUrl } from '../lib/share';
+import { IndeterminateBar } from '../pages/Feed';
 import { C, colors } from '../lib/tokens';
 
 // Local drift: no exact token match, kept inline per migration rules.
@@ -333,6 +334,12 @@ function AddPhotoModal({ scopeLabel, teams, currentUser, tournamentId, leagueId,
             <option value="">Tag a team (optional)</option>
             {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
+        )}
+
+        {submitting && (
+          <div style={{ marginBottom: 12 }}>
+            <IndeterminateBar color={GAL_BLUE} />
+          </div>
         )}
 
         {error && <div style={{ color: colors.redSoft, fontSize: 12, marginBottom: 10 }}>{error}</div>}

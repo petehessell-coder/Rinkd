@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/authContext';
 import { track } from '../lib/analytics';
-import { C } from '../lib/tokens';
+import { C, motion } from '../lib/tokens';
 
 /**
  * Floating "?" button bottom-right of every page. Opens a help panel with:
@@ -141,6 +141,7 @@ export default function HelpButton() {
 
       {open && (
         <div onClick={() => setOpen(false)}
+          className="rinkd-help-sheet-backdrop"
           style={{
             position: 'fixed', inset: 0, zIndex: 9990,
             background: 'rgba(7,17,31,0.85)',
@@ -148,7 +149,18 @@ export default function HelpButton() {
             padding: 0,
             fontFamily: "'Barlow', sans-serif",
           }}>
+          {/* Manifesto "Sheet slide up" — 350ms, the sheet easing from tokens;
+              backdrop fades in alongside. Entrance only. Static under reduced
+              motion. Mirrors the sanctioned MoreDrawer pattern. */}
+          <style>{`
+            @keyframes rinkd-help-sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+            @keyframes rinkd-help-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+            .rinkd-help-sheet { animation: rinkd-help-sheet-up ${motion.duration.sheet}ms ${motion.easing.sheet} both; }
+            .rinkd-help-sheet-backdrop { animation: rinkd-help-backdrop-in 200ms ease-out both; }
+            @media (prefers-reduced-motion: reduce) { .rinkd-help-sheet, .rinkd-help-sheet-backdrop { animation: none; } }
+          `}</style>
           <div onClick={(e) => e.stopPropagation()}
+            className="rinkd-help-sheet"
             style={{
               background: C.card, border: `1px solid ${C.border}`, borderTopLeftRadius: 18, borderTopRightRadius: 18,
               width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto',
