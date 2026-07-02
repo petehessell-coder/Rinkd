@@ -95,6 +95,27 @@ export async function getDmUnreadCount() {
 }
 
 /**
+ * Cheap "does this user have ANY conversation?" check — used to gate the
+ * unfiltered inbox realtime channel (subscribeInbox) so the large majority of
+ * pilot users, who have never sent or received a DM, never open it. RLS on
+ * conversation_participants (cp_select → is_conversation_participant) already
+ * scopes the visible rows to the caller's own conversations, so a bare head
+ * count is > 0 iff they participate in at least one — no profile-id lookup
+ * needed. head:true fetches only the count, not rows.
+ */
+export async function hasAnyConversations() {
+  try {
+    const { count, error } = await supabase
+      .from('conversation_participants')
+      .select('conversation_id', { count: 'exact', head: true });
+    if (error) return false; // fail-closed: no channel rather than a leaked one
+    return (count || 0) > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Realtime INSERTs for a single conversation's thread. Unique channel name per
  * call dodges the supabase-js same-name reuse throw under StrictMode/remounts
  * (same pattern as lib/notifications.subscribe). Returns an unsubscribe fn.

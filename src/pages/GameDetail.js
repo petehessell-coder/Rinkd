@@ -24,6 +24,7 @@ import { areScorersHidden } from '../lib/publicShare';
 import { useGoalMoment, GoalSweep, usePeriodChange } from '../lib/goalMoment';
 import { haptics } from '../lib/haptics';
 import SoundToggle from '../components/SoundToggle';
+import { subscribeGame } from '../lib/gameRealtime';
 
 function LiveBarnWordmark({ dark = false }) {
   const liveColor = dark ? '#2E6DB4' : '#5a9fd4';
@@ -211,27 +212,19 @@ export default function GameDetail({ profile }) {
 
   // Realtime — keep a spectator's single-game view fresh. This page is what
   // fans open from a shared link; without this the score/goals stay frozen
-  // until they manually reload. Re-run load() (debounced) on any change to this
-  // game's row or its goals/penalties. Read-only page, so a full reload is fine.
+  // until they manually reload. Re-run load() (debounced 400ms) on any change
+  // to this game's row / goals / penalties. Read-only page, so a full reload is
+  // fine. Uses the shared subscribeGame() so this surface rides the same
+  // (env-gated) broadcast path as PublicGame when it's flipped on — no drifted
+  // per-game channel of its own. The 400ms debounce is the caller's job
+  // (subscribeGame just relays the ping), mirroring PublicGame.
   useEffect(() => {
-    if (!gameId) return;
-    const rowTable = isLeague ? 'league_games' : isTeamGame ? 'team_games' : 'games';
+    if (!gameId) return undefined;
+    const kind = isLeague ? 'league' : isTeamGame ? 'team' : 'tournament';
     let t = null;
     const bump = () => { if (t) clearTimeout(t); t = setTimeout(() => { load(); }, 400); };
-    let channel = null;
-    try {
-      const name = `gamedetail:${gameId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
-      let ch = supabase.channel(name)
-        .on('postgres_changes', { event: '*', schema: 'public', table: rowTable, filter: `id=eq.${gameId}` }, bump);
-      if (!isTeamGame) {
-        ch = ch
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'game_goals', filter: `game_id=eq.${gameId}` }, bump)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'game_penalties', filter: `game_id=eq.${gameId}` }, bump);
-      }
-      ch.subscribe();
-      channel = ch;
-    } catch { /* realtime is best-effort; manual reload still works */ }
-    return () => { if (t) clearTimeout(t); try { if (channel) supabase.removeChannel(channel); } catch { /* swallow */ } };
+    const unsub = subscribeGame({ kind, gameId, onChange: bump });
+    return () => { if (t) clearTimeout(t); unsub(); };
   }, [gameId, isLeague, isTeamGame, load]);
 
   // Activation analytics (pre-pilot P1-3): record the first time this spectator

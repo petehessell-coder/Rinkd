@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getDmUnreadCount, subscribeInbox } from '../lib/messages';
+import { getDmUnreadCount, subscribeInbox, hasAnyConversations } from '../lib/messages';
 import { C } from '../lib/tokens';
 
 /**
@@ -31,9 +31,22 @@ export default function MessagesIcon({ userId, size = 22, color }) {
     const onVis = () => { if (document.visibilityState === 'visible') refresh(); };
     document.addEventListener('visibilitychange', onVis);
 
+    // perf(scale): subscribeInbox opens an UNFILTERED postgres_changes channel
+    // on `messages` (RLS scopes deliveries, but the channel + its per-row RLS
+    // eval still exist for every logged-in user). Most pilot users have zero
+    // DMs, so we only open it when they actually have a conversation. Trade-off:
+    // a user who RECEIVES their first-ever DM while this tab is open won't get a
+    // live badge until the next 5-min poll or a remount — accepted, since the
+    // reconciliation interval already covers it and first-DM-while-watching is
+    // rare. The gate is async, so guard against unmount landing first.
     let unsub = () => {};
-    try { unsub = subscribeInbox(() => refresh()); }
-    catch { /* polling-only is fine */ }
+    hasAnyConversations()
+      .then((has) => {
+        if (cancelled || !has) return;
+        try { unsub = subscribeInbox(() => refresh()); }
+        catch { /* polling-only is fine */ }
+      })
+      .catch(() => { /* polling-only is fine */ });
 
     return () => {
       cancelled = true;

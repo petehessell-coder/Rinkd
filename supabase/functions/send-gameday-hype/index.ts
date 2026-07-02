@@ -146,7 +146,12 @@ serve(async (req) => {
     const payload = JSON.stringify({ title, body, url, tag: `hype:${g.id}` });
 
     const delivered: string[] = [];
-    await Promise.all(pushSubs.map(async (s: any) => {
+    // Chunked fan-out: sequential batches of BATCH_SIZE, concurrent WITHIN a
+    // batch via Promise.allSettled. Unbounded Promise.all over every subscriber
+    // (× every game in the run) risks an edge-function timeout at pilot scale.
+    // Per-sub error isolation (stale pruning + non-stale logging) is unchanged.
+    const BATCH_SIZE = 100;
+    const sendOne = async (s: any) => {
       attempted++;
       let parsed: unknown;
       try { parsed = JSON.parse(s.subscription); } catch { stale.push(s.user_id); return; }
@@ -158,7 +163,10 @@ serve(async (req) => {
         if (code === 410 || code === 404) stale.push(s.user_id);
         else console.error('[gameday-hype] delivery failed', { game_id: g.id, user_id: s.user_id, code });
       }
-    }));
+    };
+    for (let i = 0; i < pushSubs.length; i += BATCH_SIZE) {
+      await Promise.allSettled(pushSubs.slice(i, i + BATCH_SIZE).map(sendOne));
+    }
 
     // Record the ledger for everyone we targeted (delivered OR skipped) so a
     // re-run never re-fires, even for a user whose push later expired.
@@ -172,5 +180,6 @@ serve(async (req) => {
   }
 
   if (stale.length) await supabase.from('push_subscriptions').delete().in('user_id', stale);
+  console.log('[gameday-hype] done', { games: games.length, sent, attempted, pruned: stale.length });
   return json({ games: games.length, sent, attempted, pruned: stale.length });
 });

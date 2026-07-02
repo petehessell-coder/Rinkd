@@ -337,8 +337,15 @@ export async function getStandingsLeader(leagueId) {
 // ── One-shot aggregate for the page ──────────────────────────────────────────
 // Fires every layer concurrently so the home first-paints fast (skeleton →
 // hydrate). Each piece self-guards: one failing layer never blanks the page.
+// The last gameday context resolved by loadHome, keyed by userId. loadHomeLive
+// reuses it so a realtime ping never re-fetches the (subscriptions + memberships)
+// context — that context only changes when the user follows/unfollows, which
+// always goes through a full loadHome remount anyway.
+let _lastCtx = { userId: null, ctx: null };
+
 export async function loadHome(userId) {
   const ctx = await getGamedayContext(userId).catch(() => ({ tournamentIds: [], leagueIds: [], teamIds: [] }));
+  _lastCtx = { userId, ctx };
   const hasFollows = !!(ctx.tournamentIds.length || ctx.leagueIds.length || ctx.teamIds.length);
 
   const [featured, gameday, your, publicEvents, leader, ticker] = await Promise.all([
@@ -365,6 +372,38 @@ export async function loadHome(userId) {
     // Followed event ids — the home subscribes to these for Realtime live
     // updates (no polling). Capped at the source.
     followIds: { tournamentIds: ctx.tournamentIds || [], leagueIds: ctx.leagueIds || [] },
+  };
+}
+
+// ── Narrow live re-load (realtime ping) ──────────────────────────────────────
+// A goal/score change should refresh ONLY the live-affected tiles, not re-run
+// the full 6-way loadHome() (which re-fetches your-hockey, this-week, discover,
+// standings — none of which a live score touches, and each a skeleton-flash
+// risk). This re-runs just the three live layers:
+//   • getGamedayGames  → live + upcoming (reusing the cached ctx, so no
+//                        subscriptions/memberships re-fetch)
+//   • getLiveTicker    → the top score-bug strip
+//   • getFeaturedEvent → recomputes ONLY the hero's isLive flag (identity is
+//                        cached in _featuredBase; this is one live-count read)
+// The caller merges these into existing state without clearing the rest.
+export async function loadHomeLive(userId) {
+  // Reuse the ctx loadHome resolved on mount; only re-derive if we somehow have
+  // none for this user (defensive — the mount path always populates it first).
+  const ctx = (_lastCtx.userId === userId && _lastCtx.ctx)
+    ? _lastCtx.ctx
+    : await getGamedayContext(userId).catch(() => ({ tournamentIds: [], leagueIds: [], teamIds: [] }));
+
+  const [gameday, featured, ticker] = await Promise.all([
+    getGamedayGames(userId, { windowHours: 168, ctx }).catch(() => ({ live: [], upcoming: [] })),
+    getFeaturedEvent().catch(() => null),
+    getLiveTicker(12).catch(() => []),
+  ]);
+
+  return {
+    live: gameday.live || [],
+    upcoming: gameday.upcoming || [],
+    featuredIsLive: featured ? !!featured.isLive : undefined,
+    ticker,
   };
 }
 
