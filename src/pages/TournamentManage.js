@@ -30,6 +30,11 @@ import { tournamentPayoutsReady, startConnectOnboarding } from '../lib/stripeCon
 import { listLinks, createLink, setLinkStatus, removeLink, listGameMaps, confirmMatch, ignoreMatch } from '../lib/gamesheet';
 import { listTournamentTeamJerseys, getTournamentTeamLinks, searchLinkableProfiles, linkTournamentPlayer, unlinkTournamentPlayer } from '../lib/tournamentRoster';
 
+import Skeleton from '../components/ui/Skeleton';
+import ErrorState from '../components/ui/ErrorState';
+import Icon from '../components/ui/Icon';
+import { ConfirmSheet, useConfirm, ConfirmSheetHost } from '../components/ui/ConfirmSheet';
+
 import { C as sharedC, colors } from '../lib/tokens';
 
 // Shared tokens + the two semantic keys this page's ~15 call sites still name
@@ -81,6 +86,47 @@ const btnGhost = { background: 'transparent', color: C.ice, border: `1px solid $
 function fmtDateTime(iso) {
   if (!iso) return 'TBD';
   return new Date(iso).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+// S10 — geometric loading placeholder for every tab/section that used to render
+// a bare "Warming up." / "Loading standings…" string. `rows` grey bars, each
+// matching a card row's height, so there's no layout shift when data hydrates.
+// Reduced-motion safe (Skeleton holds a flat tint, no sweep).
+function TabSkeleton({ rows = 3 }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }} aria-hidden="true">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <Skeleton width={36} height={36} radius={8} />
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Skeleton width="55%" height={14} />
+            <Skeleton width="35%" height={11} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// S10 — page-level shell: header block + tab strip + a few card rows. Shown while
+// the tournament + its teams/games/divisions load, matching the real layout the
+// page settles into (no jump from a centered one-liner to the full board).
+function PageSkeleton({ profile }) {
+  return (
+    <Layout profile={profile}>
+      <div style={{ background: C.dark, minHeight: '100vh', color: C.ice, fontFamily: 'Barlow, sans-serif' }}>
+        <div style={{ maxWidth: 980, margin: '0 auto', padding: '20px 16px 80px' }}>
+          <Skeleton width={140} height={12} style={{ marginBottom: 12 }} />
+          <Skeleton width="60%" height={30} style={{ marginBottom: 8 }} />
+          <Skeleton width="40%" height={13} style={{ marginBottom: 18 }} />
+          <div style={{ display: 'flex', gap: 10, borderBottom: `1px solid ${C.border}`, paddingBottom: 10, marginBottom: 18 }}>
+            {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} width={72} height={16} />)}
+          </div>
+          <TabSkeleton rows={3} />
+        </div>
+      </div>
+    </Layout>
+  );
 }
 
 export default function TournamentManagePage({ currentUser, profile }) {
@@ -179,33 +225,32 @@ export default function TournamentManagePage({ currentUser, profile }) {
 
   useEffect(() => { load(); }, [load]);
 
-  if (loading) return (
-    <Layout profile={profile}>
-      <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice }}>Getting the ice ready.</div>
-    </Layout>
-  );
+  // S10 — geometric page skeleton (header + tabs + card rows) instead of a
+  // centered one-liner, so there's no layout jump when the board hydrates.
+  if (loading) return <PageSkeleton profile={profile} />;
   if (error || !tournament) return (
     <Layout profile={profile}>
-      <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.ice, gap: 12 }}>
-        <div>{error || "We couldn't find this tournament."}</div>
-        <button onClick={() => navigate('/tournaments')} style={btnPrimary}>Back to tournaments</button>
+      <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <ErrorState
+          title={tournament ? 'That didn’t load' : 'We couldn’t find this tournament'}
+          body={error || 'It may have been removed, or the link is off. Head back to browse events.'}
+          onRetry={() => { setError(null); setLoading(true); load(); }}
+        >
+          <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center' }}>
+            <button onClick={() => navigate('/tournaments')} style={btnGhost}>Back to tournaments</button>
+          </div>
+        </ErrorState>
       </div>
     </Layout>
   );
   // Wait for the extra-director async check before deciding to lock out.
   // Without this gate, a freshly-added director navigating to /manage sees
   // the lock screen for a beat while tournament_roles is being queried.
-  if (!extraDirectorChecked) return (
-    <Layout profile={profile}>
-      <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ice }}>
-        Getting the ice ready.
-      </div>
-    </Layout>
-  );
+  if (!extraDirectorChecked) return <PageSkeleton profile={profile} />;
   if (!isDirector) return (
     <Layout profile={profile}>
       <div style={{ background: C.dark, minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.ice, gap: 12, padding: 20, textAlign: 'center' }}>
-        <div style={{ fontSize: 40 }}>🔒</div>
+        <Icon name="privacy" size={40} color={C.steel} />
         <div>Only the tournament director can manage this event.</div>
         <button onClick={() => navigate(`/tournament/${id}`)} style={btnPrimary}>View tournament</button>
       </div>
@@ -237,7 +282,7 @@ export default function TournamentManagePage({ currentUser, profile }) {
 
           {tournament.is_activated === false && (
             <div style={{ background: 'rgba(245,158,11,0.12)', border: '0.5px solid rgba(245,158,11,0.4)', borderRadius: 10, padding: '12px 14px', marginBottom: 18, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-              <div style={{ fontSize: 18 }}>🔒</div>
+              <Icon name="privacy" size={18} color={colors.warning} style={{ marginTop: 1 }} />
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: colors.warning }}>Activation pending</div>
                 <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.65)', marginTop: 4, lineHeight: 1.5 }}>
@@ -280,7 +325,7 @@ export default function TournamentManagePage({ currentUser, profile }) {
                 fontSize: 13, lineHeight: 1.5, cursor: 'pointer',
                 display: 'flex', alignItems: 'center', gap: 10,
               }}>
-              <span style={{ fontSize: 18 }}>{flash.kind === 'error' ? '⚠️' : '✓'}</span>
+              <Icon name={flash.kind === 'error' ? 'alert' : 'approved'} size={18} color={flash.kind === 'error' ? C.red : C.green} />
               <span style={{ flex: 1 }}>{flash.text}</span>
               <span style={{ fontSize: 11, color: C.steel }}>tap to dismiss</span>
             </div>
@@ -335,6 +380,7 @@ function DivisionsTab({ tournamentId, divisions, teams, games, selectedDivisionI
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const confirm = useConfirm();
 
   // Per-division team + game counts so the director sees what a delete will
   // take with it (teams CASCADE; games' division_id is SET NULL).
@@ -360,9 +406,9 @@ function DivisionsTab({ tournamentId, divisions, teams, games, selectedDivisionI
   const remove = async (d) => {
     const c = counts[d.id] || { teams: 0, games: 0 };
     const warn = c.teams > 0 || c.games > 0
-      ? `Delete "${d.name}"? This removes its ${c.teams} team${c.teams === 1 ? '' : 's'}${c.games ? ` and unassigns ${c.games} game${c.games === 1 ? '' : 's'}` : ''} — this can't be undone.`
-      : `Delete "${d.name}"? This can't be undone.`;
-    if (!window.confirm(warn)) return;
+      ? `This removes its ${c.teams} team${c.teams === 1 ? '' : 's'}${c.games ? ` and unassigns ${c.games} game${c.games === 1 ? '' : 's'}` : ''} — this can't be undone.`
+      : `This can't be undone.`;
+    if (!(await confirm({ title: `Delete “${d.name}”?`, body: warn, confirmLabel: 'Delete division', danger: true }))) return;
     setBusyId(d.id);
     const { error } = await deleteDivision(d.id);
     setBusyId(null);
@@ -394,10 +440,11 @@ function DivisionsTab({ tournamentId, divisions, teams, games, selectedDivisionI
 
       {divisions.length === 0 && !adding && (
         <div style={{ textAlign: 'center', color: C.steel, padding: '40px 0' }}>
-          <div style={{ fontSize: 32, marginBottom: 8 }}>🗂️</div>
           Add your first division to start scoping teams and games.
         </div>
       )}
+
+      <ConfirmSheetHost controller={confirm} />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {divisions.map((d, i) => editingId === d.id ? (
@@ -541,7 +588,6 @@ function TeamsTab({ tournamentId, teams, divisionId = null, standingsByTeam = {}
 
       {teams.length === 0 && !adding && (
         <div style={{ textAlign: 'center', color: C.steel, padding: '40px 0' }}>
-          <div style={{ fontSize: 32, marginBottom: 8 }}>🏒</div>
           Add your first team to get this event on the ice.
         </div>
       )}
@@ -568,8 +614,8 @@ function TeamsTab({ tournamentId, teams, divisionId = null, standingsByTeam = {}
                   </div>
                   <button
                     onClick={() => setLinkingId(linkingId === t.id ? null : t.id)}
-                    style={{ ...btnGhost, ...(linkingId === t.id ? { borderColor: C.red, color: C.red } : {}) }}
-                    title="Link Rinkd players to jerseys so their stats show on their profile">🔗 Players</button>
+                    style={{ ...btnGhost, display: 'inline-flex', alignItems: 'center', gap: 6, ...(linkingId === t.id ? { borderColor: C.red, color: C.red } : {}) }}
+                    title="Link Rinkd players to jerseys so their stats show on their profile"><Icon name="link" size={13} /> Players</button>
                   <button onClick={() => setEditingId(t.id)} style={btnGhost}>Edit</button>
                 </div>
                 {linkingId === t.id && <TeamPlayerLinks tournamentId={tournamentId} team={t} flash={flash} />}
@@ -660,7 +706,7 @@ function TeamPlayerLinks({ tournamentId, team, flash }) {
         New games for a linked jersey attach automatically.
       </div>
       {jerseys === null ? (
-        <div style={{ fontSize: 12, color: C.steel, padding: '8px 0' }}>Warming up.</div>
+        <div style={{ padding: '8px 0' }}><TabSkeleton rows={2} /></div>
       ) : jerseys.length === 0 ? (
         <div style={{ fontSize: 12, color: C.steel, padding: '8px 0' }}>
           Jerseys show up here once this team has game lineups to attribute.
@@ -676,7 +722,7 @@ function TeamPlayerLinks({ tournamentId, team, flash }) {
                   <span style={{ fontSize: 13, color: C.steel, flex: 1, minWidth: 80 }}>{j.invite_name || '—'}</span>
                   {link ? (
                     <>
-                      <span style={{ fontSize: 12, color: C.green, fontWeight: 700 }}>✓ {link.name}{link.handle ? ` · @${link.handle}` : ''}</span>
+                      <span style={{ fontSize: 12, color: C.green, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="approved" size={13} color={C.green} /> {link.name}{link.handle ? ` · @${link.handle}` : ''}</span>
                       <button onClick={() => doUnlink(j.jersey_number)} disabled={busy} style={btnGhost}>Unlink</button>
                     </>
                   ) : openJersey === j.jersey_number ? (
@@ -742,6 +788,7 @@ function TeamForm({ tournamentId, divisionId = null, team, pools, flash, onDone,
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState('');
   const [progress, setProgress] = useState(''); // "Adding 2/5…" during bulk add
+  const confirm = useConfirm();
 
   const pool = poolChoice === '__new__' ? newPool.trim() : poolChoice;
 
@@ -786,7 +833,7 @@ function TeamForm({ tournamentId, divisionId = null, team, pools, flash, onDone,
 
   const remove = async () => {
     if (!team) return;
-    if (!window.confirm(`Delete "${team.team_name}"? This can't be undone.`)) return;
+    if (!(await confirm({ title: `Delete “${team.team_name}”?`, body: "This removes the team and its schedule slots — this can't be undone.", confirmLabel: 'Delete team', danger: true }))) return;
     const { error } = await deleteTeam(team.id);
     if (error) { flash?.('error', `That didn't delete — ${error.message}`); return; }
     flash?.('success', `Deleted ${team.team_name}.`);
@@ -846,6 +893,7 @@ function TeamForm({ tournamentId, divisionId = null, team, pools, flash, onDone,
           <button onClick={save} disabled={busy} style={btnPrimary}>{busy ? (progress || 'Saving…') : team ? 'Save' : isBulk ? `Add ${names.length} teams` : 'Add Team'}</button>
         </div>
       </div>
+      <ConfirmSheetHost controller={confirm} />
     </div>
   );
 }
@@ -859,6 +907,7 @@ function ScheduleTab({ tournamentId, tournament, teams, games, divisionId = null
   const [replace, setReplace] = useState(true);
   const [busy, setBusy] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const confirm = useConfirm();
 
   const poolGames = games.filter((g) => (g.round || 'pool') === 'pool');
 
@@ -882,9 +931,14 @@ function ScheduleTab({ tournamentId, tournament, teams, games, divisionId = null
   // that fact in the button copy and gate the form behind a confirm so the
   // director can't accidentally wipe a scheduled day they just hand-edited.
   const hasPoolGames = poolGames.length > 0;
-  const handleGenerateClick = () => {
+  const handleGenerateClick = async () => {
     if (hasPoolGames && !showGen) {
-      const ok = window.confirm(`Regenerate the schedule? This wipes the ${poolGames.length} current pool game${poolGames.length === 1 ? '' : 's'} and rebuilds them. Bracket games stay intact.`);
+      const ok = await confirm({
+        title: 'Regenerate the schedule?',
+        body: `This wipes the ${poolGames.length} current pool game${poolGames.length === 1 ? '' : 's'} and rebuilds them. Bracket games stay intact.`,
+        confirmLabel: 'Regenerate',
+        danger: true,
+      });
       if (!ok) return;
     }
     setShowGen((v) => !v);
@@ -894,7 +948,7 @@ function ScheduleTab({ tournamentId, tournament, teams, games, divisionId = null
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div style={{ fontSize: 13, color: C.steel }}>{poolGames.length} pool game{poolGames.length === 1 ? '' : 's'}</div>
         <button onClick={handleGenerateClick} style={btnPrimary}>
-          {hasPoolGames ? `⚡ Regenerate (wipes ${poolGames.length})` : '⚡ Generate Pool Schedule'}
+          {hasPoolGames ? `Regenerate (wipes ${poolGames.length})` : 'Generate Pool Schedule'}
         </button>
       </div>
 
@@ -936,7 +990,7 @@ function ScheduleTab({ tournamentId, tournament, teams, games, divisionId = null
 
       {poolGames.length === 0 ? (
         <div style={{ textAlign: 'center', color: C.steel, padding: '40px 0' }}>
-          <div style={{ fontSize: 32, marginBottom: 8 }}>📅</div>
+          <Icon name="calendar" size={30} color={C.steel} style={{ margin: '0 auto 8px' }} />
           Fill the board — generate a round-robin or add games one at a time.
         </div>
       ) : (
@@ -951,7 +1005,7 @@ function ScheduleTab({ tournamentId, tournament, teams, games, divisionId = null
                 <div style={{ fontSize: 12, color: C.steel, marginTop: 2 }}>
                   {fmtDateTime(g.start_time)}
                   {g.rink ? ` · ${[g.rink.sub_rink, g.rink.name].filter(Boolean).join(' · ')}` : ''}
-                  {g.youtube_url ? ' · 📺 stream' : ''}
+                  {g.youtube_url ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, marginLeft: 4 }}> · <Icon name="live" size={11} color={C.steel} /> stream</span> : ''}
                 </div>
               </div>
               <button onClick={() => setEditingId(g.id)} style={btnGhost}>Edit</button>
@@ -996,6 +1050,7 @@ function ScheduleTab({ tournamentId, tournament, teams, games, divisionId = null
           />
         );
       })()}
+      <ConfirmSheetHost controller={confirm} />
     </div>
   );
 }
@@ -1029,6 +1084,7 @@ function BracketTab({ tournamentId, tournament, divSettings, teams, games, divis
   const [startTime, setStartTime] = useState('');
   const [rinkId, setRinkId] = useState('');
   const [busy, setBusy] = useState(false);
+  const confirm = useConfirm();
 
   // Keep `round` in sync with the derived default whenever the tournament's
   // pool count or advancement rules change (e.g., director edits settings
@@ -1077,7 +1133,7 @@ function BracketTab({ tournamentId, tournament, divSettings, teams, games, divis
         </div>
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '4px 0' }}>
           {!loaded ? (
-            <div style={{ padding: 14, color: C.steel, fontSize: 13 }}>Loading standings…</div>
+            <div style={{ padding: 14 }}><TabSkeleton rows={3} /></div>
           ) : qualifiers.length === 0 ? (
             <div style={{ padding: 14, color: C.steel, fontSize: 13 }}>Seeds lock in as pool games go final.</div>
           ) : qualifiers.map((q, i) => (
@@ -1174,7 +1230,7 @@ function BracketTab({ tournamentId, tournament, divSettings, teams, games, divis
                 <div style={{ fontSize: 12, color: C.steel, marginTop: 2 }}>{fmtDateTime(g.start_time)}</div>
               </div>
               <button onClick={async () => {
-                if (!window.confirm("Delete this bracket game? Its score and stats go with it — this can't be undone.")) return;
+                if (!(await confirm({ title: 'Delete this bracket game?', body: "Its score and stats go with it — this can't be undone.", confirmLabel: 'Delete game', danger: true }))) return;
                 const { error } = await deleteGame(g.id);
                 if (error) { flash?.('error', `That didn't delete — ${error.message}`); return; }
                 flash?.('success', 'Bracket game deleted.');
@@ -1185,6 +1241,7 @@ function BracketTab({ tournamentId, tournament, divSettings, teams, games, divis
           })}
         </div>
       )}
+      <ConfirmSheetHost controller={confirm} />
     </div>
   );
 }
@@ -1274,7 +1331,7 @@ function PlayoffBracketBuilder({ tournamentId, divisionId = null, games, bracket
               : `Pool play in progress (${finalPool}/${poolGames.length} games final). Seed now from current standings, or wait until pool play wraps.`}
           </div>
         </div>
-        <button onClick={() => setOpen((v) => !v)} style={btnPrimary}>🏆 Build Bracket</button>
+        <button onClick={() => setOpen((v) => !v)} style={{ ...btnPrimary, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="build" size={14} color="#fff" /> Build Bracket</button>
       </div>
 
       {open && (
@@ -1519,28 +1576,28 @@ function RegistrationsTab({ tournamentId, tournament, divisionId = null, reload,
       <div style={sec}>Payouts</div>
       <div style={card}>
         {payoutsReady === null ? (
-          <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.5)' }}>Warming up.</div>
+          <TabSkeleton rows={1} />
         ) : payoutsReady ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 18 }}>✅</span>
+            <Icon name="approved" size={18} color={C.green} />
             <div>
               <div style={{ fontSize: 14, fontWeight: 700, color: C.ice }}>Payouts connected</div>
-              <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.5)', marginTop: 2 }}>Entry fees deposit straight to your account — you keep 99% (Rinkd keeps 1%).</div>
+              <div style={{ fontSize: 12, color: C.steel, marginTop: 2 }}>Entry fees deposit straight to your account — you keep 99% (Rinkd keeps 1%).</div>
             </div>
           </div>
         ) : isFounder ? (
           <>
-            <div style={{ fontSize: 14, fontWeight: 700, color: C.ice }}>Get paid directly <span style={{ color: 'rgba(244,247,250,0.4)', fontWeight: 600 }}>(optional)</span></div>
-            <div style={{ fontSize: 12, color: 'rgba(244,247,250,0.55)', marginTop: 4, marginBottom: 12, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.ice }}>Get paid directly <span style={{ color: C.steel, fontWeight: 600 }}>(optional)</span></div>
+            <div style={{ fontSize: 12, color: C.steel, marginTop: 4, marginBottom: 12, lineHeight: 1.5 }}>
               Paid registration works right now — fees collect through Rinkd and we settle up with you. Want entry fees deposited straight to your bank automatically? Connect a Stripe account (you keep 99%). You can do this anytime.
             </div>
-            <button onClick={handleConnect} disabled={connecting} style={{ ...btnGhost, opacity: connecting ? 0.6 : 1 }}>
-              {connecting ? 'Opening Stripe…' : '💳 Connect payouts'}
+            <button onClick={handleConnect} disabled={connecting} style={{ ...btnGhost, display: 'inline-flex', alignItems: 'center', gap: 6, opacity: connecting ? 0.6 : 1 }}>
+              {connecting ? 'Opening Stripe…' : <><Icon name="connect" size={14} /> Connect payouts</>}
             </button>
             {connectReturn && <div style={{ fontSize: 12, color: C.amber, marginTop: 10 }}>Just finished on Stripe? Verification can take a moment — reload to see it as connected.</div>}
           </>
         ) : (
-          <div style={{ fontSize: 13, color: 'rgba(244,247,250,0.5)' }}>Entry fees for this tournament are handled through Rinkd.</div>
+          <div style={{ fontSize: 13, color: C.steel }}>Entry fees for this tournament are handled through Rinkd.</div>
         )}
       </div>
 
@@ -1573,7 +1630,7 @@ function RegistrationsTab({ tournamentId, tournament, divisionId = null, reload,
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button onClick={saveConfig} disabled={savingCfg} style={{ ...btnPrimary, flex: 1, minWidth: 120, opacity: savingCfg ? 0.6 : 1 }}>{savingCfg ? 'Saving…' : 'Save Settings'}</button>
-          <button onClick={copyLink} style={{ ...btnGhost, color: copied ? C.green : C.ice }}>{copied ? '✓ Copied' : '🔗 Copy Link'}</button>
+          <button onClick={copyLink} style={{ ...btnGhost, display: 'inline-flex', alignItems: 'center', gap: 6, color: copied ? C.green : C.ice }}>{copied ? <><Icon name="approved" size={14} color={C.green} /> Copied</> : <><Icon name="link" size={14} /> Copy Link</>}</button>
         </div>
         <div style={{ fontSize: 11, color: 'rgba(244,247,250,0.35)', marginTop: 10, wordBreak: 'break-all' }}>{regLink}</div>
       </div>
@@ -1581,7 +1638,7 @@ function RegistrationsTab({ tournamentId, tournament, divisionId = null, reload,
       {/* Submissions */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={sec}>Registrations ({regs.length})</div>
-        {regs.length > 0 && <button onClick={exportCsv} style={{ ...btnGhost, fontSize: 12 }}>⬇ Export CSV</button>}
+        {regs.length > 0 && <button onClick={exportCsv} style={{ ...btnGhost, fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="export" size={14} /> Export CSV</button>}
       </div>
       {regs.length === 0 ? (
         <div style={{ ...card, color: 'rgba(244,247,250,0.4)', fontSize: 13, textAlign: 'center' }}>No registrations yet. Share your link to start collecting teams.</div>
@@ -1595,8 +1652,8 @@ function RegistrationsTab({ tournamentId, tournament, divisionId = null, reload,
                 <div style={{ fontSize: 12, fontWeight: 700, color: REG_STATUS[status].color }}>{gLabel} · {group.length}</div>
                 {/* S05 C3 — bulk-approve when ≥2 pending rows have already paid. */}
                 {status === 'pending' && pendingPaid.length >= 2 && (
-                  <button onClick={approveAllPaid} disabled={!!approvingAll} style={{ ...actBtn('approve'), opacity: approvingAll ? 0.7 : 1 }}>
-                    {approvingAll || `✓ Approve all paid (${pendingPaid.length})`}
+                  <button onClick={approveAllPaid} disabled={!!approvingAll} style={{ ...actBtn('approve'), display: 'inline-flex', alignItems: 'center', gap: 5, opacity: approvingAll ? 0.7 : 1 }}>
+                    {approvingAll || <><Icon name="approved" size={13} color={colors.success} /> Approve all paid ({pendingPaid.length})</>}
                   </button>
                 )}
               </div>
@@ -1621,8 +1678,8 @@ function RegistrationsTab({ tournamentId, tournament, divisionId = null, reload,
                       ))}
                       {/* S05 C2b — promote an approved registration to a tournament_teams row. */}
                       {status === 'approved' && (
-                        <button disabled={busyId === r.id || promoted} onClick={() => promoteToTeam(r)} style={{ ...actBtn('approve'), opacity: promoted ? 0.5 : 1 }}>
-                          {promoted ? '✓ Added as team' : busyId === r.id ? 'Adding…' : '+ Add as team'}
+                        <button disabled={busyId === r.id || promoted} onClick={() => promoteToTeam(r)} style={{ ...actBtn('approve'), display: 'inline-flex', alignItems: 'center', gap: 5, opacity: promoted ? 0.5 : 1 }}>
+                          {promoted ? <><Icon name="approved" size={13} color={colors.success} /> Added as team</> : busyId === r.id ? 'Adding…' : '+ Add as team'}
                         </button>
                       )}
                     </div>
@@ -1735,10 +1792,11 @@ function AudienceControl({ tournament, reload, flash }) {
       </div>
 
       {/* Plain-language consequence of the CURRENT selection (color is never the only cue). */}
-      <div style={{ fontSize: 12, color: C.steel, marginTop: 10, lineHeight: 1.45 }}>
-        {value
-          ? '🔒 Youth events keep rosters, schedules and player names private — only insiders (the team, the scorekeeper, the director) can see them.'
-          : 'Adult events are public — rosters, schedules and player names are visible to anyone.'}
+      <div style={{ fontSize: 12, color: C.steel, marginTop: 10, lineHeight: 1.45, display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+        {value && <Icon name="privacy" size={13} color={C.steel} style={{ marginTop: 2 }} />}
+        <span>{value
+          ? 'Youth events keep rosters, schedules and player names private — only insiders (the team, the scorekeeper, the director) can see them.'
+          : 'Adult events are public — rosters, schedules and player names are visible to anyone.'}</span>
       </div>
 
       {confirmYouth && (
@@ -2015,7 +2073,7 @@ function SettingsTab({ tournament, currentUser, reload, flash }) {
                   opacity: uploading ? 0.6 : 1,
                   display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
                 }}>
-                {uploading ? 'Uploading…' : '📷 Upload'}
+                {uploading ? 'Uploading…' : <><Icon name="camera" size={14} /> Upload</>}
               </label>
               {logoUrl && (
                 <button type="button" onClick={() => setLogoUrl('')}
@@ -2111,6 +2169,7 @@ function ScorersTab({ tournamentId, tournamentName, originalDirectorId, profile,
   // addScorerByInput returns { status: 'needs_email' }.
   const [emailPromptHandle, setEmailPromptHandle] = useState(null);
   const [emailPromptValue, setEmailPromptValue] = useState('');
+  const confirm = useConfirm();
 
   const loadScorers = async () => {
     setLoading(true);
@@ -2152,7 +2211,7 @@ function ScorersTab({ tournamentId, tournamentName, originalDirectorId, profile,
   };
 
   const remove = async (roleId, name) => {
-    if (!window.confirm(`Remove ${name} as a scorer? They lose access to score this tournament's games.`)) return;
+    if (!(await confirm({ title: `Remove ${name} as a scorer?`, body: "They lose access to score this tournament's games.", confirmLabel: 'Remove scorer', danger: true }))) return;
     const { error } = await removeScorer(roleId);
     if (error) { flash?.('error', `That didn't remove — ${error.message}`); return; }
     flash?.('success', `${name} removed as a scorer.`);
@@ -2218,10 +2277,9 @@ function ScorersTab({ tournamentId, tournamentName, originalDirectorId, profile,
       </div>
 
       {loading ? (
-        <div style={{ color: C.steel, fontSize: 13, padding: '20px 0', textAlign: 'center' }}>Warming up.</div>
+        <TabSkeleton rows={2} />
       ) : scorers.length === 0 ? (
         <div style={{ textAlign: 'center', color: C.steel, padding: '40px 0' }}>
-          <div style={{ fontSize: 32, marginBottom: 8 }}>🥅</div>
           You can always score as the director — add others above to share the load.
         </div>
       ) : (
@@ -2238,12 +2296,13 @@ function ScorersTab({ tournamentId, tournamentName, originalDirectorId, profile,
                   <div style={{ fontSize: 14, fontWeight: 600, color: C.ice }}>{name}</div>
                   {p.handle && <div style={{ fontSize: 12, color: C.steel }}>@{p.handle}</div>}
                 </div>
-                <button onClick={() => remove(s.id, name)} style={{ ...btnGhost, color: C.red, borderColor: C.red }}>Remove</button>
+                <button onClick={() => remove(s.id, name)} style={{ ...btnGhost, minHeight: 44, color: C.red, borderColor: C.red }}>Remove</button>
               </div>
             );
           })}
         </div>
       )}
+      <ConfirmSheetHost controller={confirm} />
     </div>
   );
 }
@@ -2260,6 +2319,7 @@ function DirectorsSection({ tournamentId, originalDirectorId, flash }) {
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
+  const confirm = useConfirm();
 
   const load = async () => {
     setLoading(true);
@@ -2288,7 +2348,7 @@ function DirectorsSection({ tournamentId, originalDirectorId, flash }) {
   };
 
   const remove = async (roleId, name) => {
-    if (!window.confirm(`Remove ${name} as a director? They lose full management access.`)) return;
+    if (!(await confirm({ title: `Remove ${name} as a director?`, body: 'They lose full management access — schedule, teams, bracket, settings, and scorer assignments.', confirmLabel: 'Remove director', danger: true }))) return;
     const { error } = await removeDirector(roleId);
     if (error) { flash?.('error', `That didn't remove — ${error.message}`); return; }
     flash?.('success', `${name} removed as a director.`);
@@ -2323,7 +2383,7 @@ function DirectorsSection({ tournamentId, originalDirectorId, flash }) {
       </div>
 
       {loading ? (
-        <div style={{ color: C.steel, fontSize: 13, padding: '20px 0', textAlign: 'center' }}>Warming up.</div>
+        <TabSkeleton rows={1} />
       ) : directors.length === 0 ? (
         <div style={{ textAlign: 'center', color: C.steel, padding: '24px 0', fontSize: 13 }}>
           No extra directors yet — add one above to share full management access. (The original director is set on the tournament itself.)
@@ -2353,13 +2413,14 @@ function DirectorsSection({ tournamentId, originalDirectorId, flash }) {
                 {isFounder ? (
                   <div style={{ fontSize: 11, color: C.steel }}>Can't remove</div>
                 ) : (
-                  <button onClick={() => remove(d.id, name)} style={{ ...btnGhost, color: C.red, borderColor: C.red }}>Remove</button>
+                  <button onClick={() => remove(d.id, name)} style={{ ...btnGhost, minHeight: 44, color: C.red, borderColor: C.red }}>Remove</button>
                 )}
               </div>
             );
           })}
         </div>
       )}
+      <ConfirmSheetHost controller={confirm} />
     </div>
   );
 }
@@ -2436,7 +2497,7 @@ function SuspensionsTab({ tournamentId, flash, onPendingCount }) {
     }
   };
 
-  if (rows === null) return <div style={{ color: C.steel, fontSize: 13, padding: '24px 0', textAlign: 'center' }}>Warming up.</div>;
+  if (rows === null) return <TabSkeleton rows={3} />;
 
   const pending = rows.filter(r => r.status === 'pending');
   const resolved = rows.filter(r => r.status !== 'pending');
@@ -2497,14 +2558,14 @@ function SuspensionsTab({ tournamentId, flash, onPendingCount }) {
         Suspensions are filed by scorekeepers when a game misconduct or match penalty is logged.
         <b style={{ color: C.ice }}> Mark Served</b> counts one game sat out (the suspension clears at zero);
         <b style={{ color: C.ice }}> Overturn</b> voids it. Teams with a pending suspension show a team-level
-        ⚠️ badge on the public standings — player names are never shown publicly.
+        warning badge on the public standings — player names are never shown publicly.
       </div>
 
       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: C.steel, textTransform: 'uppercase', marginBottom: 8 }}>
         Pending ({pending.length})
       </div>
       {pending.length === 0 && (
-        <div style={{ ...card, color: C.steel, fontSize: 13, textAlign: 'center' }}>No pending suspensions. 🎉</div>
+        <div style={{ ...card, color: C.steel, fontSize: 13, textAlign: 'center' }}>No pending suspensions.</div>
       )}
       {pending.map(s => renderRow(s, (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -2576,6 +2637,7 @@ function GameSheetTab({ tournamentId, tournament, games = [], reload, flash }) {
   const [busyMapId, setBusyMapId] = useState(null);
   // Per-unmatched-row manual game pick (mapId → rinkd_game_id).
   const [pick, setPick] = useState({});
+  const confirm = useConfirm();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -2614,7 +2676,12 @@ function GameSheetTab({ tournamentId, tournament, games = [], reload, flash }) {
     load();
   };
   const dropLink = async (lk) => {
-    if (!window.confirm(`Unlink GameSheet season ${lk.gamesheet_season_id}? Scores already synced stay; future syncs stop. If this is the last link, the event returns to manual scoring.`)) return;
+    if (!(await confirm({
+      title: `Unlink GameSheet season ${lk.gamesheet_season_id}?`,
+      body: 'Scores already synced stay; future syncs stop. If this is the last link, the event returns to manual scoring.',
+      confirmLabel: 'Unlink season',
+      danger: true,
+    }))) return;
     const { error } = await removeLink(lk.id, tournamentId);
     if (error) { flash?.('error', error.message); return; }
     flash?.('success', 'Unlinked.'); reload?.(); load();
@@ -2680,7 +2747,7 @@ function GameSheetTab({ tournamentId, tournament, games = [], reload, flash }) {
       </div>
 
       {loading ? (
-        <div style={{ textAlign: 'center', color: C.steel, padding: '24px 0', fontSize: 13 }}>Warming up.</div>
+        <TabSkeleton rows={2} />
       ) : !hasLink ? null : (
         <>
           {/* Pending matches — director confirms before any score is written */}
@@ -2744,6 +2811,7 @@ function GameSheetTab({ tournamentId, tournament, games = [], reload, flash }) {
           )}
         </>
       )}
+      <ConfirmSheetHost controller={confirm} />
     </div>
   );
 }
