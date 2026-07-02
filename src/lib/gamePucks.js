@@ -8,6 +8,7 @@
 // 'tournament') for a games row — mirrors GameDetail's ?type param.
 
 import { supabase } from './supabase';
+import { cached } from './cache';
 
 const isLeague = (kind) => kind === 'league';
 
@@ -148,13 +149,22 @@ export async function getUserGamePuckCount(userId) {
 // Season board: how many game-pucks each (team, jersey) won across a scope.
 // `scope` is 'league' | 'tournament'. Returns rows
 // { team_id, jersey, pucks_won, team_name, player_name } sorted pucks-won desc.
+// perf(scale) — the Stats tab (StatLeaderboards.js + this) is the hottest
+// per-open surface during a live pilot; cache alongside the leaderboard RPCs
+// under the same `stats:` prefix so the parent page's realtime tick can
+// invalidate everything in one call. No division scope for game pucks today,
+// so the key always carries 'all'.
 export async function getSeasonGamePucks(scope, scopeId) {
   if (!scopeId) return [];
-  const { data, error } = await supabase.rpc('get_season_game_pucks', {
-    p_scope: scope === 'league' ? 'league' : 'tournament',
-    p_scope_id: scopeId,
+  const normScope = scope === 'league' ? 'league' : 'tournament';
+  const data = await cached(`stats:${normScope}:${scopeId}:all:pucks`, 60_000, async () => {
+    const { data, error } = await supabase.rpc('get_season_game_pucks', {
+      p_scope: normScope,
+      p_scope_id: scopeId,
+    });
+    if (error) throw error;
+    return data || [];
   });
-  if (error) throw error;
   return (data || []).map((r) => ({
     team_id: r.team_id,
     jersey: r.jersey,

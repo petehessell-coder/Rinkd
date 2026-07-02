@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import ShareButton from './ShareButton';
 import { buildStatCardData } from '../lib/shareCard';
 import { C } from '../lib/tokens';
+import { cached } from '../lib/cache';
 
 // Phase-1 review-only stat leaderboards (skaters + goalies), jersey-keyed.
 // Shared by the Tournament and League pages via the `source` prop:
@@ -230,18 +231,34 @@ export default function StatLeaderboards({ source = 'tournament', id, divisionId
     // League RPCs don't take it, so only thread it when scoping a tournament to a division.
     const args = { [cfg.arg]: id };
     if (source === 'tournament' && divisionId) args.p_division_id = divisionId;
-    const [sk, go] = await Promise.all([
-      supabase.rpc(cfg.skater, args),
-      supabase.rpc(cfg.goalie, args),
-    ]);
-    if (sk.error || go.error) {
+    // perf(scale) — the Stats tab is the hottest per-open surface during a live
+    // pilot (5 fresh queries every open, per C08 audit). Cache both RPCs 60s,
+    // keyed so the parent page's realtime tick can invalidatePrefix the whole
+    // `stats:${source}:${id}` namespace (including SeasonGamePucks) in one call.
+    // fetchFn throws on a Supabase error (instead of resolving with it) so
+    // cached() never memoizes a transient failure for the full TTL.
+    const divKey = divisionId || 'all';
+    try {
+      const [skData, goData] = await Promise.all([
+        cached(`stats:${source}:${id}:${divKey}:skater`, 60_000, async () => {
+          const { data, error } = await supabase.rpc(cfg.skater, args);
+          if (error) throw error;
+          return data;
+        }),
+        cached(`stats:${source}:${id}:${divKey}:goalie`, 60_000, async () => {
+          const { data, error } = await supabase.rpc(cfg.goalie, args);
+          if (error) throw error;
+          return data;
+        }),
+      ]);
+      // Goalies show on their own board; keep them out of the scoring leaders.
+      setSkaters((skData || []).filter(r => !r.is_goalie));
+      setGoalies(goData || []);
+    } catch {
       setError(true);
       setLoading(false);
       return;
     }
-    // Goalies show on their own board; keep them out of the scoring leaders.
-    setSkaters((sk.data || []).filter(r => !r.is_goalie));
-    setGoalies(go.data || []);
     setLoading(false);
   }, [cfg.skater, cfg.goalie, cfg.arg, id, source, divisionId]);
 
