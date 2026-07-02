@@ -1439,6 +1439,18 @@ function RegistrationsTab({ tournamentId, tournament, divisionId = null, reload,
         divisionId,
       });
       if (res.error) { flash('error', `That didn't add as a team — ${res.error.message}`); return; }
+      // Stamp the created team back onto the registration so the promoted
+      // state survives a reload (S05 QA P1-2: promotedIds is session-only,
+      // and a re-click after reload would double-create the team). Best
+      // effort — the team exists either way; the stamp just locks the button.
+      const newTeamId = res.data?.id || null;
+      if (newTeamId) {
+        try {
+          await supabase.from('tournament_registrations')
+            .update({ tournament_team_id: newTeamId })
+            .eq('id', reg.id);
+        } catch { /* non-fatal — session guard still applies */ }
+      }
       setPromotedIds((m) => ({ ...m, [reg.id]: true }));
       flash('success', `Added ${reg.team_name || 'the team'} to Teams.`);
     } catch (e) {

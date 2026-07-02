@@ -1261,9 +1261,11 @@ function PlayoffsTab({ leagueId, teams, standings, games, rinks, divisionId = nu
     setBusy(true);
     setError(null);
     const { error: insertErr } = await bulkInsertLeagueGames(leagueId, rows, divisionId);
-    setBusy(false);
-    if (insertErr) { setError(insertErr.message || 'Insert failed.'); return; }
-    await onPublished?.();
+    if (insertErr) { setBusy(false); setError(insertErr.message || 'Insert failed.'); return; }
+    // Hold busy THROUGH the parent reload — releasing it before onPublished
+    // leaves a window where byRound is stale and a fast second tap duplicates
+    // the round (S05 QA P1-1).
+    try { await onPublished?.(); } finally { setBusy(false); }
   };
 
   const teamNameByLtId = useMemo(() => {
@@ -1396,7 +1398,7 @@ function PlayoffsTab({ leagueId, teams, standings, games, rinks, divisionId = nu
                 {unplayedRegularCount} regular-season game{unplayedRegularCount === 1 ? ' is' : 's are'} still unplayed — seeds may change.
               </div>
             )}
-            <button onClick={() => handleGenerate(round1Preview.rows)}
+            <button onClick={() => handleGenerate(round1Preview.rows, round1Preview.label)}
               disabled={busy || round1Preview.error || round1Preview.rows.length === 0}
               style={{
                 marginTop: 10, padding: '10px 16px', borderRadius: 999,
