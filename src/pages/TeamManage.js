@@ -338,9 +338,9 @@ function ManageTeam({ id, profile, navigate }) {
   // removeTeamMember is a hard delete with no confirm today — this replaces
   // the un-guarded fire-and-forget with optimistic + 5s Undo (manifesto:
   // lightweight/reversible actions get Undo, not a confirm dialog). The
-  // "restore" during the commit's undo window is purely a full re-add via
-  // addTeamMember from the in-memory row, so it stays clean even on flaky
-  // rink wifi (nothing hits the network unless Undo is never tapped).
+  // "restore" during the undo window is a pure CLIENT-STATE re-insert of the
+  // in-memory row — nothing hits the network unless the 5s window expires,
+  // at which point the real delete commits exactly once.
   const handleRemoveMember = (m) => runUndoable({
     message: `${m.profile?.name || m.invite_name || 'Player'} removed from roster`,
     apply: () => removeMemberFromList(m.id),

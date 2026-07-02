@@ -71,5 +71,6 @@ focus ring is missing app-wide** (a regression vs the June QA pass memory).
    sweep; outside the operator audit's file list): ScorerView ×3 (reopen /
    finalize-mismatch / discard-dead-writes — deliberate safety friction,
    DON'T rush), EditGameModal ×2, PostActionMenu ×3 (block/report),
-   TeamManage schedule ×2, Profile push-off ×1. Convert to ConfirmSheet in
+   TeamManage schedule ×2, Profile push-off ×1 + block-user ×1 (QA-found,
+   ~:361). Convert to ConfirmSheet in
    a calm window; the consumer-side alert() class was closed in-sprint.
