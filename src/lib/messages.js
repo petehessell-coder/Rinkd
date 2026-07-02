@@ -53,20 +53,38 @@ export async function getOrCreateDm(otherUserId) {
 }
 
 // Inbox: conversations with the other participant, last-message summary, unread.
+// perf(scale) C08 PR-F — list_my_conversations() is now bounded server-side
+// (p_limit default 50, clamped ≤200 — see
+// 20260702231000_c08_f_conversations_bound.sql). We call with no args so the
+// default applies. DECISION (C08 PR-F item 3b): no "load more" affordance —
+// the RPC aggregates into one jsonb array with no natural offset/cursor
+// column exposed per-row, so a real keyset page would mean widening the RPC
+// surface (a `p_before` timestamp) purely to serve an edge case (>50 active
+// DM threads for one user, not expected at pilot scale). Capping at 50 and
+// noting it here rather than over-engineering; revisit if a real user hits it.
 export async function listConversations() {
   const { data, error } = await supabase.rpc('list_my_conversations');
   if (error) throw error;
   return data || [];
 }
 
-export async function getMessages(conversationId, { limit = 100 } = {}) {
-  const { data, error } = await supabase
+// perf(scale) C08 PR-F — keyset pagination, same "fetch newest DESC, reverse
+// for oldest-first display" pattern as getComments: an ASC .limit(N) always
+// returns the OLDEST N messages, which is backwards for "show the recent
+// tail of a long thread, then load earlier on demand." `before` is an ISO
+// created_at cursor for "load earlier." `hasMore` is a same page-length
+// proxy as getComments (a short page means nothing older is left).
+export async function getMessages(conversationId, { limit = 50, before = null } = {}) {
+  let q = supabase
     .from('messages')
     .select('id, conversation_id, sender_id, body, created_at')
     .eq('conversation_id', conversationId)
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: false })
     .limit(limit);
-  return { data: data || [], error };
+  if (before) q = q.lt('created_at', before);
+  const { data, error } = await q;
+  const rows = (data || []).slice().reverse();
+  return { data: rows, error, hasMore: rows.length === limit };
 }
 
 export async function sendMessage(conversationId, body) {

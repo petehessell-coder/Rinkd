@@ -317,17 +317,29 @@ export async function getLikedPosts(userId, postIds) {
   return data?.map(l => l.post_id) || [];
 }
 
-export async function getComments(postId) {
+// perf(scale) C08 PR-F — keyset pagination. A comment thread renders
+// oldest-first, but paging "newest N" with a DESC query is what lets a viral
+// thread stay bounded (an ASC .limit(50) would always return the OLDEST 50 —
+// exactly the ones a "load earlier" tap wants to reach LAST). So: fetch the
+// newest `limit` rows DESC (optionally `before` an ISO created_at cursor for
+// "load earlier"), then reverse client-side for oldest-first display.
+// `hasMore` tells CommentThread whether a full page came back (only a proxy —
+// see the doc on CommentThread's "Load earlier" button — but cheap and
+// correct in the common case: a page shorter than `limit` means there's
+// nothing older left).
+export async function getComments(postId, { limit = 50, before = null } = {}) {
   // Explicit FK hint — there's only one FK from comments → profiles
   // (comments_author_id_fkey) but being explicit means the embed can never get
   // ambiguous if new relationships land later.
-  const { data, error } = await supabase
+  let q = supabase
     .from('comments')
     .select(`*, profiles!comments_author_id_fkey(id, name, handle, avatar_url, avatar_color, avatar_initials, tier), ${COMMENT_MENTIONS_EMBED}`)
     .eq('post_id', postId)
     .eq('is_hidden', false)
-    .order('created_at', { ascending: true })
-    .limit(200); // perf(scale): cap a viral thread; "load earlier" pagination is a follow-up
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (before) q = q.lt('created_at', before);
+  const { data, error } = await q;
   // Filter blocked users out of the result. Doing it client-side avoids a
   // separate IN-list URL fragment per thread fetch; comment threads are small.
   const blocked = await getBlockedIds();
@@ -336,11 +348,18 @@ export async function getComments(postId) {
     // eslint-disable-next-line no-console
     console.warn('[comments] load failed:', error);
     // Graceful fallback: fetch without the embed so users at least see the text.
-    const { data: fallback } = await supabase
-      .from('comments').select('*').eq('post_id', postId).eq('is_hidden', false).order('created_at', { ascending: true });
-    return drop(fallback || []);
+    let fq = supabase.from('comments').select('*').eq('post_id', postId).eq('is_hidden', false)
+      .order('created_at', { ascending: false }).limit(limit);
+    if (before) fq = fq.lt('created_at', before);
+    const { data: fallback } = await fq;
+    const rows = drop(fallback || []);
+    return { comments: rows.slice().reverse(), hasMore: rows.length === limit };
   }
-  return drop(data || []);
+  const rows = drop(data || []);
+  // Reverse DESC→ASC for oldest-first display (the newest page's rows, in
+  // chronological order); "load earlier" prepends the NEXT (older) page in
+  // the same oldest-first order ahead of what's already shown.
+  return { comments: rows.slice().reverse(), hasMore: rows.length === limit };
 }
 
 export async function createComment(postId, authorId, content) {

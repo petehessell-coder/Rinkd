@@ -30,16 +30,41 @@ export default function NotificationsPage({ currentUser, profile }) {
   const [leaving, setLeaving] = useState(() => new Set());
   const online = useOnline();
   const { toast } = useToast();
+  // perf(scale) C08 PR-F — "Show older" keyset page. hasMore/loadingOlder
+  // drive the button below the list; resets whenever the filter changes
+  // (load() below always fetches a fresh first page).
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data, error: e } = await listNotifications({ limit: 80, unreadOnly: filter === 'unread' });
+    const { data, error: e, hasMore: more } = await listNotifications({ limit: 80, unreadOnly: filter === 'unread' });
     setItems(data || []);
     setError(e || null);
+    setHasMore(!!more);
     setLoading(false);
   }, [filter]);
 
   useEffect(() => { load(); }, [load]);
+
+  const loadOlder = async () => {
+    if (loadingOlder || !items.length) return;
+    setLoadingOlder(true);
+    try {
+      const cursor = items[items.length - 1]?.created_at;
+      const { data, error: e, hasMore: more } = await listNotifications({ limit: 80, unreadOnly: filter === 'unread', before: cursor });
+      if (e) throw e;
+      setItems((prev) => {
+        const seen = new Set(prev.map((n) => n.id));
+        const fresh = (data || []).filter((n) => !seen.has(n.id));
+        return [...prev, ...fresh];
+      });
+      setHasMore(!!more);
+    } catch (e) {
+      toast({ message: "Couldn't load older notifications — check your connection and try again.", tone: 'alert' });
+    }
+    setLoadingOlder(false);
+  };
 
   const openOne = async (n) => {
     if (!n.read_at) {
@@ -163,6 +188,17 @@ export default function NotificationsPage({ currentUser, profile }) {
                       {earlier.map((n, i) => <NotifRow key={n.id} n={n} first={i === 0} leaving={leaving.has(n.id)} onOpen={openOne} onDelete={handleDelete} />)}
                     </div>
                   </>
+                )}
+                {/* perf(scale) C08 PR-F — keyset "Show older", matches the
+                    Mark-all-read pill styling. Only shown once a full page
+                    came back (listNotifications' hasMore contract). */}
+                {hasMore && (
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+                    <button onClick={loadOlder} disabled={loadingOlder}
+                      style={{ background: 'transparent', color: C.ice, border: `1px solid ${C.border}`, padding: '7px 14px', minHeight: 44, display: 'inline-flex', alignItems: 'center', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: loadingOlder ? 'default' : 'pointer', fontFamily: 'Barlow, sans-serif', opacity: loadingOlder ? 0.6 : 1 }}>
+                      {loadingOlder ? 'Loading…' : 'Show older'}
+                    </button>
+                  </div>
                 )}
               </>
             );

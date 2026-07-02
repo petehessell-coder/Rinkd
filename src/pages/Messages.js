@@ -196,7 +196,13 @@ function Thread({ conversationId, currentUser, profile }) {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const bottomRef = useRef(null);
+  const scrollRef = useRef(null);
   const { toast } = useToast();
+  // perf(scale) C08 PR-F — keyset "load earlier" at the top of the thread.
+  // Same pattern as CommentThread: hasMore only true when a full page came
+  // back. The optimistic-send + realtime-append logic below is UNTOUCHED.
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
 
   const scrollToBottom = (behavior = 'auto') => {
     requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior, block: 'end' }));
@@ -208,13 +214,14 @@ function Thread({ conversationId, currentUser, profile }) {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const [{ data: otherProfile }, { data: rows }] = await Promise.all([
+      const [{ data: otherProfile }, { data: rows, hasMore: more }] = await Promise.all([
         getConversationOther(conversationId, myId),
         getMessages(conversationId),
       ]);
       if (cancelled) return;
       setOther(otherProfile);
       setMsgs(rows);
+      setHasMore(!!more);
       setLoading(false);
       scrollToBottom();
       markConversationRead(conversationId);
@@ -223,6 +230,7 @@ function Thread({ conversationId, currentUser, profile }) {
   }, [conversationId, myId]);
 
   // Realtime: append incoming messages, de-duping our own optimistic inserts.
+  // UNTOUCHED — do not fold "load earlier" concerns into this effect.
   useEffect(() => {
     const unsub = subscribeToConversation(conversationId, (m) => {
       setMsgs((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
@@ -231,6 +239,38 @@ function Thread({ conversationId, currentUser, profile }) {
     });
     return unsub;
   }, [conversationId, myId]);
+
+  // "Load earlier" — prepend the next (older) page above what's shown, using
+  // the oldest currently-loaded message as the cursor. Preserves scroll
+  // position (anchors on the scroll container's height delta) instead of
+  // jumping the viewport, since this button lives at the TOP of a
+  // bottom-anchored thread.
+  const loadEarlier = async () => {
+    if (loadingEarlier || !msgs.length) return;
+    setLoadingEarlier(true);
+    const el = scrollRef.current;
+    const prevHeight = el?.scrollHeight || 0;
+    const prevScrollTop = el?.scrollTop || 0;
+    try {
+      const cursor = msgs[0]?.created_at;
+      const { data: older, hasMore: more } = await getMessages(conversationId, { before: cursor });
+      setMsgs((prev) => {
+        const seen = new Set(prev.map((m) => m.id));
+        const fresh = older.filter((m) => !seen.has(m.id));
+        return [...fresh, ...prev];
+      });
+      setHasMore(more);
+      // Restore scroll position after the prepend so the viewport doesn't
+      // jump — run after the DOM paints the new (taller) content.
+      requestAnimationFrame(() => {
+        if (el) el.scrollTop = (el.scrollHeight - prevHeight) + prevScrollTop;
+      });
+    } catch (e) {
+      console.warn('[Messages] load earlier failed:', e?.message || e);
+      toast({ message: "Couldn't load earlier messages — check your connection and try again.", tone: 'alert' });
+    }
+    setLoadingEarlier(false);
+  };
 
   const send = async () => {
     const body = draft.trim();
@@ -324,34 +364,51 @@ function Thread({ conversationId, currentUser, profile }) {
           </div>
 
           {/* Messages */}
-          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 16px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 16px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
             {loading ? (
               <ListRowSkeleton rows={5} />
             ) : msgs.length === 0 ? (
               <div style={{ margin: 'auto', textAlign: 'center', color: C.steel, fontSize: 14 }}>Say hi 👋</div>
             ) : (
-              msgs.map((m) => {
-                const mine = m.sender_id === myId;
-                return (
-                  <div key={m.id} style={{
-                    display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start',
-                    animation: motionSafe(`rinkdStaggerIn ${motion.duration.entrance}ms ${motion.easing.out} both`),
-                  }}>
-                    <div style={{
-                      maxWidth: '76%', padding: '9px 13px', borderRadius: 16,
-                      borderBottomRightRadius: mine ? 4 : 16, borderBottomLeftRadius: mine ? 16 : 4,
-                      background: mine ? C.blue : C.card, color: C.ice, fontSize: 14, lineHeight: 1.4,
-                      whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                      opacity: m.__pending ? 0.55 : 1, transition: transition('opacity', motion.duration.entrance),
+              <>
+                {/* perf(scale) C08 PR-F — quiet "load earlier" at the TOP of
+                    the thread, only shown once a full page came back. */}
+                {hasMore && (
+                  <div style={{ textAlign: 'center', marginBottom: 4 }}>
+                    <button onClick={loadEarlier} disabled={loadingEarlier}
+                      style={{
+                        background: 'transparent', border: 'none', color: C.steel,
+                        fontSize: 12, fontWeight: 600, cursor: loadingEarlier ? 'default' : 'pointer',
+                        padding: '4px 8px', fontFamily: "'Barlow', sans-serif",
+                        opacity: loadingEarlier ? 0.6 : 1,
+                      }}>
+                      {loadingEarlier ? 'Loading…' : 'Load earlier messages'}
+                    </button>
+                  </div>
+                )}
+                {msgs.map((m) => {
+                  const mine = m.sender_id === myId;
+                  return (
+                    <div key={m.id} style={{
+                      display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start',
+                      animation: motionSafe(`rinkdStaggerIn ${motion.duration.entrance}ms ${motion.easing.out} both`),
                     }}>
-                      {m.body}
-                      <div style={{ fontSize: 10, color: mine ? 'rgba(244,247,250,0.6)' : C.steel, marginTop: 4, textAlign: 'right' }}>
-                        {m.__pending ? 'sending…' : timeAgo(m.created_at)}
+                      <div style={{
+                        maxWidth: '76%', padding: '9px 13px', borderRadius: 16,
+                        borderBottomRightRadius: mine ? 4 : 16, borderBottomLeftRadius: mine ? 16 : 4,
+                        background: mine ? C.blue : C.card, color: C.ice, fontSize: 14, lineHeight: 1.4,
+                        whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                        opacity: m.__pending ? 0.55 : 1, transition: transition('opacity', motion.duration.entrance),
+                      }}>
+                        {m.body}
+                        <div style={{ fontSize: 10, color: mine ? 'rgba(244,247,250,0.6)' : C.steel, marginTop: 4, textAlign: 'right' }}>
+                          {m.__pending ? 'sending…' : timeAgo(m.created_at)}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })
+                  );
+                })}
+              </>
             )}
             <div ref={bottomRef} />
           </div>

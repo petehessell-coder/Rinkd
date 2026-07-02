@@ -74,22 +74,46 @@ export async function getTeamMembers(teamId) {
   });
 }
 
-export async function getTeamGames(teamId) {
-  // TODO: paginate — cap each sub-query and the merged result. Once a team
-  // accumulates years of games this view needs a real "season" filter UI.
-  // Bumped 50→200 with the unified schedule: a season of weekly practices sorts
-  // (far-future first) ahead of recent game results, so a 50-row merge cap could
-  // silently drop recent finals. 200 matches the display + series-generation cap.
-  const PAGE_CAP = 200;
+// perf(scale) C08 PR-F — real keyset pagination via OPT-IN caps. Other callers
+// (TeamManage, TeamVolunteer, VolunteerCoordinator, lib/home — all outside
+// this PR's touch-scope) call getTeamGames(teamId) with NO options and expect
+// the historic "everything, capped generously" shape (TeamManage lists the
+// FULL editable schedule; TeamVolunteer/VolunteerCoordinator .slice(0,30) a
+// fuller upcoming window themselves). So the DEFAULTS stay at the prior
+// per-table cap (200) — unchanged behavior for every caller that doesn't pass
+// options. Team.js (the only caller this PR paginates) explicitly passes
+// tight caps (`finalCap`/`upcomingCap`) for its default collapsed view, and
+// `before` to page further back on "Load earlier games." Upcoming games
+// ASC-nearest and recent finals DESC-most-recent don't share a single cursor
+// direction, so we fetch a bounded window of EACH side rather than one giant
+// DESC page.
+export async function getTeamGames(teamId, { finalCap = 200, upcomingCap = 200, before = null } = {}) {
+  // Two keyset queries per table: upcoming (status=scheduled, start_time ASC
+  // from now) and recent finals (status=final, start_time DESC, optionally
+  // before a cursor). Practices/events are status='scheduled' too, so they
+  // ride along with "upcoming" — Team.js's schedule filter chips narrow the
+  // type client-side same as before.
+  const applyBefore = (q) => (before ? q.lt('start_time', before) : q);
+  // upcomingCap <= 0 means "skip the upcoming window entirely" (used by
+  // Team.js's "Load earlier" — it only needs to page further into finals).
+  // .limit(0) is not a safe no-op over PostgREST's Range header, so we short-
+  // circuit to an empty result instead of issuing the query.
+  const skipUpcoming = upcomingCap <= 0;
 
-  // Get regular team games
-  const { data: teamGames, error } = await supabase
-    .from('team_games')
-    .select('*')
-    .eq('team_id', teamId)
-    .order('start_time', { ascending: false })
-    .limit(PAGE_CAP);
-  if (error) throw error;
+  // Get regular team games — upcoming window + recent-finals window (keyset).
+  const [{ data: teamUpcoming, error: tuErr }, { data: teamFinals, error: tfErr }] = await Promise.all([
+    skipUpcoming
+      ? Promise.resolve({ data: [], error: null })
+      : supabase.from('team_games').select('*')
+          .eq('team_id', teamId).neq('status', 'final')
+          .order('start_time', { ascending: true }).limit(upcomingCap),
+    applyBefore(supabase.from('team_games').select('*')
+      .eq('team_id', teamId).eq('status', 'final')
+      .order('start_time', { ascending: false })).limit(finalCap),
+  ]);
+  if (tuErr) throw tuErr;
+  if (tfErr) throw tfErr;
+  const teamGames = [...(teamUpcoming || []), ...(teamFinals || [])];
 
   // Get league_teams rows for this team
   const { data: leagueTeamRows } = await supabase
@@ -98,25 +122,37 @@ export async function getTeamGames(teamId) {
     .eq('team_id', teamId);
 
   if (!leagueTeamRows || leagueTeamRows.length === 0) {
-    return (teamGames || []).map(g => ({ ...g, _source: 'team' }));
+    const onlyTeamGames = (teamGames || []).map(g => ({ ...g, _source: 'team' }));
+    return withPageMeta(onlyTeamGames, {
+      moreFinals: (teamFinals?.length || 0) === finalCap,
+      oldestFinalCursor: teamFinals?.length ? teamFinals[teamFinals.length - 1].start_time : null,
+    });
   }
 
   const ltIds = leagueTeamRows.map(lt => lt.id);
+  const LEAGUE_GAME_EMBED = '*, home_lt:league_teams!home_team_id(id, team_name, logo_color, logo_initials, team:teams(id,name)), away_lt:league_teams!away_team_id(id, team_name, logo_color, logo_initials, team:teams(id,name)), rink:rinks(name,sub_rink,live_barn_venue_id)';
 
-  // Get league games where this team is home or away
-  const { data: homeGames } = await supabase
-    .from('league_games')
-    .select('*, home_lt:league_teams!home_team_id(id, team_name, logo_color, logo_initials, team:teams(id,name)), away_lt:league_teams!away_team_id(id, team_name, logo_color, logo_initials, team:teams(id,name)), rink:rinks(name,sub_rink,live_barn_venue_id)')
-    .in('home_team_id', ltIds)
-    .order('start_time', { ascending: false })
-    .limit(PAGE_CAP);
-
-  const { data: awayGames } = await supabase
-    .from('league_games')
-    .select('*, home_lt:league_teams!home_team_id(id, team_name, logo_color, logo_initials, team:teams(id,name)), away_lt:league_teams!away_team_id(id, team_name, logo_color, logo_initials, team:teams(id,name)), rink:rinks(name,sub_rink,live_barn_venue_id)')
-    .in('away_team_id', ltIds)
-    .order('start_time', { ascending: false })
-    .limit(PAGE_CAP);
+  // Get league games where this team is home or away — same upcoming/finals
+  // keyset split as team_games above.
+  const [
+    { data: homeUpcoming }, { data: homeFinals },
+    { data: awayUpcoming }, { data: awayFinals },
+  ] = await Promise.all([
+    skipUpcoming ? Promise.resolve({ data: [] }) : supabase.from('league_games').select(LEAGUE_GAME_EMBED)
+      .in('home_team_id', ltIds).neq('status', 'final')
+      .order('start_time', { ascending: true }).limit(upcomingCap),
+    applyBefore(supabase.from('league_games').select(LEAGUE_GAME_EMBED)
+      .in('home_team_id', ltIds).eq('status', 'final')
+      .order('start_time', { ascending: false })).limit(finalCap),
+    skipUpcoming ? Promise.resolve({ data: [] }) : supabase.from('league_games').select(LEAGUE_GAME_EMBED)
+      .in('away_team_id', ltIds).neq('status', 'final')
+      .order('start_time', { ascending: true }).limit(upcomingCap),
+    applyBefore(supabase.from('league_games').select(LEAGUE_GAME_EMBED)
+      .in('away_team_id', ltIds).eq('status', 'final')
+      .order('start_time', { ascending: false })).limit(finalCap),
+  ]);
+  const homeGames = [...(homeUpcoming || []), ...(homeFinals || [])];
+  const awayGames = [...(awayUpcoming || []), ...(awayFinals || [])];
 
   // Normalize league games to match team_games shape
   const normalizeLeagueGame = (g) => {
@@ -150,15 +186,36 @@ export async function getTeamGames(teamId) {
     return true;
   });
 
-  // Merge and sort by start_time descending, then cap. Each sub-query is
-  // capped at PAGE_CAP so the merged result is bounded but we still want
-  // the page to feel snappy at scale.
+  // Merge + sort. Each sub-query above is already keyset-bounded
+  // (upcomingCap/finalCap per table), so no additional client-side slice cap
+  // is needed — the merged result is bounded by construction.
   const all = [
     ...(teamGames || []).map(g => ({ ...g, _source: 'team' })),
     ...deduped,
-  ].sort((a, b) => new Date(b.start_time) - new Date(a.start_time)).slice(0, PAGE_CAP);
+  ].sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
 
-  return all;
+  // "More finals may exist beyond this page" iff ANY finals sub-query came
+  // back full — Team.js uses this to show/hide the "load earlier" cursor.
+  const moreFinals = (teamFinals?.length === finalCap) || (homeFinals?.length === finalCap) || (awayFinals?.length === finalCap);
+  // Oldest final start_time across this page — the `before` cursor for the
+  // next "load earlier" call.
+  const finalRows = all.filter((g) => g.status === 'final');
+  const oldestFinalCursor = finalRows.length ? finalRows[finalRows.length - 1].start_time : null;
+
+  return withPageMeta(all, { moreFinals, oldestFinalCursor });
+}
+
+// Pagination metadata is attached directly on the returned array (rather than
+// wrapping in { games, ... }) so existing callers (TeamManage.js,
+// TeamVolunteer.js, VolunteerCoordinator.js, lib/home.js) that treat the
+// result as a plain array keep working UNCHANGED — .filter/.map/.slice all
+// still behave normally; the caller opting into pagination (Team.js) reads
+// `.moreFinals`/`.oldestFinalCursor` off the same array. Non-enumerable so a
+// JSON.stringify or {...spread} of the array-as-object never leaks these.
+function withPageMeta(arr, { moreFinals, oldestFinalCursor }) {
+  Object.defineProperty(arr, 'moreFinals', { value: !!moreFinals, enumerable: false, configurable: true });
+  Object.defineProperty(arr, 'oldestFinalCursor', { value: oldestFinalCursor ?? null, enumerable: false, configurable: true });
+  return arr;
 }
 
 export async function addTeamMember({ team_id, user_id, role, jersey_number, position, shot_hand, invite_email, invite_name }) {

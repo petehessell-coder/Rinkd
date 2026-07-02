@@ -7,7 +7,10 @@ import { getBlockedIds } from './blocks';
  * read and acknowledge them.
  */
 
-export async function listNotifications({ limit = 50, unreadOnly = false } = {}) {
+// perf(scale) C08 PR-F — `before` keyset param ("Show older" cursor). Default
+// limit/behavior unchanged (80, newest-first) so the initial bell/page load
+// is identical; `before` (an ISO created_at) pages further back on demand.
+export async function listNotifications({ limit = 80, unreadOnly = false, before = null } = {}) {
   let q = supabase
     .from('notifications')
     .select('*, actor:actor_id ( id, name, handle, avatar_color, avatar_initials )')
@@ -17,13 +20,14 @@ export async function listNotifications({ limit = 50, unreadOnly = false } = {})
     .order('created_at', { ascending: false })
     .limit(limit);
   if (unreadOnly) q = q.is('read_at', null);
+  if (before) q = q.lt('created_at', before);
   const { data, error } = await q;
   // Drop notifications from blocked users. We filter client-side because
   // actor_id is nullable (system notifications carry null) and a server-side
   // NOT IN would incorrectly exclude those null rows.
   const blocked = await getBlockedIds();
   const rows = (data || []).filter((n) => !n.actor_id || !blocked.has(n.actor_id));
-  return { data: rows, error };
+  return { data: rows, error, hasMore: rows.length === limit };
 }
 
 export async function getUnreadCount(userId) {
