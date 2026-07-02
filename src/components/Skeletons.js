@@ -96,6 +96,11 @@ export function CardGridSkeleton({ count = 6 }) {
 }
 
 /**
+ * @deprecated LEGACY — new code uses `ui/EmptyState` (Rizzo mascot + Button
+ * primitive; prop-compatible: icon/title/body/cta). Kept because other files
+ * may still import this until the W3 migration finishes across agents. Do NOT
+ * delete until the last importer is migrated.
+ *
  * Empty state with art + headline + body + CTA. Use everywhere a list is
  * legitimately empty (not still loading).
  *

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { C, colors } from '../lib/tokens';
-import { Icon, useExpand, Img, ErrorState, useToast } from '../components/ui';
+import { Icon, useExpand, Img, ErrorState, useToast, EmptyState, SectionHeader } from '../components/ui';
 import { useOnline } from '../lib/useOnline';
 import { staggerStyle, useDelayedFlag } from '../lib/motion';
 import TapeText from '../components/TapeText';
@@ -10,7 +10,7 @@ import { Avatar, TierBadge } from '../components/Logos';
 import { getPosts, getFollowingPosts, createPost, toggleLike, getLikedPosts, uploadMedia, timeAgo } from '../lib/posts';
 import PushPrompt from '../components/PushPrompt';
 import { track } from '../lib/analytics';
-import { FeedSkeleton, PostSkeleton, EmptyState } from '../components/Skeletons';
+import { FeedSkeleton, PostSkeleton } from '../components/Skeletons';
 import GamedayStrip from '../components/Gameday/GamedayStrip';
 import ReciprocityNudges from '../components/ReciprocityNudges';
 import { classifyImage } from '../lib/imageModeration';
@@ -176,39 +176,9 @@ function LiveBadge() {
   );
 }
 
-// Broadcast lower-third — white Barlow Condensed 700 italic caps on solid navy
-// (#0f2847), bleeding to the column's left edge with a red accent slab. This is
-// the section header pattern from the manifesto ("PERIOD 2 · LIVE"), not a
-// generic label. `live` lights a pulsing LIVE marker when the view has live
-// content, so the 2-second test ("is something live?") passes from the header.
-function BroadcastHeader({ label, live }) {
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 10,
-      background: C.card, borderLeft: `4px solid ${C.red}`,
-      marginLeft: -16, marginBottom: 12,
-      padding: '8px 14px 8px 16px',
-      borderTopRightRadius: 4, borderBottomRightRadius: 4,
-    }}>
-      <span style={{
-        flex: 1, minWidth: 0,
-        fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontStyle: 'italic',
-        fontSize: 18, lineHeight: 1, letterSpacing: '0.05em',
-        color: C.ice, textTransform: 'uppercase',
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      }}>{label}</span>
-      {live && (
-        <span style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6, flex: '0 0 auto',
-          color: C.red, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
-          fontStyle: 'italic', fontSize: 13, letterSpacing: '0.1em', textTransform: 'uppercase',
-        }}>
-          <LiveDot /> Live
-        </span>
-      )}
-    </div>
-  );
-}
+// S10 — the feed section header is now the shared ui/SectionHeader (broadcast
+// lower-third: white Barlow Condensed caps on a red-slab bar, pulsing LIVE dot).
+// The former local BroadcastHeader was a hand-rolled copy of that primitive.
 
 function PostCard({ post, currentUser, profile: viewerProfile, likedPosts, reactions, onLike, onComment, onCommentRemoved, onPostHidden, onPostDelete, onUserBlocked, index = 0 }) {
   const navigate = useNavigate();
@@ -841,7 +811,7 @@ export default function Feed({ currentUser, profile }) {
           />
         ) : (
           <>
-            <BroadcastHeader label={headerLabel} live={hasLive} />
+            <SectionHeader label={headerLabel} live={hasLive} />
             {followingFallback && (
               <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, padding: '10px 12px', marginBottom: 8, borderRadius: 10, background: C.navy, border: `1px solid ${C.border}`, color: C.steel, fontSize: 13, fontFamily: "'Barlow', sans-serif" }}>
                 <span>✨ Showing popular chirps —</span>
